@@ -50,12 +50,10 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
 ) {
   const existing = yield* find(db, input.id)
   if (existing !== undefined) return existing
-  const timestamp = yield* DateTime.now
   return yield* events
     .publish(SessionEvent.PromptAdmitted, {
-      messageID: input.id,
+      inputID: input.id,
       sessionID: input.sessionID,
-      timestamp,
       prompt: input.prompt,
       delivery: input.delivery,
     })
@@ -70,7 +68,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
                 sessionID: input.sessionID,
                 prompt: input.prompt,
                 delivery: input.delivery,
-                timeCreated: timestamp,
+                timeCreated: event.created,
               }),
             ),
       ),
@@ -115,14 +113,11 @@ export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(functio
   if (!stored) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
 
-export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(function* (
+export const projectPromptPromoted = Effect.fn("SessionInput.projectPromptPromoted")(function* (
   db: DatabaseService,
   input: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
-    readonly prompt: Prompt
-    readonly delivery: Delivery
-    readonly timeCreated: DateTime.Utc
     readonly promotedSeq: number
   },
 ) {
@@ -141,15 +136,16 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
     .pipe(Effect.orDie)
   if (updated) {
     const stored = fromRow(updated)
-    if (!matchesProjection(stored, input)) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-    return
+    if (stored.sessionID !== input.sessionID) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+    return stored
   }
 
-  // Every Prompted event is published from an admitted inbox row, so a missing or
+  // Every PromptPromoted event is published from an admitted inbox row, so a missing or
   // divergent row on replay is an invariant violation.
   const stored = yield* find(db, input.id)
-  if (!stored || !matchesProjection(stored, input) || stored.promotedSeq !== input.promotedSeq)
+  if (!stored || stored.sessionID !== input.sessionID || stored.promotedSeq !== input.promotedSeq)
     return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  return stored
 })
 
 export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
@@ -206,12 +202,9 @@ const publish = Effect.fn("SessionInput.publish")(function* (
   for (const row of rows) {
     const id = SessionMessage.ID.make(row.id)
     yield* events
-      .publish(SessionEvent.Prompted, {
+      .publish(SessionEvent.PromptPromoted, {
         sessionID,
-        timestamp: DateTime.makeUnsafe(row.time_created),
-        messageID: id,
-        prompt: decodePrompt(row.prompt),
-        delivery: row.delivery,
+        inputID: id,
       })
       .pipe(
         Effect.catchDefect((defect) =>

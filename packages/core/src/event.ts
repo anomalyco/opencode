@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
@@ -55,6 +55,7 @@ export const reserveSequence = Effect.fn("EventV2.reserveSequence")(function* (
 export type SerializedEvent = {
   readonly id: ID
   readonly type: string
+  readonly created?: DateTime.Utc
   readonly seq: number
   readonly aggregateID: string
   readonly data: Record<string, unknown>
@@ -81,6 +82,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   }
   return {
     id: event.id,
+    created: event.created ?? DateTime.makeUnsafe(0),
     type: definition.type,
     durable: envelope(event.aggregateID, event.seq, definition.durable.version),
     data: Schema.decodeUnknownSync(definition.data)(event.data),
@@ -295,6 +297,7 @@ export const layerWith = (options?: LayerOptions) =>
                             if (
                               stored?.id === event.id &&
                               stored.type === versionedType(definition.type, durable.version) &&
+                              stored.created === DateTime.toEpochMillis(event.created ?? DateTime.makeUnsafe(0)) &&
                               isDeepStrictEqual(stored.data, encoded)
                             ) {
                               if (input.ownerID && row?.ownerID == null) {
@@ -366,6 +369,7 @@ export const layerWith = (options?: LayerOptions) =>
                                 id: event.id,
                                 aggregate_id: aggregateID,
                                 seq,
+                                created: DateTime.toEpochMillis(event.created ?? DateTime.makeUnsafe(0)),
                                 type: versionedType(definition.type, durable.version),
                                 data: encoded,
                               },
@@ -471,6 +475,7 @@ export const layerWith = (options?: LayerOptions) =>
             definition,
             {
               id: options?.id ?? ID.create(),
+              created: yield* DateTime.now,
               ...(options?.metadata ? { metadata: options.metadata } : {}),
               type: definition.type,
               ...(location ? { location } : {}),
@@ -494,6 +499,7 @@ export const layerWith = (options?: LayerOptions) =>
           } else {
             const payload = {
               id: event.id,
+              created: event.created ?? DateTime.makeUnsafe(0),
               type: definition.type,
               data: Schema.decodeUnknownSync(definition.data)(event.data),
             } as Payload
@@ -610,6 +616,7 @@ export const layerWith = (options?: LayerOptions) =>
               return [
                 decodeSerializedEvent({
                   id: event.id,
+                  created: DateTime.makeUnsafe(event.created),
                   aggregateID: event.aggregate_id,
                   seq: event.seq,
                   type: event.type,

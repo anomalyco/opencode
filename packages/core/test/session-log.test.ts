@@ -47,7 +47,7 @@ describe("SessionV2.log", () => {
 
       // Session creation commits a non-public durable event, so the marker's
       // seq covers more of the aggregate than the public events emitted.
-      expect(items.map((item) => item.type)).toEqual(["session.next.renamed", "log.synced"])
+      expect(items.map((item) => item.type)).toEqual(["renamed", "log.synced"])
       expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: watermark })
     }),
   )
@@ -64,7 +64,7 @@ describe("SessionV2.log", () => {
       yield* session.rename({ sessionID: created.id, title: "renamed live" })
 
       const items = Array.from(yield* Fiber.join(fiber))
-      expect(items.map((item) => item.type)).toEqual(["log.synced", "session.next.renamed"])
+      expect(items.map((item) => item.type)).toEqual(["log.synced", "renamed"])
     }),
   )
 

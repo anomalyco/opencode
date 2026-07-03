@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Location } from "./location.js"
-import { statics } from "./schema.js"
+import { DateTimeUtcFromMillis, statics } from "./schema.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
   Schema.brand("Event.ID"),
@@ -60,6 +60,7 @@ export type Data<D extends Definition> = Schema.Schema.Type<D["data"]>
 type PayloadBase<D extends Definition> = {
   readonly id: ID
   readonly type: D["type"]
+  readonly created: typeof DateTimeUtcFromMillis.Type
   readonly data: Data<D>
   readonly location?: Location.Ref
   readonly metadata?: Record<string, unknown>
@@ -85,6 +86,7 @@ export function durable<
   const data = Schema.Struct(input.schema)
   return Schema.Struct({
     id: ID,
+    created: DateTimeUtcFromMillis,
     metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
     type: Schema.Literal(input.type),
     durable: DurableEnvelope,
@@ -109,6 +111,7 @@ export function ephemeral<
   const data = Schema.Struct(input.schema)
   return Schema.Struct({
     id: ID,
+    created: DateTimeUtcFromMillis,
     metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
     type: Schema.Literal(input.type),
     location: optional(Location.Ref),

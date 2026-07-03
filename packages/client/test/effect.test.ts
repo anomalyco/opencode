@@ -1,7 +1,17 @@
 import { expect, test } from "bun:test"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { AbsolutePath, Agent, Event, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect/index"
+import {
+  AbsolutePath,
+  Agent,
+  Event,
+  Location,
+  Model,
+  OpenCode,
+  Prompt,
+  Session,
+  SessionMessage,
+} from "../src/effect/index"
 
 const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
@@ -35,9 +45,9 @@ test("event.subscribe exposes and decodes the native Effect event stream", async
     return yield* client.event.subscribe().pipe(Stream.runCollect)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "session.next.model.switched"])
+  expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "model.selected"])
   const durable = events[1]
-  if (durable?.type !== "session.next.model.switched") throw new Error("Expected model event")
+  if (durable?.type !== "model.selected") throw new Error("Expected model event")
   expect(DateTime.toEpochMillis(durable.data.timestamp)).toBe(1_717_171_717_000)
   expect(durable.durable).toEqual({ aggregateID: "ses_test", seq: 1, version: 1 })
 })
@@ -149,8 +159,8 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(result.context).toEqual([])
   expect(logQueries[0]).toEqual({ after: "0" })
   const logged = Array.from(result.log)
-  expect(logged.map((item) => item.type)).toEqual(["session.next.model.switched", "log.synced"])
-  expect(logged[0]?.type === "session.next.model.switched" && DateTime.toEpochMillis(logged[0].data.timestamp)).toBe(
+  expect(logged.map((item) => item.type)).toEqual(["model.selected", "log.synced"])
+  expect(logged[0]?.type === "model.selected" && DateTime.toEpochMillis(logged[0].data.timestamp)).toBe(
     1_717_171_717_000,
   )
   expect(logged.at(-1)).toEqual(synced)
@@ -217,7 +227,7 @@ const modelSwitchedMessage = {
 
 const modelSwitchedEvent = {
   id: "evt_model",
-  type: "session.next.model.switched",
+  type: "model.selected",
   durable: { aggregateID: "ses_test", seq: 1, version: 1 },
   data: {
     timestamp: 1_717_171_717_000,

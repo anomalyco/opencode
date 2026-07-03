@@ -36,7 +36,6 @@ const layer = Layer.effect(
             Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? Cause.squash(exit.cause) : undefined
           yield* events.publish(SessionEvent.ExecutionSettled, {
             sessionID,
-            timestamp: yield* DateTime.now,
             outcome: Exit.isSuccess(exit) ? "success" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failure",
             error:
               failure !== undefined

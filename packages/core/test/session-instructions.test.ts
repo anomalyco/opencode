@@ -133,8 +133,6 @@ const seedSynthetic = (sessionID: SessionV2.ID, paths: string[]) =>
     const events = yield* EventV2.Service
     yield* events.publish(SessionEvent.Synthetic, {
       sessionID,
-      messageID: SessionMessage.ID.create(),
-      timestamp: yield* DateTime.now,
       text: `Instructions from: ${paths[0]}\nprior`,
       description: `Loaded ${paths[0]}`,
       metadata: { instruction: { paths } },

@@ -51,7 +51,6 @@ describe("Tool.Progress", () => {
       yield* service.publish(SessionEvent.Step.Started, {
         sessionID,
         assistantMessageID,
-        timestamp,
         agent: "build",
         model,
       })
@@ -69,14 +68,12 @@ describe("Tool.Progress", () => {
         Effect.gen(function* () {
           yield* service.publish(SessionEvent.Tool.Input.Started, {
             sessionID,
-            timestamp,
             assistantMessageID,
             callID,
             name: "bash",
           })
           yield* service.publish(SessionEvent.Tool.Called, {
             sessionID,
-            timestamp,
             assistantMessageID,
             callID,
             tool: "bash",
@@ -92,7 +89,6 @@ describe("Tool.Progress", () => {
 
       yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
-        timestamp,
         assistantMessageID,
         callID: "call-success",
         structured: { phase: "checkpoint" },
@@ -104,7 +100,6 @@ describe("Tool.Progress", () => {
 
       const success = yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
-        timestamp,
         assistantMessageID,
         callID: "call-success",
         structured: { phase: "done" },
@@ -118,7 +113,6 @@ describe("Tool.Progress", () => {
       yield* start("call-failed")
       yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
-        timestamp,
         assistantMessageID,
         callID: "call-failed",
         structured: { phase: "checkpoint" },
@@ -126,7 +120,6 @@ describe("Tool.Progress", () => {
       })
       const failed = yield* service.publish(SessionEvent.Tool.Failed, {
         sessionID,
-        timestamp,
         assistantMessageID,
         callID: "call-failed",
         error: { type: "unknown", message: "boom" },

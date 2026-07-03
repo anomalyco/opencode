@@ -89,7 +89,6 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   } satisfies SessionSchema.Info["revert"]
   yield* events.publish(SessionEvent.RevertEvent.Staged, {
     sessionID: input.session.id,
-    timestamp: yield* DateTime.now,
     revert,
   })
   return revert
@@ -106,7 +105,6 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
   const events = yield* EventV2.Service
   yield* events.publish(SessionEvent.RevertEvent.Cleared, {
     sessionID: session.id,
-    timestamp: yield* DateTime.now,
   })
 })
 
@@ -116,6 +114,5 @@ export const commit = Effect.fn("SessionRevert.commit")(function* (session: Sess
   yield* events.publish(SessionEvent.RevertEvent.Committed, {
     sessionID: session.id,
     messageID: session.revert.messageID,
-    timestamp: yield* DateTime.now,
   })
 })

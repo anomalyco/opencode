@@ -201,7 +201,6 @@ describe("SessionV2.prompt", () => {
       yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
-        timestamp: yield* DateTime.now,
         revert: { messageID: boundary.id, files: [] },
       })
       expect((yield* session.get(sessionID)).revert?.messageID).toBe(boundary.id)
@@ -257,16 +256,16 @@ describe("SessionV2.prompt", () => {
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
-        [0, "session.next.prompt.admitted"],
-        [1, "session.next.prompt.admitted"],
-        [2, "session.next.prompted"],
-        [3, "session.next.prompted"],
+        [0, "prompt.admitted"],
+        [1, "prompt.admitted"],
+        [2, "prompt.promoted"],
+        [3, "prompt.promoted"],
       ])
       expect(
         Array.from(
           yield* publicEvents({ sessionID, after: streamed[0].durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
-      ).toEqual([[1, "session.next.prompt.admitted"]])
+      ).toEqual([[1, "prompt.admitted"]])
     }),
   )
 
@@ -429,7 +428,7 @@ describe("SessionV2.prompt", () => {
         { concurrency: "unbounded" },
       )
 
-      expect(yield* eventCount(EventV2.versionedType(SessionEvent.Prompted.type, 1))).toBe(1)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptPromoted.type, 1))).toBe(1)
       expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
@@ -467,6 +466,7 @@ describe("SessionV2.prompt", () => {
       yield* events.replayAll(
         recorded.map((event) => ({
           id: event.id,
+          created: DateTime.makeUnsafe(event.created),
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,
@@ -514,13 +514,23 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      yield* events.publish(SessionEvent.Synthetic, {
+      const { db } = yield* Database.Service
+      const {
+        id: _,
+        type,
+        ...data
+      } = encodeMessage({
+        id: messageID,
         sessionID,
-        messageID,
-        timestamp: yield* DateTime.now,
+        type: "synthetic",
         text: "Existing history",
+        time: { created: DateTime.makeUnsafe(0) },
       })
+      yield* db
+        .insert(SessionMessageTable)
+        .values({ id: messageID, session_id: sessionID, type, seq: 0, time_created: 0, data })
+        .run()
+        .pipe(Effect.orDie)
 
       const failure = yield* session
         .prompt({ id: messageID, sessionID, prompt: Prompt.make({ text: "Conflicting prompt" }), resume: false })

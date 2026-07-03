@@ -76,7 +76,7 @@ test("local tool success serializes media base64 once and reconstructs from stru
   await Effect.runPromise(publisher.publish(call))
   await Effect.runPromise(publisher.publish(result))
 
-  const success = published.find((event) => event.type === "session.next.tool.success.1")
+  const success = published.find((event) => event.type === "tool.success.1")
   expect(success).toBeDefined()
   const serialized = JSON.stringify(success)
   expect(serialized.split(base64)).toHaveLength(2)
@@ -94,7 +94,7 @@ test("provider-executed success retains its compatibility result", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
-  const success = published.find((event) => event.type === "session.next.tool.success.1")
+  const success = published.find((event) => event.type === "tool.success.1")
   expect(success?.data).toHaveProperty("result")
 })
 
@@ -110,14 +110,13 @@ test("binary failure emits no success event", async () => {
       }),
     ),
   )
-  expect(published.some((event) => event.type === "session.next.tool.success.1")).toBe(false)
-  expect(published.some((event) => event.type === "session.next.tool.failed.1")).toBe(true)
+  expect(published.some((event) => event.type === "tool.success.1")).toBe(false)
+  expect(published.some((event) => event.type === "tool.failed.1")).toBe(true)
 })
 
 test("old success event data containing result still decodes", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,
-    timestamp: Date.now(),
     assistantMessageID: SessionMessage.ID.create(),
     callID: "call-old",
     structured: { type: "media", mime: "image/png" },
@@ -133,6 +132,6 @@ test("step finish records settlement without publishing step ended", async () =>
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
   await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
 
-  expect(published.some((event) => event.type === "session.next.step.ended.2")).toBe(false)
+  expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
 })

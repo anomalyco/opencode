@@ -7,7 +7,7 @@ import { EventV2 } from "../event"
 import { makeLocationNode } from "../effect/app-node"
 import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
+import type { SessionMessage } from "./message"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
@@ -206,11 +206,8 @@ const make = (dependencies: Dependencies) => {
     const summaryPrompt = buildPrompt({ previousSummary: input.previousSummary, context: input.context })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
-    const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
-      messageID,
-      timestamp: yield* DateTime.now,
       reason: input.reason,
     })
 
@@ -238,8 +235,6 @@ const make = (dependencies: Dependencies) => {
     if (!summarized || failed || !summary.trim()) return false
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
-      messageID,
-      timestamp: yield* DateTime.now,
       reason: input.reason,
       text: summary,
       recent: input.recent,

@@ -363,8 +363,7 @@ const layer = Layer.effect(
         yield* events.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
-          messageID: input.messageID,
-          timestamp: yield* DateTime.now,
+          from: input.messageID,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -551,16 +550,13 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             activeShells.add(input.sessionID)
             if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
-            const messageID = SessionMessage.ID.create()
             const callID = Identifier.ascending()
             yield* events.publish(
               SessionEvent.Shell.Started,
               {
                 sessionID: input.sessionID,
-                messageID,
                 callID,
                 command: input.command,
-                timestamp: yield* DateTime.now,
               },
               { id: input.id },
             )
@@ -571,7 +567,6 @@ const layer = Layer.effect(
               sessionID: input.sessionID,
               callID,
               output,
-              timestamp: yield* DateTime.now,
             })
           }).pipe(
             Effect.ensuring(
@@ -590,8 +585,6 @@ const layer = Layer.effect(
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
         yield* events.publish(SessionEvent.Skill.Activated, {
           sessionID: input.sessionID,
-          messageID: input.id ?? SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
           name: skill.name,
           text: skill.content,
         })
@@ -602,10 +595,8 @@ const layer = Layer.effect(
       }),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
         yield* result.get(input.sessionID)
-        yield* events.publish(SessionEvent.AgentSwitched, {
+        yield* events.publish(SessionEvent.AgentSelected, {
           sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
           agent: input.agent,
         })
       }),
@@ -617,10 +608,8 @@ const layer = Layer.effect(
           (session.model.variant ?? "default") === (input.model.variant ?? "default")
         )
           return
-        yield* events.publish(SessionEvent.ModelSwitched, {
+        yield* events.publish(SessionEvent.ModelSelected, {
           sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
           model: input.model,
         })
       }),
@@ -628,7 +617,6 @@ const layer = Layer.effect(
         yield* result.get(input.sessionID)
         yield* events.publish(SessionEvent.Renamed, {
           sessionID: input.sessionID,
-          timestamp: yield* DateTime.now,
           title: input.title,
         })
       }),
@@ -676,8 +664,6 @@ const layer = Layer.effect(
         yield* result.get(input.sessionID)
         yield* events.publish(SessionEvent.Synthetic, {
           sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
           text: input.text,
           description: input.description,
           metadata: input.metadata,

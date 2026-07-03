@@ -554,6 +554,7 @@ describe("EventV2", () => {
 
       yield* events.replay({
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -573,6 +574,7 @@ describe("EventV2", () => {
 
       yield* events.replay({
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -609,6 +611,7 @@ describe("EventV2", () => {
         const exit = yield* events
           .replay({
             id: EventV2.ID.create(),
+            created: DateTime.makeUnsafe(0),
             type: EventV2.versionedType(DurableMessage.type, 1),
             seq: 1,
             aggregateID: envelopeAggregateID,
@@ -642,6 +645,7 @@ describe("EventV2", () => {
 
       yield* events.replay({
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -650,6 +654,7 @@ describe("EventV2", () => {
       const exit = yield* events
         .replay({
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 5,
           aggregateID,
@@ -674,13 +679,14 @@ describe("EventV2", () => {
 
       yield* events.replay({
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(SessionEvent.ContextUpdated.type, 1),
         seq: 0,
         aggregateID,
-        data: { sessionID: aggregateID, messageID: "msg_context", timestamp: 0, text: "context" },
+        data: { sessionID: aggregateID, text: "context" },
       })
 
-      expect(received[0]?.data.timestamp).toEqual(DateTime.makeUnsafe(0))
+      expect(received[0]?.created).toEqual(DateTime.makeUnsafe(0))
     }),
   )
 
@@ -690,6 +696,7 @@ describe("EventV2", () => {
       const exit = yield* events
         .replay({
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: "unknown.event.1",
           seq: 0,
           aggregateID: EventV2.ID.create(),
@@ -708,6 +715,7 @@ describe("EventV2", () => {
       const source = yield* events.replayAll([
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -715,6 +723,7 @@ describe("EventV2", () => {
         },
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -735,6 +744,7 @@ describe("EventV2", () => {
       const one = yield* events.replayAll([
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -742,6 +752,7 @@ describe("EventV2", () => {
         },
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -751,6 +762,7 @@ describe("EventV2", () => {
       const two = yield* events.replayAll([
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 2,
           aggregateID,
@@ -758,6 +770,7 @@ describe("EventV2", () => {
         },
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 3,
           aggregateID,
@@ -793,6 +806,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -812,6 +826,7 @@ describe("EventV2", () => {
       const id = EventV2.ID.create()
       const replayed = {
         id,
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -833,6 +848,7 @@ describe("EventV2", () => {
       const published = yield* events.publish(DurableMessage, durableData(aggregateID, "owned"))
       const replayed = {
         id: published.id,
+        created: published.created,
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: published.durable!.seq,
         aggregateID,
@@ -867,6 +883,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -895,6 +912,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -905,6 +923,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 2,
           aggregateID,
@@ -937,6 +956,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -949,6 +969,7 @@ describe("EventV2", () => {
         .replay(
           {
             id: EventV2.ID.create(),
+            created: DateTime.makeUnsafe(0),
             type: EventV2.versionedType(DurableMessage.type, 1),
             seq: 1,
             aggregateID,
@@ -970,6 +991,7 @@ describe("EventV2", () => {
       yield* events.listen((event) => Effect.sync(() => received.push(event)))
       const replayed = {
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -990,6 +1012,7 @@ describe("EventV2", () => {
       const aggregateID = Session.ID.create()
       const replayed = {
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1014,6 +1037,7 @@ describe("EventV2", () => {
       const id = EventV2.ID.create()
       yield* events.replay({
         id,
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1023,6 +1047,7 @@ describe("EventV2", () => {
       const exit = yield* events
         .replay({
           id,
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1045,6 +1070,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -1055,6 +1081,7 @@ describe("EventV2", () => {
       yield* events.replay(
         {
           id: EventV2.ID.create(),
+          created: DateTime.makeUnsafe(0),
           type: EventV2.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1116,6 +1143,7 @@ describe("EventV2", () => {
 
       yield* events.replay({
         id: EventV2.ID.create(),
+        created: DateTime.makeUnsafe(0),
         type: EventV2.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,

@@ -197,8 +197,6 @@ describe("SessionV2.create", () => {
       yield* SessionInput.promoteSteers(db, events, parent.id)
       yield* events.publish(SessionEvent.Synthetic, {
         sessionID: parent.id,
-        messageID: SessionMessage.ID.create(),
-        timestamp: yield* DateTime.now,
         text: "parent note",
       })
 
@@ -215,7 +213,7 @@ describe("SessionV2.create", () => {
       expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
       expect(history).toHaveLength(1)
       expect(history[0]).toMatchObject({
-        type: "session.next.forked",
+        type: "forked",
         durable: { seq: 0 },
         data: { sessionID: forked.id, parentID: parent.id },
       })
@@ -267,7 +265,7 @@ describe("SessionV2.create", () => {
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
       expect(context).toMatchObject([{ text: "First" }])
       expect(context[0]?.id).not.toBe(first.id)
-      expect(history[0]).toMatchObject({ data: { messageID: second.id } })
+      expect(history[0]).toMatchObject({ data: { from: second.id } })
     }),
   )
 
@@ -380,8 +378,8 @@ describe("SessionV2.create", () => {
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
-        { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
-        { durable: { seq: 2 }, type: "session.next.prompted" },
+        { durable: { seq: 1 }, type: "prompt.admitted", data: { prompt: { text: "Hello" } } },
+        { durable: { seq: 2 }, type: "prompt.promoted" },
       ])
     }),
   )
@@ -406,6 +404,7 @@ describe("SessionV2.create", () => {
         .all()
         .pipe(Effect.orDie)).map((event) => ({
         id: event.id,
+        created: DateTime.makeUnsafe(event.created),
         aggregateID: event.aggregate_id,
         seq: event.seq,
         type: event.type,
@@ -466,7 +465,7 @@ describe("SessionV2.create", () => {
         ).toEqual([
           [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
           [1, EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1)],
-          [2, EventV2.versionedType(SessionEvent.Prompted.type, 1)],
+          [2, EventV2.versionedType(SessionEvent.PromptPromoted.type, 1)],
         ])
       }).pipe(Effect.provide(Layer.fresh(targetLayer)))
     }),
@@ -530,7 +529,7 @@ describe("SessionV2.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ type: "session.next.agent.switched", data: { agent: "plan" } }])
+      ).toMatchObject([{ type: "agent.selected", data: { agent: "plan" } }])
     }),
   )
 
@@ -563,7 +562,7 @@ describe("SessionV2.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ type: "session.next.model.switched", data: { model } }])
+      ).toMatchObject([{ type: "model.selected", data: { model } }])
     }),
   )
 

@@ -79,27 +79,23 @@ const executionNode = makeGlobalNode({
         yield* events.publish(SessionEvent.Step.Started, {
           sessionID: id,
           assistantMessageID,
-          timestamp: yield* DateTime.now,
           agent: session.agent ?? AgentV2.ID.make("code"),
           model: sessionModel,
         })
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: id,
           assistantMessageID,
-          timestamp: yield* DateTime.now,
           textID,
         })
         yield* events.publish(SessionEvent.Text.Ended, {
           sessionID: id,
           assistantMessageID,
-          timestamp: yield* DateTime.now,
           textID,
           text: "ok",
         })
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: id,
           assistantMessageID,
-          timestamp: yield* DateTime.now,
           finish: "stop",
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

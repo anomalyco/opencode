@@ -126,45 +126,49 @@ export function createSessionRows(sessionID: Accessor<string>) {
     return index === -1 ? rows.length : index
   }
 
-  const message = (event: { data: { sessionID: string; messageID: string } }) => {
-    if (event.data.sessionID === sessionID()) appendMessage(event.data.messageID)
+  const message = (event: { id: string; data: { sessionID: string } }) => {
+    if (event.data.sessionID === sessionID()) appendMessage(event.id.replace(/^evt_/, "msg_"))
+  }
+  const input = (event: { data: { sessionID: string; inputID: string } }) => {
+    if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID)
   }
   const subscriptions = [
-    data.on("session.next.prompt.admitted", message),
-    data.on("session.next.prompted", message),
-    data.on("session.next.context.updated", message),
-    data.on("session.next.synthetic", (event) => {
-      if (event.data.sessionID === sessionID() && event.data.description?.trim()) appendMessage(event.data.messageID)
+    data.on("prompt.admitted", input),
+    data.on("prompt.promoted", input),
+    data.on("session.context.updated", message),
+    data.on("synthetic", (event) => {
+      if (event.data.sessionID === sessionID() && event.data.description?.trim())
+        appendMessage(event.id.replace(/^evt_/, "msg_"))
     }),
-    data.on("session.next.shell.started", message),
-    data.on("session.next.agent.switched", message),
-    data.on("session.next.model.switched", message),
-    data.on("session.next.compaction.ended", message),
-    data.on("session.next.text.delta", (event) => {
+    data.on("shell.started", message),
+    data.on("agent.selected", message),
+    data.on("model.selected", message),
+    data.on("compaction.ended", message),
+    data.on("text.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
     }),
-    data.on("session.next.text.ended", (event) => {
+    data.on("text.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
     }),
-    data.on("session.next.reasoning.delta", (event) => {
+    data.on("reasoning.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
     }),
-    data.on("session.next.reasoning.ended", (event) => {
+    data.on("reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
     }),
-    data.on("session.next.tool.input.started", (event) => {
+    data.on("tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.callID }, event.data.name)
     }),
-    data.on("session.next.step.ended", (event) => {
+    data.on("step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
     }),
-    data.on("session.next.step.failed", (event) => {
+    data.on("step.failed", (event) => {
       if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
     }),
   ]
@@ -229,8 +233,6 @@ function hasPart(rows: SessionRow[], ref: PartRef) {
   return rows.some((row) => {
     if (row.type === "part") return row.ref.messageID === ref.messageID && row.ref.partID === ref.partID
     if (row.type !== "group") return false
-    return [...row.refs, ...row.pending].some(
-      (item) => item.messageID === ref.messageID && item.partID === ref.partID,
-    )
+    return [...row.refs, ...row.pending].some((item) => item.messageID === ref.messageID && item.partID === ref.partID)
   })
 }

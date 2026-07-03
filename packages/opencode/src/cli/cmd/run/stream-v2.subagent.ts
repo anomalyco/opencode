@@ -424,21 +424,21 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
-    if (event.type === "session.next.prompted") {
-      if (userFrame(child, event.data.messageID, event.data.prompt.text)) {
-        touch(child, event.data.timestamp)
+    if (event.type === "prompt.promoted") {
+      if (userFrame(child, event.data.inputID, "")) {
+        touch(child, event.created)
         notifyDetail(child)
       }
       return
     }
-    if (event.type === "session.next.step.started") {
-      touch(child, event.data.timestamp)
+    if (event.type === "step.started") {
+      touch(child, event.created)
       if (child.label === FALLBACK_LABEL && event.data.agent) child.label = Locale.titlecase(event.data.agent)
       if (child.status !== "running") child.status = "running"
       input.emit()
       return
     }
-    if (event.type === "session.next.text.delta") {
+    if (event.type === "text.delta") {
       const projected = child.projectedText.get(event.data.textID)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
@@ -455,11 +455,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         messageID: event.data.assistantMessageID,
         partID: event.data.textID,
       })
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.text.ended") {
+    if (event.type === "text.ended") {
       child.text.set(event.data.textID, event.data.text)
       child.projectedText.delete(event.data.textID)
       setFrame(child, `text:${event.data.textID}`, {
@@ -470,11 +470,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         messageID: event.data.assistantMessageID,
         partID: event.data.textID,
       })
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.reasoning.delta") {
+    if (event.type === "reasoning.delta") {
       const projected = child.projectedReasoning.get(event.data.reasoningID)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
@@ -495,7 +495,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.reasoning.ended") {
+    if (event.type === "reasoning.ended") {
       child.reasoning.set(event.data.reasoningID, event.data.text)
       child.projectedReasoning.delete(event.data.reasoningID)
       if (!input.thinking) return
@@ -510,16 +510,16 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.tool.input.started") {
-      child.tools.set(event.data.callID, { name: event.data.name, input: {}, started: event.data.timestamp })
+    if (event.type === "tool.input.started") {
+      child.tools.set(event.data.callID, { name: event.data.name, input: {}, started: event.created })
       return
     }
-    if (event.type === "session.next.tool.called") {
+    if (event.type === "tool.called") {
       const current = child.tools.get(event.data.callID)
       child.tools.set(event.data.callID, {
         name: event.data.tool,
         input: event.data.input,
-        started: current?.started ?? event.data.timestamp,
+        started: current?.started ?? event.created,
       })
       childTool(
         child,
@@ -529,18 +529,18 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           name: event.data.tool,
           provider: event.data.provider,
           state: { status: "running", input: event.data.input, structured: {}, content: [] },
-          time: { created: current?.started ?? event.data.timestamp, ran: event.data.timestamp },
+          time: { created: current?.started ?? event.created, ran: event.created },
         },
         event.data.assistantMessageID,
       )
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.tool.success" || event.type === "session.next.tool.failed") {
+    if (event.type === "tool.success" || event.type === "tool.failed") {
       if (child.finishedTools.has(event.data.callID)) return
       const current = child.tools.get(event.data.callID)
-      const failed = event.type === "session.next.tool.failed"
+      const failed = event.type === "tool.failed"
       childTool(
         child,
         {
@@ -566,18 +566,18 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
                 result: event.data.result,
               },
           time: {
-            created: current?.started ?? event.data.timestamp,
+            created: current?.started ?? event.created,
             ran: current?.started,
-            completed: event.data.timestamp,
+            completed: event.created,
           },
         },
         event.data.assistantMessageID,
       )
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.step.failed") {
+    if (event.type === "step.failed") {
       setFrame(child, `error:step:${event.data.assistantMessageID}`, {
         kind: "error",
         source: "system",
@@ -585,14 +585,14 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         phase: "start",
         messageID: event.data.assistantMessageID,
       })
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       notifyDetail(child)
       return
     }
-    if (event.type === "session.next.execution.settled") {
+    if (event.type === "execution.settled") {
       child.status =
         event.data.outcome === "success" ? "completed" : event.data.outcome === "interrupted" ? "cancelled" : "error"
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       input.emit()
     }
   }
@@ -613,15 +613,15 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
 
   return {
     main(event) {
-      if (event.type === "session.next.tool.called") {
+      if (event.type === "tool.called") {
         if (event.data.tool === "subagent") pendingCalls.set(event.data.callID, event.data.input)
         return
       }
-      if (event.type === "session.next.tool.failed") {
+      if (event.type === "tool.failed") {
         pendingCalls.delete(event.data.callID)
         return
       }
-      if (event.type !== "session.next.tool.success") return
+      if (event.type !== "tool.success") return
       const pending = pendingCalls.get(event.data.callID)
       pendingCalls.delete(event.data.callID)
       const found = childSessionID(record(event.data.structured))
@@ -633,7 +633,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         child.status = "running"
       }
       if (!found.running && child.status === "running") child.status = "completed"
-      touch(child, event.data.timestamp)
+      touch(child, event.created)
       input.emit()
       if (!child.hydrated) void hydrateChild(child)
     },

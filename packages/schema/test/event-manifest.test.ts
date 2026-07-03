@@ -52,7 +52,7 @@ describe("public event manifest", () => {
     expect(Session.Event.Definitions).toBe(SessionEvent.Definitions)
     expect(Workspace.Event).toBe(WorkspaceEvent)
     expect(Workspace.Event.Definitions).toBe(WorkspaceEvent.Definitions)
-    expect(EventManifest.Latest.get("session.next.step.ended")).toBe(SessionEvent.Step.Ended)
+    expect(EventManifest.Latest.get("step.ended")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Latest.get("todo.updated")).toBe(SessionTodo.Event.Updated)
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Latest.get("project.updated")).toBe(Project.Event.Updated)
@@ -71,8 +71,8 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(EventManifest.Durable.has("session.next.step.ended.1")).toBe(false)
-    expect(EventManifest.Durable.get("session.next.step.ended.2")).toBe(SessionEvent.Step.Ended)
+    expect(EventManifest.Durable.has("step.ended.1")).toBe(false)
+    expect(EventManifest.Durable.get("step.ended.2")).toBe(SessionEvent.Step.Ended)
   })
 
   test("derives durable definitions from explicit definition durability", () => {
@@ -85,37 +85,37 @@ describe("public event manifest", () => {
         "message.removed.1",
         "message.part.updated.1",
         "message.part.removed.1",
-        "session.next.agent.switched.1",
-        "session.next.model.switched.1",
-        "session.next.moved.1",
-        "session.next.renamed.1",
-        "session.next.forked.1",
-        "session.next.prompted.1",
-        "session.next.prompt.admitted.1",
-        "session.next.context.updated.1",
-        "session.next.synthetic.1",
-        "session.next.skill.activated.1",
-        "session.next.shell.started.1",
-        "session.next.shell.ended.1",
-        "session.next.step.started.1",
-        "session.next.step.ended.2",
-        "session.next.step.failed.2",
-        "session.next.text.started.1",
-        "session.next.text.ended.1",
-        "session.next.tool.input.started.1",
-        "session.next.tool.input.ended.1",
-        "session.next.tool.called.1",
-        "session.next.tool.progress.1",
-        "session.next.tool.success.1",
-        "session.next.tool.failed.1",
-        "session.next.reasoning.started.1",
-        "session.next.reasoning.ended.1",
-        "session.next.retried.1",
-        "session.next.compaction.started.1",
-        "session.next.compaction.ended.1",
-        "session.next.revert.staged.1",
-        "session.next.revert.cleared.1",
-        "session.next.revert.committed.1",
+        "agent.selected.1",
+        "model.selected.1",
+        "session.moved.1",
+        "renamed.1",
+        "forked.1",
+        "prompt.promoted.1",
+        "prompt.admitted.1",
+        "session.context.updated.1",
+        "synthetic.1",
+        "skill.activated.1",
+        "shell.started.1",
+        "shell.ended.1",
+        "step.started.1",
+        "step.ended.2",
+        "step.failed.2",
+        "text.started.1",
+        "text.ended.1",
+        "tool.input.started.1",
+        "tool.input.ended.1",
+        "tool.called.1",
+        "tool.progress.1",
+        "tool.success.1",
+        "tool.failed.1",
+        "reasoning.started.1",
+        "reasoning.ended.1",
+        "retried.1",
+        "compaction.started.1",
+        "compaction.ended.1",
+        "revert.staged.1",
+        "revert.cleared.1",
+        "revert.committed.1",
       ].toSorted(),
     )
     expect(SessionEvent.DurableDefinitions).toEqual(

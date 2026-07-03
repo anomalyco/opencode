@@ -86,17 +86,13 @@ const prompt = (sessionID: SessionV2.ID, text: string) =>
     const messageID = SessionMessage.ID.create()
     yield* events.publish(SessionEvent.PromptAdmitted, {
       sessionID,
-      messageID,
-      timestamp: DateTime.makeUnsafe(0),
+      inputID: messageID,
       prompt: Prompt.make({ text }),
       delivery: "steer",
     })
-    yield* events.publish(SessionEvent.Prompted, {
+    yield* events.publish(SessionEvent.PromptPromoted, {
       sessionID,
-      messageID,
-      timestamp: DateTime.makeUnsafe(0),
-      prompt: Prompt.make({ text }),
-      delivery: "steer",
+      inputID: messageID,
     })
   })
 

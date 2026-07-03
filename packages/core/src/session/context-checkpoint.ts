@@ -1,13 +1,12 @@
 export * as SessionContextCheckpoint from "./context-checkpoint"
 
 import { eq } from "drizzle-orm"
-import { DateTime, Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { SystemContext } from "../system-context/index"
 import { SessionEvent } from "./event"
 import { SessionHistory } from "./history"
-import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionContextCheckpointTable } from "./sql"
 
@@ -50,7 +49,7 @@ export const prepare = Effect.fn("SessionContextCheckpoint.prepare")(function* (
 
   yield* events.publish(
     SessionEvent.ContextUpdated,
-    { sessionID, messageID: SessionMessage.ID.create(), timestamp: yield* DateTime.now, text: result.text },
+    { sessionID, text: result.text },
     { commit: () => advance(db, sessionID, result.applied).pipe(Effect.orDie) },
   )
   return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }

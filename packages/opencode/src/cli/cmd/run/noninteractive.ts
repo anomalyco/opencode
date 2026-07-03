@@ -156,17 +156,16 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
-      const time = "timestamp" in event.data ? toMillis(event.data.timestamp) : Date.now()
+      const time = toMillis(event.created)
 
-      if (event.type === "session.next.prompted") {
-        if (event.data.messageID === messageID) {
+      if (event.type === "prompt.promoted") {
+        if (event.data.inputID === messageID) {
           promoted = true
           continue
         }
-        if (promoted && event.data.delivery === "queue") return
       }
       if (
-        event.type === "session.next.execution.settled" &&
+        event.type === "execution.settled" &&
         event.data.outcome === "interrupted" &&
         (interrupted || permissionRejected || questionRejected || formCancelled)
       ) {
@@ -174,7 +173,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       if (!promoted) continue
 
-      if (event.type === "session.next.step.started") {
+      if (event.type === "step.started") {
         const part: StepStartPart = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -190,11 +189,11 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "session.next.text.started") {
+      if (event.type === "text.started") {
         starts.set(event.data.textID, { id: partID(event.id), timestamp: time })
         continue
       }
-      if (event.type === "session.next.text.ended") {
+      if (event.type === "text.ended") {
         const started = starts.get(event.data.textID)
         const part: TextPart = {
           id: started?.id ?? partID(event.id),
@@ -208,11 +207,11 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "session.next.reasoning.started") {
+      if (event.type === "reasoning.started") {
         starts.set(event.data.reasoningID, { id: partID(event.id), timestamp: time })
         continue
       }
-      if (event.type === "session.next.reasoning.ended" && input.thinking) {
+      if (event.type === "reasoning.ended" && input.thinking) {
         const started = starts.get(event.data.reasoningID)
         const part: ReasoningPart = {
           id: started?.id ?? partID(event.id),
@@ -237,7 +236,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "session.next.tool.input.started") {
+      if (event.type === "tool.input.started") {
         tools.set(event.data.callID, {
           id: partID(event.id),
           timestamp: time,
@@ -247,12 +246,12 @@ export async function runNonInteractivePrompt(input: Input) {
         })
         continue
       }
-      if (event.type === "session.next.tool.input.ended") {
+      if (event.type === "tool.input.ended") {
         const current = tools.get(event.data.callID)
         if (current) current.raw = event.data.text
         continue
       }
-      if (event.type === "session.next.tool.called") {
+      if (event.type === "tool.called") {
         const current = tools.get(event.data.callID)
         tools.set(event.data.callID, {
           id: current?.id ?? partID(event.id),
@@ -265,7 +264,7 @@ export async function runNonInteractivePrompt(input: Input) {
         })
         continue
       }
-      if (event.type === "session.next.tool.success") {
+      if (event.type === "tool.success") {
         const current = tools.get(event.data.callID) ?? fallbackTool(event)
         const part: ToolPart = {
           id: current.id,
@@ -298,7 +297,7 @@ export async function runNonInteractivePrompt(input: Input) {
         if (!emit("tool_use", time, { part })) await input.renderTool(part)
         continue
       }
-      if (event.type === "session.next.tool.failed") {
+      if (event.type === "tool.failed") {
         const current = tools.get(event.data.callID) ?? fallbackTool(event)
         const error = event.data.error.message
         const part: ToolPart = {
@@ -329,7 +328,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "session.next.step.ended") {
+      if (event.type === "step.ended") {
         const part: StepFinishPart = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -343,19 +342,19 @@ export async function runNonInteractivePrompt(input: Input) {
         emit("step_finish", time, { part })
         continue
       }
-      if (event.type === "session.next.step.failed") {
+      if (event.type === "step.failed") {
         if (interrupted || permissionRejected || questionRejected || formCancelled) continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
-      if (event.type === "session.next.execution.settled") {
+      if (event.type === "execution.settled") {
         if (event.data.outcome === "failure" && !emittedError && !questionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
           const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
-          if (!emit("error", toMillis(event.data.timestamp), { error })) UI.error(error.message)
+          if (!emit("error", time, { error })) UI.error(error.message)
         }
         if (event.data.outcome === "interrupted" && interrupted) process.exitCode = 130
         return
@@ -458,11 +457,12 @@ function partID(eventID: string) {
 
 function fallbackTool(event: {
   id: string
-  data: { timestamp: number; assistantMessageID: string; callID: string }
+  created: number
+  data: { assistantMessageID: string; callID: string }
 }): ToolState {
   return {
     id: partID(event.id),
-    timestamp: toMillis(event.data.timestamp),
+    timestamp: toMillis(event.created),
     assistantMessageID: event.data.assistantMessageID,
     tool: "tool",
     input: {},

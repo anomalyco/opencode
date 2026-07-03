@@ -85,17 +85,13 @@ describe("SessionV2.compact", () => {
       const prompt = Prompt.make({ text: "Please compact this session history." })
       yield* events.publish(SessionEvent.PromptAdmitted, {
         sessionID: created.id,
-        messageID,
-        timestamp: DateTime.makeUnsafe(0),
+        inputID: messageID,
         prompt,
         delivery: "steer",
       })
-      yield* events.publish(SessionEvent.Prompted, {
+      yield* events.publish(SessionEvent.PromptPromoted, {
         sessionID: created.id,
-        messageID,
-        timestamp: DateTime.makeUnsafe(0),
-        prompt,
-        delivery: "steer",
+        inputID: messageID,
       })
 
       yield* session.compact({ sessionID: created.id })

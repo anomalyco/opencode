@@ -51,13 +51,13 @@ describe("toLLMMessages", () => {
     const file = FileAttachment.make({ uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" })
     const messages = toLLMMessages(
       [
-        SessionMessage.AgentSwitched.make({
+        SessionMessage.AgentSelected.make({
           id: id("agent"),
           type: "agent-switched",
           agent: "build",
           time: { created },
         }),
-        SessionMessage.ModelSwitched.make({
+        SessionMessage.ModelSelected.make({
           id: id("model"),
           type: "model-switched",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },

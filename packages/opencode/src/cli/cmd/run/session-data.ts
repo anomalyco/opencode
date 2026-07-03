@@ -728,7 +728,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
   const data = input.data
   const event = input.event
 
-  if (event.type === "session.next.shell.started") {
+  if (event.type === "shell.started") {
     if (event.properties.sessionID !== input.sessionID) {
       return out(data, commits)
     }
@@ -748,7 +748,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     return out(data, commits, patch({ status: "running shell" }))
   }
 
-  if (event.type === "session.next.shell.ended") {
+  if (event.type === "shell.ended") {
     if (event.properties.sessionID !== input.sessionID) {
       return out(data, commits)
     }

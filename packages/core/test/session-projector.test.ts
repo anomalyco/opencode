@@ -79,7 +79,6 @@ describe("SessionProjector", () => {
       const events = yield* EventV2.Service
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
-        timestamp: DateTime.makeUnsafe(1),
         revert: { messageID: boundary, snapshot: Snapshot.ID.make("tree"), diff: "patch", files: [] },
       })
       expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toMatchObject({
@@ -87,17 +86,15 @@ describe("SessionProjector", () => {
         snapshot: "tree",
         files: [],
       })
-      yield* events.publish(SessionEvent.RevertEvent.Cleared, { sessionID, timestamp: DateTime.makeUnsafe(2) })
+      yield* events.publish(SessionEvent.RevertEvent.Cleared, { sessionID })
       expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
-        timestamp: DateTime.makeUnsafe(3),
         revert: { messageID: boundary, files: [] },
       })
       yield* events.publish(SessionEvent.RevertEvent.Committed, {
         sessionID,
         messageID: boundary,
-        timestamp: DateTime.makeUnsafe(4),
       })
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
@@ -131,37 +128,29 @@ describe("SessionProjector", () => {
 
       yield* events.publish(SessionEvent.PromptAdmitted, {
         sessionID,
-        messageID: SessionMessage.ID.make("msg_first"),
-        timestamp: created,
+        inputID: SessionMessage.ID.make("msg_first"),
         prompt: Prompt.make({ text: "first" }),
         delivery: "steer",
       })
       yield* events.publish(
-        SessionEvent.Prompted,
+        SessionEvent.PromptPromoted,
         {
           sessionID,
-          messageID: SessionMessage.ID.make("msg_first"),
-          timestamp: created,
-          prompt: Prompt.make({ text: "first" }),
-          delivery: "steer",
+          inputID: SessionMessage.ID.make("msg_first"),
         },
         { id: EventV2.ID.make("evt_z") },
       )
       yield* events.publish(SessionEvent.PromptAdmitted, {
         sessionID,
-        messageID: SessionMessage.ID.make("msg_second"),
-        timestamp: created,
+        inputID: SessionMessage.ID.make("msg_second"),
         prompt: Prompt.make({ text: "second" }),
         delivery: "steer",
       })
       yield* events.publish(
-        SessionEvent.Prompted,
+        SessionEvent.PromptPromoted,
         {
           sessionID,
-          messageID: SessionMessage.ID.make("msg_second"),
-          timestamp: created,
-          prompt: Prompt.make({ text: "second" }),
-          delivery: "steer",
+          inputID: SessionMessage.ID.make("msg_second"),
         },
         { id: EventV2.ID.make("evt_a") },
       )
@@ -190,7 +179,7 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
-  it.effect("marks an inbox row promoted with the Prompted event sequence", () =>
+  it.effect("marks an inbox row promoted with the PromptPromoted event sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -220,12 +209,9 @@ describe("SessionProjector", () => {
       })
       if (!admitted) return yield* Effect.die("Prompt admission failed")
 
-      const event = yield* events.publish(SessionEvent.Prompted, {
+      const event = yield* events.publish(SessionEvent.PromptPromoted, {
         sessionID,
-        timestamp: admitted.timeCreated,
-        messageID: id,
-        prompt: Prompt.make({ text: "promote me" }),
-        delivery: "steer",
+        inputID: id,
       })
 
       expect(
@@ -256,49 +242,36 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
 
-      yield* events.publish(SessionEvent.AgentSwitched, {
+      yield* events.publish(SessionEvent.AgentSelected, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: created,
         agent: "build",
       })
-      yield* events.publish(SessionEvent.ModelSwitched, {
+      yield* events.publish(SessionEvent.ModelSelected, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: created,
         model,
       })
       yield* events.publish(SessionEvent.Synthetic, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: created,
         text: "synthetic context",
         metadata: { source: "projector-test" },
       })
       yield* events.publish(SessionEvent.Shell.Started, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: created,
         callID: "shell-1",
         command: "pwd",
       })
       yield* events.publish(SessionEvent.Shell.Ended, {
         sessionID,
-        timestamp: DateTime.makeUnsafe(1),
         callID: "shell-1",
         output: "/project",
       })
       const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
-        messageID: compactionID,
-        timestamp: created,
         reason: "manual",
       })
       yield* events.publish(SessionEvent.Compaction.Delta, {
         sessionID,
-        messageID: compactionID,
-        timestamp: created,
         text: "partial",
       })
       expect(
@@ -319,8 +292,6 @@ describe("SessionProjector", () => {
       ).toEqual([])
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
-        messageID: compactionID,
-        timestamp: DateTime.makeUnsafe(1),
         reason: "manual",
         text: "summary",
         recent: "recent context",
@@ -350,7 +321,7 @@ describe("SessionProjector", () => {
       })
       expect(messages.find((message) => message.type === "shell")).toMatchObject({
         output: "/project",
-        time: { completed: DateTime.makeUnsafe(1) },
+        time: { completed: DateTime.makeUnsafe(0) },
       })
       expect(messages.find((message) => message.type === "compaction")).toMatchObject({
         summary: "summary",
@@ -388,13 +359,20 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
       const id = SessionMessage.ID.make("msg_creator_collision")
+      const {
+        id: _,
+        type,
+        ...data
+      } = encodeMessage({ id, sessionID, type: "synthetic", text: "existing", time: { created } })
+      yield* db
+        .insert(SessionMessageTable)
+        .values({ id, session_id: sessionID, type, seq: 0, time_created: 0, data })
+        .run()
 
-      yield* events.publish(SessionEvent.Synthetic, { sessionID, messageID: id, timestamp: created, text: "keep me" })
       const exit = yield* events
         .publish(SessionEvent.Step.Started, {
           sessionID,
           assistantMessageID: id,
-          timestamp: created,
           agent: "build",
           model,
         })
@@ -464,7 +442,6 @@ describe("SessionProjector", () => {
       const service = yield* EventV2.Service
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
-        timestamp: DateTime.makeUnsafe(1),
         assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
         finish: "stop",
         cost: 0,
@@ -485,7 +462,7 @@ describe("SessionProjector", () => {
       expect(messages[1]).toMatchObject({
         type: "assistant",
         finish: "stop",
-        time: { completed: DateTime.makeUnsafe(1) },
+        time: { completed: DateTime.makeUnsafe(0) },
       })
     }),
   )
@@ -526,7 +503,6 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Text.Started, {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
-        timestamp: DateTime.makeUnsafe(3),
         textID: "text-stale",
       })
 

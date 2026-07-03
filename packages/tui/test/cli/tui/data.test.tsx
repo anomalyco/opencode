@@ -2,6 +2,8 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { V2Event } from "@opencode-ai/sdk/v2"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { EventV2 } from "@opencode-ai/core/event"
 import { onMount } from "solid-js"
 import { ProjectProvider } from "../../../src/context/project"
 import { SDKProvider } from "../../../src/context/sdk"
@@ -47,8 +49,8 @@ test("refreshes resources into reactive getters", async () => {
     if (url.pathname === "/api/session/ses_test/message")
       return json({
         data: [
-          { id: "msg_second", type: "user", text: "Second", time: { created: 2 } },
-          { id: "msg_first", type: "user", text: "First", time: { created: 1 } },
+          { id: "msg_second", created: 0, type: "user", text: "Second", time: { created: 2 } },
+          { id: "msg_first", created: 0, type: "user", text: "First", time: { created: 1 } },
         ],
         cursor: {},
       })
@@ -187,7 +189,9 @@ test("connectedOnce is false until first connect and persists across disconnect"
     )
   const connect = () =>
     stream?.enqueue(
-      encoder.encode(`data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n`),
+      encoder.encode(
+        `data: ${JSON.stringify({ id: "evt_connected", created: 0, type: "server.connected", data: {} })}\n\n`,
+      ),
     )
   const disconnect = () => {
     stream?.close()
@@ -264,12 +268,12 @@ test("tracks session status from active sessions and execution events", async ()
 
     emitEvent(events, {
       id: "evt_step_started",
-      type: "session.next.step.started",
+      created: 0,
+      type: "step.started",
       durable: durable("session-live"),
       data: {
         sessionID: "session-live",
         assistantMessageID: "message-live",
-        timestamp: 1,
         agent: "build",
         model: { id: "model", providerID: "provider" },
       },
@@ -278,12 +282,12 @@ test("tracks session status from active sessions and execution events", async ()
 
     emitEvent(events, {
       id: "evt_step_ended",
-      type: "session.next.step.ended",
+      created: 0,
+      type: "step.ended",
       durable: durable("session-live", 1, 2),
       data: {
         sessionID: "session-live",
         assistantMessageID: "message-live",
-        timestamp: 2,
         finish: "stop",
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -297,10 +301,10 @@ test("tracks session status from active sessions and execution events", async ()
 
     emitEvent(events, {
       id: "evt_execution_settled",
-      type: "session.next.execution.settled",
+      created: 0,
+      type: "execution.settled",
       data: {
         sessionID: "session-live",
-        timestamp: 3,
         outcome: "success",
       },
     })
@@ -308,12 +312,12 @@ test("tracks session status from active sessions and execution events", async ()
 
     emitEvent(events, {
       id: "evt_failed_step_started",
-      type: "session.next.step.started",
+      created: 0,
+      type: "step.started",
       durable: durable("session-failed"),
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
-        timestamp: 3,
         agent: "build",
         model: { id: "model", providerID: "provider" },
       },
@@ -322,12 +326,12 @@ test("tracks session status from active sessions and execution events", async ()
 
     emitEvent(events, {
       id: "evt_step_failed",
-      type: "session.next.step.failed",
+      created: 0,
+      type: "step.failed",
       durable: durable("session-failed", 1, 2),
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
-        timestamp: 4,
         error: { type: "unknown", message: "Provider unavailable" },
       },
     })
@@ -339,10 +343,10 @@ test("tracks session status from active sessions and execution events", async ()
 
     emitEvent(events, {
       id: "evt_failed_execution_settled",
-      type: "session.next.execution.settled",
+      created: 0,
+      type: "execution.settled",
       data: {
         sessionID: "session-failed",
-        timestamp: 5,
         outcome: "failure",
         error: { type: "unknown", message: "Provider unavailable" },
       },
@@ -411,7 +415,7 @@ test("refreshes integrations after integration updates", async () => {
     expect(data.location.integration.list()).toEqual([])
     const before = { ...requests }
 
-    emitEvent(events, { id: "evt_integration", type: "integration.updated", data: {} })
+    emitEvent(events, { id: "evt_integration", created: 0, type: "integration.updated", data: {} })
     await wait(() => data.location.integration.list()?.length === 1)
     await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
@@ -449,7 +453,7 @@ test("refreshes effective catalog data after catalog updates", async () => {
   try {
     await wait(() => requests.model > 0 && requests.provider > 0)
     const before = { ...requests }
-    emitEvent(events, { id: "evt_catalog", type: "catalog.updated", data: {} })
+    emitEvent(events, { id: "evt_catalog", created: 0, type: "catalog.updated", data: {} })
     await wait(() => requests.model > before.model && requests.provider > before.provider)
   } finally {
     app.renderer.destroy()
@@ -496,7 +500,7 @@ test("refreshes agents after agent updates", async () => {
 
   try {
     await wait(() => data.location.agent.list()?.[0]?.id === "build")
-    emitEvent(events, { id: "evt_agent", type: "agent.updated", data: {} })
+    emitEvent(events, { id: "evt_agent", created: 0, type: "agent.updated", data: {} })
     await wait(() => data.location.agent.list()?.[0]?.id === "reviewer")
   } finally {
     app.renderer.destroy()
@@ -541,7 +545,7 @@ test("refreshes references after updates", async () => {
   try {
     await mounted
     await wait(() => requests === 1)
-    emitEvent(events, { id: "evt_reference_1", type: "reference.updated", data: {} })
+    emitEvent(events, { id: "evt_reference_1", created: 0, type: "reference.updated", data: {} })
     await wait(() => data.location.reference.list()?.length === 1)
     expect(data.location.reference.list()?.[0]?.name).toBe("docs")
   } finally {
@@ -602,6 +606,7 @@ test("keeps shell state scoped to location", async () => {
 
     events.emit({
       id: "evt_shell_created",
+      created: 0,
       type: "shell.created",
       location: { directory: other },
       data: {
@@ -650,6 +655,7 @@ test("adds and dismisses permission requests from live events", async () => {
     await wait(() => data.connection.status() === "connected")
     emitEvent(events, {
       id: "evt_permission_asked_1",
+      created: 0,
       type: "permission.v2.asked",
       data: {
         id: "per_1",
@@ -660,6 +666,7 @@ test("adds and dismisses permission requests from live events", async () => {
     })
     emitEvent(events, {
       id: "evt_permission_asked_2",
+      created: 0,
       type: "permission.v2.asked",
       data: {
         id: "per_2",
@@ -672,6 +679,7 @@ test("adds and dismisses permission requests from live events", async () => {
 
     emitEvent(events, {
       id: "evt_permission_replied_1",
+      created: 0,
       type: "permission.v2.replied",
       data: { sessionID: "ses_1", requestID: "per_1", reply: "once" },
     })
@@ -680,6 +688,7 @@ test("adds and dismisses permission requests from live events", async () => {
 
     emitEvent(events, {
       id: "evt_permission_replied_2",
+      created: 0,
       type: "permission.v2.replied",
       data: { sessionID: "ses_1", requestID: "per_2", reply: "reject" },
     })
@@ -715,6 +724,7 @@ test("adds and dismisses question requests from live events", async () => {
     await wait(() => data.connection.status() === "connected")
     emitEvent(events, {
       id: "evt_question_asked_1",
+      created: 0,
       type: "question.v2.asked",
       data: {
         id: "que_1",
@@ -724,6 +734,7 @@ test("adds and dismisses question requests from live events", async () => {
     })
     emitEvent(events, {
       id: "evt_question_asked_2",
+      created: 0,
       type: "question.v2.asked",
       data: {
         id: "que_2",
@@ -735,6 +746,7 @@ test("adds and dismisses question requests from live events", async () => {
 
     emitEvent(events, {
       id: "evt_question_replied_1",
+      created: 0,
       type: "question.v2.replied",
       data: { sessionID: "ses_1", requestID: "que_1", answers: [["First"]] },
     })
@@ -743,6 +755,7 @@ test("adds and dismisses question requests from live events", async () => {
 
     emitEvent(events, {
       id: "evt_question_rejected_2",
+      created: 0,
       type: "question.v2.rejected",
       data: { sessionID: "ses_1", requestID: "que_2" },
     })
@@ -783,52 +796,52 @@ test("settles pending tools when a live failure arrives", async () => {
     await mounted
     emitEvent(events, {
       id: "evt_agent_1",
-      type: "session.next.agent.switched",
+      created: 0,
+      type: "agent.selected",
       durable: durable("session-1"),
-      data: { sessionID: "session-1", messageID: "msg_agent_1", timestamp: 0, agent: "build" },
+      data: { sessionID: "session-1", agent: "build" },
     })
     emitEvent(events, {
       id: "evt_model_1",
-      type: "session.next.model.switched",
+      created: 0,
+      type: "model.selected",
       durable: durable("session-1", 1),
       data: {
         sessionID: "session-1",
-        messageID: "msg_model_1",
-        timestamp: 0,
         model: { id: "model-1", providerID: "provider-1" },
       },
     })
     emitEvent(events, {
       id: "evt_step_started_1",
-      type: "session.next.step.started",
+      created: 0,
+      type: "step.started",
       durable: durable("session-1", 2),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
-        timestamp: 1,
         agent: "build",
         model: { id: "model-1", providerID: "provider-1" },
       },
     })
     emitEvent(events, {
       id: "evt_input_1",
-      type: "session.next.tool.input.started",
+      created: 0,
+      type: "tool.input.started",
       durable: durable("session-1", 3),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
-        timestamp: 2,
         callID: "call-1",
         name: "bash",
       },
     })
     emitEvent(events, {
       id: "evt_called_1",
-      type: "session.next.tool.called",
+      created: 0,
+      type: "tool.called",
       durable: durable("session-1", 4),
       data: {
         sessionID: "session-1",
-        timestamp: 2,
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
         tool: "bash",
@@ -838,11 +851,11 @@ test("settles pending tools when a live failure arrives", async () => {
     })
     emitEvent(events, {
       id: "evt_failed_1",
-      type: "session.next.tool.failed",
+      created: 0,
+      type: "tool.failed",
       durable: durable("session-1", 5),
       data: {
         sessionID: "session-1",
-        timestamp: 3,
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
         error: { type: "unknown", message: "aborted" },
@@ -928,12 +941,12 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     const unsubscribe = sync.listen((event) => received.push(event.name))
     emitEvent(events, {
       id: "evt_admitted_1",
-      type: "session.next.prompt.admitted",
+      created: 0,
+      type: "prompt.admitted",
       durable: durable(sessionID),
       data: {
         sessionID,
-        messageID,
-        timestamp: 0,
+        inputID: messageID,
         prompt: { text: "hello" },
         delivery: "steer",
       },
@@ -947,19 +960,17 @@ test("renders admitted prompts immediately with queued marker and clears when pr
 
     emitEvent(events, {
       id: "evt_prompted_1",
-      type: "session.next.prompted",
+      created: 0,
+      type: "prompt.promoted",
       durable: durable(sessionID, 1),
       data: {
         sessionID,
-        messageID,
-        timestamp: 0,
-        prompt: { text: "hello" },
-        delivery: "steer",
+        inputID: messageID,
       },
     })
 
-    await wait(() => received.at(-1) === "session.next.prompted")
-    expect(received.slice(-2)).toEqual(["session.next.prompt.admitted", "session.next.prompted"])
+    await wait(() => received.at(-1) === "prompt.promoted")
+    expect(received.slice(-2)).toEqual(["prompt.admitted", "prompt.promoted"])
     unsubscribe()
     const message = sync.session.message.list(sessionID)?.[0]
     expect(message?.type).toBe("user")
@@ -1007,21 +1018,21 @@ test("projects live context updates with their message ID", async () => {
     await mounted
     emitEvent(events, {
       id: "evt_context_1",
-      type: "session.next.context.updated",
+      created: 0,
+      type: "session.context.updated",
       durable: durable("session-1"),
       data: {
         sessionID: "session-1",
-        messageID: "msg_context_1",
-        timestamp: 1,
         text: "Updated context",
       },
     })
 
     await wait(() => sync.session.message.list("session-1")?.length === 1)
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: "msg_context_1",
+      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_context_1")),
       type: "system",
       text: "Updated context",
+      time: { created: 0 },
     })
   } finally {
     app.renderer.destroy()

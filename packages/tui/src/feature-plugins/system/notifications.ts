@@ -74,17 +74,17 @@ const tui: TuiPlugin = async (api) => {
     notify(api, sessionID, "Session done", session?.parentID ? "subagent_done" : "done")
   }
 
-  api.event.on("session.next.prompted", (event) => started(event.data.sessionID))
-  api.event.on("session.next.shell.started", (event) => started(event.data.sessionID))
-  api.event.on("session.next.step.started", (event) => started(event.data.sessionID))
-  api.event.on("session.next.retried", (event) => started(event.data.sessionID))
-  api.event.on("session.next.compaction.started", (event) => started(event.data.sessionID))
-  api.event.on("session.next.shell.ended", (event) => ended(event.data.sessionID))
-  api.event.on("session.next.step.ended", (event) => {
+  api.event.on("prompt.promoted", (event) => started(event.data.sessionID))
+  api.event.on("shell.started", (event) => started(event.data.sessionID))
+  api.event.on("step.started", (event) => started(event.data.sessionID))
+  api.event.on("retried", (event) => started(event.data.sessionID))
+  api.event.on("compaction.started", (event) => started(event.data.sessionID))
+  api.event.on("shell.ended", (event) => ended(event.data.sessionID))
+  api.event.on("step.ended", (event) => {
     if (event.data.finish === "tool-calls") return
     ended(event.data.sessionID)
   })
-  api.event.on("session.next.step.failed", (event) => {
+  api.event.on("step.failed", (event) => {
     const sessionID = event.data.sessionID
     if (!active.has(sessionID)) return
     errored.add(sessionID)

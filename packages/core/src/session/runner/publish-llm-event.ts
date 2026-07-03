@@ -78,7 +78,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* events.publish(SessionEvent.Step.Started, {
       ...input,
       assistantMessageID,
-      timestamp: yield* timestamp,
       snapshot: input.snapshot,
     })
     return assistantMessageID
@@ -123,7 +122,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       yield* events.publish(SessionEvent.Text.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
-        timestamp: yield* timestamp,
         textID,
         text: value,
       })
@@ -134,7 +132,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       yield* events.publish(SessionEvent.Reasoning.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
-        timestamp: yield* timestamp,
         reasoningID,
         text: value,
         providerMetadata,
@@ -147,7 +144,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${callID}`))
       yield* events.publish(SessionEvent.Tool.Input.Ended, {
         sessionID: input.sessionID,
-        timestamp: yield* timestamp,
         assistantMessageID: tool.assistantMessageID,
         callID,
         text: value,
@@ -176,7 +172,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* toolInput.start(event.id)
     yield* events.publish(SessionEvent.Tool.Input.Started, {
       sessionID: input.sessionID,
-      timestamp: yield* timestamp,
       assistantMessageID,
       callID: event.id,
       name: event.name,
@@ -204,7 +199,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantFailed = true
     yield* events.publish(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
-      timestamp: yield* timestamp,
       assistantMessageID,
       error: { type: "unknown", message },
     })
@@ -219,7 +213,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       tool.settled = true
       yield* events.publish(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,
-        timestamp: yield* timestamp,
         assistantMessageID: tool.assistantMessageID,
         callID,
         error: { type: "unknown", message },
@@ -248,7 +241,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
-          timestamp: yield* timestamp,
           textID: event.id,
         })
         return
@@ -257,7 +249,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
-          timestamp: yield* timestamp,
           textID: event.id,
           delta: event.text,
         })
@@ -270,7 +261,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
-          timestamp: yield* timestamp,
           reasoningID: event.id,
           providerMetadata: event.providerMetadata,
         })
@@ -280,7 +270,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
-          timestamp: yield* timestamp,
           reasoningID: event.id,
           delta: event.text,
         })
@@ -300,7 +289,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* toolInput.append(event.id, event.text)
         yield* events.publish(SessionEvent.Tool.Input.Delta, {
           sessionID: input.sessionID,
-          timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           delta: event.text,
@@ -322,7 +310,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         tool.providerMetadata = event.providerMetadata
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
-          timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           tool: event.name,
@@ -352,7 +339,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if ("error" in result) {
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
-            timestamp: yield* timestamp,
             assistantMessageID: tool.assistantMessageID,
             callID: event.id,
             error: result.error,
@@ -363,7 +349,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         }
         yield* events.publish(SessionEvent.Tool.Success, {
           sessionID: input.sessionID,
-          timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
@@ -382,7 +367,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         tool.settled = true
         yield* events.publish(SessionEvent.Tool.Failed, {
           sessionID: input.sessionID,
-          timestamp: yield* timestamp,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           error: { type: "unknown", message: event.message },

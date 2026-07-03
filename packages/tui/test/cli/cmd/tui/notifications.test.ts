@@ -90,12 +90,12 @@ function durable(sessionID: string) {
 function stepStarted(id: string, sessionID = "session"): V2Event {
   return {
     id,
-    type: "session.next.step.started",
+    created: 0,
+    type: "step.started",
     durable: durable(sessionID),
     data: {
       sessionID,
       assistantMessageID: `msg_${id}`,
-      timestamp: 0,
       agent: "build",
       model: { id: "model", providerID: "provider" },
     },
@@ -105,12 +105,12 @@ function stepStarted(id: string, sessionID = "session"): V2Event {
 function stepEnded(id: string, sessionID = "session", finish = "stop"): V2Event {
   return {
     id,
-    type: "session.next.step.ended",
+    created: 0,
+    type: "step.ended",
     durable: durable(sessionID),
     data: {
       sessionID,
       assistantMessageID: `msg_${id}`,
-      timestamp: 0,
       finish,
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -121,12 +121,12 @@ function stepEnded(id: string, sessionID = "session", finish = "stop"): V2Event 
 function stepFailed(id: string, sessionID = "session"): V2Event {
   return {
     id,
-    type: "session.next.step.failed",
+    created: 0,
+    type: "step.failed",
     durable: durable(sessionID),
     data: {
       sessionID,
       assistantMessageID: `msg_${id}`,
-      timestamp: 0,
       error: { type: "unknown", message: "boom" },
     },
   }
@@ -150,8 +150,8 @@ describe("internal notifications TUI plugin", () => {
   test("notifies for question and permission requests with blurred notifications and always-on sounds", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", type: "question.asked", data: question("question-1") })
-    harness.emit({ id: "event-2", type: "permission.asked", data: permission("permission-1") })
+    harness.emit({ id: "event-1", created: 0, type: "question.asked", data: question("question-1") })
+    harness.emit({ id: "event-2", created: 0, type: "permission.asked", data: permission("permission-1") })
 
     expect(harness.notifications).toEqual([questionNotification, permissionNotification])
   })
@@ -159,23 +159,25 @@ describe("internal notifications TUI plugin", () => {
   test("dedupes pending questions and permissions until they are resolved", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", type: "question.asked", data: question("question-1") })
-    harness.emit({ id: "event-2", type: "question.asked", data: question("question-1") })
+    harness.emit({ id: "event-1", created: 0, type: "question.asked", data: question("question-1") })
+    harness.emit({ id: "event-2", created: 0, type: "question.asked", data: question("question-1") })
     harness.emit({
       id: "event-3",
+      created: 0,
       type: "question.replied",
       data: { sessionID: "session", requestID: "question-1", answers: [] },
     })
-    harness.emit({ id: "event-4", type: "question.asked", data: question("question-1") })
+    harness.emit({ id: "event-4", created: 0, type: "question.asked", data: question("question-1") })
 
-    harness.emit({ id: "event-5", type: "permission.asked", data: permission("permission-1") })
-    harness.emit({ id: "event-6", type: "permission.asked", data: permission("permission-1") })
+    harness.emit({ id: "event-5", created: 0, type: "permission.asked", data: permission("permission-1") })
+    harness.emit({ id: "event-6", created: 0, type: "permission.asked", data: permission("permission-1") })
     harness.emit({
       id: "event-7",
+      created: 0,
       type: "permission.replied",
       data: { sessionID: "session", requestID: "permission-1", reply: "once" },
     })
-    harness.emit({ id: "event-8", type: "permission.asked", data: permission("permission-1") })
+    harness.emit({ id: "event-8", created: 0, type: "permission.asked", data: permission("permission-1") })
 
     expect(harness.notifications).toEqual([
       questionNotification,
@@ -205,7 +207,7 @@ describe("internal notifications TUI plugin", () => {
   test("uses sound-only notifications and subagent_done sound for subagent sessions", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", type: "question.asked", data: question("question-1", "subagent") })
+    harness.emit({ id: "event-1", created: 0, type: "question.asked", data: question("question-1", "subagent") })
     harness.emit(stepStarted("event-2", "subagent"))
     harness.emit(stepEnded("event-3", "subagent"))
 
@@ -248,12 +250,14 @@ describe("internal notifications TUI plugin", () => {
     harness.emit(stepStarted("event-1", "abort"))
     harness.emit({
       id: "event-2",
+      created: 0,
       type: "session.error",
       data: { sessionID: "abort", error: { name: "MessageAbortedError", data: { message: "Aborted" } } },
     })
     harness.emit(stepStarted("event-3", "timeout"))
     harness.emit({
       id: "event-4",
+      created: 0,
       type: "session.error",
       data: { sessionID: "timeout", error: { name: "UnknownError", data: { message: "SSE read timed out" } } },
     })

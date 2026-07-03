@@ -18,31 +18,33 @@ function form(id: string, sessionID: string): FormInfo {
 }
 
 function formCreated(info: FormInfo): V2Event {
-  return { id: `evt_${info.id}`, type: "form.created", data: { form: info } }
+  return { id: `evt_${info.id}`, created: 0, type: "form.created", data: { form: info } }
 }
 
-function prompted(messageID: string): V2Event {
+function prompted(inputID: string): V2Event {
   return {
     id: "evt_prompted",
-    type: "session.next.prompted",
+    created: 0,
+    type: "prompt.promoted",
     durable: { aggregateID: "ses_1", seq: 0, version: 1 },
-    data: { timestamp: 1, sessionID: "ses_1", messageID, prompt: { text: "hello" }, delivery: "steer" },
+    data: { sessionID: "ses_1", inputID },
   }
 }
 
 function settled(outcome: "success" | "interrupted" = "success"): V2Event {
   return {
     id: "evt_settled",
-    type: "session.next.execution.settled",
-    data: { timestamp: 2, sessionID: "ses_1", outcome },
+    created: 0,
+    type: "execution.settled",
+    data: { sessionID: "ses_1", outcome },
   }
 }
 
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
-async function run(input: { turn: (messageID: string) => V2Event[]; pendingForms?: FormInfo[]; attached?: boolean }) {
+async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?: FormInfo[]; attached?: boolean }) {
   const sdk = new OpencodeClient()
-  const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
+  const values: V2Event[] = [{ id: "evt_connected", created: 0, type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {

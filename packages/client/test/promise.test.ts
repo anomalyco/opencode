@@ -160,7 +160,7 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
   for await (const event of client.event.subscribe()) events.push(event)
 
   expect(events).toEqual([{ id: "evt_connected", type: "server.connected", data: {} }, modelSwitchedEvent])
-  expect(events[1]?.type === "session.next.model.switched" && events[1].data.timestamp).toBe(1_717_171_717_000)
+  expect(events[1]?.type === "model.selected" && events[1].data.timestamp).toBe(1_717_171_717_000)
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
@@ -328,7 +328,7 @@ const synced = { type: "log.synced", aggregateID: "ses_test", seq: 1 }
 
 const modelSwitchedEvent = {
   id: "evt_model",
-  type: "session.next.model.switched",
+  type: "model.selected",
   durable: { aggregateID: "ses_test", seq: 1, version: 1 },
   data: {
     timestamp: 1_717_171_717_000,

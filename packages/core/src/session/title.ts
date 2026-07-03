@@ -42,9 +42,10 @@ const make = (dependencies: Dependencies) => {
     if (!firstUser) return
     const agent = yield* dependencies.agents.get(AgentV2.ID.make("title"))
     if (!agent) return
-    const resolved = yield* (agent.model
-      ? dependencies.models.resolve({ ...session, model: agent.model })
-      : dependencies.models.resolve(session)
+    const resolved = yield* (
+      agent.model
+        ? dependencies.models.resolve({ ...session, model: agent.model })
+        : dependencies.models.resolve(session)
     ).pipe(Effect.catch(() => Effect.succeed(undefined)))
     if (!resolved) return
     const chunks: string[] = []
@@ -76,7 +77,6 @@ const make = (dependencies: Dependencies) => {
     if (!title) return
     yield* dependencies.events.publish(SessionEvent.Renamed, {
       sessionID: session.id,
-      timestamp: yield* DateTime.now,
       title: truncate(title),
     })
   })

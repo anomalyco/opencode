@@ -106,8 +106,7 @@ const layer = Layer.effect(
       yield* events.publish(SessionEvent.Moved, {
         sessionID: input.sessionID,
         location: Location.Ref.make({ directory }),
-        subdirectory: RelativePath.make(path.relative(destination.directory, directory).replaceAll("\\", "/")),
-        timestamp: yield* DateTime.now,
+        subpath: RelativePath.make(path.relative(destination.directory, directory).replaceAll("\\", "/")),
       })
 
       if (patch) {

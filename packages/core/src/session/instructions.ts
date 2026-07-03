@@ -60,9 +60,9 @@ const layer = Layer.effect(
       const files = yield* Effect.forEach(
         toInject,
         (path) =>
-          fs.readFileStringSafe(path).pipe(
-            Effect.map((content) => (content === undefined ? undefined : { path, content })),
-          ),
+          fs
+            .readFileStringSafe(path)
+            .pipe(Effect.map((content) => (content === undefined ? undefined : { path, content }))),
         { concurrency: "unbounded" },
       )
       const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
@@ -74,8 +74,6 @@ const layer = Layer.effect(
       // metadata so it survives across Location layer restarts.
       yield* events.publish(SessionEvent.Synthetic, {
         sessionID: input.sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: yield* DateTime.now,
         text: readable.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n"),
         description: `Loaded ${readable.map((file) => describePath(root, file.path)).join(", ")}`,
         metadata: { instruction: { paths: readable.map((file) => file.path) } },

@@ -8,10 +8,14 @@ import { FileAttachment, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { ascending } from "./identifier.js"
+import { Event } from "./event.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
-  statics((schema) => ({ create: () => schema.make("msg_" + ascending()) })),
+  statics((schema) => ({
+    create: () => schema.make("msg_" + ascending()),
+    fromEvent: (eventID: Event.ID) => schema.make(eventID.replace(/^evt_/, "msg_")),
+  })),
 )
 export type ID = typeof ID.Type
 
@@ -27,19 +31,19 @@ const Base = {
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
 
-export interface AgentSwitched extends Schema.Schema.Type<typeof AgentSwitched> {}
-export const AgentSwitched = Schema.Struct({
+export interface AgentSelected extends Schema.Schema.Type<typeof AgentSelected> {}
+export const AgentSelected = Schema.Struct({
   ...Base,
   type: Schema.Literal("agent-switched"),
   agent: Schema.String,
-}).annotate({ identifier: "Session.Message.AgentSwitched" })
+}).annotate({ identifier: "Session.Message.AgentSelected" })
 
-export interface ModelSwitched extends Schema.Schema.Type<typeof ModelSwitched> {}
-export const ModelSwitched = Schema.Struct({
+export interface ModelSelected extends Schema.Schema.Type<typeof ModelSelected> {}
+export const ModelSelected = Schema.Struct({
   ...Base,
   type: Schema.Literal("model-switched"),
   model: Model.Ref,
-}).annotate({ identifier: "Session.Message.ModelSwitched" })
+}).annotate({ identifier: "Session.Message.ModelSelected" })
 
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
@@ -207,8 +211,8 @@ export const Compaction = Schema.Struct({
 }).annotate({ identifier: "Session.Message.Compaction" })
 
 export const Message = Schema.Union([
-  AgentSwitched,
-  ModelSwitched,
+  AgentSelected,
+  ModelSelected,
   User,
   Synthetic,
   System,
@@ -219,5 +223,5 @@ export const Message = Schema.Union([
 ])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Message" })
-export type Message = AgentSwitched | ModelSwitched | User | Synthetic | System | Skill | Shell | Assistant | Compaction
+export type Message = AgentSelected | ModelSelected | User | Synthetic | System | Skill | Shell | Assistant | Compaction
 export type Type = Message["type"]

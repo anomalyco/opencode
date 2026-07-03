@@ -134,7 +134,6 @@ const layer = Layer.effect(
           if (tool.type !== "tool" || (tool.state.status !== "pending" && tool.state.status !== "running")) continue
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID,
-            timestamp: yield* DateTime.now,
             assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
@@ -297,7 +296,6 @@ const layer = Layer.effect(
           yield* serialized(
             events.publish(SessionEvent.Step.Ended, {
               sessionID: session.id,
-              timestamp: yield* DateTime.now,
               assistantMessageID: yield* publisher.startAssistant(),
               finish: settlement.finish,
               cost: 0,
