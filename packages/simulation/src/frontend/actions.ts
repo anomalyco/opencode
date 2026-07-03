@@ -1,36 +1,11 @@
 import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
+import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
 import { SimulationTrace } from "./trace"
 
-export interface KeyModifiers {
-  readonly ctrl?: boolean
-  readonly shift?: boolean
-  readonly meta?: boolean
-  readonly super?: boolean
-  readonly hyper?: boolean
-}
-
-export type Action =
-  | { readonly type: "typeText"; readonly text: string }
-  | { readonly type: "pressKey"; readonly key: string; readonly modifiers?: KeyModifiers }
-  | { readonly type: "pressEnter" }
-  | { readonly type: "pressArrow"; readonly direction: "up" | "down" | "left" | "right" }
-  | { readonly type: "focus"; readonly target: number }
-  | { readonly type: "click"; readonly target: number; readonly x: number; readonly y: number }
-
-export interface Element {
-  readonly id: string
-  readonly num: number
-  readonly x: number
-  readonly y: number
-  readonly width: number
-  readonly height: number
-  readonly focusable: boolean
-  readonly focused: boolean
-  readonly clickable: boolean
-  readonly editor: boolean
-}
+export type Action = SimulationProtocol.Frontend.Action
+export type Element = SimulationProtocol.Frontend.Element
 
 export interface Harness {
   readonly renderer: CliRenderer

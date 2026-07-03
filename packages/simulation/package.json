@@ -9,7 +9,8 @@
     "./backend": "./src/backend/index.ts",
     "./backend/*": "./src/backend/*.ts",
     "./frontend": "./src/frontend/simulation.ts",
-    "./frontend/*": "./src/frontend/*.ts"
+    "./frontend/*": "./src/frontend/*.ts",
+    "./protocol": "./src/protocol/index.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit"

@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
+import { SimulationProtocol } from "../protocol"
 import { SimulationLLMExchange } from "./llm-exchange"
 import { SimulationNetwork } from "./network"
 
@@ -23,43 +24,13 @@ import { SimulationNetwork } from "./network"
 const DefaultPort = 40950
 const MaxPortAttempts = 100
 
-const ChunkItem = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("toolCall"), id: Schema.String, name: Schema.String, input: Schema.Unknown }),
-  Schema.Struct({ type: Schema.Literal("raw"), chunk: Schema.Unknown }),
-])
-
-const ChunkParams = Schema.Struct({ id: Schema.String, items: Schema.Array(ChunkItem) })
-
-const FinishParams = Schema.Struct({
-  id: Schema.String,
-  reason: Schema.Literals(["stop", "tool-calls", "length", "content-filter"]).pipe(
-    Schema.withDecodingDefault(Effect.succeed("stop" as const)),
-  ),
-})
-
-const decodeChunkParams = Schema.decodeUnknownPromise(ChunkParams)
-const decodeFinishParams = Schema.decodeUnknownPromise(FinishParams)
-
-type JsonRpcRequest = {
-  readonly jsonrpc: "2.0"
-  readonly id?: string | number | null
-  readonly method: string
-  readonly params?: unknown
-}
-
 type ControlSocket = Bun.ServerWebSocket<{ unsubscribe?: () => void }>
 
-function parseRequest(input: string | Buffer): JsonRpcRequest {
-  const value = JSON.parse(typeof input === "string" ? input : input.toString()) as unknown
-  if (typeof value !== "object" || value === null) throw new Error("Invalid JSON-RPC request")
-  if (!("jsonrpc" in value) || value.jsonrpc !== "2.0") throw new Error("Invalid JSON-RPC version")
-  if (!("method" in value) || typeof value.method !== "string") throw new Error("Invalid JSON-RPC method")
-  return value as JsonRpcRequest
+function parseRequest(input: string | Buffer) {
+  return SimulationProtocol.JsonRpc.decodeRequest(JSON.parse(typeof input === "string" ? input : input.toString()))
 }
 
-async function handle(socket: ControlSocket, request: JsonRpcRequest): Promise<unknown> {
+async function handle(socket: ControlSocket, request: SimulationProtocol.JsonRpc.Request): Promise<unknown> {
   switch (request.method) {
     case "llm.attach": {
       socket.data.unsubscribe?.()
@@ -69,7 +40,7 @@ async function handle(socket: ControlSocket, request: JsonRpcRequest): Promise<u
       return { attached: true }
     }
     case "llm.chunk": {
-      const params = await decodeChunkParams(request.params)
+      const params = await SimulationProtocol.Backend.decodeChunkParams(request.params)
       await Effect.runPromise(
         SimulationLLMExchange.push(
           params.id,
@@ -79,7 +50,7 @@ async function handle(socket: ControlSocket, request: JsonRpcRequest): Promise<u
       return { ok: true }
     }
     case "llm.finish": {
-      const params = await decodeFinishParams(request.params)
+      const params = await SimulationProtocol.Backend.decodeFinishParams(request.params)
       await Effect.runPromise(SimulationLLMExchange.push(params.id, [{ type: "finish", reason: params.reason }]))
       return { ok: true }
     }
@@ -105,19 +76,14 @@ function serve(port = DefaultPort, attempts = MaxPortAttempts): Bun.Server<{ uns
           socket.data.unsubscribe?.()
         },
         async message(socket, message) {
-          let request: JsonRpcRequest | undefined
+          let request: SimulationProtocol.JsonRpc.Request | undefined
           try {
             request = parseRequest(message)
             const result = await handle(socket, request)
-            if (request.id !== undefined) socket.send(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }))
+            const response = SimulationProtocol.JsonRpc.success(request.id, result)
+            if (response) socket.send(JSON.stringify(response))
           } catch (error) {
-            socket.send(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                id: request?.id ?? null,
-                error: { code: -32000, message: error instanceof Error ? error.message : String(error) },
-              }),
-            )
+            socket.send(JSON.stringify(SimulationProtocol.JsonRpc.failure(request?.id, error)))
           }
         },
       },
