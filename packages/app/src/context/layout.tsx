@@ -5,10 +5,11 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { ServerConnection, useServer } from "./server"
+import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { pathKey } from "@/utils/path-key"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
@@ -493,7 +494,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const root = rootFor(project.worktree)
           if (root === project.worktree) continue
 
-          server.projects.close(project.worktree)
+          server.projects.remove(project.worktree)
 
           if (!seen.has(root)) {
             server.projects.open(root)
@@ -613,6 +614,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
+        recentlyClosed: createMemo(() => {
+          const known = new Set(serverSync().data.project.map((project) => pathKey(project.worktree)))
+          return server.projects
+            .recentlyClosed()
+            .filter((worktree) => known.has(pathKey(worktree)))
+            .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+            .map((worktree) => enrich({ worktree, expanded: false }))
+        }),
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return

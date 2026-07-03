@@ -28,7 +28,7 @@
   outline: none;
 }
 
-[data-component="button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+[data-component="button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled):not([data-variant="loading"]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2.5px;
 }
@@ -168,6 +168,15 @@
 [data-component="button-v2"][data-variant="contrast"]:is(:disabled, [data-state="disabled"]) {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Loading */
+[data-component="button-v2"][data-variant="loading"] {
+  background: #f2f2f2;
+  color: var(--v2-text-text-base);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+  cursor: default;
+  pointer-events: none;
 }
 
 /* Ghost */

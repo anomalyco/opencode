@@ -19,7 +19,7 @@ import type { ServerSession } from "../server-session"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
-import { loadMcpQuery } from "../server-sync"
+import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
@@ -247,25 +247,29 @@ export async function bootstrapDirectory(input: {
       () =>
         retry(() =>
           input.sdk.session.status().then(async (x) => {
-            if (input.session) {
-              const statuses = x.data ?? {}
-              await Promise.all(
-                Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
-              )
-              input.session.set(
-                "session_status",
-                produce((draft) => {
-                  for (const sessionID of Object.keys(draft)) {
-                    if (statuses[sessionID]) continue
-                    if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
-                  }
-                }),
-              )
-              for (const [sessionID, status] of Object.entries(statuses)) {
-                input.session.set("session_status", sessionID, reconcile(status))
-              }
+            if (!input.session) {
+              input.setStore("session_status", x.data!)
+              return
             }
-            if (!input.session) input.setStore("session_status", x.data!)
+            const statuses = x.data ?? {}
+            input.session.set(
+              "session_status",
+              produce((draft) => {
+                for (const sessionID of Object.keys(draft)) {
+                  if (statuses[sessionID]) continue
+                  if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
+                }
+              }),
+            )
+            for (const [sessionID, status] of Object.entries(statuses)) {
+              input.session.set("session_status", sessionID, reconcile(status))
+            }
+            // Warm session info only after seeding statuses so a stalled session
+            // fetch cannot park busy indicators behind it, mirroring how live
+            // session.status events apply first and resolve info in the background.
+            await Promise.all(
+              Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
+            )
           }),
         ),
       !seededProject &&
@@ -348,6 +352,7 @@ export async function bootstrapDirectory(input: {
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, input.directory, input.sdk))),
+      input.mcp && (() => input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.sdk))),
       () =>
         input.queryClient.fetchQuery(loadProvidersQuery(input.scope, input.directory, input.sdk)).catch((err) => {
           const project = getFilename(input.directory)

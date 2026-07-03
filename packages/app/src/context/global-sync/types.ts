@@ -3,6 +3,7 @@ import type {
   Command,
   Config,
   LspStatus,
+  McpResource,
   McpStatus,
   Message,
   Part,
@@ -64,6 +65,9 @@ export type State = {
   mcp_ready: boolean
   mcp: {
     [name: string]: McpStatus
+  }
+  mcp_resource: {
+    [key: string]: McpResource
   }
   lsp_ready: boolean
   lsp: LspStatus[]

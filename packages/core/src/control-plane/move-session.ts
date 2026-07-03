@@ -66,7 +66,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ControlPlaneMoveSession") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service
@@ -139,13 +139,6 @@ export const layer = Layer.effect(
 
     return Service.of({ moveSession })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
 )
 
 export const node = makeGlobalNode({

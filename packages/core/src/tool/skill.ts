@@ -54,7 +54,7 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
 const unableToLoad = (name: string, error?: unknown) =>
   new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const fs = yield* FSUtil.Service

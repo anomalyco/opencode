@@ -81,6 +81,13 @@
   --project-avatar-border: var(--v2-avatar-border-gray);
 }
 
+[data-slot="project-avatar-surface"][data-variant="outline"] {
+  --project-avatar-bg: var(--v2-background-bg-base);
+  --project-avatar-border: var(--v2-border-border-strong);
+  color: var(--v2-text-text-muted);
+  text-shadow: none;
+}
+
 [data-slot="project-avatar-surface"][data-has-image] {
   background: var(--project-avatar-bg);
 }

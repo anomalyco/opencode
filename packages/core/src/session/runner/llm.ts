@@ -89,7 +89,7 @@ import { llmClient } from "../../effect/app-node-platform"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -405,8 +405,6 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const defaultLayer = layer
 
 export const node = makeLocationNode({
   service: Service,
