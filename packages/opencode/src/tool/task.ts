@@ -130,41 +130,48 @@ export const TaskTool = Tool.define(
       status: "ok" | "error" | "aborted",
       startedAt: number,
     ) {
-      const session = yield* sessions.get(sessionID).pipe(Effect.option)
-      const s = Option.getOrUndefined(session)
-      const messages = yield* sessions.messages({ sessionID }).pipe(Effect.option)
-      const msgs = Option.getOrElse(messages, () => [] as SessionV1.WithParts[])
+      const base = { sessionID, parentSessionID, status }
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const session = yield* sessions.get(sessionID).pipe(Effect.option)
+          const s = Option.getOrUndefined(session)
+          const messages = yield* sessions.messages({ sessionID }).pipe(Effect.option)
+          const msgs = Option.getOrElse(messages, () => [] as SessionV1.WithParts[])
 
-      const elapsedMs = Date.now() - startedAt
+          const elapsedMs = Date.now() - startedAt
 
-      let input = 0
-      let output = 0
-      let reasoning = 0
-      let cacheRead = 0
-      let cacheWrite = 0
-      let totalCost = 0
-      for (const msg of msgs) {
-        if (msg.info.role !== "assistant") continue
-        input += msg.info.tokens.input
-        output += msg.info.tokens.output
-        reasoning += msg.info.tokens.reasoning
-        cacheRead += msg.info.tokens.cache.read
-        cacheWrite += msg.info.tokens.cache.write
-        totalCost += msg.info.cost
-      }
+          let input = 0
+          let output = 0
+          let reasoning = 0
+          let cacheRead = 0
+          let cacheWrite = 0
+          let totalCost = 0
+          for (const msg of msgs) {
+            if (msg.info.role !== "assistant") continue
+            input += msg.info.tokens?.input ?? 0
+            output += msg.info.tokens?.output ?? 0
+            reasoning += msg.info.tokens?.reasoning ?? 0
+            cacheRead += msg.info.tokens?.cache?.read ?? 0
+            cacheWrite += msg.info.tokens?.cache?.write ?? 0
+            totalCost += msg.info.cost ?? 0
+          }
 
-      return {
-        sessionID,
-        parentSessionID,
-        status,
-        slug: s?.slug,
-        agent: s?.agent,
-        model: s?.model ? `${s.model.providerID}/${s.model.id}` : undefined,
-        variant: s?.model?.variant,
-        elapsedMs,
-        tokens: { input, output, reasoning, cacheRead, cacheWrite },
-        cost: totalCost,
-      }
+          return {
+            sessionID,
+            parentSessionID,
+            status,
+            slug: s?.slug,
+            agent: s?.agent,
+            model: s?.model ? `${s.model.providerID}/${s.model.id}` : undefined,
+            variant: s?.model?.variant,
+            elapsedMs,
+            tokens: { input, output, reasoning, cacheRead, cacheWrite },
+            cost: totalCost,
+          }
+        }),
+      )
+      if (Exit.isSuccess(exit)) return exit.value
+      return base
     })
 
     const run = Effect.fn("TaskTool.execute")(function* (

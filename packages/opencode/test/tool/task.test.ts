@@ -17,7 +17,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
 import { Interrupt } from "../../src/session/interrupt"
-import { TaskTool, renderOutput, type TaskPromptOps } from "../../src/tool/task"
+import { TaskTool, renderOutput, Event as TaskEventDef, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -1121,8 +1121,9 @@ describe("tool.task", () => {
       }),
   )
 
-  it.instance("completed task publishes enriched message tokens and cost", () =>
+  it.instance("completed task publishes enriched task.completed event", () =>
     Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -1156,7 +1157,6 @@ describe("tool.task", () => {
               type: "text" as const,
               text: "done",
             }
-            // Persist message and part so completedPayload can sum them
             return { info: info as SessionV1.Info, parts: [part] }
           }).pipe(
             Effect.tap((result) =>
@@ -1167,6 +1167,12 @@ describe("tool.task", () => {
             ),
           ),
       }
+
+      const captured = yield* Deferred.make<any>()
+      yield* events.listen((e) => {
+        if (e.type === TaskEventDef.Completed.type) return Deferred.succeed(captured, e)
+        return Effect.void
+      })
 
       const result = yield* def.execute(
         {
@@ -1186,25 +1192,19 @@ describe("tool.task", () => {
         },
       )
 
-      const childId = result.metadata.sessionId
-
-      // Verify the child session has the expected agent
-      const child = yield* sessions.get(childId)
-      expect(child.agent).toBe("general")
-
-      // Read child session messages and verify tokens/cost
-      const msgs = yield* sessions.messages({ sessionID: childId })
-      const assistantMsgs = msgs.filter((m): m is SessionV1.WithParts & { info: SessionV1.Assistant } => m.info.role === "assistant")
-      expect(assistantMsgs.length).toBeGreaterThan(0)
-
-      const first = assistantMsgs[0]!
-      expect(first.info.tokens.input).toBe(100)
-      expect(first.info.tokens.output).toBe(50)
-      expect(first.info.tokens.reasoning).toBe(20)
-      expect(first.info.tokens.cache.read).toBe(10)
-      expect(first.info.tokens.cache.write).toBe(5)
-      expect(first.info.cost).toBe(0.005)
+      const event = yield* Deferred.await(captured)
+      expect(event.type).toBe("task.completed")
+      expect(event.data.sessionID).toBe(result.metadata.sessionId)
+      expect(event.data.parentSessionID).toBe(chat.id)
+      expect(event.data.status).toBe("ok")
+      expect(event.data.agent).toBe("general")
+      expect(event.data.elapsedMs).toBeGreaterThan(0)
+      expect(event.data.tokens?.input).toBe(100)
+      expect(event.data.tokens?.output).toBe(50)
+      expect(event.data.tokens?.reasoning).toBe(20)
+      expect(event.data.tokens?.cacheRead).toBe(10)
+      expect(event.data.tokens?.cacheWrite).toBe(5)
+      expect(event.data.cost).toBe(0.005)
     }),
   )
-
 })
