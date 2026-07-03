@@ -271,7 +271,7 @@ describe("tool.apply_patch freeform", () => {
 
       yield* execute({ patchText }, ctx)
 
-      const moved = path.join(test.directory, "renamed", "dir", "name.txt")
+      const moved = path.join(test.directory, "session.renamed", "dir", "name.txt")
       yield* expectReadFailure(original)
       expect(yield* readText(moved)).toBe("new content\n")
     }),
@@ -282,7 +282,7 @@ describe("tool.apply_patch freeform", () => {
       const test = yield* TestInstance
       const { ctx } = makeCtx()
       const original = path.join(test.directory, "old", "name.txt")
-      const destination = path.join(test.directory, "renamed", "dir", "name.txt")
+      const destination = path.join(test.directory, "session.renamed", "dir", "name.txt")
       yield* makeDir(path.dirname(original))
       yield* makeDir(path.dirname(destination))
       yield* writeText(original, "from\n")

@@ -226,7 +226,7 @@ const SettingsProvidersContent: Component = () => {
             >
               <div class="flex flex-col min-w-0">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
+                  <ProviderIcon id="session.synthetic" class="size-5 shrink-0 icon-strong-base" />
                   <span class="text-14-medium text-text-strong">{language.t("provider.custom.title")}</span>
                   <Tag>{language.t("settings.providers.tag.custom")}</Tag>
                 </div>

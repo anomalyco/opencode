@@ -60,7 +60,7 @@ if (schemas) {
   visit({ ...document, components: { ...document.components, schemas: undefined } })
   for (const name of Object.keys(schemas)) {
     if (
-      /^(AgentSelected|ModelSelected|SessionMoved|Renamed|Forked|PromptPromoted|PromptAdmitted|ExecutionSettled|ContextUpdated|Synthetic|SkillActivated|ShellStarted|ShellEnded|StepStarted|StepEnded|StepFailed|TextStarted|TextDelta|TextEnded|ReasoningStarted|ReasoningDelta|ReasoningEnded|ToolInputStarted|ToolInputDelta|ToolInputEnded|ToolCalled|ToolProgress|ToolSuccess|ToolFailed|Retried|CompactionStarted|CompactionDelta|CompactionEnded|RevertStaged|RevertCleared|RevertCommitted)1$/.test(
+      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionSettled|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetried|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1$/.test(
         name,
       ) &&
       !reachable.has(name)
@@ -100,7 +100,7 @@ await createClient({
 const generatedTypesPath = "./src/v2/gen/types.gen.ts"
 const generatedTypes = await Bun.file(generatedTypesPath).text()
 if (
-  /export type (AgentSelected|ModelSelected|SessionMoved|Renamed|Forked|PromptPromoted|PromptAdmitted|ExecutionSettled|ContextUpdated|Synthetic|SkillActivated|ShellStarted|ShellEnded|StepStarted|StepEnded|StepFailed|TextStarted|TextDelta|TextEnded|ReasoningStarted|ReasoningDelta|ReasoningEnded|ToolInputStarted|ToolInputDelta|ToolInputEnded|ToolCalled|ToolProgress|ToolSuccess|ToolFailed|Retried|CompactionStarted|CompactionDelta|CompactionEnded|RevertStaged|RevertCleared|RevertCommitted)1 =/.test(
+  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionSettled|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetried|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1 =/.test(
     generatedTypes,
   )
 ) {

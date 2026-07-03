@@ -2985,7 +2985,7 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Interrupt provider" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Step interrupted" } },
       ])
-      expect(yield* recordedEventTypes(sessionID)).toContain("step.failed.1")
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.step.failed.1")
       yield* session.interrupt(sessionID)
     }),
   )
@@ -3029,8 +3029,8 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const eventTypes = yield* recordedEventTypes(sessionID)
-      expect(eventTypes).toContain("step.failed.1")
-      expect(eventTypes).not.toContain("step.ended.1")
+      expect(eventTypes).toContain("session.step.failed.1")
+      expect(eventTypes).not.toContain("session.step.ended.1")
     }),
   )
 

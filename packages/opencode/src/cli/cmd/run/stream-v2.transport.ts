@@ -213,7 +213,9 @@ function promptAgents(next: SessionTurnInput) {
       ? [
           {
             name: part.name,
-            source: part.source ? { start: part.source.start, end: part.source.end, text: part.source.value } : undefined,
+            source: part.source
+              ? { start: part.source.start, end: part.source.end, text: part.source.value }
+              : undefined,
           },
         ]
       : [],
@@ -404,27 +406,39 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (message.type === "shell") {
-      state.shellCommands.set(message.callID, message.command)
+      state.shellCommands.set(message.shell.id, message.shell.command)
       const completed = message.time.completed !== undefined
       if (!render) {
         // Suppressed history: mark settled shells rendered so live redelivery
         // stays silent. A still-running shell stays unmarked and renders in
         // full when its live shell.ended event arrives.
         if (completed) {
-          state.shellStarted.add(message.callID)
-          state.shellEnded.add(message.callID)
+          state.shellStarted.add(message.shell.id)
+          state.shellEnded.add(message.shell.id)
         }
         return
       }
-      if (!state.shellStarted.has(message.callID)) {
-        state.shellStarted.add(message.callID)
-        write([shellCommit(message.callID, message.command, { text: "running shell", phase: "start", toolState: "running" })])
+      if (!state.shellStarted.has(message.shell.id)) {
+        state.shellStarted.add(message.shell.id)
+        write([
+          shellCommit(message.shell.id, message.shell.command, {
+            text: "running shell",
+            phase: "start",
+            toolState: "running",
+          }),
+        ])
       }
-      if (completed && !state.shellEnded.has(message.callID)) {
-        state.shellEnded.add(message.callID)
-        write([shellCommit(message.callID, message.command, { text: message.output, phase: "progress", toolState: "completed" })])
+      if (completed && message.output && !state.shellEnded.has(message.shell.id)) {
+        state.shellEnded.add(message.shell.id)
+        write([
+          shellCommit(message.shell.id, message.shell.command, {
+            text: message.output.output,
+            phase: "progress",
+            toolState: "completed",
+          }),
+        ])
       }
-      if (completed && state.shellWait?.callID === message.callID) state.shellWait.resolve()
+      if (completed && state.shellWait?.callID === message.shell.id) state.shellWait.resolve()
       return
     }
     if (message.type !== "assistant") return
@@ -515,17 +529,17 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     input.trace?.write("recv.event", event)
     subagents.main(event)
-    if (event.type === "prompt.promoted") {
+    if (event.type === "session.prompt.promoted") {
       if (state.wait?.messageID === event.data.inputID) state.wait.promoted = true
       state.messageIDs.add(event.data.inputID)
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }
-    if (event.type === "step.started") {
+    if (event.type === "session.step.started") {
       write([], { phase: "running", status: "assistant responding" })
       return
     }
-    if (event.type === "skill.activated") {
+    if (event.type === "session.skill.activated") {
       const messageID = event.id.replace(/^evt_/, "msg_")
       if (state.wait) state.wait.promoted = true
       if (state.skillMessages.has(messageID)) return
@@ -533,38 +547,56 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       write([skillCommit(messageID, event.data.name)])
       return
     }
-    if (event.type === "shell.started") {
-      state.shellCommands.set(event.data.callID, event.data.command)
+    if (event.type === "session.shell.started") {
+      state.shellCommands.set(event.data.shell.id, event.data.shell.command)
       const wait = state.shellWait
-      if (wait && wait.callID === undefined) wait.callID = event.data.callID
-      if (state.shellStarted.has(event.data.callID)) return
-      state.shellStarted.add(event.data.callID)
-      write([shellCommit(event.data.callID, event.data.command, { text: "running shell", phase: "start", toolState: "running" })], {
-        phase: "running",
-        status: "running shell",
-      })
+      if (wait && wait.callID === undefined) wait.callID = event.data.shell.id
+      if (state.shellStarted.has(event.data.shell.id)) return
+      state.shellStarted.add(event.data.shell.id)
+      write(
+        [
+          shellCommit(event.data.shell.id, event.data.shell.command, {
+            text: "running shell",
+            phase: "start",
+            toolState: "running",
+          }),
+        ],
+        {
+          phase: "running",
+          status: "running shell",
+        },
+      )
       return
     }
-    if (event.type === "shell.ended") {
-      const command = state.shellCommands.get(event.data.callID) ?? ""
+    if (event.type === "session.shell.ended") {
+      const command = state.shellCommands.get(event.data.shell.id) ?? event.data.shell.command
       const commits: StreamCommit[] = []
-      if (!state.shellStarted.has(event.data.callID)) {
-        state.shellStarted.add(event.data.callID)
-        if (command) commits.push(shellCommit(event.data.callID, command, { text: "running shell", phase: "start", toolState: "running" }))
+      if (!state.shellStarted.has(event.data.shell.id)) {
+        state.shellStarted.add(event.data.shell.id)
+        if (command)
+          commits.push(
+            shellCommit(event.data.shell.id, command, { text: "running shell", phase: "start", toolState: "running" }),
+          )
       }
-      if (!state.shellEnded.has(event.data.callID)) {
-        state.shellEnded.add(event.data.callID)
-        commits.push(shellCommit(event.data.callID, command, { text: event.data.output, phase: "progress", toolState: "completed" }))
+      if (!state.shellEnded.has(event.data.shell.id)) {
+        state.shellEnded.add(event.data.shell.id)
+        commits.push(
+          shellCommit(event.data.shell.id, command, {
+            text: event.data.output.output,
+            phase: "progress",
+            toolState: "completed",
+          }),
+        )
       }
       const wait = state.shellWait
       // An unset callID means shell.started has not been observed yet (event
       // delivery lag); mini serializes its own shells, so adopt this ended.
-      const owned = wait !== undefined && (wait.callID === undefined || wait.callID === event.data.callID)
+      const owned = wait !== undefined && (wait.callID === undefined || wait.callID === event.data.shell.id)
       write(commits, owned || state.wait ? undefined : { phase: "idle", status: "" })
       if (owned) wait.resolve()
       return
     }
-    if (event.type === "text.delta") {
+    if (event.type === "session.text.delta") {
       const key = streamPartKey(event.data.assistantMessageID, event.data.textID)
       const projected = state.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -586,7 +618,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       ])
       return
     }
-    if (event.type === "text.ended") {
+    if (event.type === "session.text.ended") {
       const key = streamPartKey(event.data.assistantMessageID, event.data.textID)
       const previous = state.text.get(key) ?? ""
       if (event.data.text.length > previous.length)
@@ -604,7 +636,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.projectedText.delete(key)
       return
     }
-    if (event.type === "reasoning.delta") {
+    if (event.type === "session.reasoning.delta") {
       const key = streamPartKey(event.data.assistantMessageID, event.data.reasoningID)
       const projected = state.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -627,7 +659,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         ])
       return
     }
-    if (event.type === "reasoning.ended") {
+    if (event.type === "session.reasoning.ended") {
       const key = streamPartKey(event.data.assistantMessageID, event.data.reasoningID)
       const previous = state.reasoning.get(key) ?? ""
       if (input.thinking && event.data.text.length > previous.length)
@@ -645,7 +677,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.projectedReasoning.delete(key)
       return
     }
-    if (event.type === "tool.input.started") {
+    if (event.type === "session.tool.input.started") {
       state.tools.set(event.data.callID, {
         messageID: event.data.assistantMessageID,
         name: event.data.name,
@@ -655,7 +687,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       })
       return
     }
-    if (event.type === "tool.called") {
+    if (event.type === "session.tool.called") {
       if (state.finishedTools.has(event.data.callID)) return
       const current = state.tools.get(event.data.callID)
       const item: SessionMessageAssistantTool = {
@@ -669,10 +701,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       renderTool(event.data.assistantMessageID, item)
       return
     }
-    if (event.type === "tool.progress") return
-    if (event.type === "tool.success" || event.type === "tool.failed") {
+    if (event.type === "session.tool.progress") return
+    if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
       const current = state.tools.get(event.data.callID)
-      const failed = event.type === "tool.failed"
+      const failed = event.type === "session.tool.failed"
       const item: SessionMessageAssistantTool = {
         type: "tool",
         id: event.data.callID,
@@ -720,7 +752,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       syncBlockers()
       return
     }
-    if (event.type === "step.ended") {
+    if (event.type === "session.step.ended") {
       const total =
         event.data.tokens.input +
         event.data.tokens.output +
@@ -734,13 +766,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       })
       return
     }
-    if (event.type === "step.failed") {
+    if (event.type === "session.step.failed") {
       state.errors.add(event.data.assistantMessageID)
       if (state.wait) state.wait.failureRendered = true
       write([{ kind: "error", source: "system", text: errorMessage(event.data.error), phase: "start" }])
       return
     }
-    if (event.type === "execution.settled") {
+    if (event.type === "session.execution.settled") {
       write([], { phase: "idle", status: "" })
       const current = state.wait
       if (!current || (!current.promoted && !current.interrupted)) return
@@ -977,10 +1009,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               sessionID: input.sessionID,
               id: messageID,
               prompt: {
-                text: [
-                  next.prompt.text,
-                  ...prepared.flatMap((file) => (file.text ? [file.text] : [])),
-                ].join("\n\n"),
+                text: [next.prompt.text, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
                 files: attachments.length ? attachments : undefined,
                 agents: agents.length ? agents : undefined,
               },

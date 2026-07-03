@@ -329,7 +329,7 @@ describe("run session data", () => {
   test("renders direct shell mode from first-class shell events", () => {
     let data = createSessionData()
     const started = reduce(data, {
-      type: "shell.started",
+      type: "session.shell.started",
       properties: {
         sessionID: "session-1",
         timestamp: 1,
@@ -353,7 +353,7 @@ describe("run session data", () => {
 
     data = started.data
     const ended = reduce(data, {
-      type: "shell.ended",
+      type: "session.shell.ended",
       properties: {
         sessionID: "session-1",
         timestamp: 2,
@@ -380,7 +380,7 @@ describe("run session data", () => {
 
   test("suppresses legacy bash part updates once shell events claim the call", () => {
     let data = reduce(createSessionData(), {
-      type: "shell.started",
+      type: "session.shell.started",
       properties: {
         sessionID: "session-1",
         timestamp: 1,
@@ -409,7 +409,7 @@ describe("run session data", () => {
     ).toEqual([])
 
     data = reduce(data, {
-      type: "shell.ended",
+      type: "session.shell.ended",
       properties: {
         sessionID: "session-1",
         timestamp: 2,
@@ -463,7 +463,7 @@ describe("run session data", () => {
 
     expect(
       reduce(data, {
-        type: "shell.started",
+        type: "session.shell.started",
         properties: {
           sessionID: "session-1",
           timestamp: 1,
@@ -497,7 +497,7 @@ describe("run session data", () => {
 
     expect(
       reduce(data, {
-        type: "shell.ended",
+        type: "session.shell.ended",
         properties: {
           sessionID: "session-1",
           timestamp: 2,

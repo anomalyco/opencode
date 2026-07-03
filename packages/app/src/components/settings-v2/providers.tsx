@@ -223,7 +223,7 @@ export const SettingsProvidersV2: Component = () => {
             <div class="settings-v2-provider-row" data-component="custom-provider-section">
               <div class="settings-v2-provider-lead">
                 <ProviderIcon
-                  id="synthetic"
+                  id="session.synthetic"
                   width={PROVIDER_ICON_SIZE}
                   height={PROVIDER_ICON_SIZE}
                   class="settings-v2-provider-icon shrink-0"

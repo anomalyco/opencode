@@ -424,21 +424,21 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
-    if (event.type === "prompt.promoted") {
+    if (event.type === "session.prompt.promoted") {
       if (userFrame(child, event.data.inputID, "")) {
         touch(child, event.created)
         notifyDetail(child)
       }
       return
     }
-    if (event.type === "step.started") {
+    if (event.type === "session.step.started") {
       touch(child, event.created)
       if (child.label === FALLBACK_LABEL && event.data.agent) child.label = Locale.titlecase(event.data.agent)
       if (child.status !== "running") child.status = "running"
       input.emit()
       return
     }
-    if (event.type === "text.delta") {
+    if (event.type === "session.text.delta") {
       const projected = child.projectedText.get(event.data.textID)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
@@ -459,7 +459,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "text.ended") {
+    if (event.type === "session.text.ended") {
       child.text.set(event.data.textID, event.data.text)
       child.projectedText.delete(event.data.textID)
       setFrame(child, `text:${event.data.textID}`, {
@@ -474,7 +474,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "reasoning.delta") {
+    if (event.type === "session.reasoning.delta") {
       const projected = child.projectedReasoning.get(event.data.reasoningID)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
@@ -495,7 +495,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "reasoning.ended") {
+    if (event.type === "session.reasoning.ended") {
       child.reasoning.set(event.data.reasoningID, event.data.text)
       child.projectedReasoning.delete(event.data.reasoningID)
       if (!input.thinking) return
@@ -510,11 +510,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "tool.input.started") {
+    if (event.type === "session.tool.input.started") {
       child.tools.set(event.data.callID, { name: event.data.name, input: {}, started: event.created })
       return
     }
-    if (event.type === "tool.called") {
+    if (event.type === "session.tool.called") {
       const current = child.tools.get(event.data.callID)
       child.tools.set(event.data.callID, {
         name: event.data.tool,
@@ -537,10 +537,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "tool.success" || event.type === "tool.failed") {
+    if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
       if (child.finishedTools.has(event.data.callID)) return
       const current = child.tools.get(event.data.callID)
-      const failed = event.type === "tool.failed"
+      const failed = event.type === "session.tool.failed"
       childTool(
         child,
         {
@@ -577,7 +577,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "step.failed") {
+    if (event.type === "session.step.failed") {
       setFrame(child, `error:step:${event.data.assistantMessageID}`, {
         kind: "error",
         source: "system",
@@ -589,7 +589,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "execution.settled") {
+    if (event.type === "session.execution.settled") {
       child.status =
         event.data.outcome === "success" ? "completed" : event.data.outcome === "interrupted" ? "cancelled" : "error"
       touch(child, event.created)
@@ -613,15 +613,15 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
 
   return {
     main(event) {
-      if (event.type === "tool.called") {
+      if (event.type === "session.tool.called") {
         if (event.data.tool === "subagent") pendingCalls.set(event.data.callID, event.data.input)
         return
       }
-      if (event.type === "tool.failed") {
+      if (event.type === "session.tool.failed") {
         pendingCalls.delete(event.data.callID)
         return
       }
-      if (event.type !== "tool.success") return
+      if (event.type !== "session.tool.success") return
       const pending = pendingCalls.get(event.data.callID)
       pendingCalls.delete(event.data.callID)
       const found = childSessionID(record(event.data.structured))

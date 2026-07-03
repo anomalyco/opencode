@@ -200,7 +200,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "prompt.promoted",
+      type: "session.prompt.promoted",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -210,7 +210,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_text",
       created: 0,
-      type: "text.delta",
+      type: "session.text.delta",
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
@@ -221,7 +221,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_1", outcome: "success" },
     })
     await turn
@@ -259,7 +259,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "prompt.promoted",
+          type: "session.prompt.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -269,7 +269,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_settled",
           created: 0,
-          type: "execution.settled",
+          type: "session.execution.settled",
           data: { sessionID: "ses_1", outcome: "success" },
         })
       })
@@ -353,7 +353,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "prompt.promoted",
+          type: "session.prompt.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -363,7 +363,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_settled",
           created: 0,
-          type: "execution.settled",
+          type: "session.execution.settled",
           data: { sessionID: "ses_1", outcome: "success" },
         })
       })
@@ -450,7 +450,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "prompt.promoted",
+          type: "session.prompt.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -460,7 +460,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_settled",
           created: 0,
-          type: "execution.settled",
+          type: "session.execution.settled",
           data: { sessionID: "ses_1", outcome: "success" },
         })
       })
@@ -724,7 +724,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_text",
       created: 0,
-      type: "text.delta",
+      type: "session.text.delta",
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
@@ -809,7 +809,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_reasoning",
       created: 0,
-      type: "reasoning.ended",
+      type: "session.reasoning.ended",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -865,7 +865,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_1", outcome: "success" },
     })
     await turn
@@ -921,7 +921,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "prompt.promoted",
+      type: "session.prompt.promoted",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -931,7 +931,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_1", outcome: "success" },
     })
     await turn
@@ -981,7 +981,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "prompt.promoted",
+      type: "session.prompt.promoted",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -993,7 +993,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_1", outcome: "success" },
     })
     await turn
@@ -1021,16 +1021,42 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_shell_start",
           created: 0,
-          type: "shell.started",
+          type: "session.shell.started",
           durable: durable("ses_1"),
-          data: { sessionID: "ses_1", callID: "call_shell", command: "ls" },
+          data: {
+            sessionID: "ses_1",
+            shell: {
+              id: "sh_shell",
+              status: "running",
+              command: "ls",
+              cwd: "/tmp",
+              shell: "/bin/sh",
+              file: "/tmp/opencode-shell",
+              metadata: {},
+              time: { started: 0 },
+            },
+          },
         })
         events.push({
           id: "evt_shell_end",
           created: 0,
-          type: "shell.ended",
+          type: "session.shell.ended",
           durable: durable("ses_1", 1),
-          data: { sessionID: "ses_1", callID: "call_shell", output: "file.txt" },
+          data: {
+            sessionID: "ses_1",
+            shell: {
+              id: "sh_shell",
+              status: "exited",
+              command: "ls",
+              cwd: "/tmp",
+              shell: "/bin/sh",
+              file: "/tmp/opencode-shell",
+              exit: 0,
+              metadata: {},
+              time: { started: 0, completed: 1 },
+            },
+            output: { output: "file.txt", cursor: 8, size: 8, truncated: false },
+          },
         })
       })
       return ok(undefined) as never
@@ -1047,8 +1073,8 @@ describe("V2 mini transport", () => {
 
     expect(request).toMatchObject({ sessionID: "ses_1", command: "ls" })
     expect(ui.commits.filter((item) => item.shell)).toMatchObject([
-      { phase: "start", tool: "bash", toolState: "running", shell: { callID: "call_shell", command: "ls" } },
-      { phase: "progress", text: "file.txt", toolState: "completed", shell: { callID: "call_shell", command: "ls" } },
+      { phase: "start", tool: "bash", toolState: "running", shell: { callID: "sh_shell", command: "ls" } },
+      { phase: "progress", text: "file.txt", toolState: "completed", shell: { callID: "sh_shell", command: "ls" } },
     ])
     expect(ui.events).toContainEqual({ type: "stream.patch", patch: { phase: "running", status: "running shell" } })
     await transport.close()
@@ -1107,9 +1133,18 @@ describe("V2 mini transport", () => {
           {
             id: "msg_shell",
             type: "shell" as const,
-            callID: "call_1",
-            command: "ls",
-            output: "file.txt",
+            shell: {
+              id: "sh_1",
+              status: "exited",
+              command: "ls",
+              cwd: "/tmp",
+              shell: "/bin/sh",
+              file: "/tmp/opencode-shell",
+              exit: 0,
+              metadata: {},
+              time: { started: 0, completed: 1 },
+            },
+            output: { output: "file.txt", cursor: 8, size: 8, truncated: false },
             time: { created: 1, completed: 2 },
           },
         ],
@@ -1127,15 +1162,29 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_shell_end",
       created: 0,
-      type: "shell.ended",
+      type: "session.shell.ended",
       durable: durable("ses_1", 1),
-      data: { sessionID: "ses_1", callID: "call_1", output: "file.txt" },
+      data: {
+        sessionID: "ses_1",
+        shell: {
+          id: "sh_1",
+          status: "exited",
+          command: "ls",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          file: "/tmp/opencode-shell",
+          exit: 0,
+          metadata: {},
+          time: { started: 0, completed: 1 },
+        },
+        output: { output: "file.txt", cursor: 8, size: 8, truncated: false },
+      },
     })
     await Bun.sleep(0)
     await Bun.sleep(0)
 
     expect(ui.commits.filter((item) => item.shell)).toMatchObject([
-      { phase: "start", shell: { callID: "call_1", command: "ls" } },
+      { phase: "start", shell: { callID: "sh_1", command: "ls" } },
       { phase: "progress", text: "file.txt", toolState: "completed" },
     ])
     await transport.close()
@@ -1160,7 +1209,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "prompt.promoted",
+          type: "session.prompt.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -1170,7 +1219,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_settled",
           created: 0,
-          type: "execution.settled",
+          type: "session.execution.settled",
           data: { sessionID: "ses_1", outcome: "success" },
         })
       })
@@ -1236,7 +1285,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_skill",
           created: 0,
-          type: "skill.activated",
+          type: "session.skill.activated",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -1247,7 +1296,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_settled",
           created: 0,
-          type: "execution.settled",
+          type: "session.execution.settled",
           data: { sessionID: "ses_1", outcome: "success" },
         })
       })
@@ -1317,7 +1366,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_unrelated_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_1", outcome: "success" },
     })
     await Bun.sleep(0)
@@ -1327,7 +1376,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_skill",
       created: 0,
-      type: "skill.activated",
+      type: "session.skill.activated",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -1338,7 +1387,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_skill_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_1", outcome: "success" },
     })
     await turn
@@ -1376,7 +1425,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_skill",
       created: 0,
-      type: "skill.activated",
+      type: "session.skill.activated",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -1438,7 +1487,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_step",
       created: 0,
-      type: "step.started",
+      type: "session.step.started",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
@@ -1456,7 +1505,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_text",
       created: 0,
-      type: "text.delta",
+      type: "session.text.delta",
       data: {
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
@@ -1470,7 +1519,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_child", outcome: "success" },
     })
     while (!states().some((state) => state.tabs.some((tab) => tab.status === "completed"))) await Bun.sleep(0)
@@ -1515,7 +1564,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_step",
       created: 0,
-      type: "step.started",
+      type: "session.step.started",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
@@ -1527,7 +1576,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_child", outcome: "interrupted" },
     })
     await Bun.sleep(0)
@@ -1574,7 +1623,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_step",
       created: 0,
-      type: "step.started",
+      type: "session.step.started",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
@@ -1587,7 +1636,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_parent_call",
       created: 0,
-      type: "tool.called",
+      type: "session.tool.called",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -1601,7 +1650,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_parent_success",
       created: 0,
-      type: "tool.success",
+      type: "session.tool.success",
       durable: durable("ses_1", 1),
       data: {
         sessionID: "ses_1",
@@ -1616,7 +1665,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: { sessionID: "ses_child", outcome: "interrupted" },
     })
     while (!states().some((state) => state.tabs.some((tab) => tab.status === "cancelled"))) await Bun.sleep(0)

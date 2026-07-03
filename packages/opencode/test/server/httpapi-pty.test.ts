@@ -99,10 +99,10 @@ describe("pty HttpApi bridge", () => {
       const updated = await app().request(PtyPaths.update.replace(":ptyID", info.id), {
         method: "PUT",
         headers: { ...headers, "content-type": "application/json" },
-        body: JSON.stringify({ title: "renamed", size: { cols: 80, rows: 24 } }),
+        body: JSON.stringify({ title: "session.renamed", size: { cols: 80, rows: 24 } }),
       })
       expect(updated.status).toBe(200)
-      expect(await updated.json()).toMatchObject({ id: info.id, title: "renamed" })
+      expect(await updated.json()).toMatchObject({ id: info.id, title: "session.renamed" })
     } finally {
       await app().request(PtyPaths.remove.replace(":ptyID", info.id), { method: "DELETE", headers })
     }

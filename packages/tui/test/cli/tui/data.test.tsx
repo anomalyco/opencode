@@ -269,7 +269,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_step_started",
       created: 0,
-      type: "step.started",
+      type: "session.step.started",
       durable: durable("session-live"),
       data: {
         sessionID: "session-live",
@@ -283,7 +283,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_step_ended",
       created: 0,
-      type: "step.ended",
+      type: "session.step.ended",
       durable: durable("session-live", 1, 2),
       data: {
         sessionID: "session-live",
@@ -302,7 +302,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_execution_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: {
         sessionID: "session-live",
         outcome: "success",
@@ -313,7 +313,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_failed_step_started",
       created: 0,
-      type: "step.started",
+      type: "session.step.started",
       durable: durable("session-failed"),
       data: {
         sessionID: "session-failed",
@@ -327,7 +327,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_step_failed",
       created: 0,
-      type: "step.failed",
+      type: "session.step.failed",
       durable: durable("session-failed", 1, 2),
       data: {
         sessionID: "session-failed",
@@ -344,7 +344,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_failed_execution_settled",
       created: 0,
-      type: "execution.settled",
+      type: "session.execution.settled",
       data: {
         sessionID: "session-failed",
         outcome: "failure",
@@ -797,14 +797,14 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_agent_1",
       created: 0,
-      type: "agent.selected",
+      type: "session.agent.selected",
       durable: durable("session-1"),
       data: { sessionID: "session-1", agent: "build" },
     })
     emitEvent(events, {
       id: "evt_model_1",
       created: 0,
-      type: "model.selected",
+      type: "session.model.selected",
       durable: durable("session-1", 1),
       data: {
         sessionID: "session-1",
@@ -814,7 +814,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_step_started_1",
       created: 0,
-      type: "step.started",
+      type: "session.step.started",
       durable: durable("session-1", 2),
       data: {
         sessionID: "session-1",
@@ -826,7 +826,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_input_1",
       created: 0,
-      type: "tool.input.started",
+      type: "session.tool.input.started",
       durable: durable("session-1", 3),
       data: {
         sessionID: "session-1",
@@ -838,7 +838,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_called_1",
       created: 0,
-      type: "tool.called",
+      type: "session.tool.called",
       durable: durable("session-1", 4),
       data: {
         sessionID: "session-1",
@@ -852,7 +852,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_failed_1",
       created: 0,
-      type: "tool.failed",
+      type: "session.tool.failed",
       durable: durable("session-1", 5),
       data: {
         sessionID: "session-1",
@@ -942,7 +942,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     emitEvent(events, {
       id: "evt_admitted_1",
       created: 0,
-      type: "prompt.admitted",
+      type: "session.prompt.admitted",
       durable: durable(sessionID),
       data: {
         sessionID,
@@ -961,7 +961,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     emitEvent(events, {
       id: "evt_prompted_1",
       created: 0,
-      type: "prompt.promoted",
+      type: "session.prompt.promoted",
       durable: durable(sessionID, 1),
       data: {
         sessionID,
@@ -969,8 +969,8 @@ test("renders admitted prompts immediately with queued marker and clears when pr
       },
     })
 
-    await wait(() => received.at(-1) === "prompt.promoted")
-    expect(received.slice(-2)).toEqual(["prompt.admitted", "prompt.promoted"])
+    await wait(() => received.at(-1) === "session.prompt.promoted")
+    expect(received.slice(-2)).toEqual(["session.prompt.admitted", "session.prompt.promoted"])
     unsubscribe()
     const message = sync.session.message.list(sessionID)?.[0]
     expect(message?.type).toBe("user")

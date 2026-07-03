@@ -133,42 +133,42 @@ export function createSessionRows(sessionID: Accessor<string>) {
     if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID)
   }
   const subscriptions = [
-    data.on("prompt.admitted", input),
-    data.on("prompt.promoted", input),
+    data.on("session.prompt.admitted", input),
+    data.on("session.prompt.promoted", input),
     data.on("session.context.updated", message),
-    data.on("synthetic", (event) => {
+    data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
         appendMessage(event.id.replace(/^evt_/, "msg_"))
     }),
-    data.on("shell.started", message),
-    data.on("agent.selected", message),
-    data.on("model.selected", message),
-    data.on("compaction.ended", message),
-    data.on("text.delta", (event) => {
+    data.on("session.shell.started", message),
+    data.on("session.agent.selected", message),
+    data.on("session.model.selected", message),
+    data.on("session.compaction.ended", message),
+    data.on("session.text.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
     }),
-    data.on("text.ended", (event) => {
+    data.on("session.text.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
     }),
-    data.on("reasoning.delta", (event) => {
+    data.on("session.reasoning.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
     }),
-    data.on("reasoning.ended", (event) => {
+    data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
     }),
-    data.on("tool.input.started", (event) => {
+    data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.callID }, event.data.name)
     }),
-    data.on("step.ended", (event) => {
+    data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
     }),
-    data.on("step.failed", (event) => {
+    data.on("session.step.failed", (event) => {
       if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
     }),
   ]

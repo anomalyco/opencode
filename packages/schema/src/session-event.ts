@@ -52,7 +52,7 @@ export const UnknownError = SessionMessage.UnknownError
 export type UnknownError = SessionMessage.UnknownError
 
 export const AgentSelected = Event.durable({
-  type: "agent.selected",
+  type: "session.agent.selected",
   ...options,
   schema: {
     ...Base,
@@ -62,7 +62,7 @@ export const AgentSelected = Event.durable({
 export type AgentSelected = typeof AgentSelected.Type
 
 export const ModelSelected = Event.durable({
-  type: "model.selected",
+  type: "session.model.selected",
   ...options,
   schema: {
     ...Base,
@@ -83,7 +83,7 @@ export const Moved = Event.durable({
 export type Moved = typeof Moved.Type
 
 export const Renamed = Event.durable({
-  type: "renamed",
+  type: "session.renamed",
   ...options,
   schema: {
     ...Base,
@@ -93,7 +93,7 @@ export const Renamed = Event.durable({
 export type Renamed = typeof Renamed.Type
 
 export const Forked = Event.durable({
-  type: "forked",
+  type: "session.forked",
   ...options,
   schema: {
     ...Base,
@@ -104,7 +104,7 @@ export const Forked = Event.durable({
 export type Forked = typeof Forked.Type
 
 export const PromptPromoted = Event.durable({
-  type: "prompt.promoted",
+  type: "session.prompt.promoted",
   ...options,
   schema: {
     sessionID: SessionID,
@@ -114,14 +114,14 @@ export const PromptPromoted = Event.durable({
 export type PromptPromoted = typeof PromptPromoted.Type
 
 export const PromptAdmitted = Event.durable({
-  type: "prompt.admitted",
+  type: "session.prompt.admitted",
   ...options,
   schema: PromptFields,
 })
 export type PromptAdmitted = typeof PromptAdmitted.Type
 
 export const ExecutionSettled = Event.ephemeral({
-  type: "execution.settled",
+  type: "session.execution.settled",
   schema: {
     ...Base,
     outcome: Schema.Literals(["success", "failure", "interrupted"]),
@@ -141,7 +141,7 @@ export const ContextUpdated = Event.durable({
 export type ContextUpdated = typeof ContextUpdated.Type
 
 export const Synthetic = Event.durable({
-  type: "synthetic",
+  type: "session.synthetic",
   ...options,
   schema: {
     ...Base,
@@ -154,7 +154,7 @@ export type Synthetic = typeof Synthetic.Type
 
 export namespace Skill {
   export const Activated = Event.durable({
-    type: "skill.activated",
+    type: "session.skill.activated",
     ...options,
     schema: {
       ...Base,
@@ -167,7 +167,7 @@ export namespace Skill {
 
 export namespace Shell {
   export const Started = Event.durable({
-    type: "shell.started",
+    type: "session.shell.started",
     ...options,
     schema: {
       ...Base,
@@ -177,7 +177,7 @@ export namespace Shell {
   export type Started = typeof Started.Type
 
   export const Ended = Event.durable({
-    type: "shell.ended",
+    type: "session.shell.ended",
     ...options,
     schema: {
       ...Base,
@@ -190,7 +190,7 @@ export namespace Shell {
 
 export namespace Step {
   export const Started = Event.durable({
-    type: "step.started",
+    type: "session.step.started",
     ...options,
     schema: {
       ...Base,
@@ -203,7 +203,7 @@ export namespace Step {
   export type Started = typeof Started.Type
 
   export const Ended = Event.durable({
-    type: "step.ended",
+    type: "session.step.ended",
     ...stepSettlementOptions,
     schema: {
       ...Base,
@@ -226,7 +226,7 @@ export namespace Step {
   export type Ended = typeof Ended.Type
 
   export const Failed = Event.durable({
-    type: "step.failed",
+    type: "session.step.failed",
     ...stepSettlementOptions,
     schema: {
       ...Base,
@@ -239,7 +239,7 @@ export namespace Step {
 
 export namespace Text {
   export const Started = Event.durable({
-    type: "text.started",
+    type: "session.text.started",
     ...options,
     schema: {
       ...Base,
@@ -251,7 +251,7 @@ export namespace Text {
 
   // Stream fragments are live-only; Text.Ended is the replayable full-value boundary.
   export const Delta = Event.ephemeral({
-    type: "text.delta",
+    type: "session.text.delta",
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
@@ -262,7 +262,7 @@ export namespace Text {
   export type Delta = typeof Delta.Type
 
   export const Ended = Event.durable({
-    type: "text.ended",
+    type: "session.text.ended",
     ...options,
     schema: {
       ...Base,
@@ -276,7 +276,7 @@ export namespace Text {
 
 export namespace Reasoning {
   export const Started = Event.durable({
-    type: "reasoning.started",
+    type: "session.reasoning.started",
     ...options,
     schema: {
       ...Base,
@@ -289,7 +289,7 @@ export namespace Reasoning {
 
   // Stream fragments are live-only; Reasoning.Ended is the replayable full-value boundary.
   export const Delta = Event.ephemeral({
-    type: "reasoning.delta",
+    type: "session.reasoning.delta",
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
@@ -300,7 +300,7 @@ export namespace Reasoning {
   export type Delta = typeof Delta.Type
 
   export const Ended = Event.durable({
-    type: "reasoning.ended",
+    type: "session.reasoning.ended",
     ...options,
     schema: {
       ...Base,
@@ -322,7 +322,7 @@ export namespace Tool {
 
   export namespace Input {
     export const Started = Event.durable({
-      type: "tool.input.started",
+      type: "session.tool.input.started",
       ...options,
       schema: {
         ...ToolBase,
@@ -333,7 +333,7 @@ export namespace Tool {
 
     // Stream fragments are live-only; Input.Ended is the replayable raw-input boundary.
     export const Delta = Event.ephemeral({
-      type: "tool.input.delta",
+      type: "session.tool.input.delta",
       schema: {
         ...ToolBase,
         delta: Schema.String,
@@ -342,7 +342,7 @@ export namespace Tool {
     export type Delta = typeof Delta.Type
 
     export const Ended = Event.durable({
-      type: "tool.input.ended",
+      type: "session.tool.input.ended",
       ...options,
       schema: {
         ...ToolBase,
@@ -353,7 +353,7 @@ export namespace Tool {
   }
 
   export const Called = Event.durable({
-    type: "tool.called",
+    type: "session.tool.called",
     ...options,
     schema: {
       ...ToolBase,
@@ -372,7 +372,7 @@ export namespace Tool {
    * transitions or at a bounded cadence, not persist every stdout/stderr chunk.
    */
   export const Progress = Event.durable({
-    type: "tool.progress",
+    type: "session.tool.progress",
     ...options,
     schema: {
       ...ToolBase,
@@ -383,7 +383,7 @@ export namespace Tool {
   export type Progress = typeof Progress.Type
 
   export const Success = Event.durable({
-    type: "tool.success",
+    type: "session.tool.success",
     ...options,
     schema: {
       ...ToolBase,
@@ -400,7 +400,7 @@ export namespace Tool {
   export type Success = typeof Success.Type
 
   export const Failed = Event.durable({
-    type: "tool.failed",
+    type: "session.tool.failed",
     ...options,
     schema: {
       ...ToolBase,
@@ -428,7 +428,7 @@ export const RetryError = Schema.Struct({
 export interface RetryError extends Schema.Schema.Type<typeof RetryError> {}
 
 export const Retried = Event.durable({
-  type: "retried",
+  type: "session.retried",
   ...options,
   schema: {
     ...Base,
@@ -440,7 +440,7 @@ export type Retried = typeof Retried.Type
 
 export namespace Compaction {
   export const Started = Event.durable({
-    type: "compaction.started",
+    type: "session.compaction.started",
     ...options,
     schema: {
       ...Base,
@@ -450,7 +450,7 @@ export namespace Compaction {
   export type Started = typeof Started.Type
 
   export const Delta = Event.ephemeral({
-    type: "compaction.delta",
+    type: "session.compaction.delta",
     schema: {
       ...Base,
       text: Schema.String,
@@ -459,7 +459,7 @@ export namespace Compaction {
   export type Delta = typeof Delta.Type
 
   export const Ended = Event.durable({
-    type: "compaction.ended",
+    type: "session.compaction.ended",
     ...options,
     schema: {
       ...Base,
@@ -473,13 +473,13 @@ export namespace Compaction {
 
 export namespace RevertEvent {
   export const Staged = Event.durable({
-    type: "revert.staged",
+    type: "session.revert.staged",
     ...options,
     schema: { ...Base, revert: Revert.State },
   })
-  export const Cleared = Event.durable({ type: "revert.cleared", ...options, schema: Base })
+  export const Cleared = Event.durable({ type: "session.revert.cleared", ...options, schema: Base })
   export const Committed = Event.durable({
-    type: "revert.committed",
+    type: "session.revert.committed",
     ...options,
     schema: { ...Base, messageID: SessionMessage.ID },
   })

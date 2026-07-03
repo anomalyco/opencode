@@ -16410,7 +16410,7 @@
           "text": {
             "type": "string"
           },
-          "synthetic": {
+          "session.synthetic": {
             "type": "boolean"
           },
           "ignored": {
@@ -23071,7 +23071,7 @@
           "text": {
             "type": "string"
           },
-          "synthetic": {
+          "session.synthetic": {
             "type": "boolean"
           },
           "ignored": {
@@ -27479,7 +27479,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["synthetic"]
+            "enum": ["session.synthetic"]
           }
         },
         "required": ["id", "time", "sessionID", "text", "type"],

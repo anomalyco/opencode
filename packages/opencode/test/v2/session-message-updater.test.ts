@@ -22,7 +22,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "step.started",
+      type: "session.step.started",
       durable: durable(sessionID),
       data: {
         sessionID,
@@ -44,7 +44,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "step.ended",
+      type: "session.step.ended",
       durable: durable(sessionID, 1, 2),
       data: {
         sessionID,
@@ -77,7 +77,7 @@ test.skip("text ended populates assistant text content", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "step.started",
+      type: "session.step.started",
       durable: durable(sessionID),
       data: {
         sessionID,
@@ -96,7 +96,7 @@ test.skip("text ended populates assistant text content", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "text.started",
+      type: "session.text.started",
       durable: durable(sessionID, 1),
       data: {
         sessionID,
@@ -110,7 +110,7 @@ test.skip("text ended populates assistant text content", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "text.ended",
+      type: "session.text.ended",
       durable: durable(sessionID, 2),
       data: {
         sessionID,
@@ -136,7 +136,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "step.started",
+      type: "session.step.started",
       durable: durable(sessionID),
       data: {
         sessionID,
@@ -155,7 +155,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "tool.input.started",
+      type: "session.tool.input.started",
       durable: durable(sessionID, 1),
       data: {
         sessionID,
@@ -170,7 +170,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "tool.called",
+      type: "session.tool.called",
       durable: durable(sessionID, 2),
       data: {
         sessionID,
@@ -187,7 +187,7 @@ test.skip("tool completion stores completed timestamp", () => {
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "tool.success",
+      type: "session.tool.success",
       durable: durable(sessionID, 3),
       data: {
         sessionID,
@@ -218,7 +218,7 @@ test("compaction events reduce to compaction message only when completed", () =>
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id,
       created: DateTime.makeUnsafe(0),
-      type: "compaction.started",
+      type: "session.compaction.started",
       durable: durable(sessionID),
       data: {
         sessionID,
@@ -233,7 +233,7 @@ test("compaction events reduce to compaction message only when completed", () =>
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "compaction.delta",
+      type: "session.compaction.delta",
       data: {
         sessionID,
         text: "hello ",
@@ -245,7 +245,7 @@ test("compaction events reduce to compaction message only when completed", () =>
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
-      type: "compaction.delta",
+      type: "session.compaction.delta",
       data: {
         sessionID,
         text: "summary",
@@ -257,7 +257,7 @@ test("compaction events reduce to compaction message only when completed", () =>
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
       id: endedID,
       created: DateTime.makeUnsafe(0),
-      type: "compaction.ended",
+      type: "session.compaction.ended",
       durable: durable(sessionID, 1),
       data: {
         sessionID,

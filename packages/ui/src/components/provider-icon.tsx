@@ -9,7 +9,7 @@ export type ProviderIconProps = JSX.SVGElementTags["svg"] & {
 
 export const ProviderIcon: Component<ProviderIconProps> = (props) => {
   const [local, rest] = splitProps(props, ["id", "class", "classList"])
-  const resolved = createMemo(() => (iconNames.includes(local.id as IconName) ? local.id : "synthetic"))
+  const resolved = createMemo(() => (iconNames.includes(local.id as IconName) ? local.id : "session.synthetic"))
   return (
     <svg
       data-component="provider-icon"

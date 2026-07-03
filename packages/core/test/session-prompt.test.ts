@@ -256,16 +256,16 @@ describe("SessionV2.prompt", () => {
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
-        [0, "prompt.admitted"],
-        [1, "prompt.admitted"],
-        [2, "prompt.promoted"],
-        [3, "prompt.promoted"],
+        [0, "session.prompt.admitted"],
+        [1, "session.prompt.admitted"],
+        [2, "session.prompt.promoted"],
+        [3, "session.prompt.promoted"],
       ])
       expect(
         Array.from(
           yield* publicEvents({ sessionID, after: streamed[0].durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
-      ).toEqual([[1, "prompt.admitted"]])
+      ).toEqual([[1, "session.prompt.admitted"]])
     }),
   )
 

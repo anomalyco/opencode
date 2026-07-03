@@ -573,7 +573,7 @@ describe("HttpApi SDK", () => {
         const child = yield* capture(() => sdk.session.create({ title: "child", parentID }))
         const childID = String(record(child.data).id)
         const get = yield* capture(() => sdk.session.get({ sessionID: parentID }))
-        const update = yield* capture(() => sdk.session.update({ sessionID: parentID, title: "renamed" }))
+        const update = yield* capture(() => sdk.session.update({ sessionID: parentID, title: "session.renamed" }))
         const roots = yield* capture(() => sdk.session.list({ roots: true, limit: 10 }))
         const all = yield* capture(() => sdk.session.list({ roots: false, limit: 10 }))
         const children = yield* capture(() => sdk.session.children({ sessionID: parentID }))

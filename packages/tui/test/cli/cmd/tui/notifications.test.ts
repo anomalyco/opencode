@@ -91,7 +91,7 @@ function stepStarted(id: string, sessionID = "session"): V2Event {
   return {
     id,
     created: 0,
-    type: "step.started",
+    type: "session.step.started",
     durable: durable(sessionID),
     data: {
       sessionID,
@@ -106,7 +106,7 @@ function stepEnded(id: string, sessionID = "session", finish = "stop"): V2Event 
   return {
     id,
     created: 0,
-    type: "step.ended",
+    type: "session.step.ended",
     durable: durable(sessionID),
     data: {
       sessionID,
@@ -122,7 +122,7 @@ function stepFailed(id: string, sessionID = "session"): V2Event {
   return {
     id,
     created: 0,
-    type: "step.failed",
+    type: "session.step.failed",
     durable: durable(sessionID),
     data: {
       sessionID,

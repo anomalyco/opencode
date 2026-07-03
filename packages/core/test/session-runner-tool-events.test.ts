@@ -76,7 +76,7 @@ test("local tool success serializes media base64 once and reconstructs from stru
   await Effect.runPromise(publisher.publish(call))
   await Effect.runPromise(publisher.publish(result))
 
-  const success = published.find((event) => event.type === "tool.success.1")
+  const success = published.find((event) => event.type === "session.tool.success.1")
   expect(success).toBeDefined()
   const serialized = JSON.stringify(success)
   expect(serialized.split(base64)).toHaveLength(2)
@@ -94,7 +94,7 @@ test("provider-executed success retains its compatibility result", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
-  const success = published.find((event) => event.type === "tool.success.1")
+  const success = published.find((event) => event.type === "session.tool.success.1")
   expect(success?.data).toHaveProperty("result")
 })
 
@@ -110,8 +110,8 @@ test("binary failure emits no success event", async () => {
       }),
     ),
   )
-  expect(published.some((event) => event.type === "tool.success.1")).toBe(false)
-  expect(published.some((event) => event.type === "tool.failed.1")).toBe(true)
+  expect(published.some((event) => event.type === "session.tool.success.1")).toBe(false)
+  expect(published.some((event) => event.type === "session.tool.failed.1")).toBe(true)
 })
 
 test("old success event data containing result still decodes", () => {

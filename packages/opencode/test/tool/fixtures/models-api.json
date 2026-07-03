@@ -79593,8 +79593,8 @@
       }
     }
   },
-  "synthetic": {
-    "id": "synthetic",
+  "session.synthetic": {
+    "id": "session.synthetic",
     "env": ["SYNTHETIC_API_KEY"],
     "npm": "@ai-sdk/openai-compatible",
     "api": "https://api.synthetic.new/openai/v1",

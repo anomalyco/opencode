@@ -78,7 +78,7 @@ it.live(
           prompt: fixture.sdk.Prompt.make({ text: "Promote this input" }),
         })
         const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
-          Stream.filter((event) => event.type === "prompt.promoted" && event.data.inputID === wake.id),
+          Stream.filter((event) => event.type === "session.prompt.promoted" && event.data.inputID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
           Effect.map(Option.getOrThrow),
@@ -119,7 +119,7 @@ it.live(
         expect(page.data.some((session) => session.id === id)).toBe(true)
         expect(active).toEqual({ data: {}, watermarks: {} })
         expect(admitted.sessionID).toBe(id)
-        expect(prompted.type).toBe("prompt.promoted")
+        expect(prompted.type).toBe("session.prompt.promoted")
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
         expect(contextEntries).toEqual([
           { key: "deploy-target", value: "production" },
@@ -127,7 +127,7 @@ it.live(
         ])
         expect(remainingContextEntries).toEqual([{ key: "deploy-target", value: "production" }])
         expect(context.some((message) => message.type === "model-switched")).toBe(true)
-        expect(event).toMatchObject({ type: "model.selected", durable: { seq: 1 } })
+        expect(event).toMatchObject({ type: "session.model.selected", durable: { seq: 1 } })
         expect(message).toEqual(modelMessage)
         expect(missing.map((error) => error._tag)).toEqual([
           "SessionNotFoundError",
@@ -149,13 +149,13 @@ it.live(
         const opencode = yield* fixture.sdk.OpenCode.create()
         const id = sessionID(fixture)
         const connected = yield* Latch.make(false)
-        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "prompt.promoted" }>>()
+        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "session.prompt.promoted" }>>()
 
         yield* opencode.events.subscribe().pipe(
           Stream.runForEach((event) =>
             event.type === "server.connected"
               ? connected.open
-              : event.type === "prompt.promoted" && event.data.sessionID === id
+              : event.type === "session.prompt.promoted" && event.data.sessionID === id
                 ? Deferred.succeed(prompted, event).pipe(Effect.asVoid)
                 : Effect.void,
           ),
@@ -191,7 +191,7 @@ it.live(
           Stream.runForEach((notification: OpenCodeEvent) =>
             notification.type === "server.connected"
               ? ready.open
-              : notification.type === "agent.selected" && notification.data.sessionID === id
+              : notification.type === "session.agent.selected" && notification.data.sessionID === id
                 ? event.open
                 : Effect.void,
           )

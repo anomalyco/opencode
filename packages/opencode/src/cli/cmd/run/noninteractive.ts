@@ -158,14 +158,14 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
       const time = toMillis(event.created)
 
-      if (event.type === "prompt.promoted") {
+      if (event.type === "session.prompt.promoted") {
         if (event.data.inputID === messageID) {
           promoted = true
           continue
         }
       }
       if (
-        event.type === "execution.settled" &&
+        event.type === "session.execution.settled" &&
         event.data.outcome === "interrupted" &&
         (interrupted || permissionRejected || questionRejected || formCancelled)
       ) {
@@ -173,7 +173,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       if (!promoted) continue
 
-      if (event.type === "step.started") {
+      if (event.type === "session.step.started") {
         const part: StepStartPart = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -189,11 +189,11 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "text.started") {
+      if (event.type === "session.text.started") {
         starts.set(event.data.textID, { id: partID(event.id), timestamp: time })
         continue
       }
-      if (event.type === "text.ended") {
+      if (event.type === "session.text.ended") {
         const started = starts.get(event.data.textID)
         const part: TextPart = {
           id: started?.id ?? partID(event.id),
@@ -207,11 +207,11 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "reasoning.started") {
+      if (event.type === "session.reasoning.started") {
         starts.set(event.data.reasoningID, { id: partID(event.id), timestamp: time })
         continue
       }
-      if (event.type === "reasoning.ended" && input.thinking) {
+      if (event.type === "session.reasoning.ended" && input.thinking) {
         const started = starts.get(event.data.reasoningID)
         const part: ReasoningPart = {
           id: started?.id ?? partID(event.id),
@@ -236,7 +236,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "tool.input.started") {
+      if (event.type === "session.tool.input.started") {
         tools.set(event.data.callID, {
           id: partID(event.id),
           timestamp: time,
@@ -246,12 +246,12 @@ export async function runNonInteractivePrompt(input: Input) {
         })
         continue
       }
-      if (event.type === "tool.input.ended") {
+      if (event.type === "session.tool.input.ended") {
         const current = tools.get(event.data.callID)
         if (current) current.raw = event.data.text
         continue
       }
-      if (event.type === "tool.called") {
+      if (event.type === "session.tool.called") {
         const current = tools.get(event.data.callID)
         tools.set(event.data.callID, {
           id: current?.id ?? partID(event.id),
@@ -264,7 +264,7 @@ export async function runNonInteractivePrompt(input: Input) {
         })
         continue
       }
-      if (event.type === "tool.success") {
+      if (event.type === "session.tool.success") {
         const current = tools.get(event.data.callID) ?? fallbackTool(event)
         const part: ToolPart = {
           id: current.id,
@@ -297,7 +297,7 @@ export async function runNonInteractivePrompt(input: Input) {
         if (!emit("tool_use", time, { part })) await input.renderTool(part)
         continue
       }
-      if (event.type === "tool.failed") {
+      if (event.type === "session.tool.failed") {
         const current = tools.get(event.data.callID) ?? fallbackTool(event)
         const error = event.data.error.message
         const part: ToolPart = {
@@ -328,7 +328,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
 
-      if (event.type === "step.ended") {
+      if (event.type === "session.step.ended") {
         const part: StepFinishPart = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -342,14 +342,14 @@ export async function runNonInteractivePrompt(input: Input) {
         emit("step_finish", time, { part })
         continue
       }
-      if (event.type === "step.failed") {
+      if (event.type === "session.step.failed") {
         if (interrupted || permissionRejected || questionRejected || formCancelled) continue
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
-      if (event.type === "execution.settled") {
+      if (event.type === "session.execution.settled") {
         if (event.data.outcome === "failure" && !emittedError && !questionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1

@@ -908,7 +908,7 @@ Compatibility:
 ## 2026-07-03: Normalize Session Event Names And Envelope Time
 
 - Drop the experimental `session.next.` prefix from current Session event names.
-- Rename `agent.switched` to `agent.selected`, `model.switched` to `model.selected`, and `prompted` to `prompt.promoted`; add `prompt.admitted` as the durable prompt admission record.
+- Rename `agent.switched` to `session.agent.selected`, `model.switched` to `session.model.selected`, and `prompted` to `session.prompt.promoted`; add `session.prompt.admitted` as the durable prompt admission record.
 - Add an envelope-level `created` timestamp stored on each event row; payload-level `timestamp` fields are removed.
 - Remove projection-only `messageID` fields from selected/message-producing events; projected message IDs derive from the event ID. `revert.committed.messageID` remains, and `forked.messageID` is now `forked.from`.
 - Rename `session.moved.subdirectory` to `subpath` and normalize event-related schema identifiers.
@@ -919,13 +919,22 @@ Compatibility:
 - All renamed durable event types restart at version 1 under their normalized names.
 - Generated Promise, Effect, and legacy JavaScript SDK surfaces were regenerated from the normalized schemas.
 
+## 2026-07-03: Restore Session Event Prefix
+
+- Restore the `session.` prefix on current Session event names; the prior rename intended to drop only the `.next.` segment from `session.next.*` names.
+- Payloads are unchanged. For example, `step.ended` is now `session.step.ended`, while already-correct names such as `session.moved` and `session.context.updated` are unchanged.
+
+Compatibility:
+
+- Covered by the existing `20260703190000_reset_v2_shell_event_payloads` V2 reset; no additional migration or column change is required.
+
 ## 2026-07-03: Align Session Shell Payloads With Shell Service
 
-- Change durable `shell.started` to carry `shell: Shell.Info`.
-- Change durable `shell.ended` to carry the final `shell: Shell.Info` snapshot and structured `output: Shell.Output`.
+- Change durable `session.shell.started` to carry `shell: Shell.Info`.
+- Change durable `session.shell.ended` to carry the final `shell: Shell.Info` snapshot and structured `output: Shell.Output`.
 - Project `SessionMessage.Shell` with the same nested Shell service objects so consumers can render command, exit status, truncation, and paged output consistently.
 - Remove the transitional `callID` correlation field from shell events and projected shell messages; shell records now key by `shell.id`.
-- Publish `shell.started` after the shell process is created so `Shell.Info` reflects the real process. A failed spawn publishes no shell events; the failure surfaces as an error on the shell request itself, so the durable ledger never records a `shell.started` without a process that existed.
+- Publish `session.shell.started` after the shell process is created so `Shell.Info` reflects the real process. A failed spawn publishes no shell events; the failure surfaces as an error on the shell request itself, so the durable ledger never records a `session.shell.started` without a process that existed.
 
 Compatibility:
 

@@ -45,9 +45,9 @@ test("event.subscribe exposes and decodes the native Effect event stream", async
     return yield* client.event.subscribe().pipe(Stream.runCollect)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "model.selected"])
+  expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "session.model.selected"])
   const durable = events[1]
-  if (durable?.type !== "model.selected") throw new Error("Expected model event")
+  if (durable?.type !== "session.model.selected") throw new Error("Expected model event")
   expect(DateTime.toEpochMillis(durable.created)).toBe(1_717_171_717_000)
   expect(durable.durable).toEqual({ aggregateID: "ses_test", seq: 1, version: 1 })
 })
@@ -159,8 +159,8 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(result.context).toEqual([])
   expect(logQueries[0]).toEqual({ after: "0" })
   const logged = Array.from(result.log)
-  expect(logged.map((item) => item.type)).toEqual(["model.selected", "log.synced"])
-  expect(logged[0]?.type === "model.selected" && DateTime.toEpochMillis(logged[0].created)).toBe(
+  expect(logged.map((item) => item.type)).toEqual(["session.model.selected", "log.synced"])
+  expect(logged[0]?.type === "session.model.selected" && DateTime.toEpochMillis(logged[0].created)).toBe(
     1_717_171_717_000,
   )
   expect(logged.at(-1)).toEqual(synced)
@@ -228,7 +228,7 @@ const modelSwitchedMessage = {
 const modelSwitchedEvent = {
   id: "evt_model",
   created: 1_717_171_717_000,
-  type: "model.selected",
+  type: "session.model.selected",
   durable: { aggregateID: "ses_test", seq: 1, version: 1 },
   data: {
     sessionID: "ses_test",
