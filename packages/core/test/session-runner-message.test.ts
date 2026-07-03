@@ -7,6 +7,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, FileAttachment } from "@opencode-ai/core/session/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
@@ -88,8 +89,18 @@ describe("toLLMMessages", () => {
           id: id("shell"),
           type: "shell",
           callID: "shell-1",
-          command: "pwd",
-          output: "/project",
+          shell: Shell.Info.make({
+            id: Shell.ID.make("sh_test"),
+            status: "exited",
+            command: "pwd",
+            cwd: "/project",
+            shell: "/bin/sh",
+            file: "/tmp/sh_test.out",
+            exit: 0,
+            metadata: {},
+            time: { started: 0, completed: 0 },
+          }),
+          output: { output: "/project", cursor: 8, size: 8, truncated: false },
           time: { created, completed: created },
         }),
         SessionMessage.Compaction.make({

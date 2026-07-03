@@ -272,19 +272,6 @@ const layer = Layer.effect(
         ),
       )
 
-    // Session shell is user-initiated and synchronous at the API boundary, while
-    // the Location shell service owns process lifecycle and file-backed output.
-    const runShellCommand = (command: string, cwd: string) =>
-      Effect.gen(function* () {
-        const shell = yield* Shell.Service
-        const info = yield* shell.create({ command, cwd })
-        yield* shell.wait(info.id)
-        const output = yield* shell.output(info.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-        return output.output || "(no output)"
-      }).pipe(
-        Effect.catchTag("Shell.NotFoundError", () => Effect.succeed("Shell command output is no longer available.")),
-      )
-
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
@@ -551,22 +538,45 @@ const layer = Layer.effect(
             activeShells.add(input.sessionID)
             if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
             const callID = Identifier.ascending()
+            const started = yield* Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              return yield* shell.create({ command: input.command, cwd: session.location.directory })
+            }).pipe(Effect.provide(locations.get(session.location)))
             yield* events.publish(
               SessionEvent.Shell.Started,
               {
                 sessionID: input.sessionID,
                 callID,
-                command: input.command,
+                shell: started,
               },
               { id: input.id },
             )
-            const output = yield* runShellCommand(input.command, session.location.directory).pipe(
-              Effect.provide(locations.get(session.location)),
-            )
+            const completed = yield* Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const info = yield* shell.wait(started.id)
+              const output = yield* shell.output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+              return { shell: info, output }
+            })
+              .pipe(Effect.provide(locations.get(session.location)))
+              .pipe(
+                Effect.catchTag("Shell.NotFoundError", () => {
+                  const output = "Shell command output is no longer available."
+                  return Effect.succeed({
+                    shell: started,
+                    output: {
+                      output,
+                      cursor: Buffer.byteLength(output),
+                      size: Buffer.byteLength(output),
+                      truncated: false,
+                    },
+                  })
+                }),
+              )
             yield* events.publish(SessionEvent.Shell.Ended, {
               sessionID: input.sessionID,
               callID,
-              output,
+              shell: completed.shell,
+              output: completed.output,
             })
           }).pipe(
             Effect.ensuring(

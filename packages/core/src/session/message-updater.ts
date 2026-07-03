@@ -168,8 +168,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             type: "shell",
             metadata: event.metadata,
             callID: event.data.callID,
-            command: event.data.command,
-            output: "",
+            shell: event.data.shell,
             time: { created: event.created },
           }),
         )
@@ -180,6 +179,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           if (currentShell) {
             yield* adapter.updateShell(
               produce(currentShell, (draft) => {
+                draft.shell = castDraft(event.data.shell)
                 draft.output = event.data.output
                 draft.time.completed = event.created
               }),

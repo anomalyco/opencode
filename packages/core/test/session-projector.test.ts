@@ -19,6 +19,7 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
+import { Shell } from "@opencode-ai/schema/shell"
 import {
   SessionContextCheckpointTable,
   SessionInputTable,
@@ -258,14 +259,33 @@ describe("SessionProjector", () => {
       yield* events.publish(SessionEvent.Shell.Started, {
         sessionID,
         callID: "shell-1",
-        command: "pwd",
+        shell: Shell.Info.make({
+          id: Shell.ID.make("sh_projector"),
+          status: "running",
+          command: "pwd",
+          cwd: "/project",
+          shell: "/bin/sh",
+          file: "/tmp/sh_projector.out",
+          metadata: {},
+          time: { started: 0 },
+        }),
       })
       yield* events.publish(SessionEvent.Shell.Ended, {
         sessionID,
         callID: "shell-1",
-        output: "/project",
+        shell: Shell.Info.make({
+          id: Shell.ID.make("sh_projector"),
+          status: "exited",
+          command: "pwd",
+          cwd: "/project",
+          shell: "/bin/sh",
+          file: "/tmp/sh_projector.out",
+          exit: 0,
+          metadata: {},
+          time: { started: 0, completed: 1 },
+        }),
+        output: { output: "/project", cursor: 8, size: 8, truncated: false },
       })
-      const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
@@ -320,7 +340,8 @@ describe("SessionProjector", () => {
         metadata: { source: "projector-test" },
       })
       expect(messages.find((message) => message.type === "shell")).toMatchObject({
-        output: "/project",
+        shell: { command: "pwd", status: "exited", exit: 0 },
+        output: { output: "/project", truncated: false },
         time: { completed: DateTime.makeUnsafe(0) },
       })
       expect(messages.find((message) => message.type === "compaction")).toMatchObject({

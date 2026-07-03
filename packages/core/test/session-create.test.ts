@@ -494,8 +494,9 @@ describe("SessionV2.create", () => {
 
         const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
         const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
-        expect(shell).toMatchObject({ type: "shell", command: "echo hello" })
-        expect(shell?.output).toContain("hello")
+        expect(shell).toMatchObject({ type: "shell", shell: { command: "echo hello", status: "exited", exit: 0 } })
+        expect(shell?.output?.output).toContain("hello")
+        expect(shell?.output?.truncated).toBe(false)
         expect(shell?.time.completed).toBeDefined()
       }),
     ),
@@ -513,7 +514,8 @@ describe("SessionV2.create", () => {
 
         const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
         const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
-        expect(shell).toMatchObject({ type: "shell", command: "false" })
+        expect(shell).toMatchObject({ type: "shell", shell: { command: "false", status: "exited" } })
+        expect(shell?.shell.exit).not.toBe(0)
         expect(shell?.time.completed).toBeDefined()
       }),
     ),

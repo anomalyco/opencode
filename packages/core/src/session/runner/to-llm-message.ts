@@ -139,7 +139,7 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.command}\n\n${message.output}`,
+          content: `Shell command: ${message.shell.command}\n\n${message.output?.output ?? ""}`,
           metadata: message.metadata,
         }),
       ]
