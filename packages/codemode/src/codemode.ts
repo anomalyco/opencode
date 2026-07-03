@@ -39,11 +39,10 @@ export type ExecutionLimits = {
 /** Controls how much of the tool catalog is inlined in agent instructions. */
 export type DiscoveryOptions = {
   /**
-   * Estimated-token budget (chars/4, default 4000) for inlined full tool signatures in agent
-   * instructions. Every namespace is always listed with its tool count regardless of budget;
-   * as many full signatures as fit this budget are inlined (cheapest-first within a
-   * namespace, namespaces alphabetical), and the instructions state whether the list is
-   * COMPLETE or PARTIAL. `tools.$codemode.search` is always registered.
+   * Estimated-token budget (chars/4, default 2000) for inlined full tool signatures in agent
+   * instructions. Signatures that fit are inlined round-robin across namespaces; every
+   * namespace is always listed with its tool count regardless of budget, and
+   * `tools.$codemode.search` is always registered.
    */
   readonly maxInlineCatalogTokens?: number
 }

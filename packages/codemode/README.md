@@ -30,7 +30,7 @@ Within this workspace:
 }
 ```
 
-CodeMode requires `effect` as a peer dependency.
+Hosts interact with CodeMode through `effect` (tool `run` implementations, `Effect`-typed results), so they should depend on `effect` themselves.
 
 ## Quick Start
 

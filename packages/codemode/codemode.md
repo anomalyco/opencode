@@ -135,14 +135,13 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 
 ## 3. Current status (what is already done on `codemode-v2`)
 
-Waves 0–5 and the post-wave fixes below are committed on `codemode-v2` (four commits: the
-generic package, the OpenCode integration, then one follow-up pair for Fixes 4–9); the
-DSL-expansion pass is uncommitted working-tree changes. Verification: from
-`packages/codemode`, `bun test` (207 pass / 0 fail across
-`codemode/parity/stdlib/promise/enumeration/signature`) and `bun run typecheck`; from
-`packages/opencode`, `bun run typecheck` and `bun test test/session/` (all green — the
-adapter suites are `code-mode.test.ts`, 34 tests, and `code-mode-integration.test.ts`,
-16 tests).
+Everything below is committed and pushed on `codemode-v2` (six commits, in pairs of
+generic-package + OpenCode-integration: waves 0–5, Fixes 4–9, then the DSL-expansion pass /
+real-JS error names / truncation layering). Verification: from `packages/codemode`,
+`bun test` (210 pass / 0 fail across `codemode/parity/stdlib/promise/enumeration/signature`)
+and `bun run typecheck`; from `packages/opencode`, `bun run typecheck` and
+`bun test test/session/` (all green — the adapter suites are `code-mode.test.ts`, 34 tests,
+and `code-mode-integration.test.ts`, 16 tests).
 
 ### Wave 0 — scaffold (done)
 - `packages/codemode` created from the experiments implementation: `src/{index,codemode,tool,
@@ -588,9 +587,9 @@ configurable knobs; the internal limit system dies):
 
 **Fix 6 — no default timeout / tool-call cap** (user direction): `timeoutMs` and
 `maxToolCalls` lost their defaults (were 10_000 / 100) — absent now means no timeout /
-unlimited calls. Budgets are host policy, not library policy; `maxOutputBytes` keeps its
-32,000 default because truncation never breaks correctness and its absence would silently
-flood model context. `ResolvedExecutionLimits` carries `number | undefined` for both, the
+unlimited calls. Budgets are host policy, not library policy; `maxOutputBytes` kept its
+32,000 default at the time (removed later — see the truncation-layering entry: absent now
+means no truncation). `ResolvedExecutionLimits` carries `number | undefined` for both, the
 timeout wrapper is only applied when configured, and `ToolRuntime.make` treats undefined
 `maxToolCalls` as uncapped. Validation is unchanged when values ARE provided (safe integers,
 timeoutMs >= 1, others >= 0). The OpenCode adapter is unaffected in behavior it sets
@@ -825,6 +824,11 @@ parity items, done as one focused pass; no public API or limit changes):
     that relied on the old default now asserts the oversized result reaches the shared
     wrapper un-truncated. Suites: 210 + 50, tsgo clean both.
 
+**Docs polish** (post-API-review): stale `DiscoveryOptions` JSDoc fixed (claimed default
+4,000 and alphabetical cheapest-first — now 2,000 and round-robin, matching Fix 8/9 reality)
+and the README's incorrect "`effect` as a peer dependency" line corrected (`effect` is a
+regular dependency; hosts depend on it themselves because the API surface is Effect-typed).
+
 ---
 
 ## 4. Remaining work (detailed TODO)
@@ -860,6 +864,65 @@ focused interpreter-surface pass rather than picked off piecemeal.
       signatures). Result quality is dominated by whether servers declare output schemas;
       revisit once real usage shows which failure modes matter.
 
+### Wiring-review findings (subagent code review of the OpenCode integration, triaged)
+Pre-PR fixes (user-approved cut):
+- [x] **Cancellation does not interrupt the interpreter** — the no-limits rationale claimed
+      "user cancel interrupts the execution fiber," but `tools.ts` runs tools via
+      `run.promise` → `Effect.runPromise` (`effect/bridge.ts:64-66`) with NO abort wiring;
+      on cancel the ai-sdk abandons the promise, child MCP calls abort (they hold
+      `ctx.abort`) but the interpreter fiber spun on — `while(true){}` or a try/catch
+      loop was uncancellable with no timeout backstop. Verified by hand, not just the
+      reviewer. FIXED in the adapter: `Effect.raceFirst(runtime.execute(code), cancelled)`
+      where `cancelled` is an `Effect.callback` abort-signal watcher (listener removed on
+      interruption) resuming with an `ok: false` "Execution cancelled." result — the abort
+      winning the race interrupts the execution fiber (interpreter auto-yield makes busy
+      loops preemptible, same mechanism as timeoutMs) and returning a value keeps the
+      runner's post-abort `completeToolCall` bookkeeping on its normal path. A pre-aborted
+      signal short-circuits at entry before the program starts (racing alone still lets
+      the loser run its first steps). Tests: +2 adapter (child call triggers abort
+      deterministically then the program enters `while(true){}` — would hang if
+      interruption broke; pre-aborted signal runs nothing). Adapter suite 34 → 36.
+      (Wiring abort→interrupt into the shared `tools.ts` runner for ALL tools remains a
+      worthwhile separate change.)
+- [ ] **Permission-denied/disabled MCP tools are still advertised in the catalog** — the
+      non-code-mode path filters them from the model's view (`llm/request.ts:208-213`);
+      code mode builds the catalog from all of `mcp.tools()`, so the model is invited to
+      call tools that can only fail at permission time, and per-message `tools[key]=false`
+      disabling has no child-call equivalent. Fix: filter the catalog with the same
+      ruleset.
+- [ ] Style: `code-mode.ts` is the only `src/session` sibling without the
+      `export * as ... from "./..."` self-reexport footer, forcing a star import at
+      `tools.ts:26` (AGENTS.md violation). Add footer + import the projection.
+- [ ] Trivial: latent `groupByServer` fallback bug — `key.slice(0, key.indexOf("_"))` is
+      `slice(0, -1)` when no underscore (unreachable today; guard or drop); dead
+      `CODE_MODE_TOOL` export (integration points hardcode `"execute"` — use it or inline
+      it).
+
+Post-MVP (logged, not blocking an experimental flag):
+- [ ] **Plugin `tool.execute.before/after` hooks skip child calls** — legacy MCP
+      registration fires them per tool (`tools.ts:419-441`); under code mode only the
+      outer `execute` fires them, so auditing/intercepting plugins silently lose MCP
+      coverage when the flag flips.
+- [ ] Description/preview rebuilt every assistant turn — `resolve()` re-runs
+      `groupByServer` + a throwaway `CodeMode.make(...).instructions()` per turn
+      (`code-mode.ts:252-259`); memoizable on a defs snapshot key. A second
+      `CodeMode.make` per execution is inherent (description precedes execution).
+- [ ] Child permission rejection round-trips through the defect channel — `ctx.ask`
+      defect (`tools.ts:90` orDie) recovered via `catchCause` + `Cause.squash`
+      (`code-mode.ts:238-245`). Works, interrupts preserved, but fragile coupling;
+      exposing the typed rejection on `Tool.Context.ask` would be cleaner.
+- [ ] No collision guard on the `execute` tool id (a plugin/custom tool named `execute`
+      is silently shadowed; a log line would do).
+- [ ] Style nits: triple-nested `yield*` in `tools.ts:101-107` argument position (bind
+      first, like neighbors); single-use micro-helpers (`toJsonSchema` is a bare cast);
+      comment density far above session-neighbor norm; adapter tests use raw
+      `Effect.runPromise` + hand-built layers with `as any` instead of the
+      `testEffect`/`LayerNode.compile` fixture pattern (`test/tool/grep.test.ts:25-31`)
+      and star-import `Truncate`.
+- [ ] Reviewer observation worth keeping: MCP server instructions (`sys.mcp`,
+      `session/system.ts:110-126`) still inject prose referencing server-native tool
+      names that are no longer directly callable under code mode.
+
 ### Backlog / loose ends (non-blocking, any order)
 - [ ] Media-only marker could name what it attached when MCP provides names: `image`/`audio`
       blocks carry no filename (mime + data only) so the generic
@@ -879,10 +942,14 @@ focused interpreter-surface pass rather than picked off piecemeal.
       normalizes → `FilePart`s visible to the model). Code-reviewed as sound; confirm with
       one interactive session (an image-returning MCP tool) when convenient. Same session
       can eyeball TUI child-call rendering via `metadata.toolCalls`.
-- [x] Commit hygiene: Waves 0–5 + post-wave fixes committed on `codemode-v2` as two units
-      (the generic package; the OpenCode integration). Future work: commit only when
-      explicitly asked; push with `--no-verify` per repo convention. The scratch
-      `.opencode/opencode.jsonc` stays uncommitted.
+- [x] Commit hygiene: all work committed and pushed on `codemode-v2` as six commits, in
+      generic-package + OpenCode-integration pairs (waves 0–5; Fixes 4–9; DSL pass +
+      error names + truncation layering). Future work: commit only when explicitly asked;
+      push with `--no-verify` per repo convention. The scratch `.opencode/opencode.jsonc`
+      stays uncommitted.
+- [ ] MVP scope decided (user direction): the interactive e2e eyeball is NOT required —
+      remaining pre-PR work is essentially just opening the PR. Attachment-propagation
+      verification (below) stays parked as post-MVP.
 
 ---
 
