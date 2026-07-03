@@ -959,7 +959,6 @@ export type GlobalEvent = {
         type: "shell.started"
         properties: {
           sessionID: string
-          callID: string
           shell: Shell
         }
       }
@@ -968,7 +967,6 @@ export type GlobalEvent = {
         type: "shell.ended"
         properties: {
           sessionID: string
-          callID: string
           shell: Shell
           output: {
             output: string
@@ -3864,7 +3862,6 @@ export type SyncEventShellStarted = {
     aggregateID: string
     data: {
       sessionID: string
-      callID: string
       shell: Shell
     }
   }
@@ -3880,7 +3877,6 @@ export type SyncEventShellEnded = {
     aggregateID: string
     data: {
       sessionID: string
-      callID: string
       shell: Shell
       output: {
         output: string
@@ -4461,7 +4457,6 @@ export type SessionMessageShell = {
     completed?: number
   }
   type: "shell"
-  callID: string
   shell: Shell
   output?: {
     output: string
@@ -4769,7 +4764,6 @@ export type ShellStarted = {
   location?: LocationRef
   data: {
     sessionID: string
-    callID: string
     shell: Shell1
   }
 }
@@ -4789,7 +4783,6 @@ export type ShellEnded = {
   location?: LocationRef
   data: {
     sessionID: string
-    callID: string
     shell: Shell1
     output: {
       output: string
@@ -6867,7 +6860,6 @@ export type EventShellStarted = {
   type: "shell.started"
   properties: {
     sessionID: string
-    callID: string
     shell: Shell2
   }
 }
@@ -6877,7 +6869,6 @@ export type EventShellEnded = {
   type: "shell.ended"
   properties: {
     sessionID: string
-    callID: string
     shell: Shell2
     output: {
       output: string
@@ -8056,7 +8047,6 @@ export type SessionMessageShell2 = {
     completed?: number
   }
   type: "shell"
-  callID: string
   shell: ShellV2
   output?: {
     output: string
@@ -8472,7 +8462,6 @@ export type ShellStarted2 = {
   location?: LocationRef2
   data: {
     sessionID: string
-    callID: string
     shell: Shell1V2
   }
 }
@@ -8492,7 +8481,6 @@ export type ShellEnded2 = {
   location?: LocationRef2
   data: {
     sessionID: string
-    callID: string
     shell: Shell1V2
     output: {
       output: string

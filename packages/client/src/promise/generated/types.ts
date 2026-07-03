@@ -976,7 +976,6 @@ export type SessionContextOutput = {
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number; readonly completed?: number }
         readonly type: "shell"
-        readonly callID: string
         readonly shell: {
           readonly id: string
           readonly status: "running" | "exited" | "timeout" | "killed"
@@ -1253,7 +1252,6 @@ export type SessionLogOutput =
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
-            readonly callID: string
             readonly shell: {
               readonly id: string
               readonly status: "running" | "exited" | "timeout" | "killed"
@@ -1277,7 +1275,6 @@ export type SessionLogOutput =
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
-            readonly callID: string
             readonly shell: {
               readonly id: string
               readonly status: "running" | "exited" | "timeout" | "killed"
@@ -1672,7 +1669,6 @@ export type SessionMessageOutput = {
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number; readonly completed?: number }
         readonly type: "shell"
-        readonly callID: string
         readonly shell: {
           readonly id: string
           readonly status: "running" | "exited" | "timeout" | "killed"
@@ -1872,7 +1868,6 @@ export type MessageListOutput = {
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number; readonly completed?: number }
         readonly type: "shell"
-        readonly callID: string
         readonly shell: {
           readonly id: string
           readonly status: "running" | "exited" | "timeout" | "killed"
@@ -4539,7 +4534,6 @@ export type EventSubscribeOutput =
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {
         readonly sessionID: string
-        readonly callID: string
         readonly shell: {
           readonly id: string
           readonly status: "running" | "exited" | "timeout" | "killed"
@@ -4563,7 +4557,6 @@ export type EventSubscribeOutput =
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {
         readonly sessionID: string
-        readonly callID: string
         readonly shell: {
           readonly id: string
           readonly status: "running" | "exited" | "timeout" | "killed"
