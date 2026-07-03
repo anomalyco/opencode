@@ -101,7 +101,7 @@ export function FormPrompt(props: { request: PromptForm; location?: LocationRef 
 
   function selectTab(index: number) {
     setStore("tab", index)
-    setStore("selected", 0)
+    setStore("selected", selectedOptionIndex(fields()[index]))
     setStore("editing", false)
   }
 
@@ -174,6 +174,15 @@ export function FormPrompt(props: { request: PromptForm; location?: LocationRef 
     return store.text[item.key] ?? (item.default === undefined ? "" : String(item.default))
   }
 
+  function selectedOptionIndex(item: FormField | undefined) {
+    const choices = fieldOptions(item)
+    if (!item || choices.length === 0 || item.type === "multiselect") return 0
+    const index = choices.findIndex((option) => option.value === fieldText(item))
+    if (index >= 0) return index
+    const customIndex = choices.findIndex((option) => option.custom === true)
+    return customIndex >= 0 && (store.custom[item.key] || fieldText(item)) ? customIndex : 0
+  }
+
   function buildAnswer(items: FormField[]): { answer: FormAnswer } | { error: string } {
     const answer: FormAnswer = {}
     for (const item of items) {
@@ -207,6 +216,7 @@ export function FormPrompt(props: { request: PromptForm; location?: LocationRef 
   }
 
   onMount(() => {
+    setStore("selected", selectedOptionIndex(field()))
     const popMode = modeStack.push(FORM_MODE)
     onCleanup(popMode)
   })
