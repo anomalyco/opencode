@@ -2,7 +2,6 @@ export * as PluginV2 from "./plugin"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
-import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/v2/effect"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
@@ -27,7 +26,7 @@ export type Info = Plugin.Info
 export const Event = Plugin.Event
 
 export interface Interface {
-  readonly add: (id: ID, effect: PluginDefinition["effect"]) => Effect.Effect<void>
+  readonly add: (id: ID, effect: import("@opencode-ai/plugin/v2/effect").Plugin["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly wait: (id: ID) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
@@ -45,10 +44,13 @@ const layer = Layer.effect(
     const loading = new Set<ID>()
     const waiters = new Map<ID, Set<Deferred.Deferred<void>>>()
     const failures = new Map<ID, Exit.Exit<void, never>>()
-    let host: Parameters<PluginDefinition["effect"]>[0]
+    let host: Parameters<import("@opencode-ai/plugin/v2/effect").Plugin["effect"]>[0]
 
-    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: PluginDefinition["effect"]) {
-      if (loading.has(id)) return yield* Effect.die(`Plugin load cycle detected for ${id}`)
+    const add = Effect.fn("Plugin.add")(function* (
+      id: ID,
+      effect: import("@opencode-ai/plugin/v2/effect").Plugin["effect"],
+    ) {
+      if (loading.has(id)) return yield* Effect.die(new Error(`Plugin load cycle detected for ${id}`))
 
       yield* locks.withLock(id)(
         Effect.sync(() => {
@@ -90,7 +92,7 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Plugin.remove")(function* (id: ID) {
-      if (loading.has(id)) return yield* Effect.die(`Cannot remove plugin ${id} while it is loading`)
+      if (loading.has(id)) return yield* Effect.die(new Error(`Cannot remove plugin ${id} while it is loading`))
 
       yield* locks.withLock(id)(
         State.batch(

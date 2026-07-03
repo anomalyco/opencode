@@ -2,8 +2,11 @@ export * as SessionRunnerModel from "./model"
 
 import { makeLocationNode } from "../../effect/app-node"
 import { type Model } from "@opencode-ai/llm"
+// ast-grep-ignore: no-star-import
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
+// ast-grep-ignore: no-star-import
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
+// ast-grep-ignore: no-star-import
 import * as OpenAIResponses from "@opencode-ai/llm/protocols/openai-responses"
 import { Auth, type AnyRoute } from "@opencode-ai/llm/route"
 import { Context, Effect, Layer, Schema } from "effect"

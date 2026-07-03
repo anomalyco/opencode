@@ -157,7 +157,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .where(eq(SessionTable.id, event.data.parentID))
     .get()
     .pipe(Effect.orDie)
-  if (!parent) return yield* Effect.die(`Fork parent session not found: ${event.data.parentID}`)
+  if (!parent) return yield* Effect.die(new Error(`Fork parent session not found: ${event.data.parentID}`))
   const boundary = event.data.messageID
     ? yield* db
         .select({ seq: SessionMessageTable.seq })
@@ -172,7 +172,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         .pipe(Effect.orDie)
     : undefined
   if (event.data.messageID && !boundary)
-    return yield* Effect.die(`Fork boundary message not found: ${event.data.messageID}`)
+    return yield* Effect.die(new Error(`Fork boundary message not found: ${event.data.messageID}`))
   const copied = yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
@@ -341,7 +341,8 @@ function run(db: DatabaseService, event: MessageEvent) {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type })
     const updateMessage = (message: SessionMessage.Message) => {
-      if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
+      if (event.durable === undefined)
+        return Effect.die(new Error("Durable Session event is missing aggregate sequence"))
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
       return db
@@ -418,7 +419,7 @@ function run(db: DatabaseService, event: MessageEvent) {
 }
 
 function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Message) {
-  if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
+  if (event.durable === undefined) return Effect.die(new Error("Durable Session event is missing aggregate sequence"))
   const encoded = encodeMessage(message)
   const { id, type, ...data } = encoded
   return db
@@ -585,7 +586,8 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
-        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        if (event.durable === undefined)
+          return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         yield* SessionInput.projectPrompted(db, {
           id: event.data.messageID,
           sessionID: event.data.sessionID,
@@ -599,7 +601,8 @@ const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.PromptAdmitted, (event) =>
       Effect.gen(function* () {
-        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        if (event.durable === undefined)
+          return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         yield* SessionInput.projectAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.messageID,
@@ -670,7 +673,7 @@ const layer = Layer.effectDiscard(
           )
           .get()
           .pipe(Effect.orDie)
-        if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
+        if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.messageID}`))
         yield* db
           .delete(SessionMessageTable)
           .where(

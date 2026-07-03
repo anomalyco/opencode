@@ -406,7 +406,7 @@ const layer = Layer.effect(
             .get()
             .integrations.get(input.integrationID)
             ?.methods.some((method) => method.type === "key")
-          if (!method) return yield* Effect.die(`Key method not found: ${input.integrationID}`)
+          if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
           yield* credentials.create({
             integrationID: input.integrationID,
             label: input.label,
@@ -418,7 +418,7 @@ const layer = Layer.effect(
         oauth: Effect.fn("Integration.connection.oauth")(function* (input) {
           const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
           if (!method) {
-            return yield* Effect.die(`OAuth method not found: ${input.integrationID}/${input.methodID}`)
+            return yield* Effect.die(new Error(`OAuth method not found: ${input.integrationID}/${input.methodID}`))
           }
           const attemptScope = yield* Scope.fork(scope)
           const authorization = yield* authorize(method.authorize(input.inputs)).pipe(
@@ -475,7 +475,7 @@ const layer = Layer.effect(
       attempt: {
         status: Effect.fn("Integration.attempt.status")(function* (attemptID) {
           const attempt = (yield* SynchronizedRef.get(attempts)).get(attemptID)
-          if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${attemptID}`)
+          if (!attempt) return yield* Effect.die(new Error(`OAuth attempt not found: ${attemptID}`))
           if (attempt.status === "failed") {
             return { status: attempt.status, message: attempt.message ?? "Authorization failed", time: attempt.time }
           }
@@ -488,12 +488,13 @@ const layer = Layer.effect(
             if (match.authorization.mode === "code" && input.code === undefined) return [match, current]
             return [match, new Map(current).set(input.attemptID, { ...match, completing: true })]
           })
-          if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${input.attemptID}`)
+          if (!attempt) return yield* Effect.die(new Error(`OAuth attempt not found: ${input.attemptID}`))
           if (attempt.status !== "pending") return
           if (attempt.authorization.mode === "code" && input.code === undefined) {
             return yield* new CodeRequiredError({ attemptID: input.attemptID })
           }
-          if (attempt.completing) return yield* Effect.die(`OAuth attempt already completing: ${input.attemptID}`)
+          if (attempt.completing)
+            return yield* Effect.die(new Error(`OAuth attempt already completing: ${input.attemptID}`))
           const callback =
             attempt.authorization.mode === "auto"
               ? attempt.authorization.callback

@@ -4,7 +4,7 @@ import path from "path"
 import { spawn, type ChildProcess } from "child_process"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
-import { setTimeout as sleep } from "node:timers/promises"
+import { setTimeout } from "node:timers/promises"
 import { Flag } from "../flag/flag"
 import { FSUtil } from "../fs-util"
 import { which } from "../util/which"
@@ -46,13 +46,13 @@ export async function killTree(proc: ChildProcess, opts?: { exited?: () => boole
 
   try {
     process.kill(-pid, "SIGTERM")
-    await sleep(SIGKILL_TIMEOUT_MS)
+    await setTimeout(SIGKILL_TIMEOUT_MS)
     if (!opts?.exited?.()) {
       process.kill(-pid, "SIGKILL")
     }
   } catch {
     proc.kill("SIGTERM")
-    await sleep(SIGKILL_TIMEOUT_MS)
+    await setTimeout(SIGKILL_TIMEOUT_MS)
     if (!opts?.exited?.()) {
       proc.kill("SIGKILL")
     }

@@ -32,7 +32,7 @@ function matches(record: Scope, input: Scope) {
 
 // Tickets are inserted via Cache.set and removed atomically via invalidateWhen. The lookup is
 // never invoked; it dies if it ever is, which would signal a misuse of the Service interface.
-const noLookup = () => Effect.die("PtyTicket cache must be used via set/invalidateWhen, never get")
+const noLookup = () => Effect.die(new Error("PtyTicket cache must be used via set/invalidateWhen, never get"))
 
 // Visible for tests so the TTL can be shortened. Production uses `layer` with the default TTL.
 export const make = (ttl: Duration.Input = DEFAULT_TTL) =>

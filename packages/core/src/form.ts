@@ -98,10 +98,14 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    const forms = yield* Cache.makeWith<ID, Entry>(() => Effect.die("Form cache must be used via set/getSuccess, never get"), {
-      capacity: Number.MAX_SAFE_INTEGER,
-      timeToLive: (exit) => (Exit.isSuccess(exit) && exit.value.state.status === "pending" ? Duration.infinity : RETENTION),
-    })
+    const forms = yield* Cache.makeWith<ID, Entry>(
+      () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
+      {
+        capacity: Number.MAX_SAFE_INTEGER,
+        timeToLive: (exit) =>
+          Exit.isSuccess(exit) && exit.value.state.status === "pending" ? Duration.infinity : RETENTION,
+      },
+    )
 
     const find = Effect.fn("Form.find")(function* (id: ID) {
       return yield* Cache.getSuccess(forms, id).pipe(
@@ -131,7 +135,9 @@ export const layer = Layer.effect(
             ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
           }
           const form: Info =
-            input.mode === "form" ? { ...base, mode: "form", fields: input.fields } : { ...base, mode: "url", url: input.url }
+            input.mode === "form"
+              ? { ...base, mode: "form", fields: input.fields }
+              : { ...base, mode: "url", url: input.url }
           const entry: Entry = {
             form,
             state: { status: "pending" },
@@ -149,7 +155,9 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const form = yield* create(input)
           const entry = yield* find(form.id).pipe(Effect.orDie)
-          return yield* restore(Deferred.await(entry.deferred)).pipe(Effect.onInterrupt(() => Effect.ignore(cancel(form.id))))
+          return yield* restore(Deferred.await(entry.deferred)).pipe(
+            Effect.onInterrupt(() => Effect.ignore(cancel(form.id))),
+          )
         }),
       ),
     )
@@ -301,7 +309,8 @@ function validateField(field: Form.Field, value: Form.Value): string | undefined
         return `Form field has invalid pattern: ${field.key}`
       }
     }
-    if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `Expected email for form field: ${field.key}`
+    if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+      return `Expected email for form field: ${field.key}`
     if (field.format === "uri" && !isUri(value)) return `Expected URI for form field: ${field.key}`
     if (field.format === "date" && !isDate(value)) return `Expected date for form field: ${field.key}`
     if (field.format === "date-time" && !isDateTime(value)) return `Expected date-time for form field: ${field.key}`
@@ -324,8 +333,10 @@ function validateField(field: Form.Field, value: Form.Value): string | undefined
   if (field.type === "multiselect") {
     if (!isStringArray(value)) return `Expected string array for form field: ${field.key}`
     if (field.required && value.length === 0) return `Missing required form field: ${field.key}`
-    if (field.minItems !== undefined && value.length < field.minItems) return `Too few selections for form field: ${field.key}`
-    if (field.maxItems !== undefined && value.length > field.maxItems) return `Too many selections for form field: ${field.key}`
+    if (field.minItems !== undefined && value.length < field.minItems)
+      return `Too few selections for form field: ${field.key}`
+    if (field.maxItems !== undefined && value.length > field.maxItems)
+      return `Too many selections for form field: ${field.key}`
     if (!field.custom && value.some((item) => !field.options.some((option) => option.value === item))) {
       return `Invalid option for form field: ${field.key}`
     }

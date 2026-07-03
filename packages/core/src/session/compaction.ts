@@ -2,10 +2,8 @@ export * as SessionCompaction from "./compaction"
 
 import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
-import type { Config } from "../config"
-import { Config as ConfigV2 } from "../config"
-import type { EventV2 } from "../event"
-import { EventV2 as EventV2Service } from "../event"
+import { Config } from "../config"
+import { EventV2 } from "../event"
 import { makeLocationNode } from "../effect/app-node"
 import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
@@ -311,9 +309,9 @@ const make = (dependencies: Dependencies) => {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2Service.Service
+    const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
-    const config = yield* ConfigV2.Service
+    const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
     const compaction = make({ events, llm, config: yield* config.entries() })
 
@@ -336,5 +334,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2Service.node, llmClient, ConfigV2.node, SessionRunnerModel.node],
+  deps: [EventV2.node, llmClient, Config.node, SessionRunnerModel.node],
 })

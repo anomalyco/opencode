@@ -1,26 +1,17 @@
-import type * as Arr from "effect/Array"
-import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
-import * as NodePath from "@effect/platform-node/NodePath"
-import * as Deferred from "effect/Deferred"
-import * as Effect from "effect/Effect"
-import * as Exit from "effect/Exit"
-import * as FileSystem from "effect/FileSystem"
-import * as Layer from "effect/Layer"
-import * as Path from "effect/Path"
-import * as PlatformError from "effect/PlatformError"
-import * as Predicate from "effect/Predicate"
-import type * as Scope from "effect/Scope"
-import * as Sink from "effect/Sink"
-import * as Stream from "effect/Stream"
-import * as ChildProcess from "effect/unstable/process/ChildProcess"
-import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
+import type { NonEmptyReadonlyArray } from "effect/Array"
+import { NodeFileSystem, NodePath, NodeSink, NodeStream } from "@effect/platform-node"
+import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
+import type { Scope } from "effect"
+import { ChildProcess } from "effect/unstable/process"
 import {
   ChildProcessSpawner,
   ExitCode,
-  make as makeSpawner,
+  make,
   makeHandle,
   ProcessId,
+  type ChildProcessHandle,
 } from "effect/unstable/process/ChildProcessSpawner"
+// ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
@@ -71,7 +62,7 @@ const flatten = (command: ChildProcess.Command) => {
   if (commands.length === 0) throw new Error("flatten produced empty commands array")
   const [head, ...tail] = commands
   return {
-    commands: [head, ...tail] as Arr.NonEmptyReadonlyArray<ChildProcess.StandardCommand>,
+    commands: [head, ...tail] as NonEmptyReadonlyArray<ChildProcess.StandardCommand>,
     opts,
   }
 }
@@ -96,7 +87,7 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
-export const make = Effect.gen(function* () {
+const makeCrossSpawnSpawner = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
 
@@ -494,12 +485,12 @@ export const make = Effect.gen(function* () {
     },
   )
 
-  return makeSpawner(spawnCommand)
+  return make(spawnCommand)
 })
 
 const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
   ChildProcessSpawner,
-  make,
+  makeCrossSpawnSpawner,
 )
 
 export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })

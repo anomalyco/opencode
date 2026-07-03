@@ -1,22 +1,23 @@
 export * as Policy from "./policy"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Effect as EffectRuntime, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { Wildcard } from "./util/wildcard"
 import { Location } from "./location"
 
-export const Effect = Schema.Literals(["allow", "deny"]).annotate({ identifier: "Policy.Effect" })
-export type Effect = typeof Effect.Type
+const PolicyEffect = Schema.Literals(["allow", "deny"]).annotate({ identifier: "Policy.Effect" })
+export { PolicyEffect as Effect }
+export type Effect = typeof PolicyEffect.Type
 
 export class Info extends Schema.Class<Info>("Policy.Info")({
   action: Schema.String,
-  effect: Effect,
+  effect: PolicyEffect,
   resource: Schema.String,
 }) {}
 
 export interface Interface {
-  readonly load: (statements: Info[]) => EffectRuntime.Effect<void>
-  readonly evaluate: (action: string, resource: string, fallback: Effect) => EffectRuntime.Effect<Effect>
+  readonly load: (statements: Info[]) => Effect.Effect<void>
+  readonly evaluate: (action: string, resource: string, fallback: Effect) => Effect.Effect<Effect>
   readonly hasStatements: () => boolean
 }
 
@@ -24,16 +25,16 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 const layer = Layer.effect(
   Service,
-  EffectRuntime.gen(function* () {
+  Effect.gen(function* () {
     let statements: Info[] = []
     yield* Location.Service
 
     return Service.of({
-      load: EffectRuntime.fn("Policy.load")(function* (input) {
+      load: Effect.fn("Policy.load")(function* (input) {
         statements = input
       }),
       hasStatements: () => statements.length > 0,
-      evaluate: EffectRuntime.fn("Policy.evaluate")(function* (action, resource, fallback) {
+      evaluate: Effect.fn("Policy.evaluate")(function* (action, resource, fallback) {
         return (
           statements.findLast(
             (statement) => Wildcard.match(action, statement.action) && Wildcard.match(resource, statement.resource),

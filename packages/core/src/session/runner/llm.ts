@@ -119,7 +119,7 @@ const layer = Layer.effect(
     const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
-      if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
+      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       return session
     })
 

@@ -1,4 +1,4 @@
-import { create as createIdentifier } from "@opencode-ai/schema/identifier"
+import { create } from "@opencode-ai/schema/identifier"
 
 const prefixes = {
   job: "job",
@@ -23,7 +23,7 @@ export function descending(prefix: keyof typeof prefixes, given?: string) {
 
 function generateID(prefix: keyof typeof prefixes, direction: "descending" | "ascending", given?: string): string {
   if (!given) {
-    return create(prefixes[prefix], direction)
+    return createID(prefixes[prefix], direction)
   }
 
   if (!given.startsWith(prefixes[prefix])) {
@@ -32,9 +32,11 @@ function generateID(prefix: keyof typeof prefixes, direction: "descending" | "as
   return given
 }
 
-export function create(prefix: string, direction: "descending" | "ascending", timestamp?: number): string {
-  return prefix + "_" + createIdentifier(direction === "descending", timestamp)
+function createID(prefix: string, direction: "descending" | "ascending", timestamp?: number): string {
+  return prefix + "_" + create(direction === "descending", timestamp)
 }
+
+export { createID as create }
 
 /** Extract timestamp from an ascending ID. Does not work with descending IDs. */
 export function timestamp(id: string): number {
