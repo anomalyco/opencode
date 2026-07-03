@@ -19,6 +19,25 @@ const input = {
 } satisfies Form.CreateInput
 
 describe("Form", () => {
+  it.effect("supports the temporary global mcp elicitation owner", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const created = yield* service.create({
+        sessionID: "global",
+        mode: "form",
+        fields: [{ key: "name", type: "string", required: true }],
+      })
+      expect(created.sessionID).toBe("global")
+
+      const owned = yield* service.list({ sessionID: "global" })
+      expect(owned.map((form) => form.id)).toEqual([created.id])
+      expect(yield* service.list({ sessionID: "other" })).toEqual([])
+
+      yield* service.reply({ id: created.id, answer: { name: "Ava" } })
+      expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { name: "Ava" } })
+    }),
+  )
+
   it.effect("cleans up created forms when event publication fails", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

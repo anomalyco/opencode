@@ -4,7 +4,6 @@ import { Schema } from "effect"
 import { define, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, optional, statics } from "./schema.js"
-import { SessionID } from "./session-id.js"
 
 const IDSchema = Schema.String.check(Schema.isStartsWith("frm_")).pipe(Schema.brand("Form.ID"))
 
@@ -95,7 +94,11 @@ export type Field = StringField | NumberField | IntegerField | BooleanField | Mu
 
 const InfoBase = {
   id: ID,
-  sessionID: SessionID,
+  // This should be typed as SessionID. It is a plain string only because MCP elicitation
+  // temporarily needs the `"global"` sentinel owner, which is not a real session. Once
+  // elicitations can be attributed to real sessions, revert this to SessionID. Do not rely
+  // on non-session owners anywhere else.
+  sessionID: Schema.String,
   title: Schema.String.pipe(optional),
   metadata: Metadata.pipe(optional),
 }
@@ -140,7 +143,7 @@ export const Reply = Schema.Struct({
 export interface Reply extends Schema.Schema.Type<typeof Reply> {}
 
 const Created = define({ type: "form.created", schema: { form: Info } })
-const Replied = define({ type: "form.replied", schema: { id: ID, sessionID: SessionID, answer: Answer } })
-const Cancelled = define({ type: "form.cancelled", schema: { id: ID, sessionID: SessionID } })
+const Replied = define({ type: "form.replied", schema: { id: ID, sessionID: Schema.String, answer: Answer } })
+const Cancelled = define({ type: "form.cancelled", schema: { id: ID, sessionID: Schema.String } })
 
 export const Event = { Created, Replied, Cancelled, Definitions: inventory(Created, Replied, Cancelled) }
