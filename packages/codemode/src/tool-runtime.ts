@@ -21,11 +21,16 @@ export type HostTools<R = never> = {
 
 export type Services<Tools> = Tools extends (...args: Array<unknown>) => Effect.Effect<unknown, unknown, infer R>
   ? R
-  : Tools extends { readonly _tag: "CodeModeTool"; readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R> }
+  : Tools extends {
+        readonly _tag: "CodeModeTool"
+        readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
+      }
     ? R
-  : Tools extends object
-    ? string extends keyof Tools ? never : Services<Tools[keyof Tools]>
-    : never
+    : Tools extends object
+      ? string extends keyof Tools
+        ? never
+        : Services<Tools[keyof Tools]>
+      : never
 
 /** Minimal audit record retained for each admitted tool call. */
 export type ToolCall = {
@@ -68,11 +73,13 @@ export type SafeObject = Record<string, unknown>
 const reservedNamespace = "$codemode"
 const defaultMaxInlineCatalogTokens = 2_000
 const defaultSearchLimit = 10
-const searchSignature = "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
+const searchSignature =
+  "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
 const toolExpression = (path: string) =>
-  "tools" + path
+  "tools" +
+  path
     .split(".")
-    .map((segment) => identifierSegment.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`)
+    .map((segment) => (identifierSegment.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`))
     .join("")
 
 export class ToolReference {
@@ -88,7 +95,12 @@ const MAX_VALUE_DEPTH = 32
 
 export class ToolRuntimeError extends Error {
   constructor(
-    readonly kind: "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "InvalidDataValue" | "ToolCallLimitExceeded",
+    readonly kind:
+      | "UnknownTool"
+      | "InvalidToolInput"
+      | "InvalidToolOutput"
+      | "InvalidDataValue"
+      | "ToolCallLimitExceeded",
     message: string,
     readonly suggestions: ReadonlyArray<string> = [],
   ) {
@@ -131,7 +143,13 @@ export const isBlockedMember = (name: string): boolean => blockedMemberNames.has
 export const copyIn = (value: unknown, label: string, preserveSandboxValues = false): unknown =>
   copyBounded(value, label, 0, new Set(), preserveSandboxValues)
 
-const copyBounded = (value: unknown, label: string, depth: number, seen: Set<object>, preserveSandboxValues: boolean): unknown => {
+const copyBounded = (
+  value: unknown,
+  label: string,
+  depth: number,
+  seen: Set<object>,
+  preserveSandboxValues: boolean,
+): unknown => {
   if (depth > MAX_VALUE_DEPTH) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
   }
@@ -166,7 +184,12 @@ const copyBounded = (value: unknown, label: string, depth: number, seen: Set<obj
     // Intra-sandbox checkpoints keep sandbox value instances alive as leaves; their contents
     // are never walked here (Map/Set members are validated where mutation happens, and the
     // real boundary still serializes them below).
-    if (value instanceof SandboxDate || value instanceof SandboxRegExp || value instanceof SandboxMap || value instanceof SandboxSet) {
+    if (
+      value instanceof SandboxDate ||
+      value instanceof SandboxRegExp ||
+      value instanceof SandboxMap ||
+      value instanceof SandboxSet
+    ) {
       return value
     }
     // Host instances cannot normally reach an intra-sandbox checkpoint (tool results cross
@@ -197,8 +220,12 @@ const copyBounded = (value: unknown, label: string, depth: number, seen: Set<obj
     return Number.isFinite(value.getTime()) ? value.toISOString() : null
   }
   if (
-    value instanceof SandboxRegExp || value instanceof SandboxMap || value instanceof SandboxSet ||
-    value instanceof RegExp || value instanceof Map || value instanceof Set
+    value instanceof SandboxRegExp ||
+    value instanceof SandboxMap ||
+    value instanceof SandboxSet ||
+    value instanceof RegExp ||
+    value instanceof Map ||
+    value instanceof Set
   ) {
     return Object.create(null) as SafeObject
   }
@@ -250,7 +277,10 @@ export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
   return value
 }
 
-const definitions = <R>(tools: HostTools<R>, path: ReadonlyArray<string> = []): Array<{ path: string; definition: Definition<R> }> => {
+const definitions = <R>(
+  tools: HostTools<R>,
+  path: ReadonlyArray<string> = [],
+): Array<{ path: string; definition: Definition<R> }> => {
   const entries: Array<{ path: string; definition: Definition<R> }> = []
   for (const [name, value] of Object.entries(tools)) {
     const next = [...path, name]
@@ -342,8 +372,11 @@ const toSearchEntry = <R>(path: string, definition: Definition<R>, description: 
     path,
     definition.description,
     ...inputProperties(definition).flatMap(({ name, description: property }) =>
-      property === undefined ? [name] : [name, property]),
-  ].join("\n").toLowerCase(),
+      property === undefined ? [name] : [name, property],
+    ),
+  ]
+    .join("\n")
+    .toLowerCase(),
 })
 
 /** The runtime search index over every described tool. Search is always registered. */
@@ -396,7 +429,8 @@ export const discoveryPlan = <R>(
     namespace,
     picked: new Set<ToolDescription>(),
     queue: [...group].sort(
-      (left, right) => estimate(catalogLine(left)) - estimate(catalogLine(right)) || left.path.localeCompare(right.path),
+      (left, right) =>
+        estimate(catalogLine(left)) - estimate(catalogLine(right)) || left.path.localeCompare(right.path),
     ),
   }))
   let used = 0
@@ -472,7 +506,9 @@ export const discoveryPlan = <R>(
         "- A result typed `Promise<unknown>` has no guaranteed shape - verify what actually came back before relying on its fields.",
         "- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`.",
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
-        ...(complete ? [] : ['- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.']),
+        ...(complete
+          ? []
+          : ['- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.']),
       ]
 
   const syntax = [
@@ -500,26 +536,21 @@ export const discoveryPlan = <R>(
       const count = `${group.length} tool${group.length === 1 ? "" : "s"}`
       // Annotate only when a namespace is not fully shown, so a comprehensive
       // namespace reads cleanly and a truncated one is unambiguous.
-      const label = picked.size === group.length ? count : picked.size === 0 ? `${count}, none shown` : `${count}, ${picked.size} shown`
+      const label =
+        picked.size === group.length
+          ? count
+          : picked.size === 0
+            ? `${count}, none shown`
+            : `${count}, ${picked.size} shown`
       toolSection.push(`- ${namespace} (${label})`)
       for (const tool of group) if (picked.has(tool)) toolSection.push(catalogLine(tool))
     }
     if (!complete) {
-      toolSection.push(
-        "",
-        "Search returns complete callable signatures:",
-        `- ${searchSignature}`,
-      )
+      toolSection.push("", "Search returns complete callable signatures:", `- ${searchSignature}`)
     }
   }
 
-  const lines = [
-    ...intro,
-    ...workflow,
-    ...rules,
-    ...syntax,
-    ...toolSection,
-  ]
+  const lines = [...intro, ...workflow, ...rules, ...syntax, ...toolSection]
   return {
     catalog: described,
     instructions: lines.join("\n"),
@@ -534,18 +565,29 @@ export const discoveryPlan = <R>(
  * function in JS). An unknown path is an `UnknownTool` error pointing at the working
  * discovery idioms, mirroring how calling an unknown tool fails.
  */
-const namespaceKeys = <R>(tools: HostTools<R>, path: ReadonlyArray<string>, searchEnabled: boolean): ReadonlyArray<string> => {
+const namespaceKeys = <R>(
+  tools: HostTools<R>,
+  path: ReadonlyArray<string>,
+  searchEnabled: boolean,
+): ReadonlyArray<string> => {
   // The reserved discovery namespace is virtual (never present in the host tree); enumerate
   // it explicitly so `Object.keys(tools.$codemode)` matches the callable surface.
   if (searchEnabled && path.length === 1 && path[0] === reservedNamespace) return ["search"]
   let value: HostTool<R> | Definition<R> | HostTools<R> = tools
   for (const segment of path) {
-    if (isBlockedMember(segment) || typeof value === "function" || isDefinition(value) || !Object.hasOwn(value, segment)) {
+    if (
+      isBlockedMember(segment) ||
+      typeof value === "function" ||
+      isDefinition(value) ||
+      !Object.hasOwn(value, segment)
+    ) {
       throw new ToolRuntimeError(
         "UnknownTool",
         `Unknown tool namespace '${path.join(".")}'.`,
         searchEnabled
-          ? ["Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools."]
+          ? [
+              "Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools.",
+            ]
           : ["Object.keys(tools) lists the available namespaces."],
       )
     }
@@ -555,12 +597,25 @@ const namespaceKeys = <R>(tools: HostTools<R>, path: ReadonlyArray<string>, sear
   return Object.keys(value)
 }
 
-const resolve = <R>(tools: HostTools<R>, path: ReadonlyArray<string>, searchEnabled: boolean): HostTool<R> | Definition<R> => {
+const resolve = <R>(
+  tools: HostTools<R>,
+  path: ReadonlyArray<string>,
+  searchEnabled: boolean,
+): HostTool<R> | Definition<R> => {
   let value: HostTool<R> | Definition<R> | HostTools<R> = tools
 
   for (const segment of path) {
-    if (isBlockedMember(segment) || typeof value === "function" || isDefinition(value) || !Object.hasOwn(value, segment)) {
-      throw new ToolRuntimeError("UnknownTool", `Unknown tool '${path.join(".")}'.`, searchEnabled ? ["Use tools.$codemode.search({ query }) to find available described tools."] : [])
+    if (
+      isBlockedMember(segment) ||
+      typeof value === "function" ||
+      isDefinition(value) ||
+      !Object.hasOwn(value, segment)
+    ) {
+      throw new ToolRuntimeError(
+        "UnknownTool",
+        `Unknown tool '${path.join(".")}'.`,
+        searchEnabled ? ["Use tools.$codemode.search({ query }) to find available described tools."] : [],
+      )
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
   }
@@ -602,7 +657,8 @@ export const make = <R>(
     return effect.pipe(
       Effect.tap(() => onEnd({ ...call, durationMs: Date.now() - startedAt, outcome: "success" })),
       Effect.tapError((error) =>
-        onEnd({ ...call, durationMs: Date.now() - startedAt, outcome: "failure", message: failureMessage(error) })),
+        onEnd({ ...call, durationMs: Date.now() - startedAt, outcome: "failure", message: failureMessage(error) }),
+      ),
     )
   }
 
@@ -624,7 +680,7 @@ export const make = <R>(
     calls,
     keys: (path) => namespaceKeys(tools, path, searchEnabled),
     invoke: (path, args) =>
-      Effect.gen(function*() {
+      Effect.gen(function* () {
         const name = path.join(".")
         const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`)))
         const call = { name }
@@ -637,17 +693,32 @@ export const make = <R>(
           if (!searchEnabled) throw new ToolRuntimeError("UnknownTool", `Unknown tool '${name}'.`)
           const input = externalArgs[0]
           if (externalArgs.length !== 1 || input === null || typeof input !== "object" || Array.isArray(input)) {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$codemode.search expects { query?: string; namespace?: string; limit?: number }.")
+            throw new ToolRuntimeError(
+              "InvalidToolInput",
+              "tools.$codemode.search expects { query?: string; namespace?: string; limit?: number }.",
+            )
           }
           const request = input as { query?: unknown; namespace?: unknown; limit?: unknown }
           if (request.query !== undefined && typeof request.query !== "string") {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$codemode.search query must be a string when provided.")
+            throw new ToolRuntimeError(
+              "InvalidToolInput",
+              "tools.$codemode.search query must be a string when provided.",
+            )
           }
           if (request.namespace !== undefined && typeof request.namespace !== "string") {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$codemode.search namespace must be a string when provided.")
+            throw new ToolRuntimeError(
+              "InvalidToolInput",
+              "tools.$codemode.search namespace must be a string when provided.",
+            )
           }
-          if (request.limit !== undefined && (typeof request.limit !== "number" || !Number.isSafeInteger(request.limit) || request.limit <= 0)) {
-            throw new ToolRuntimeError("InvalidToolInput", "tools.$codemode.search limit must be a positive safe integer when provided.")
+          if (
+            request.limit !== undefined &&
+            (typeof request.limit !== "number" || !Number.isSafeInteger(request.limit) || request.limit <= 0)
+          ) {
+            throw new ToolRuntimeError(
+              "InvalidToolInput",
+              "tools.$codemode.search limit must be a positive safe integer when provided.",
+            )
           }
           const query = typeof request.query === "string" ? request.query : ""
           const namespace = typeof request.namespace === "string" ? request.namespace : undefined
@@ -656,40 +727,50 @@ export const make = <R>(
             Effect.try({
               try: () => {
                 const limit = typeof request.limit === "number" ? request.limit : defaultSearchLimit
-                const scoped = namespace === undefined ? searchIndex : searchIndex.filter((entry) => entry.namespace === namespace)
+                const scoped =
+                  namespace === undefined ? searchIndex : searchIndex.filter((entry) => entry.namespace === namespace)
                 // A query that names one tool path exactly (canonical path or rendered
                 // JavaScript expression) is a lookup, not a search: return that tool alone.
                 const trimmed = query.trim()
                 const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
-                const exact = pathQuery === "" ? undefined : scoped.find((entry) =>
-                  entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed)
+                const exact =
+                  pathQuery === ""
+                    ? undefined
+                    : scoped.find(
+                        (entry) =>
+                          entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+                      )
                 const terms = tokenize(query).map(termForms)
                 // Additive field-weighted scoring, summed across terms: exact path or path
                 // segment (20) > path substring (8) > description substring (4) > any
                 // searchable text, incl. input parameter names/descriptions (2). Each term
                 // matches a field when any of its forms (the term or a singular variant)
                 // does. An empty query browses everything, alphabetical by path.
-                const ranked = exact !== undefined
-                  ? [exact]
-                  : scoped
-                      .map((entry) => {
-                        const path = entry.description.path.toLowerCase()
-                        const description = entry.description.description.toLowerCase()
-                        const score = terms.reduce(
-                          (total, forms) =>
-                            total +
-                            (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
-                            (forms.some((form) => path.includes(form)) ? 8 : 0) +
-                            (forms.some((form) => description.includes(form)) ? 4 : 0) +
-                            (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
-                          0,
+                const ranked =
+                  exact !== undefined
+                    ? [exact]
+                    : scoped
+                        .map((entry) => {
+                          const path = entry.description.path.toLowerCase()
+                          const description = entry.description.description.toLowerCase()
+                          const score = terms.reduce(
+                            (total, forms) =>
+                              total +
+                              (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+                              (forms.some((form) => path.includes(form)) ? 8 : 0) +
+                              (forms.some((form) => description.includes(form)) ? 4 : 0) +
+                              (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
+                            0,
+                          )
+                          return { entry, score }
+                        })
+                        .filter(({ score }) => terms.length === 0 || score > 0)
+                        .sort(
+                          (left, right) =>
+                            right.score - left.score ||
+                            left.entry.description.path.localeCompare(right.entry.description.path),
                         )
-                        return { entry, score }
-                      })
-                      .filter(({ score }) => terms.length === 0 || score > 0)
-                      .sort((left, right) =>
-                        right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path))
-                      .map(({ entry }) => entry)
+                        .map(({ entry }) => entry)
                 // Result paths are rendered as JavaScript expressions so each `path` is
                 // directly usable as the call site (`await tools.github.list({ ... })` or
                 // `await tools.ns["dashed-name"]({ ... })`). The signature is the pretty,
@@ -711,10 +792,12 @@ export const make = <R>(
         const tool = resolve(tools, path, searchEnabled)
         let describedInput: unknown
         if (isDefinition(tool)) {
-          if (externalArgs.length !== 1) throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
+          if (externalArgs.length !== 1)
+            throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
           describedInput = yield* Effect.try({
             try: () => decodeToolInput(tool, externalArgs[0]),
-            catch: (cause) => new ToolRuntimeError("InvalidToolInput", `Invalid input for tool '${name}': ${String(cause)}`),
+            catch: (cause) =>
+              new ToolRuntimeError("InvalidToolInput", `Invalid input for tool '${name}': ${String(cause)}`),
           })
         }
         const input = isDefinition(tool) ? describedInput : externalArgs
@@ -722,7 +805,7 @@ export const make = <R>(
         const currentCall = { index, name, input }
         if (isDefinition(tool)) {
           return yield* observeEnd(
-            Effect.gen(function*() {
+            Effect.gen(function* () {
               const raw = yield* runHost(Effect.suspend(() => tool.run(describedInput)))
               const result = yield* Effect.try({
                 try: () => decodeToolOutput(tool, raw),
@@ -734,7 +817,7 @@ export const make = <R>(
           )
         }
         return yield* observeEnd(
-          Effect.gen(function*() {
+          Effect.gen(function* () {
             return yield* decodeOutput(yield* runHost(Effect.suspend(() => tool(...externalArgs))), name)
           }),
           currentCall,

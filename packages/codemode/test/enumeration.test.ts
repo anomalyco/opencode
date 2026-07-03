@@ -36,10 +36,12 @@ const error = async (code: string) => {
 
 describe("Object.keys over tool references", () => {
   test("enumerates top-level namespaces (the transcript program)", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const namespaces = Object.keys(tools)
       return { namespaces, count: namespaces.length }
-    `)).toEqual({ namespaces: ["github", "memory", "playwright"], count: 3 })
+    `),
+    ).toEqual({ namespaces: ["github", "memory", "playwright"], count: 3 })
   })
 
   test("enumerates tool names at a nested namespace", async () => {
@@ -92,7 +94,8 @@ describe("Object.keys over arrays", () => {
 
 describe("for...in", () => {
   test("iterates own enumerable keys of a plain object with break/continue", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const seen = []
       for (const key in { a: 1, b: 2, c: 3, d: 4 }) {
         if (key === "b") continue
@@ -100,41 +103,50 @@ describe("for...in", () => {
         seen.push(key)
       }
       return seen
-    `)).toEqual(["a", "c"])
+    `),
+    ).toEqual(["a", "c"])
   })
 
   test("iterates index strings over arrays", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const indexes = []
       for (const i in ["x", "y", "z"]) {
         if (i === "2") break
         indexes.push(i)
       }
       return indexes
-    `)).toEqual(["0", "1"])
+    `),
+    ).toEqual(["0", "1"])
   })
 
   test("supports let declarations and bare identifiers", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       let last = ""
       for (let key in { a: 1, b: 2 }) last = key
       return last
-    `)).toBe("b")
-    expect(await value(`
+    `),
+    ).toBe("b")
+    expect(
+      await value(`
       let key = "before"
       for (key in { only: 1 }) {}
       return key
-    `)).toBe("only")
+    `),
+    ).toBe("only")
   })
 
   test("enumerates namespaces and tools from the host tool tree", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const names = []
       for (const ns in tools) {
         for (const name in tools[ns]) names.push(ns + "." + name)
       }
       return names
-    `)).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate"])
+    `),
+    ).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate"])
   })
 
   test("unsupported values fail with a hint at for...of and Object.keys", async () => {

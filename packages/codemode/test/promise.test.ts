@@ -23,7 +23,7 @@ const sleepyTool = (trace: Trace) =>
     input: Schema.Struct({ id: Schema.Number, ms: Schema.optionalKey(Schema.Number) }),
     output: Schema.Number,
     run: ({ id, ms }) =>
-      Effect.gen(function*() {
+      Effect.gen(function* () {
         trace.starts.push(id)
         trace.active += 1
         trace.maxActive = Math.max(trace.maxActive, trace.active)
@@ -31,10 +31,14 @@ const sleepyTool = (trace: Trace) =>
         trace.active -= 1
         trace.completed += 1
         return id
-      }).pipe(Effect.onInterrupt(() => Effect.sync(() => {
-        trace.active -= 1
-        trace.interrupted += 1
-      }))),
+      }).pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            trace.active -= 1
+            trace.interrupted += 1
+          }),
+        ),
+      ),
   })
 
 const failingTool = Tool.make({
@@ -46,11 +50,13 @@ const failingTool = Tool.make({
 
 const run = (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}): Promise<ExecuteResult> => {
   const trace = options.trace ?? makeTrace()
-  return Effect.runPromise(CodeMode.execute({
-    tools: { host: { sleepy: sleepyTool(trace), fail: failingTool } },
-    code,
-    ...(options.limits ? { limits: options.limits } : {}),
-  }))
+  return Effect.runPromise(
+    CodeMode.execute({
+      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool } },
+      code,
+      ...(options.limits ? { limits: options.limits } : {}),
+    }),
+  )
 }
 
 const value = async (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}) => {
@@ -121,7 +127,8 @@ describe("first-class promise values", () => {
   })
 
   test("an awaited failure is catchable exactly like a synchronous throw", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const p = tools.host.fail({})
       try {
         await p
@@ -129,7 +136,8 @@ describe("first-class promise values", () => {
       } catch (e) {
         return e.message
       }
-    `)).toBe("Lookup refused")
+    `),
+    ).toBe("Lookup refused")
   })
 
   test("a fire-and-forget call completes before the execution ends", async () => {
@@ -186,20 +194,24 @@ describe("promises at data boundaries", () => {
 
 describe("Promise.all over arbitrary arrays", () => {
   test("mixes promises and plain values, preserving order", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       return await Promise.all([tools.host.sleepy({ id: 1 }), "plain", tools.host.sleepy({ id: 2 }), 42])
-    `)).toEqual([1, "plain", 2, 42])
+    `),
+    ).toEqual([1, "plain", 2, 42])
   })
 
   test("accepts arrays built beforehand, passed as identifiers, and spread elements", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const calls = []
       calls.push(tools.host.sleepy({ id: 1 }))
       calls.push(7)
       const more = [tools.host.sleepy({ id: 2 })]
       const batch = [...calls, ...more, "x"]
       return await Promise.all(batch)
-    `)).toEqual([1, 7, 2, "x"])
+    `),
+    ).toEqual([1, 7, 2, "x"])
   })
 
   test("runs items.map tool calls in parallel", async () => {
@@ -238,14 +250,16 @@ describe("Promise.all over arbitrary arrays", () => {
   })
 
   test("rejects with the first failure, catchable in-program", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       try {
         await Promise.all([tools.host.sleepy({ id: 1 }), tools.host.fail({})])
         return "no"
       } catch (e) {
         return e.message
       }
-    `)).toBe("Lookup refused")
+    `),
+    ).toBe("Lookup refused")
   })
 
   test("a non-collection argument is a clear error", async () => {
@@ -264,14 +278,16 @@ describe("Promise.all over arbitrary arrays", () => {
 
 describe("Promise.allSettled", () => {
   test("reports fulfilled and rejected outcomes with catch-normalized reasons", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       return await Promise.allSettled([
         tools.host.sleepy({ id: 5 }),
         tools.host.fail({}),
         "plain",
         Promise.reject(new Error("boom")),
       ])
-    `)).toEqual([
+    `),
+    ).toEqual([
       { status: "fulfilled", value: 5 },
       { status: "rejected", reason: { name: "Error", message: "Lookup refused" } },
       { status: "fulfilled", value: "plain" },
@@ -306,7 +322,8 @@ describe("Promise.race", () => {
   })
 
   test("awaiting an interrupted loser afterwards is a catchable program failure", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const fast = tools.host.sleepy({ id: 1, ms: 10 })
       const slow = tools.host.sleepy({ id: 2, ms: 5000 })
       const winner = await Promise.race([fast, slow])
@@ -316,23 +333,31 @@ describe("Promise.race", () => {
       } catch (e) {
         return { winner, caught: e.message }
       }
-    `)).toEqual({ winner: 1, caught: "This tool call was interrupted because another value settled a Promise.race first." })
+    `),
+    ).toEqual({
+      winner: 1,
+      caught: "This tool call was interrupted because another value settled a Promise.race first.",
+    })
   })
 
   test("a rejection can win the race", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       try {
         await Promise.race([tools.host.fail({}), tools.host.sleepy({ id: 1, ms: 5000 })])
         return "no"
       } catch (e) {
         return e.message
       }
-    `)).toBe("Lookup refused")
+    `),
+    ).toBe("Lookup refused")
   })
 
   test("a plain value wins over pending promises", async () => {
     const trace = makeTrace()
-    expect(await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 5000 }), "immediate"])`, { trace })).toBe("immediate")
+    expect(
+      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 5000 }), "immediate"])`, { trace }),
+    ).toBe("immediate")
     expect(trace.interrupted).toBe(1)
   })
 
@@ -350,14 +375,16 @@ describe("Promise.resolve / Promise.reject", () => {
   })
 
   test("reject produces a promise whose await throws the reason", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       try {
         await Promise.reject("nope")
         return "no"
       } catch (e) {
         return e
       }
-    `)).toBe("nope")
+    `),
+    ).toBe("nope")
   })
 })
 

@@ -28,4 +28,7 @@ export class SandboxSet {
 }
 
 export const isSandboxValue = (value: unknown): value is SandboxDate | SandboxRegExp | SandboxMap | SandboxSet =>
-  value instanceof SandboxDate || value instanceof SandboxRegExp || value instanceof SandboxMap || value instanceof SandboxSet
+  value instanceof SandboxDate ||
+  value instanceof SandboxRegExp ||
+  value instanceof SandboxMap ||
+  value instanceof SandboxSet

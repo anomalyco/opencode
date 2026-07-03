@@ -143,21 +143,40 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
 
 describe("Error values and instanceof", () => {
   test("new Error carries name/message and is instanceof Error", async () => {
-    expect(await value(`const e = new Error("boom"); return [e instanceof Error, e.name, e.message]`)).toEqual([true, "Error", "boom"])
+    expect(await value(`const e = new Error("boom"); return [e instanceof Error, e.name, e.message]`)).toEqual([
+      true,
+      "Error",
+      "boom",
+    ])
   })
 
   test("Error without new behaves like new Error", async () => {
-    expect(await value(`const e = Error("plain"); return [e instanceof Error, e.name, e.message]`)).toEqual([true, "Error", "plain"])
-    expect(await value(`const e = new Error(); return [e.name, e.message, e instanceof Error]`)).toEqual(["Error", "", true])
+    expect(await value(`const e = Error("plain"); return [e instanceof Error, e.name, e.message]`)).toEqual([
+      true,
+      "Error",
+      "plain",
+    ])
+    expect(await value(`const e = new Error(); return [e.name, e.message, e instanceof Error]`)).toEqual([
+      "Error",
+      "",
+      true,
+    ])
   })
 
   test("specific error types are instanceof themselves and Error, not each other", async () => {
-    expect(await value(`const e = new TypeError("t"); return [e instanceof TypeError, e instanceof Error, e instanceof RangeError]`)).toEqual([true, true, false])
+    expect(
+      await value(
+        `const e = new TypeError("t"); return [e instanceof TypeError, e instanceof Error, e instanceof RangeError]`,
+      ),
+    ).toEqual([true, true, false])
     expect(await value(`return new Error("e") instanceof TypeError`)).toBe(false)
   })
 
   test("thrown errors keep instanceof through try/catch", async () => {
-    expect(await value(`try { throw new Error("x") } catch (e) { return [e instanceof Error, e.message] }`)).toEqual([true, "x"])
+    expect(await value(`try { throw new Error("x") } catch (e) { return [e instanceof Error, e.message] }`)).toEqual([
+      true,
+      "x",
+    ])
   })
 
   test("interpreter runtime failures are caught as Error values", async () => {
@@ -168,33 +187,48 @@ describe("Error values and instanceof", () => {
   test("caught failures carry the constructor name the real-JS failure would have", async () => {
     // JSON.parse throws SyntaxError: name and specific-instanceof both carry through, and the
     // message keeps the engine's position detail.
-    expect(await value(`
+    expect(
+      await value(`
       try { JSON.parse("{oops") } catch (e) {
         return [e.name, e instanceof SyntaxError, e instanceof Error, e instanceof TypeError, e.message.includes("JSON")]
       }
-    `)).toEqual(["SyntaxError", true, true, false, true])
-    expect(await value(`try { undeclared() } catch (e) { return [e.name, e instanceof ReferenceError] }`))
-      .toEqual(["ReferenceError", true])
-    expect(await value(`try { const c = 1; c = 2 } catch (e) { return [e.name, e instanceof TypeError] }`))
-      .toEqual(["TypeError", true])
-    expect(await value(`try { "a".normalize("NOPE") } catch (e) { return [e.name, e instanceof RangeError] }`))
-      .toEqual(["RangeError", true])
-    expect(await value(`try { "a".match("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`))
-      .toEqual(["SyntaxError", true])
-    expect(await value(`try { new RegExp("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`))
-      .toEqual(["SyntaxError", true])
+    `),
+    ).toEqual(["SyntaxError", true, true, false, true])
+    expect(await value(`try { undeclared() } catch (e) { return [e.name, e instanceof ReferenceError] }`)).toEqual([
+      "ReferenceError",
+      true,
+    ])
+    expect(await value(`try { const c = 1; c = 2 } catch (e) { return [e.name, e instanceof TypeError] }`)).toEqual([
+      "TypeError",
+      true,
+    ])
+    expect(await value(`try { "a".normalize("NOPE") } catch (e) { return [e.name, e instanceof RangeError] }`)).toEqual(
+      ["RangeError", true],
+    )
+    expect(await value(`try { "a".match("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+      "SyntaxError",
+      true,
+    ])
+    expect(await value(`try { new RegExp("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+      "SyntaxError",
+      true,
+    ])
   })
 
   test("diagnostics without a specific real-JS analogue are named plain Error", async () => {
-    expect(await value(`try { JSON.parse(5) } catch (e) { return [e.name, e instanceof Error] }`))
-      .toEqual(["Error", true])
+    expect(await value(`try { JSON.parse(5) } catch (e) { return [e.name, e instanceof Error] }`)).toEqual([
+      "Error",
+      true,
+    ])
   })
 
   test("Promise.allSettled rejection reasons are Error values", async () => {
-    expect(await value(`
+    expect(
+      await value(`
       const settled = await Promise.allSettled([Promise.reject(new Error("b"))])
       return [settled[0].reason instanceof Error, settled[0].reason.message]
-    `)).toEqual([true, "b"])
+    `),
+    ).toEqual([true, "b"])
   })
 
   test("non-error thrown values are not instanceof Error", async () => {
@@ -203,7 +237,11 @@ describe("Error values and instanceof", () => {
   })
 
   test("plain data is never instanceof Error", async () => {
-    expect(await value(`return [({}) instanceof Error, "s" instanceof Error, null instanceof Error]`)).toEqual([false, false, false])
+    expect(await value(`return [({}) instanceof Error, "s" instanceof Error, null instanceof Error]`)).toEqual([
+      false,
+      false,
+      false,
+    ])
   })
 
   test("error values still serialize as plain { name, message } data", async () => {
@@ -227,17 +265,29 @@ describe("Error values and instanceof", () => {
 
 describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
   test("splice removes in place and returns the removed elements", async () => {
-    expect(await value(`const a = [1,2,3,4]; const removed = a.splice(1, 2); return { removed, a }`)).toEqual({ removed: [2, 3], a: [1, 4] })
+    expect(await value(`const a = [1,2,3,4]; const removed = a.splice(1, 2); return { removed, a }`)).toEqual({
+      removed: [2, 3],
+      a: [1, 4],
+    })
   })
 
   test("splice inserts new elements at the cut", async () => {
     expect(await value(`const a = ["a","d"]; a.splice(1, 0, "b", "c"); return a`)).toEqual(["a", "b", "c", "d"])
-    expect(await value(`const a = [1,2,3]; const removed = a.splice(1, 1, "x"); return { removed, a }`)).toEqual({ removed: [2], a: [1, "x", 3] })
+    expect(await value(`const a = [1,2,3]; const removed = a.splice(1, 1, "x"); return { removed, a }`)).toEqual({
+      removed: [2],
+      a: [1, "x", 3],
+    })
   })
 
   test("splice with one argument removes to the end; negative start counts back", async () => {
-    expect(await value(`const a = [1,2,3]; const removed = a.splice(1); return { removed, a }`)).toEqual({ removed: [2, 3], a: [1] })
-    expect(await value(`const a = [1,2,3]; const removed = a.splice(-1); return { removed, a }`)).toEqual({ removed: [3], a: [1, 2] })
+    expect(await value(`const a = [1,2,3]; const removed = a.splice(1); return { removed, a }`)).toEqual({
+      removed: [2, 3],
+      a: [1],
+    })
+    expect(await value(`const a = [1,2,3]; const removed = a.splice(-1); return { removed, a }`)).toEqual({
+      removed: [3],
+      a: [1, 2],
+    })
   })
 
   test("splice rejects inserting a container into itself", async () => {
@@ -258,11 +308,13 @@ describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
   test("keys/values/entries return arrays usable with for...of and spread", async () => {
     expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
     expect(await value(`return ["x","y"].values()`)).toEqual(["x", "y"])
-    expect(await value(`
+    expect(
+      await value(`
       const out = []
       for (const [index, item] of ["a","b"].entries()) out.push(index + ":" + item)
       return out
-    `)).toEqual(["0:a", "1:b"])
+    `),
+    ).toEqual(["0:a", "1:b"])
     expect(await value(`return [...[7].entries()]`)).toEqual([[0, 7]])
   })
 })
@@ -300,40 +352,33 @@ describe("compound assignment matches its binary operator", () => {
   }
 
   test("sandbox Date += concatenates its string form, like d = d + 1", async () => {
-    const result = await pair(
-      `let d = new Date(1000); d += 1; return d`,
-      `let d = new Date(1000); d = d + 1; return d`,
-    )
+    const result = await pair(`let d = new Date(1000); d += 1; return d`, `let d = new Date(1000); d = d + 1; return d`)
     expect(result).toBe("1970-01-01T00:00:01.000Z1")
   })
 
   test("sandbox Date numeric compound ops use its time value", async () => {
-    expect(await pair(
-      `let d = new Date(1000); d -= 400; return d`,
-      `let d = new Date(1000); d = d - 400; return d`,
-    )).toBe(600)
-    expect(await pair(
-      `let d = new Date(1000); d /= 4; return d`,
-      `let d = new Date(1000); d = d / 4; return d`,
-    )).toBe(250)
+    expect(
+      await pair(`let d = new Date(1000); d -= 400; return d`, `let d = new Date(1000); d = d - 400; return d`),
+    ).toBe(600)
+    expect(await pair(`let d = new Date(1000); d /= 4; return d`, `let d = new Date(1000); d = d / 4; return d`)).toBe(
+      250,
+    )
   })
 
   test("string += object/array matches x = x + obj", async () => {
-    expect(await pair(
-      `let x = "a"; x += { b: 1 }; return x`,
-      `let x = "a"; x = x + { b: 1 }; return x`,
-    )).toBe("a[object Object]")
-    expect(await pair(
-      `let x = "a"; x += [1, 2]; return x`,
-      `let x = "a"; x = x + [1, 2]; return x`,
-    )).toBe("a1,2")
+    expect(await pair(`let x = "a"; x += { b: 1 }; return x`, `let x = "a"; x = x + { b: 1 }; return x`)).toBe(
+      "a[object Object]",
+    )
+    expect(await pair(`let x = "a"; x += [1, 2]; return x`, `let x = "a"; x = x + [1, 2]; return x`)).toBe("a1,2")
   })
 
   test("compound assignment through a member target coerces the same way", async () => {
-    expect(await pair(
-      `const o = { s: "t" }; o.s += new Date(0); return o.s`,
-      `const o = { s: "t" }; o.s = o.s + new Date(0); return o.s`,
-    )).toBe("t1970-01-01T00:00:00.000Z")
+    expect(
+      await pair(
+        `const o = { s: "t" }; o.s += new Date(0); return o.s`,
+        `const o = { s: "t" }; o.s = o.s + new Date(0); return o.s`,
+      ),
+    ).toBe("t1970-01-01T00:00:00.000Z")
   })
 
   test("numeric and string compound operators sweep identically to their expansions", async () => {

@@ -39,6 +39,7 @@ package and was **deleted** in Wave 3 (done, see below).
 From issue #34787 and design discussion. Do not relitigate these casually.
 
 ### Core direction
+
 - Generic CodeMode lives in its own package: `@opencode-ai/codemode` (repo scope convention;
   the issue's `@opencode/codemode` name was normalized to the `@opencode-ai/*` convention).
 - **Keep the hand-rolled interpreter.** No QuickJS/V8/sandbox-engine dependency. We own and
@@ -52,6 +53,7 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   products/blog posts) in code, comments, commit messages, or docs in this repo.
 
 ### MCP / tools
+
 - The MCP adapter lives in OpenCode, not here. It converts MCP definitions into ordinary
   `Tool.make(...)` definitions and hands CodeMode a plain tool tree.
 - Permissions stay in the OpenCode adapter (each tool's `run` wraps the permission ask).
@@ -61,8 +63,9 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   `tools.<server>.<tool>` namespaces before handing them over.
 
 ### Discovery / search
+
 - **Search only - no separate `describe`.** `tools.$codemode.search({ query?, namespace?,
-  limit? })` over the final tool tree, owned by this package.
+limit? })` over the final tool tree, owned by this package.
 - Search result item shape: `{ path, description, signature }` in an `{ items, total }`
   wrapper. The `signature` string embeds the full input/output TypeScript types - in search
   results it is the pretty, JSDoc-annotated multiline form (Fix 7), so per-field schema
@@ -82,6 +85,7 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 - Tools without an output schema render `unknown` as their return type.
 
 ### Schemas / Tool.make
+
 - `Tool.make` carries rich metadata so search can render real signatures.
 - Support **Effect Schema** (first-class, validating) and **JSON Schema** (initially
   render-only - used for TypeScript rendering; the adapter may validate on its own). Leave
@@ -90,6 +94,7 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   normalization for plugin authors can come later.
 
 ### Attachments / output
+
 - **No `output.text/file/image` API in v1.** (Deleted in Wave 2.)
 - Tool calls return native structured payloads into the sandbox. Files/images emitted by
   child tools **never enter the sandbox** - the OpenCode adapter strips and accumulates them
@@ -100,6 +105,7 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   image bytes into context or drop attachments.
 
 ### Runtime behavior
+
 - Limits are EXACTLY the three public knobs: `{ timeoutMs, maxToolCalls, maxOutputBytes }` -
   matching the original locked spec exactly. NO limit has a default (user direction, Fix 6
   for the first two; extended to `maxOutputBytes` in the truncation-layering fix below):
@@ -129,7 +135,7 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 - `console.*` is captured into `logs` on the result; the host appends them to model-facing
   output. Not a tool call; costs no tool budget.
 - Simple tool-call **start/end hooks** for nested progress: `onToolCallStart({ index, name,
-  input })` and `onToolCallEnd({ index, name, input, durationMs, outcome, message? })`.
+input })` and `onToolCallEnd({ index, name, input, durationMs, outcome, message? })`.
   Interrupted calls fire no end event. No `CurrentToolCall` context service (removed in
   Wave 2).
 
@@ -148,8 +154,9 @@ and `bun run typecheck`; from `packages/opencode`, `bun run typecheck` and
 `test/tool/registry.test.ts`).
 
 ### Wave 0 - scaffold (done)
+
 - `packages/codemode` created from the experiments implementation: `src/{index,codemode,tool,
-  tool-error,tool-runtime}.ts`, README, AGENTS.md, tests.
+tool-error,tool-runtime}.ts`, README, AGENTS.md, tests.
 - `package.json`: name `@opencode-ai/codemode`, deps `acorn@8.15.0`, `typescript: catalog:`,
   `effect: catalog:` (both repos pin effect `4.0.0-beta.83`; opencode's effect patch only
   touches `unstable/httpapi`, which this package doesn't use).
@@ -157,6 +164,7 @@ and `bun run typecheck`; from `packages/opencode`, `bun run typecheck` and
   Context.Service key string renamed to `@opencode-ai/codemode/CurrentToolCall`.
 
 ### Wave 1a - forgiving JS semantics (done)
+
 Ported from the old opencode rune work; `test/parity.test.ts` (24 tests) is the acceptance
 spec. The seeded interpreter was deliberately strict; these behaviors replaced that:
 
@@ -173,6 +181,7 @@ spec. The seeded interpreter was deliberately strict; these behaviors replaced t
   null/undefined still throws (real JS throws too).
 
 ### Wave 1b-i - stdlib value types: Date, RegExp, Map, Set (done)
+
 `src/values.ts` holds `SandboxDate/SandboxRegExp/SandboxMap/SandboxSet` (own module so both
 `codemode.ts` and `tool-runtime.ts` import without a cycle). Design:
 
@@ -202,19 +211,20 @@ spec. The seeded interpreter was deliberately strict; these behaviors replaced t
   interpolation renders `/regex/` and ISO dates directly.
 
 ### Wave 2 - API layer (done)
+
 The package's public contract, reshaped for the Wave 3 adapter. 101 tests / 0 fail after this
 wave; both packages typecheck clean.
 
 - **`Tool.make` schema flexibility** (`src/tool.ts`): `input`/`output` each accept an Effect
   Schema (validating, decoded both directions as before) OR a raw JSON Schema document
   (render-only - no validation, values pass through; rendering handles `$defs`/`definitions`
-  + `$ref`). `output` is **optional** -> signature renders `Promise<unknown>` and the host
-  result is exposed as-is. Discrimination via `Schema.isSchema`. New helpers exported from
-  `tool.ts`: `inputTypeScript`/`outputTypeScript`/`decodeInput`/`decodeOutput`/
-  `jsonSchemaToTypeScript`; `tool-runtime.ts` consumes them (no direct `Schema.*` use there
-  anymore). Types `JsonSchema`/`ToolSchema` exported from the index. Note: an empty
-  `Schema.Struct({})` renders as `{  } | Array<unknown>` (effect's JSON Schema emission) -
-  cosmetic, fixed in Wave 4.
+  - `$ref`). `output` is **optional** -> signature renders `Promise<unknown>` and the host
+    result is exposed as-is. Discrimination via `Schema.isSchema`. New helpers exported from
+    `tool.ts`: `inputTypeScript`/`outputTypeScript`/`decodeInput`/`decodeOutput`/
+    `jsonSchemaToTypeScript`; `tool-runtime.ts` consumes them (no direct `Schema.*` use there
+    anymore). Types `JsonSchema`/`ToolSchema` exported from the index. Note: an empty
+    `Schema.Struct({})` renders as `{  } | Array<unknown>` (effect's JSON Schema emission) -
+    cosmetic, fixed in Wave 4.
 - **`output.*` API deleted**: `OutputItem`(+Schema), result `output` fields, the `output`
   global/namespace dispatch, `invokeOutput`/`outputItem`/helpers, interpreter output fields,
   instructions line, README section, seeded tests. AGENTS.md keeps a rephrased
@@ -228,22 +238,23 @@ wave; both packages typecheck clean.
   (`ToolError`/`ToolRuntimeError` message, else "Tool execution failed"). Interrupted calls
   fire no end event (timeout kills the whole execution anyway).
 - **Limits collapse**: public `ExecutionLimits` = `{ timeoutMs?, maxToolCalls?,
-  maxOutputBytes? }` (defaults 10_000 / 100 / 32_000). This wave kept the other knobs as
+maxOutputBytes? }` (defaults 10_000 / 100 / 32_000). This wave kept the other knobs as
   internal defaults reachable through an `@internal` `InternalExecutionLimits` type; Fix 5
   later deleted that type and the internal limit system entirely.
 - **`maxOutputBytes` truncation** (CodeMode-owned, never fails): applied via `boundOutput` in
   a final `Effect.map` over every result path (success/timeout/normalized failure). Oversized
   serialized values become truncated text + ` [result truncated: N bytes exceeds the M-byte
-  output limit; return a smaller value]`; logs keep leading lines within the remaining budget
-  + `[logs truncated: showing K of N lines]`; result gains `truncated: true` (also added to
-  `ExecuteResultSchema`). UTF-8-safe truncation (no split code points). (The in-sandbox
-  `maxDataBytes` check that used to throw first on oversized raw values died in Fix 5 -
-  truncation is now the only result-size mechanism.)
+output limit; return a smaller value]`; logs keep leading lines within the remaining budget
+  - `[logs truncated: showing K of N lines]`; result gains `truncated: true` (also added to
+    `ExecuteResultSchema`). UTF-8-safe truncation (no split code points). (The in-sandbox
+    `maxDataBytes` check that used to throw first on oversized raw values died in Fix 5 -
+    truncation is now the only result-size mechanism.)
 - **Search polish**: default limit 12 -> **10** (`defaultSearchLimit`); exact-path lookup - a
   trimmed query equal to one tool path (optionally `tools.`-prefixed) returns that tool alone
   (`total: 1`), bypassing ranking. Tokenization/ranking/shape unchanged.
 
 ### Wave 3 - OpenCode MCP adapter (done)
+
 `packages/opencode/src/session/code-mode.ts` rewritten as a thin adapter over this package;
 the vendored rune interpreter is gone. Same `define(mcpTools, mcpDefs, servers)` signature, so
 `tools.ts` gating (flag on + MCP tools exist -> single `execute` tool, early-return suppresses
@@ -257,7 +268,7 @@ per-MCP registration; MCP resource tools unaffected) is unchanged.
   invoked) - so signature rendering, the inline-vs-search switch, and `$codemode.search`
   availability all come from this package and stay consistent with execution.
 - **`run` path**: per-child permission ask first (`ctx.ask({ permission: entry.key, patterns:
-  ["*"], always: ["*"] })`, exactly the old gating; approving `execute` approves no child).
+["*"], always: ["*"] })`, exactly the old gating; approving `execute` approves no child).
   Denials and host failures are mapped to `toolError(message)` so they surface as safe,
   catchable in-program failures (MCP `isError` text propagates as `e.message`; without this
   they'd be sanitized to "Tool execution failed"). Dispatch reuses the ai-sdk wrapper from
@@ -270,10 +281,10 @@ per-MCP registration; MCP resource tools unaffected) is unchanged.
   No handles, no `Result<T>` envelope, no base64 in the sandbox, no data-size tuning (the
   `maxDataBytes` budget that existed at the time was deleted in Fix 5).
 - **Execute result**: `{ output: formatValue(value) + trailing "Logs:" section (success AND
-  error - logs are plain pre-formatted lines now), attachments: accumulated }` through the
+error - logs are plain pre-formatted lines now), attachments: accumulated }` through the
   existing `Tool.ExecuteResult.attachments` -> `message-v2.ts` vision plumbing; attachments
   ride on both success and error results. Diagnostic `suggestions` not already contained in
-  the   message are appended to error output. Native outer truncation stays on (adapter never
+  the message are appended to error output. Native outer truncation stays on (adapter never
   sets `metadata.truncated`); CodeMode's own `maxOutputBytes` (32 KB default at the time)
   cut first - since the truncation-layering fix, native truncation is the only layer.
   Limits: `{ timeoutMs: 30_000 }` at the time (matched the default MCP request timeout);
@@ -296,6 +307,7 @@ per-MCP registration; MCP resource tools unaffected) is unchanged.
   describe/`renderType`/`rankTools` tests died with the old design (58+17+24 -> 34+16).
 
 ### Wave 4 - instructions/prompting + polish (done)
+
 Instructions are now the budgeted-catalog + prompting-guidance form; verified e2e against a
 real MCP config. Package still 101 tests / 0 fail; opencode adapter suites still 34 + 16; both
 packages typecheck clean.
@@ -321,7 +333,7 @@ packages typecheck clean.
   exported); `CodeMode.execute` (one-shot) passes it too, preserving the
   `execute`==`make().execute` law. A speculative `tools.$codemode.search` call on a small
   catalog now succeeds instead of `UnknownTool`, and unknown-tool suggestions always point at
-  search. Search is *advertised* in the instructions only when the inlined list is PARTIAL,
+  search. Search is _advertised_ in the instructions only when the inlined list is PARTIAL,
   keeping small-catalog instructions tight.
 - **Prompting content** in `instructions()`, mapping 1:1 to the section 5 transcript failures:
   parse-string-results-as-JSON, return-small, console-for-intermediates, and
@@ -340,7 +352,7 @@ packages typecheck clean.
 - **E2E (verified, headless)**: from the repo root with `OPENCODE_EXPERIMENTAL_CODE_MODE=1`,
   the scratch `.opencode/opencode.jsonc` (context7, github, playwright, sentry, memory,
   sequential-thinking; left uncommitted/as-is), and `bun packages/opencode/src/index.ts run
-  --dangerously-skip-permissions -m opencode/claude-sonnet-4-5 "..."`. Confirmed: a single
+--dangerously-skip-permissions -m opencode/claude-sonnet-4-5 "..."`. Confirmed: a single
   `execute` tool registered alongside core tools (per-MCP registration suppressed; MCP
   resource tools unaffected); the live description read back as "Available tools (PARTIAL -
   56 of 88 shown; find the rest with tools.$codemode.search):" with correct per-namespace
@@ -352,6 +364,7 @@ packages typecheck clean.
   images, output truncation.
 
 ### Wave 5 - Promise generalization (done)
+
 First-class promise values in the interpreter; the direct-tool-call-only `Promise.all`
 restriction (and its bespoke AST checks) is gone. Package suite is 136 tests / 0 fail (35 new
 in `test/promise.test.ts`); adapter suites and both typechecks unchanged/green; the opencode
@@ -495,7 +508,7 @@ adapter needed **no changes**.
     `tools.*`." (the second line drops the tools clause when the tree is empty).
   - **`## Workflow`**: numbered steps - find a tool via `tools.$codemode.search` -> read
     the `{ path, description, signature }` matches -> call by path -> `typeof res ===
-    "string" ? JSON.parse(res) : res` -> return only the needed fields. When the catalog is
+"string" ? JSON.parse(res) : res` -> return only the needed fields. When the catalog is
     COMPLETE the search/read steps collapse into "Pick a tool from the list under
     `## Available tools`" and the steps renumber (4 instead of 5).
   - **`## Rules`**: call-by-exact-path; TEXT-is-JSON -> JSON.parse; return small (never raw
@@ -526,70 +539,72 @@ adapter needed **no changes**.
 
 **Fix 4 - token-budgeted catalog (was bytes)** (user direction: signatures need a token
 budget; namespaces must always be present):
-  - `src/token.ts` added: copy of `@opencode-ai/core/util/token` (`round(chars / 4)`), so
-    the package stays dependency-free; keep in sync if the core heuristic changes.
-  - `DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
-    estimated tokens ~  the old 16,000 bytes at 4 chars/token - behavior parity, not a size
-    reduction). `discoveryPlan` charges `estimate(catalogLine(tool))` per line; cheapest-first
-    + stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
+
+- `src/token.ts` added: copy of `@opencode-ai/core/util/token` (`round(chars / 4)`), so
+  the package stays dependency-free; keep in sync if the core heuristic changes.
+- `DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
+  estimated tokens ~ the old 16,000 bytes at 4 chars/token - behavior parity, not a size
+  reduction). `discoveryPlan` charges `estimate(catalogLine(tool))` per line; cheapest-first
+  - stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
     Fix 8). Namespace stub lines were and remain unbudgeted - every
     namespace always appears with its tool count, even at budget 0 (asserted in package and
     adapter tests).
-  - Ripple: chars/4 rounding erases small line-length differences, so equal-cost lines fall
-    to the lexicographic path tiebreak; the adapter's PARTIAL test now asserts the
-    lexicographic tail (`op_99`) is excluded instead of `op_149`. Fixed-prose measurements
-    (2026-07): preamble ~44 + Workflow ~146 + Rules ~362 + Syntax ~453 ~  1,100 tokens fixed;
-    worst-case net description ~  fixed + 4,000 ~  5,100 estimated tokens.
+- Ripple: chars/4 rounding erases small line-length differences, so equal-cost lines fall
+  to the lexicographic path tiebreak; the adapter's PARTIAL test now asserts the
+  lexicographic tail (`op_99`) is excluded instead of `op_149`. Fixed-prose measurements
+  (2026-07): preamble ~44 + Workflow ~146 + Rules ~362 + Syntax ~453 ~ 1,100 tokens fixed;
+  worst-case net description ~ fixed + 4,000 ~ 5,100 estimated tokens.
 
 **Fix 5 - internal limits removed** (user direction: only the three PUBLIC limits survive as
 configurable knobs; the internal limit system dies):
-  - `ExecutionLimits` (`timeoutMs` 10_000 / `maxToolCalls` 100 / `maxOutputBytes` 32_000 at
-    the time; Fix 6 later removed the first two defaults. Same validation: safe integers,
-    timeoutMs >= 1, others >= 0, RangeError otherwise) is now
-    the ENTIRE limit surface - exactly the shape section 2's original locked spec named.
-    `ResolvedExecutionLimits` shrank to those three fields; the `@internal`
-    `InternalExecutionLimits` type is deleted.
-  - **Deleted outright**: `maxOperations` and the whole operation-budget machinery
-    (`recordWork`/`recordOperation`/`budget.operations`, plus the `workUnits`/
-    `cheapArrayMethods` cost helpers); `maxSourceBytes` (the pre-parse source-size check);
-    `maxDataBytes` (every byte-accounting path: `runtimeValueBytes`, `boundedProgramValue`,
-    the container-size caches (`containerSizes`/`objectCounts`), Map/Set incremental `bytes`
-    fields in `values.ts`, string-growth `limitString` checks, tool-argument/result byte
-    checks in `tool-runtime.ts`, and the final-result size check); `maxAuditBytes` (log and
-    audit-trail byte accounting - `toolCalls` records and the start/end hooks are unchanged);
-    `maxCollectionLength` (every array-length/object-field-count check - this knob was
-    actively harmful: an MCP tool returning 20k rows failed). The `OperationLimitExceeded`
-    and `AuditLimitExceeded` diagnostic kinds are gone from the `DiagnosticKind` union and
-    `ExecuteResultSchema` (fine - the package is unreleased).
-  - **Fixed constants, not knobs**: `TOOL_CALL_CONCURRENCY = 8` (codemode.ts; the fork
-    semaphore) and `MAX_VALUE_DEPTH = 32` (tool-runtime.ts; the `copyIn` depth check - kept
-    only because it produces a clearer error than a native stack-overflow RangeError; still
-    `InvalidDataValue`). The `DataLimits` plumbing through `tool-runtime.ts` is gone -
-    `copyIn(value, label)` needs no limits argument, and `ToolRuntime.make` takes just
-    `(tools, maxToolCalls, hooks?, searchIndex?)`.
-  - **Verified fact**: timeout interruption does NOT depend on the operation budget - the
-    Effect fiber runtime auto-yields between interpreter steps, so `timeoutMs` interrupts
-    even a pure `while (true) {}` loop (empirically verified: a 200ms timeout fired at
-    ~225ms with maxOperations set to MAX_SAFE_INTEGER before the deletion). A regression
-    test in `codemode.test.ts` asserts exactly this (`while(true){}` + `timeoutMs: 200` ->
-    `TimeoutExceeded`, elapsed well under a few seconds).
-  - **Kept (correctness, not budgets)**: circular detection (`copyIn` walks +
-    `rejectCircularInsertion` on mutations), plain-objects-only, blocked properties
-    (`__proto__`/`constructor`/`prototype`), data-only checks, and all three public-limit
-    behaviors unchanged.
-  - Behavior deltas beyond the intended kills: in-sandbox structures deeper than 32 levels
-    now fail at the data boundary (`copyIn`) instead of at construction; array index
-    assignment allows any non-negative integer index (holes permitted, message now "must be
-    a non-negative integer"); interpreter-produced deep/hostile structures that overflow the
-    native stack during a walk still normalize to the existing "Execution exceeded the
-    maximum nesting depth." data diagnostic - failures remain data everywhere.
-  - Tests: deleted the knob-only tests (stdlib Map/Set collection-length growth x2,
-    enumeration operation-budget, codemode maxDataBytes/maxSourceBytes/maxOperations/
-    maxConcurrency-RangeError assertions, and the adapter's runaway-loop-via-operation-limit
-    test - superseded by the package timeout regression test); rewrote the helpers that used
-    `InternalExecutionLimits` as a convenience to plain `ExecutionLimits`
-    (promise/enumeration/stdlib run helpers). Package suite: 154 pass / 0 fail; adapter
-    suites: 34 + 16.
+
+- `ExecutionLimits` (`timeoutMs` 10_000 / `maxToolCalls` 100 / `maxOutputBytes` 32_000 at
+  the time; Fix 6 later removed the first two defaults. Same validation: safe integers,
+  timeoutMs >= 1, others >= 0, RangeError otherwise) is now
+  the ENTIRE limit surface - exactly the shape section 2's original locked spec named.
+  `ResolvedExecutionLimits` shrank to those three fields; the `@internal`
+  `InternalExecutionLimits` type is deleted.
+- **Deleted outright**: `maxOperations` and the whole operation-budget machinery
+  (`recordWork`/`recordOperation`/`budget.operations`, plus the `workUnits`/
+  `cheapArrayMethods` cost helpers); `maxSourceBytes` (the pre-parse source-size check);
+  `maxDataBytes` (every byte-accounting path: `runtimeValueBytes`, `boundedProgramValue`,
+  the container-size caches (`containerSizes`/`objectCounts`), Map/Set incremental `bytes`
+  fields in `values.ts`, string-growth `limitString` checks, tool-argument/result byte
+  checks in `tool-runtime.ts`, and the final-result size check); `maxAuditBytes` (log and
+  audit-trail byte accounting - `toolCalls` records and the start/end hooks are unchanged);
+  `maxCollectionLength` (every array-length/object-field-count check - this knob was
+  actively harmful: an MCP tool returning 20k rows failed). The `OperationLimitExceeded`
+  and `AuditLimitExceeded` diagnostic kinds are gone from the `DiagnosticKind` union and
+  `ExecuteResultSchema` (fine - the package is unreleased).
+- **Fixed constants, not knobs**: `TOOL_CALL_CONCURRENCY = 8` (codemode.ts; the fork
+  semaphore) and `MAX_VALUE_DEPTH = 32` (tool-runtime.ts; the `copyIn` depth check - kept
+  only because it produces a clearer error than a native stack-overflow RangeError; still
+  `InvalidDataValue`). The `DataLimits` plumbing through `tool-runtime.ts` is gone -
+  `copyIn(value, label)` needs no limits argument, and `ToolRuntime.make` takes just
+  `(tools, maxToolCalls, hooks?, searchIndex?)`.
+- **Verified fact**: timeout interruption does NOT depend on the operation budget - the
+  Effect fiber runtime auto-yields between interpreter steps, so `timeoutMs` interrupts
+  even a pure `while (true) {}` loop (empirically verified: a 200ms timeout fired at
+  ~225ms with maxOperations set to MAX_SAFE_INTEGER before the deletion). A regression
+  test in `codemode.test.ts` asserts exactly this (`while(true){}` + `timeoutMs: 200` ->
+  `TimeoutExceeded`, elapsed well under a few seconds).
+- **Kept (correctness, not budgets)**: circular detection (`copyIn` walks +
+  `rejectCircularInsertion` on mutations), plain-objects-only, blocked properties
+  (`__proto__`/`constructor`/`prototype`), data-only checks, and all three public-limit
+  behaviors unchanged.
+- Behavior deltas beyond the intended kills: in-sandbox structures deeper than 32 levels
+  now fail at the data boundary (`copyIn`) instead of at construction; array index
+  assignment allows any non-negative integer index (holes permitted, message now "must be
+  a non-negative integer"); interpreter-produced deep/hostile structures that overflow the
+  native stack during a walk still normalize to the existing "Execution exceeded the
+  maximum nesting depth." data diagnostic - failures remain data everywhere.
+- Tests: deleted the knob-only tests (stdlib Map/Set collection-length growth x2,
+  enumeration operation-budget, codemode maxDataBytes/maxSourceBytes/maxOperations/
+  maxConcurrency-RangeError assertions, and the adapter's runaway-loop-via-operation-limit
+  test - superseded by the package timeout regression test); rewrote the helpers that used
+  `InternalExecutionLimits` as a convenience to plain `ExecutionLimits`
+  (promise/enumeration/stdlib run helpers). Package suite: 154 pass / 0 fail; adapter
+  suites: 34 + 16.
 
 **Fix 6 - no default timeout / tool-call cap** (user direction): `timeoutMs` and
 `maxToolCalls` lost their defaults (were 10_000 / 100) - absent now means no timeout /
@@ -639,196 +654,200 @@ adapter suites: 34 + 16.
 **Fix 8 - condensed instructions + round-robin catalog fairness + plural-aware search**
 (user direction: the fixed instruction prose was too verbose; two discovery fixes ride
 along). All in `tool-runtime.ts`; no interpreter changes.
-  - **Syntax section inverted**: the three dense allowlist lines (~453 estimated tokens)
-    are replaced by four short lines (~188) built on "models already know JavaScript; name
-    only what is unusual or missing": (1) standard modern JS works - functions/closures,
-    destructuring, template literals, loops, try/catch, spread, optional chaining, the
-    usual Array/String/Object/Math/JSON methods, plus Date/RegExp/Map/Set and
-    Promise.all/allSettled/race/resolve/reject; (2) TypeScript type annotations are
-    stripped before execution, decorators are not supported; (3) NOT supported (each fails
-    with a message naming the alternative): classes, generators, for await...of,
-    .then/.catch/.finally (use await with try/catch), `x instanceof Error` (caught errors
-    are plain `{ name, message }` objects), splice; (4) the data-boundary note (Dates ->
-    ISO strings; Map/Set/RegExp -> `{}`). Every claim was verified against the interpreter
-    before writing: probed empirically - classes/generators/for-await/.then/.catch/
-    .finally/`instanceof Error`/splice/decorators/BigInt/labeled statements/tagged
-    templates/object getters all fail with clear diagnostics; TS annotations/`as`/
-    interfaces/type aliases are stripped and TS **enums actually work** (transpileModule
-    compiles them to an IIFE the interpreter runs), hence enums deliberately unmentioned.
-    `supportedSyntaxMessage` (the in-diagnostic text in `codemode.ts`) is untouched.
-  - **Workflow/Rules deduped**: the call-by-exact-path, JSON.parse-string-results, and
-    return-small content now lives ONLY in the numbered Workflow steps (with their
-    compliance-driving justifications inline: "most tools return JSON as a string", "raw
-    payloads get truncated and waste context"); Rules keeps only bullets adding new
-    content - filter/aggregate collections in code, console.* intermediates (logs ride
-    back), Promise.all parallelism, Object.keys/for...in enumeration, browse-namespace
-    (PARTIAL only), and the media rule compressed to one line. The no-.then/.catch
-    guidance moved to the Syntax not-supported line. Content upgrades: the PARTIAL search
-    step gained query-style guidance (`- short phrases like "list issues" work best`; a
-    clearly-a-query-string example, not a tool name), and the exact-path guidance is now
-    "call it with the result's `path` as-is (never guess segments)" / COMPLETE: "use it
-    as-is rather than guessing segments".
-  - **Fixed-prose measurements** (instructions split on `"\n## "`, catalog budget 0,
-    bytes/3.7 - same method as Fix 4; chars/4 in parentheses):
-    preamble 44 -> 44 (41 -> 41), Workflow 146 -> 187 (135 -> 171), Rules 362 -> 191
-    (332 -> 176), Syntax 453 -> 188 (419 -> 174); fixed prose total 1,005 -> 610 (927 -> 562),
-    ~  40% reduction with no behavioral content dropped. Workflow grew slightly because it
-    absorbed the deduped parse/return-small justifications.
-  - **Round-robin namespace inlining** (`discoveryPlan`): the ported stop-on-first-miss
-    behavior (alphabetically-late namespaces starved to "none shown" while an early
-    namespace inlines everything) is replaced by round-robin fairness - in each round
-    (namespaces alphabetical), every namespace still holding un-inlined tools attempts to
-    place its next-cheapest line against the shared token budget; a namespace whose next
-    line does not fit is done while the others keep going; stop when all are done. Every
-    namespace gets some representation before any namespace gets everything. Kept:
-    `estimate` (chars/4) budget accounting, unbudgeted namespace stub lines, per-namespace
-    `(N tools)`/`(N tools, K shown)`/`(N tools, none shown)` labels, COMPLETE vs PARTIAL
-    header, alphabetical namespace order in the output, cheapest-first within each
-    namespace's shown set.
-  - **Plural/singular search fix**: `tokenize`d terms matched one-directionally (term must
-    be substring of indexed text), so query "issues" missed a tool whose text only says
-    "issue". Now each term expands to `termForms` - the term plus naive singular variants
-    (trailing "es" stripped when length > 3, trailing "s" when length > 2) - and each of
-    the four field checks passes when ANY form matches. Weights, exact-path lookup, and
-    namespace scoping untouched. A true plural path match still outranks a singular-only
-    description match (path substring 8 + searchable 2 > description 4 + searchable 2).
-  - **Tests**: package instruction/structure assertions updated to the new text; new
-    syntax-section test (leads with "Standard modern JavaScript works", names the
-    verified not-supported list, keeps the data-boundary note); the budget-exhaustion
-    test rewritten to assert the new fairness (alpha.expensive not fitting must NOT
-    prevent beta.cheap from showing: PARTIAL 2 of 3, `- beta (1 tool)` fully shown); new
-    plural/singular test (query "issues" finds a singular-only tool; ranking still
-    prefers the true "issues" path match). Adapter: description assertions updated; the
-    large-catalog PARTIAL test now asserts `zeta_only_tool` IS shown (`- zeta (1 tool)` +
-    its inlined line) - it was "none shown" under starvation. README updated (budgeted
-    catalog paragraph -> round-robin; search paragraph -> singular variants;
-    instructions-structure paragraph -> new section contents). Package suite: 169 pass /
-    0 fail; adapter suites: 34 + 16.
+
+- **Syntax section inverted**: the three dense allowlist lines (~453 estimated tokens)
+  are replaced by four short lines (~188) built on "models already know JavaScript; name
+  only what is unusual or missing": (1) standard modern JS works - functions/closures,
+  destructuring, template literals, loops, try/catch, spread, optional chaining, the
+  usual Array/String/Object/Math/JSON methods, plus Date/RegExp/Map/Set and
+  Promise.all/allSettled/race/resolve/reject; (2) TypeScript type annotations are
+  stripped before execution, decorators are not supported; (3) NOT supported (each fails
+  with a message naming the alternative): classes, generators, for await...of,
+  .then/.catch/.finally (use await with try/catch), `x instanceof Error` (caught errors
+  are plain `{ name, message }` objects), splice; (4) the data-boundary note (Dates ->
+  ISO strings; Map/Set/RegExp -> `{}`). Every claim was verified against the interpreter
+  before writing: probed empirically - classes/generators/for-await/.then/.catch/
+  .finally/`instanceof Error`/splice/decorators/BigInt/labeled statements/tagged
+  templates/object getters all fail with clear diagnostics; TS annotations/`as`/
+  interfaces/type aliases are stripped and TS **enums actually work** (transpileModule
+  compiles them to an IIFE the interpreter runs), hence enums deliberately unmentioned.
+  `supportedSyntaxMessage` (the in-diagnostic text in `codemode.ts`) is untouched.
+- **Workflow/Rules deduped**: the call-by-exact-path, JSON.parse-string-results, and
+  return-small content now lives ONLY in the numbered Workflow steps (with their
+  compliance-driving justifications inline: "most tools return JSON as a string", "raw
+  payloads get truncated and waste context"); Rules keeps only bullets adding new
+  content - filter/aggregate collections in code, console.\* intermediates (logs ride
+  back), Promise.all parallelism, Object.keys/for...in enumeration, browse-namespace
+  (PARTIAL only), and the media rule compressed to one line. The no-.then/.catch
+  guidance moved to the Syntax not-supported line. Content upgrades: the PARTIAL search
+  step gained query-style guidance (`- short phrases like "list issues" work best`; a
+  clearly-a-query-string example, not a tool name), and the exact-path guidance is now
+  "call it with the result's `path` as-is (never guess segments)" / COMPLETE: "use it
+  as-is rather than guessing segments".
+- **Fixed-prose measurements** (instructions split on `"\n## "`, catalog budget 0,
+  bytes/3.7 - same method as Fix 4; chars/4 in parentheses):
+  preamble 44 -> 44 (41 -> 41), Workflow 146 -> 187 (135 -> 171), Rules 362 -> 191
+  (332 -> 176), Syntax 453 -> 188 (419 -> 174); fixed prose total 1,005 -> 610 (927 -> 562),
+  ~ 40% reduction with no behavioral content dropped. Workflow grew slightly because it
+  absorbed the deduped parse/return-small justifications.
+- **Round-robin namespace inlining** (`discoveryPlan`): the ported stop-on-first-miss
+  behavior (alphabetically-late namespaces starved to "none shown" while an early
+  namespace inlines everything) is replaced by round-robin fairness - in each round
+  (namespaces alphabetical), every namespace still holding un-inlined tools attempts to
+  place its next-cheapest line against the shared token budget; a namespace whose next
+  line does not fit is done while the others keep going; stop when all are done. Every
+  namespace gets some representation before any namespace gets everything. Kept:
+  `estimate` (chars/4) budget accounting, unbudgeted namespace stub lines, per-namespace
+  `(N tools)`/`(N tools, K shown)`/`(N tools, none shown)` labels, COMPLETE vs PARTIAL
+  header, alphabetical namespace order in the output, cheapest-first within each
+  namespace's shown set.
+- **Plural/singular search fix**: `tokenize`d terms matched one-directionally (term must
+  be substring of indexed text), so query "issues" missed a tool whose text only says
+  "issue". Now each term expands to `termForms` - the term plus naive singular variants
+  (trailing "es" stripped when length > 3, trailing "s" when length > 2) - and each of
+  the four field checks passes when ANY form matches. Weights, exact-path lookup, and
+  namespace scoping untouched. A true plural path match still outranks a singular-only
+  description match (path substring 8 + searchable 2 > description 4 + searchable 2).
+- **Tests**: package instruction/structure assertions updated to the new text; new
+  syntax-section test (leads with "Standard modern JavaScript works", names the
+  verified not-supported list, keeps the data-boundary note); the budget-exhaustion
+  test rewritten to assert the new fairness (alpha.expensive not fitting must NOT
+  prevent beta.cheap from showing: PARTIAL 2 of 3, `- beta (1 tool)` fully shown); new
+  plural/singular test (query "issues" finds a singular-only tool; ranking still
+  prefers the true "issues" path match). Adapter: description assertions updated; the
+  large-catalog PARTIAL test now asserts `zeta_only_tool` IS shown (`- zeta (1 tool)` +
+  its inlined line) - it was "none shown" under starvation. README updated (budgeted
+  catalog paragraph -> round-robin; search paragraph -> singular variants;
+  instructions-structure paragraph -> new section contents). Package suite: 169 pass /
+  0 fail; adapter suites: 34 + 16.
 
 **Fix 9 - prompting trims per user review of Fix 8** (user reviewed the condensed
 instructions and directed further cuts):
-  - Default `maxInlineCatalogTokens` 4,000 -> **2,000** (user wants ~2k tokens of signatures
-    auto-inlined; round-robin fairness from Fix 8 spreads it across all namespaces).
-  - Console rule and files/images rule DROPPED from `## Rules`. Replaced by a single
-    `unknown`-treatment warning: "A result typed `Promise<unknown>` has no guaranteed
-    shape - verify what actually came back before relying on its fields." (Deliberately
-    does NOT suggest console.log - user review: naming it there nudges models to log AND
-    return the same data; the prompt stays console-neutral, neither for nor against.)
-    The media-stripping MECHANISM is unchanged and still tested; only the prose about it
-    is gone - the `[N images attached]` marker is self-explanatory in context.
-  - Kept as-is per user: the JSON.parse workflow step (maps to the original motivating
-    transcript failure; NOT copied from prior art - see section 5 note), the browse-namespace rule
-    (undecided), no no-fetch/ambient-authority rule added (proposed, not approved).
-  - Explicitly REJECTED for now: auto-parsing JSON-looking text results at the adapter
-    boundary ("could get weird" - type flips, program-sees vs tool-sent divergence). Logged
-    as a next-iteration follow-up below.
+
+- Default `maxInlineCatalogTokens` 4,000 -> **2,000** (user wants ~2k tokens of signatures
+  auto-inlined; round-robin fairness from Fix 8 spreads it across all namespaces).
+- Console rule and files/images rule DROPPED from `## Rules`. Replaced by a single
+  `unknown`-treatment warning: "A result typed `Promise<unknown>` has no guaranteed
+  shape - verify what actually came back before relying on its fields." (Deliberately
+  does NOT suggest console.log - user review: naming it there nudges models to log AND
+  return the same data; the prompt stays console-neutral, neither for nor against.)
+  The media-stripping MECHANISM is unchanged and still tested; only the prose about it
+  is gone - the `[N images attached]` marker is self-explanatory in context.
+- Kept as-is per user: the JSON.parse workflow step (maps to the original motivating
+  transcript failure; NOT copied from prior art - see section 5 note), the browse-namespace rule
+  (undecided), no no-fetch/ambient-authority rule added (proposed, not approved).
+- Explicitly REJECTED for now: auto-parsing JSON-looking text results at the adapter
+  boundary ("could get weird" - type flips, program-sees vs tool-sent divergence). Logged
+  as a next-iteration follow-up below.
 
 **DSL-expansion pass - interpreter-surface batch from section 4** (the deferred medium-tier JS
 parity items, done as one focused pass; no public API or limit changes):
-  - **`instanceof` + real Error values**: the `errorConstructors` names (`Error`,
-    `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`) are
-    bound globals (`ErrorConstructorReference`, callable with or without `new`; `typeof` ->
-    `"function"`). Error values stay the same plain `{ name, message }` null-prototype
-    objects as before - the constructor name additionally rides on a NON-ENUMERABLE symbol
-    key (`ErrorBrand`), which every `Object.entries`-based walk (copyIn/copyOut, spread,
-    JSON.stringify) is blind to, so serialization is byte-identical to the old shape and the
-    brand is lost on spread/boundary copies exactly like JS loses the prototype.
-    `caughtErrorValue` produces `{ name, message }` wrappers via `createErrorValue`, so
-    caught interpreter AND tool failures are `instanceof Error` and carry the `name` the
-    equivalent real-JS failure would have (follow-up fix, user-directed - "closest to real
-    JS"): `InterpreterRuntimeError` gained an `errorName` field ("Error" default) set
-    fluently at throw sites via `.as(name)` - `JSON.parse` failures are `"SyntaxError"` (and
-    now include the engine's position detail in the message; safe - derived from the
-    program-supplied string), invalid regex patterns/flags `"SyntaxError"`, unknown
-    identifiers and TDZ access `"ReferenceError"`, assignment to a constant `"TypeError"`,
-    a bad `normalize` form `"RangeError"`; a host Error reaching the catch path directly
-    keeps its own name when it is one of the standard seven. Tool failures and everything
-    without a specific analogue stay `"Error"` - internal class names never leak. Specific
-    names satisfy the specific `instanceof` (`e instanceof SyntaxError`), matching JS.
-    The operator is handled in `evaluateBinaryExpression`
-    BEFORE the data-only operand check (like `typeof`, it observes any lhs - promises and
-    functions included); recognized rhs: the error constructors (a specific type matches its
-    own brand or `Error`, never a sibling), `Date`/`RegExp`/`Map`/`Set` (sandbox classes),
-    `Array`, `Object` (any object/function-ish value), `Promise` (`SandboxPromise`), and
-    `Number`/`String`/`Boolean` (always false - no boxed values exist); anything else is a
-    catchable error naming the recognized constructors.
-  - **Array methods**: `splice` (mutating, returns the removed elements; insertions run
-    `rejectCircularInsertion` like push/unshift; one-arg form removes to the end, undefined
-    delete count removes nothing), `fill` (circular-checked value) and `copyWithin`
-    (host-delegated), and `keys`/`values`/`entries` returning **arrays** (the Map/Set
-    convention - for...of and spread work either way). The `retryableArrayMethods`
-    "rewrite using map/filter" hint set emptied out and was deleted with its branch; unknown
-    array properties still read `undefined`.
-  - **String methods**: `localeCompare(that)` (locale/options arguments ignored - host
-    default locale; the dominant use is a sort comparator), `normalize(form?)` (invalid form
-    -> catchable error naming the four valid forms), `trimLeft`/`trimRight` as
-    trimStart/trimEnd aliases.
-  - **Actionable regex failures**: `toHostRegex` and `constructRegExp` now show the
-    offending pattern (or flags) plus the engine reason (deduped "Invalid regular
-    expression:" prefix via `regexFailureReason`) and a shared escaping hint
-    (`escapeRegexHint`); flags failures list the valid flag letters; the
-    replaceAll/matchAll missing-`g` errors spell out the exact `/pattern/g` to write and
-    the single-match alternative.
-  - **copyIn split (the important one)**: `copyIn(value, label, preserveSandboxValues =
-    false)` - recursion moved to a private `copyBounded`; `boundedData` (every intra-sandbox
-    checkpoint: `Object.*` helpers, coercion/Array.from/join inputs, template
-    interpolation, expression-result checkpoints) is now `copyIn(value, label, true)`,
-    which passes `SandboxDate`/`SandboxRegExp`/`SandboxMap`/`SandboxSet` through **by
-    reference as leaves** (contents not walked - Map/Set members are validated at their
-    mutation sites) while keeping the depth (`MAX_VALUE_DEPTH`), circularity,
-    plain-objects-only, blocked-property, and data-only checks; un-awaited promises keep
-    the await-hinting rejection in BOTH modes (deliberate - JS-parity pass-through was
-    considered and skipped to preserve the nudge). The HOST boundary (final result,
-    tool-call arguments, `JSON.stringify`, tool-result intake) uses the default mode and
-    still serializes JSON forms (Date -> ISO, RegExp/Map/Set -> `{}`); host instances met on
-    the preserving path are defensively wrapped into sandbox equivalents. Ripple: the
-    `Object.*` helpers treat sandbox values as empty objects (`Object.keys(map)` -> `[]`,
-    assign sources contribute nothing, hasOwn -> false - JS has no own enumerable props
-    there), so interpreter internals (`.map`/`.time`/`.regex`) can never leak; the
-    template-literal sandbox carve-out collapsed into `boundedData`. Object/array spread
-    already preserved instances (reference copies, no checkpoint) - now tested.
-  - **Console formatting**: `formatConsoleArgument` is total and deep
-    (`formatConsoleValue`): numbers render via `String` (`NaN`/`Infinity`/`-Infinity`
-    literally - never the JSON `null`; finite numbers match their JSON form), nested
-    strings are JSON-quoted, sandbox values keep their friendly forms at ANY depth (ISO
-    date, `/regex/flags`, `Map(n) [...]`, `Set(n) [...]`), opaque references become
-    in-place `[CodeMode reference]` markers instead of collapsing the whole argument,
-    cycles render `[Circular]` (reachable via Map/Set members, which mutation never
-    checkpoints), and depth beyond `MAX_CONSOLE_DEPTH = 32` (fixed constant, not a knob)
-    degrades to `...` - console can no longer fail a program. `console.table` guards with
-    `containsOpaqueReference` (sandbox cells render, e.g. ISO dates) and its row/cell
-    walkers treat sandbox values as scalar cells.
-  - **Prose**: the instructions Syntax not-supported line dropped its `instanceof
-    Error`/splice mentions (nothing else reworded); README updated (checkpoint
-    preservation vs boundary serialization, error values/`instanceof`, new array/string
-    methods, regex-failure behavior); `supportedSyntaxMessage` left untouched (it lists
-    supported syntax, was already non-exhaustive, and stays accurate).
-  - **Tests**: package suite 169 -> 209 (parity: Error/instanceof + real-JS error-name
-    coverage, splice/fill/copyWithin/keys/values/entries, localeCompare/normalize/trim-alias
-    describes; stdlib: checkpoint survival incl. tool-arg boundary pinning, stdlib
-    `instanceof`, regex-message assertions; codemode: NaN/Infinity + nested/cyclic console
-    rendering, table cells, caught-tool-failure `instanceof`); adapter suites unchanged
-    (34 + 16, green); both packages `tsgo --noEmit` clean.
+
+- **`instanceof` + real Error values**: the `errorConstructors` names (`Error`,
+  `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`) are
+  bound globals (`ErrorConstructorReference`, callable with or without `new`; `typeof` ->
+  `"function"`). Error values stay the same plain `{ name, message }` null-prototype
+  objects as before - the constructor name additionally rides on a NON-ENUMERABLE symbol
+  key (`ErrorBrand`), which every `Object.entries`-based walk (copyIn/copyOut, spread,
+  JSON.stringify) is blind to, so serialization is byte-identical to the old shape and the
+  brand is lost on spread/boundary copies exactly like JS loses the prototype.
+  `caughtErrorValue` produces `{ name, message }` wrappers via `createErrorValue`, so
+  caught interpreter AND tool failures are `instanceof Error` and carry the `name` the
+  equivalent real-JS failure would have (follow-up fix, user-directed - "closest to real
+  JS"): `InterpreterRuntimeError` gained an `errorName` field ("Error" default) set
+  fluently at throw sites via `.as(name)` - `JSON.parse` failures are `"SyntaxError"` (and
+  now include the engine's position detail in the message; safe - derived from the
+  program-supplied string), invalid regex patterns/flags `"SyntaxError"`, unknown
+  identifiers and TDZ access `"ReferenceError"`, assignment to a constant `"TypeError"`,
+  a bad `normalize` form `"RangeError"`; a host Error reaching the catch path directly
+  keeps its own name when it is one of the standard seven. Tool failures and everything
+  without a specific analogue stay `"Error"` - internal class names never leak. Specific
+  names satisfy the specific `instanceof` (`e instanceof SyntaxError`), matching JS.
+  The operator is handled in `evaluateBinaryExpression`
+  BEFORE the data-only operand check (like `typeof`, it observes any lhs - promises and
+  functions included); recognized rhs: the error constructors (a specific type matches its
+  own brand or `Error`, never a sibling), `Date`/`RegExp`/`Map`/`Set` (sandbox classes),
+  `Array`, `Object` (any object/function-ish value), `Promise` (`SandboxPromise`), and
+  `Number`/`String`/`Boolean` (always false - no boxed values exist); anything else is a
+  catchable error naming the recognized constructors.
+- **Array methods**: `splice` (mutating, returns the removed elements; insertions run
+  `rejectCircularInsertion` like push/unshift; one-arg form removes to the end, undefined
+  delete count removes nothing), `fill` (circular-checked value) and `copyWithin`
+  (host-delegated), and `keys`/`values`/`entries` returning **arrays** (the Map/Set
+  convention - for...of and spread work either way). The `retryableArrayMethods`
+  "rewrite using map/filter" hint set emptied out and was deleted with its branch; unknown
+  array properties still read `undefined`.
+- **String methods**: `localeCompare(that)` (locale/options arguments ignored - host
+  default locale; the dominant use is a sort comparator), `normalize(form?)` (invalid form
+  -> catchable error naming the four valid forms), `trimLeft`/`trimRight` as
+  trimStart/trimEnd aliases.
+- **Actionable regex failures**: `toHostRegex` and `constructRegExp` now show the
+  offending pattern (or flags) plus the engine reason (deduped "Invalid regular
+  expression:" prefix via `regexFailureReason`) and a shared escaping hint
+  (`escapeRegexHint`); flags failures list the valid flag letters; the
+  replaceAll/matchAll missing-`g` errors spell out the exact `/pattern/g` to write and
+  the single-match alternative.
+- **copyIn split (the important one)**: `copyIn(value, label, preserveSandboxValues =
+false)` - recursion moved to a private `copyBounded`; `boundedData` (every intra-sandbox
+  checkpoint: `Object.*` helpers, coercion/Array.from/join inputs, template
+  interpolation, expression-result checkpoints) is now `copyIn(value, label, true)`,
+  which passes `SandboxDate`/`SandboxRegExp`/`SandboxMap`/`SandboxSet` through **by
+  reference as leaves** (contents not walked - Map/Set members are validated at their
+  mutation sites) while keeping the depth (`MAX_VALUE_DEPTH`), circularity,
+  plain-objects-only, blocked-property, and data-only checks; un-awaited promises keep
+  the await-hinting rejection in BOTH modes (deliberate - JS-parity pass-through was
+  considered and skipped to preserve the nudge). The HOST boundary (final result,
+  tool-call arguments, `JSON.stringify`, tool-result intake) uses the default mode and
+  still serializes JSON forms (Date -> ISO, RegExp/Map/Set -> `{}`); host instances met on
+  the preserving path are defensively wrapped into sandbox equivalents. Ripple: the
+  `Object.*` helpers treat sandbox values as empty objects (`Object.keys(map)` -> `[]`,
+  assign sources contribute nothing, hasOwn -> false - JS has no own enumerable props
+  there), so interpreter internals (`.map`/`.time`/`.regex`) can never leak; the
+  template-literal sandbox carve-out collapsed into `boundedData`. Object/array spread
+  already preserved instances (reference copies, no checkpoint) - now tested.
+- **Console formatting**: `formatConsoleArgument` is total and deep
+  (`formatConsoleValue`): numbers render via `String` (`NaN`/`Infinity`/`-Infinity`
+  literally - never the JSON `null`; finite numbers match their JSON form), nested
+  strings are JSON-quoted, sandbox values keep their friendly forms at ANY depth (ISO
+  date, `/regex/flags`, `Map(n) [...]`, `Set(n) [...]`), opaque references become
+  in-place `[CodeMode reference]` markers instead of collapsing the whole argument,
+  cycles render `[Circular]` (reachable via Map/Set members, which mutation never
+  checkpoints), and depth beyond `MAX_CONSOLE_DEPTH = 32` (fixed constant, not a knob)
+  degrades to `...` - console can no longer fail a program. `console.table` guards with
+  `containsOpaqueReference` (sandbox cells render, e.g. ISO dates) and its row/cell
+  walkers treat sandbox values as scalar cells.
+- **Prose**: the instructions Syntax not-supported line dropped its `instanceof
+Error`/splice mentions (nothing else reworded); README updated (checkpoint
+  preservation vs boundary serialization, error values/`instanceof`, new array/string
+  methods, regex-failure behavior); `supportedSyntaxMessage` left untouched (it lists
+  supported syntax, was already non-exhaustive, and stays accurate).
+- **Tests**: package suite 169 -> 209 (parity: Error/instanceof + real-JS error-name
+  coverage, splice/fill/copyWithin/keys/values/entries, localeCompare/normalize/trim-alias
+  describes; stdlib: checkpoint survival incl. tool-arg boundary pinning, stdlib
+  `instanceof`, regex-message assertions; codemode: NaN/Infinity + nested/cyclic console
+  rendering, table cells, caught-tool-failure `instanceof`); adapter suites unchanged
+  (34 + 16, green); both packages `tsgo --noEmit` clean.
 
 **Truncation layering - CodeMode truncation off in OpenCode** (user direction; resolves the
 section 4 outer-truncation item the OPPOSITE way from "kill the outer one"):
-  - `maxOutputBytes` lost its 32,000 default and now behaves exactly like the other two
-    limits: absent = no truncation. All three limits are uniformly no-default - budgets are
-    host policy. `ResolvedExecutionLimits.maxOutputBytes` is `number | undefined`;
-    `boundOutput` only runs when the host set the limit. Explicit values validate as before
-    (safe integer >= 0).
-  - OpenCode continues to pass NO limits, which now also means no CodeMode truncation.
-    `execute` is a normal `Tool.define` tool, so OpenCode's native tool-output truncation
-    applies with no special-casing - verified by tracing `wrap()` (`tool.ts:130-144`,
-    50KB/2000-line thresholds in `truncate.ts`, full output dumped to a file under
-    `tool-output/`): the `metadata.truncated` self-truncation exemption never fires for
-    `execute` (its metadata never sets that key). One truncation layer, the host's - and it
-    is the richer one (file dump + explore/grep hint vs an inline marker).
-  - Hosts without their own output bounding set `maxOutputBytes` explicitly; README table
-    and prose updated, adapter comment rewritten. Tests: codemode +1 (absent limit -> 100KB
-    value + 50KB log line pass through unbounded, `truncated` undefined); the adapter test
-    that relied on the old default now asserts the oversized result reaches the shared
-    wrapper un-truncated. Suites: 210 + 50, tsgo clean both.
+
+- `maxOutputBytes` lost its 32,000 default and now behaves exactly like the other two
+  limits: absent = no truncation. All three limits are uniformly no-default - budgets are
+  host policy. `ResolvedExecutionLimits.maxOutputBytes` is `number | undefined`;
+  `boundOutput` only runs when the host set the limit. Explicit values validate as before
+  (safe integer >= 0).
+- OpenCode continues to pass NO limits, which now also means no CodeMode truncation.
+  `execute` is a normal `Tool.define` tool, so OpenCode's native tool-output truncation
+  applies with no special-casing - verified by tracing `wrap()` (`tool.ts:130-144`,
+  50KB/2000-line thresholds in `truncate.ts`, full output dumped to a file under
+  `tool-output/`): the `metadata.truncated` self-truncation exemption never fires for
+  `execute` (its metadata never sets that key). One truncation layer, the host's - and it
+  is the richer one (file dump + explore/grep hint vs an inline marker).
+- Hosts without their own output bounding set `maxOutputBytes` explicitly; README table
+  and prose updated, adapter comment rewritten. Tests: codemode +1 (absent limit -> 100KB
+  value + 50KB log line pass through unbounded, `truncated` undefined); the adapter test
+  that relied on the old default now asserts the oversized result reaches the shared
+  wrapper un-truncated. Suites: 210 + 50, tsgo clean both.
 
 **Docs polish** (post-API-review): stale `DiscoveryOptions` JSDoc fixed (claimed default
 4,000 and alphabetical cheapest-first - now 2,000 and round-robin, matching Fix 8/9 reality)
@@ -837,132 +856,137 @@ regular dependency; hosts depend on it themselves because the API surface is Eff
 
 **Registry promotion + permission-aware catalog** (the "promote to a proper tool service"
 restructure; fixes the section 4 permission-advertising bug):
-  - **The adapter moved** `src/session/code-mode.ts` -> `src/tool/code-mode.ts` and is now a
-    registry-resident tool service on the TaskTool precedent: `CodeModeTool =
-    Tool.define(CODE_MODE_TOOL, ...)` whose init depends on `MCP.Service`, `Agent.Service`,
-    and `Session.Service`. It is yielded in `ToolRegistry.layer`, gated into `builtin` by
-    `flags.experimentalCodeMode` (like the lsp/plan experiments), and `MCP.node` joined the
-    registry's `node.deps` (`MCP.node` has no ToolRegistry dependency, so no cycle). The
-    session-level special-casing in `session/tools.ts` (ad-hoc `SessionCodeMode.define` +
-    append) is deleted; the early return that suppresses raw per-MCP registration when the
-    flag is on stays session-side, keyed on the same flag+tool-count condition.
-  - **Enablement** lives in `ToolRegistry.tools()` next to the WebSearchTool check: the MCP
-    tool count is consulted once (an Effect) before the synchronous filter, and code mode
-    passes the predicate iff `flags.experimentalCodeMode` && count > 0.
-  - **Description split on the `describeTask` precedent**: the tool's static base
-    description is a two-line summary; `describeCodeMode(agent)` in `registry.tools()`
-    appends the full CodeMode instructions (workflow/rules/syntax + grouped catalog,
-    `catalogInstructions` in the adapter) at the same composition point as task - so
-    `plugin.trigger("tool.definition")` sees the base description first.
-  - **Permission-aware catalog + dispatch** (the bug fix): the visibility predicate from
-    `llm/request.ts` `resolveTools` is hoisted to `Permission.visibleTools(tools, ruleset)`
-    (a record filter over `Permission.disabled` - only a hard `deny` with pattern `"*"`
-    hides a tool; ask-level rules stay fully visible and prompt at call time) and
-    `resolveTools` now uses it, so the two paths cannot drift. `describeCodeMode` filters
-    with the merged agent+session ruleset that `SessionTools.resolve` passes into the
-    registry before building the catalog/search index; `execute` rebuilds the runtime per
-    execution from a fresh, filtered `mcp.tools()` snapshot using the same merged ruleset
-    (`Agent.get(ctx.agent)` + `Session.get(ctx.sessionID)`, matching the merge
-    `SessionTools.context` wires into `ctx.ask`) - a denied tool is not dispatchable
-    even if the model guesses its name and yields the normal unknown-tool diagnostic.
-    Documented gap (out of scope by design): per-message `user.tools[key] === false` arrives
-    at request-prep after descriptions are built and has no child-call equivalent.
-  - **Preserved behavior**: cancellation race + pre-aborted-signal guard, `toSandboxResult`
-    unwrap order, attachment accumulation, `CODE_MODE_TOOL` at all title sites, no execution
-    limits (native truncation only), `displayInput`, per-child `ctx.ask` gating (now wired
-    through `Tool.Context` exactly like every registry tool).
-  - **Explicit non-goal**: memoizing the catalog builder keyed on (ToolsChanged generation,
-    permission ruleset) was considered and deliberately skipped - the per-turn rebuild is
-    cheap (grouping + string rendering); revisit only if profiling shows it matters.
-  - **Tests**: the two adapter suites moved to `test/tool/{code-mode,code-mode-integration}
-    .test.ts` (mocked `MCP.Service`/`Agent.Service`/`Session.Service` replacing the direct
-    `define(...)` construction; description assertions target `catalogInstructions`, the
-    registry's composition input) and gained permission coverage: deny excluded from
-    catalog/search, ask-level stays visible and callable, denied tool undispatchable
-    (unknown-tool diagnostic), `Permission.visibleTools` semantics. `test/tool/
-    registry.test.ts` gained four registry-level tests: registered with flag+MCP tools,
-    excluded without MCP tools, excluded with flag off, and deny/ask catalog filtering
-    through `registry.tools()`. Suites: 43 + 16 adapter tests, 16 registry tests, all green.
+
+- **The adapter moved** `src/session/code-mode.ts` -> `src/tool/code-mode.ts` and is now a
+  registry-resident tool service on the TaskTool precedent: `CodeModeTool =
+Tool.define(CODE_MODE_TOOL, ...)` whose init depends on `MCP.Service`, `Agent.Service`,
+  and `Session.Service`. It is yielded in `ToolRegistry.layer`, gated into `builtin` by
+  `flags.experimentalCodeMode` (like the lsp/plan experiments), and `MCP.node` joined the
+  registry's `node.deps` (`MCP.node` has no ToolRegistry dependency, so no cycle). The
+  session-level special-casing in `session/tools.ts` (ad-hoc `SessionCodeMode.define` +
+  append) is deleted; the early return that suppresses raw per-MCP registration when the
+  flag is on stays session-side, keyed on the same flag+tool-count condition.
+- **Enablement** lives in `ToolRegistry.tools()` next to the WebSearchTool check: the MCP
+  tool count is consulted once (an Effect) before the synchronous filter, and code mode
+  passes the predicate iff `flags.experimentalCodeMode` && count > 0.
+- **Description split on the `describeTask` precedent**: the tool's static base
+  description is a two-line summary; `describeCodeMode(agent)` in `registry.tools()`
+  appends the full CodeMode instructions (workflow/rules/syntax + grouped catalog,
+  `catalogInstructions` in the adapter) at the same composition point as task - so
+  `plugin.trigger("tool.definition")` sees the base description first.
+- **Permission-aware catalog + dispatch** (the bug fix): the visibility predicate from
+  `llm/request.ts` `resolveTools` is hoisted to `Permission.visibleTools(tools, ruleset)`
+  (a record filter over `Permission.disabled` - only a hard `deny` with pattern `"*"`
+  hides a tool; ask-level rules stay fully visible and prompt at call time) and
+  `resolveTools` now uses it, so the two paths cannot drift. `describeCodeMode` filters
+  with the merged agent+session ruleset that `SessionTools.resolve` passes into the
+  registry before building the catalog/search index; `execute` rebuilds the runtime per
+  execution from a fresh, filtered `mcp.tools()` snapshot using the same merged ruleset
+  (`Agent.get(ctx.agent)` + `Session.get(ctx.sessionID)`, matching the merge
+  `SessionTools.context` wires into `ctx.ask`) - a denied tool is not dispatchable
+  even if the model guesses its name and yields the normal unknown-tool diagnostic.
+  Documented gap (out of scope by design): per-message `user.tools[key] === false` arrives
+  at request-prep after descriptions are built and has no child-call equivalent.
+- **Preserved behavior**: cancellation race + pre-aborted-signal guard, `toSandboxResult`
+  unwrap order, attachment accumulation, `CODE_MODE_TOOL` at all title sites, no execution
+  limits (native truncation only), `displayInput`, per-child `ctx.ask` gating (now wired
+  through `Tool.Context` exactly like every registry tool).
+- **Explicit non-goal**: memoizing the catalog builder keyed on (ToolsChanged generation,
+  permission ruleset) was considered and deliberately skipped - the per-turn rebuild is
+  cheap (grouping + string rendering); revisit only if profiling shows it matters.
+- **Tests**: the two adapter suites moved to `test/tool/{code-mode,code-mode-integration}
+.test.ts` (mocked `MCP.Service`/`Agent.Service`/`Session.Service` replacing the direct
+  `define(...)` construction; description assertions target `catalogInstructions`, the
+  registry's composition input) and gained permission coverage: deny excluded from
+  catalog/search, ask-level stays visible and callable, denied tool undispatchable
+  (unknown-tool diagnostic), `Permission.visibleTools` semantics. `test/tool/
+registry.test.ts` gained four registry-level tests: registered with flag+MCP tools,
+  excluded without MCP tools, excluded with flag off, and deny/ask catalog filtering
+  through `registry.tools()`. Suites: 43 + 16 adapter tests, 16 registry tests, all green.
 
 **Shared MCP invocation middle (`McpInvoke.invoke`)** (closes the section 4 "plugin hooks skip
 child calls" gap):
-  - `packages/opencode/src/mcp/invoke.ts` extracts the duplicated "invoke an MCP tool"
-    middle into one shared `McpInvoke.invoke(input)`: plugin `tool.execute.before` hook ->
-    permission ask (`{ permission: key, patterns: ["*"], always: ["*"] }` via the caller's
-    `ctx.ask`) -> dispatch through the ai-sdk tool's execute inside the `Tool.execute`
-    tracing span (`tool.name`/`tool.call_id`/`session.id`/`message.id` attributes) ->
-    plugin `tool.execute.after` hook. It returns the RAW result the ai-sdk execute
-    resolved with; each caller keeps its own shaping edge - the legacy per-MCP loop in
-    `SessionTools.resolve` applies its existing model-facing shaping/truncation, code
-    mode applies `toSandboxResult`. It lives under `src/mcp/` because both callers
-    already depend on MCP and the function is about invoking an MCP-backed ai-sdk tool,
-    not about sessions or code mode.
-  - **After-hook payload**: fired inside `McpInvoke.invoke` with the raw MCP result -
-    which is exactly what the legacy loop always passed (the raw `CallToolResult`, not
-    the shaped `{title, output, metadata}`), so legacy behavior is preserved bit-for-bit
-    and the hook payload cannot drift between callers. No callback/edge-firing design
-    was needed.
-  - **Synthetic child callID**: code-mode child calls pass `${parentCallID}/${n}` as the
-    hook/span callID (`parentCallID` = the `execute` call's `ctx.callID`, falling back to
-    the entry key; `n` = per-execution counter starting at 1, shared across all child
-    calls in one program). callID is an opaque string - nothing parses it. The ai-sdk
-    `toolCallId` (`options.toolCallId`) stays each caller's existing value
-    (`ctx.callID ?? entry.key` for code mode).
-  - **Child-scoped hook failures**: `CodeModeTool` (which now also yields
-    `Plugin.Service`) wraps the whole child call - hooks, ask, dispatch - in
-    `toCatchable` (the generalization of the old `askPermission` catchCause), so a plugin
-    hook failure fails ONLY that child call as a catchable in-program `toolError`; other
-    calls in the same program keep running and interruption still propagates as
-    interruption. Legacy semantics unchanged: a hook failure fails the tool call.
-  - **Tests**: `test/tool/code-mode.test.ts` +2 (child calls fire before/after with the
-    MCP key and `parent/1`, `parent/2` ids, after hook carries the raw MCP result; a
-    failing before hook is caught in-program, gates dispatch, and leaves the outer
-    execute ok) - both code-mode harnesses gained a `Plugin.Service` mock (pass-through
-    trigger by default, overridable). New `test/session/tools.test.ts` (3 tests) pins
-    `SessionTools.resolve` at the real-registry seam (LayerNode.compile, fake MCP layer):
-    flag on + MCP tools -> `execute` present, raw MCP keys suppressed; flag off -> raw
-    keys present, `execute` absent; and the legacy raw-MCP execute fires before/after
-    hooks keyed by the ai-sdk toolCallId with the raw result payload. Suites: adapter
-    45 + 16, session/tool/permission all green; this package untouched (211 pass).
+
+- `packages/opencode/src/mcp/invoke.ts` extracts the duplicated "invoke an MCP tool"
+  middle into one shared `McpInvoke.invoke(input)`: plugin `tool.execute.before` hook ->
+  permission ask (`{ permission: key, patterns: ["*"], always: ["*"] }` via the caller's
+  `ctx.ask`) -> dispatch through the ai-sdk tool's execute inside the `Tool.execute`
+  tracing span (`tool.name`/`tool.call_id`/`session.id`/`message.id` attributes) ->
+  plugin `tool.execute.after` hook. It returns the RAW result the ai-sdk execute
+  resolved with; each caller keeps its own shaping edge - the legacy per-MCP loop in
+  `SessionTools.resolve` applies its existing model-facing shaping/truncation, code
+  mode applies `toSandboxResult`. It lives under `src/mcp/` because both callers
+  already depend on MCP and the function is about invoking an MCP-backed ai-sdk tool,
+  not about sessions or code mode.
+- **After-hook payload**: fired inside `McpInvoke.invoke` with the raw MCP result -
+  which is exactly what the legacy loop always passed (the raw `CallToolResult`, not
+  the shaped `{title, output, metadata}`), so legacy behavior is preserved bit-for-bit
+  and the hook payload cannot drift between callers. No callback/edge-firing design
+  was needed.
+- **Synthetic child callID**: code-mode child calls pass `${parentCallID}/${n}` as the
+  hook/span callID (`parentCallID` = the `execute` call's `ctx.callID`, falling back to
+  the entry key; `n` = per-execution counter starting at 1, shared across all child
+  calls in one program). callID is an opaque string - nothing parses it. The ai-sdk
+  `toolCallId` (`options.toolCallId`) stays each caller's existing value
+  (`ctx.callID ?? entry.key` for code mode).
+- **Child-scoped hook failures**: `CodeModeTool` (which now also yields
+  `Plugin.Service`) wraps the whole child call - hooks, ask, dispatch - in
+  `toCatchable` (the generalization of the old `askPermission` catchCause), so a plugin
+  hook failure fails ONLY that child call as a catchable in-program `toolError`; other
+  calls in the same program keep running and interruption still propagates as
+  interruption. Legacy semantics unchanged: a hook failure fails the tool call.
+- **Tests**: `test/tool/code-mode.test.ts` +2 (child calls fire before/after with the
+  MCP key and `parent/1`, `parent/2` ids, after hook carries the raw MCP result; a
+  failing before hook is caught in-program, gates dispatch, and leaves the outer
+  execute ok) - both code-mode harnesses gained a `Plugin.Service` mock (pass-through
+  trigger by default, overridable). New `test/session/tools.test.ts` (3 tests) pins
+  `SessionTools.resolve` at the real-registry seam (LayerNode.compile, fake MCP layer):
+  flag on + MCP tools -> `execute` present, raw MCP keys suppressed; flag off -> raw
+  keys present, `execute` absent; and the legacy raw-MCP execute fires before/after
+  hooks keyed by the ai-sdk toolCallId with the raw result payload. Suites: adapter
+  45 + 16, session/tool/permission all green; this package untouched (211 pass).
 
 **Signature rendering + compound-assignment parity fixes** (externally reported, both
 verified real with failing tests before fixing):
-  - **Non-identifier property names in rendered signatures** (`src/tool.ts`): `renderSchema`
-    emitted raw property names, so schema properties like `foo-bar`/`@type`/`x.y`/`123`
-    rendered invalid TypeScript (`{ foo-bar?: string }`). Fixed with a `renderKey` helper -
-    bare identifiers stay bare, everything else is `JSON.stringify`-quoted - applied in the
-    single `field` closure both the compact and pretty renderings share. The
-    `identifierSegment` regex now lives in `tool.ts` (exported) and `tool-runtime.ts`'s
-    bracket-notation `toolExpression` imports it: one source of truth for "is this a bare
-    identifier" across object keys and tool paths. Tests: `signature.test.ts` +4 (compact,
-    pretty with JSDoc on a quoted key, JSON Schema input+output, Effect Schema struct).
-  - **Numeric schema unions keep their real alternatives** (`src/tool.ts`): the old
-    `anyOf`/`oneOf` renderer collapsed any union containing `{ type: "number" }` to just
-    `number`, dropping real JSON Schema alternatives (`string | number`, `number | null`,
-    etc.). The collapse is now restricted to Effect's number-schema artifact
-    (`number | "NaN" | "Infinity" | "-Infinity"`, emitted as single-value string enums),
-    while raw JSON Schema unions render every branch. Tests: `signature.test.ts` +3.
-  - **Compound assignment now matches binary-operator semantics** (`src/codemode.ts`):
-    `applyCompoundAssignment` did raw JS ops on interpreter wrapper objects, so `x += y`
-    diverged from `x = x + y` (sandbox Date `d += 1` produced `"[object Object]1"`;
-    `d -= 400` gave `NaN` instead of epoch arithmetic). The operator table + coercion moved
-    verbatim out of `evaluateBinaryExpression` into a shared `applyBinaryOperator`;
-    compound assignment validates against a `compoundOperators` set (`+=` ... `>>>=`) and
-    dispatches through it (`operator.slice(0, -1)`). Logical assignments (`&&=`/`||=`/`??=`)
-    keep their separate short-circuit path (`evaluateLogicalAssignment`), and both
-    assignment call sites still wrap results in `boundedData`. Deliberate side effect:
-    compound assignment now rejects opaque references, consistent with binary operators.
-    Tests: `parity.test.ts` +5 (Date `+=` concat parity, Date `-=`/`/=` epoch parity,
-    string `+=` object/array, member-target compound, 13-case operator sweep vs real JS).
-    Package suite: 220 pass.
+
+- **Non-identifier property names in rendered signatures** (`src/tool.ts`): `renderSchema`
+  emitted raw property names, so schema properties like `foo-bar`/`@type`/`x.y`/`123`
+  rendered invalid TypeScript (`{ foo-bar?: string }`). Fixed with a `renderKey` helper -
+  bare identifiers stay bare, everything else is `JSON.stringify`-quoted - applied in the
+  single `field` closure both the compact and pretty renderings share. The
+  `identifierSegment` regex now lives in `tool.ts` (exported) and `tool-runtime.ts`'s
+  bracket-notation `toolExpression` imports it: one source of truth for "is this a bare
+  identifier" across object keys and tool paths. Tests: `signature.test.ts` +4 (compact,
+  pretty with JSDoc on a quoted key, JSON Schema input+output, Effect Schema struct).
+- **Numeric schema unions keep their real alternatives** (`src/tool.ts`): the old
+  `anyOf`/`oneOf` renderer collapsed any union containing `{ type: "number" }` to just
+  `number`, dropping real JSON Schema alternatives (`string | number`, `number | null`,
+  etc.). The collapse is now restricted to Effect's number-schema artifact
+  (`number | "NaN" | "Infinity" | "-Infinity"`, emitted as single-value string enums),
+  while raw JSON Schema unions render every branch. Tests: `signature.test.ts` +3.
+- **Compound assignment now matches binary-operator semantics** (`src/codemode.ts`):
+  `applyCompoundAssignment` did raw JS ops on interpreter wrapper objects, so `x += y`
+  diverged from `x = x + y` (sandbox Date `d += 1` produced `"[object Object]1"`;
+  `d -= 400` gave `NaN` instead of epoch arithmetic). The operator table + coercion moved
+  verbatim out of `evaluateBinaryExpression` into a shared `applyBinaryOperator`;
+  compound assignment validates against a `compoundOperators` set (`+=` ... `>>>=`) and
+  dispatches through it (`operator.slice(0, -1)`). Logical assignments (`&&=`/`||=`/`??=`)
+  keep their separate short-circuit path (`evaluateLogicalAssignment`), and both
+  assignment call sites still wrap results in `boundedData`. Deliberate side effect:
+  compound assignment now rejects opaque references, consistent with binary operators.
+  Tests: `parity.test.ts` +5 (Date `+=` concat parity, Date `-=`/`/=` epoch parity,
+  string `+=` object/array, member-target compound, 13-case operator sweep vs real JS).
+  Package suite: 220 pass.
 
 ---
 
 ## 4. Remaining work (detailed TODO)
 
 ### Next DSL-expansion pass (done - see the DSL-expansion pass entry in section 3)
+
 Batch these together - per user direction: important, but deliberately deferred to one
 focused interpreter-surface pass rather than picked off piecemeal.
+
 - [x] Medium-tier JS parity items deferred from the original audit: caught errors are plain
       `{ name, message }` objects, not `instanceof Error` (and `Error` isn't a value -
       `x instanceof Error` is unsupported syntax); `splice` (still a
@@ -981,6 +1005,7 @@ focused interpreter-surface pass rather than picked off piecemeal.
       (`console.log({ m: map })`) - could deep-format instead.
 
 ### Next iteration: text-result handling (deliberate follow-up, user-directed)
+
 - [ ] Revisit how MCP text results reach the program. Today: `structuredContent` when the
       server sends it, else joined text as a plain string (the program JSON.parses it,
       guided by a workflow step). Considered and deferred: (a) conservative boundary
@@ -992,6 +1017,7 @@ focused interpreter-surface pass rather than picked off piecemeal.
       revisit once real usage shows which failure modes matter.
 
 ### Next iteration: stdlib surface (prioritized)
+
 Current instructions say "usual Array/String/Object/Math/JSON methods," but the interpreter is
 intentionally a subset. Keep CodeMode focused on orchestration and data shaping, not a full host
 runtime, but close the high-friction gaps models are likely to reach for.
@@ -1028,7 +1054,9 @@ Explicit non-goals for now: `structuredClone`, `WeakMap`/`WeakSet`, and timers
 orchestration use case.
 
 ### Wiring-review findings (subagent code review of the OpenCode integration, triaged)
+
 Pre-PR fixes (user-approved cut):
+
 - [x] **Cancellation does not interrupt the interpreter** - the no-limits rationale claimed
       "user cancel interrupts the execution fiber," but `tools.ts` runs tools via
       `run.promise` -> `Effect.runPromise` (`effect/bridge.ts:64-66`) with NO abort wiring;
@@ -1073,6 +1101,7 @@ Pre-PR fixes (user-approved cut):
       `title: "execute"` sites in `code-mode.ts` now reference `CODE_MODE_TOOL`.
 
 Post-MVP (logged, not blocking an experimental flag):
+
 - [x] **Plugin `tool.execute.before/after` hooks skip child calls** - legacy MCP
       registration fires them per tool (`tools.ts:419-441`); under code mode only the
       outer `execute` fires them, so auditing/intercepting plugins silently lose MCP
@@ -1105,6 +1134,7 @@ Post-MVP (logged, not blocking an experimental flag):
       names that are no longer directly callable under code mode.
 
 ### Backlog / loose ends (non-blocking, any order)
+
 - [ ] `evaluateUpdateExpression` (`++`/`--`) still uses raw `Number(current)`, so `d++` on a
       sandbox Date yields `NaN` where `d += 1` now uses epoch semantics (and real JS `d++`
       would give epoch+0 numeric). Pre-existing, out of scope of the compound-assignment
@@ -1141,7 +1171,7 @@ Post-MVP (logged, not blocking an experimental flag):
 ## 5. Context and gotchas for whoever picks this up
 
 - **Motivating failure (why forgiving semantics + prompting matter):** in a real transcript,
-  the model wrote `me.result?.login ?? me.result` where the tool result was a JSON *string* -
+  the model wrote `me.result?.login ?? me.result` where the tool result was a JSON _string_ -
   the old strict interpreter threw (`String property 'login' is not available`); then the
   model returned a raw 105KB payload, which native truncation dumped to a file, costing a
   subagent round-trip to extract one number. Interpreter forgiveness stops the crashes;

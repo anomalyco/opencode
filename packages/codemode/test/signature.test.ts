@@ -83,15 +83,9 @@ describe("pretty signature rendering", () => {
       true,
     )
     expect(pretty).toBe(
-      [
-        "{",
-        "  /** Search filter */",
-        "  filter?: {",
-        "    /** Issue state */",
-        "    state?: string",
-        "  }",
-        "}",
-      ].join("\n"),
+      ["{", "  /** Search filter */", "  filter?: {", "    /** Issue state */", "    state?: string", "  }", "}"].join(
+        "\n",
+      ),
     )
   })
 
@@ -119,7 +113,14 @@ describe("pretty signature rendering", () => {
     expect(pretty).toContain("  /** @deprecated */\n  legacy?: string")
     expect(pretty).toContain("  /** @format uri */\n  homepage?: string")
     expect(pretty).toContain(
-      ["  /**", '   * @default ["a","b"]', "   * @minItems 2", "   * @maxItems 5", "   */", "  tags?: Array<string>"].join("\n"),
+      [
+        "  /**",
+        '   * @default ["a","b"]',
+        "   * @minItems 2",
+        "   * @maxItems 5",
+        "   */",
+        "  tags?: Array<string>",
+      ].join("\n"),
     )
   })
 
@@ -212,7 +213,11 @@ describe("non-identifier property names render as quoted keys", () => {
     const tool = Tool.make({
       description: "Adapter tool with awkward field names",
       input: rawSchema,
-      output: { type: "object", properties: { "content-type": { type: "string" } }, required: ["content-type"] } as const,
+      output: {
+        type: "object",
+        properties: { "content-type": { type: "string" } },
+        required: ["content-type"],
+      } as const,
       run: () => Effect.succeed({ "content-type": "text/plain" }),
     })
     expect(inputTypeScript(tool)).toContain('"foo-bar"?: string')
@@ -269,9 +274,9 @@ describe("pretty signatures in search results", () => {
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 
   const search = async (query: string) => {
-    const result = await Effect.runPromise(runtime.execute(
-      `return await tools.$codemode.search({ query: ${JSON.stringify(query)} })`,
-    ))
+    const result = await Effect.runPromise(
+      runtime.execute(`return await tools.$codemode.search({ query: ${JSON.stringify(query)} })`),
+    )
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
     return result.value as { items: Array<{ path: string; signature: string }>; total: number }

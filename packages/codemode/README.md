@@ -8,11 +8,11 @@ The package is currently private to this workspace. Its API is designed around t
 
 ```ts
 // One execution
-yield* CodeMode.execute({ tools, code })
+yield * CodeMode.execute({ tools, code })
 
 // A reusable runtime
 const runtime = CodeMode.make({ tools, limits })
-yield* runtime.execute(code)
+yield * runtime.execute(code)
 
 // One agent-facing code tool
 const codeTool = runtime.agentTool()
@@ -55,7 +55,9 @@ const runtime = CodeMode.make({
   },
 })
 
-const result = yield* runtime.execute(`
+const result =
+  yield *
+  runtime.execute(`
   const order = await tools.orders.lookup({ id: "order_42" })
   return { id: order.id, needsAttention: order.status !== "complete" }
 `)
@@ -72,8 +74,8 @@ Successful result values are JSON-safe data. A program that returns `undefined`,
 ```ts
 const tool = Tool.make({
   description,
-  input,   // Effect Schema (validating) or JSON Schema (render-only)
-  output,  // optional; same choice
+  input, // Effect Schema (validating) or JSON Schema (render-only)
+  output, // optional; same choice
   run,
 })
 ```
@@ -89,13 +91,15 @@ The description and schemas are part of the model-visible tool contract. Keep de
 Use `CodeMode.execute` for a single execution:
 
 ```ts
-const result = yield* CodeMode.execute({
-  tools: { orders: { lookup: lookupOrder } },
-  code: `return await tools.orders.lookup({ id: "order_42" })`,
-  limits: { maxToolCalls: 10 },
-  onToolCallStart: (call) => Effect.logDebug("CodeMode tool started", call),
-  onToolCallEnd: (call) => Effect.logDebug("CodeMode tool settled", call),
-})
+const result =
+  yield *
+  CodeMode.execute({
+    tools: { orders: { lookup: lookupOrder } },
+    code: `return await tools.orders.lookup({ id: "order_42" })`,
+    limits: { maxToolCalls: 10 },
+    onToolCallStart: (call) => Effect.logDebug("CodeMode tool started", call),
+    onToolCallEnd: (call) => Effect.logDebug("CodeMode tool settled", call),
+  })
 ```
 
 The Effect environment is inferred from the supplied tools. CodeMode does not erase service requirements introduced by tool implementations.
@@ -110,10 +114,10 @@ const runtime = CodeMode.make({
   limits: { timeoutMs: 30_000 },
 })
 
-runtime.catalog()       // structured tool descriptions
-runtime.instructions()  // model-facing syntax and tool guide
+runtime.catalog() // structured tool descriptions
+runtime.instructions() // model-facing syntax and tool guide
 runtime.execute(source) // ExecuteResult
-runtime.agentTool()     // { name, description, input, output, execute }
+runtime.agentTool() // { name, description, input, output, execute }
 ```
 
 `catalog`, `instructions`, and `agentTool` are projections of the same configured tool tree. `agentTool().description` is exactly `instructions()`.
@@ -222,10 +226,10 @@ CodeMode is an orchestration language, not a general JavaScript runtime.
 
 The limits are exactly three knobs:
 
-| Limit | Default | Bounds |
-| --- | ---: | --- |
-| `timeoutMs` | none - no timeout | Wall-clock execution time. |
-| `maxToolCalls` | none - unlimited | Tool calls admitted during the execution. |
+| Limit            |              Default | Bounds                                                               |
+| ---------------- | -------------------: | -------------------------------------------------------------------- |
+| `timeoutMs`      |    none - no timeout | Wall-clock execution time.                                           |
+| `maxToolCalls`   |     none - unlimited | Tool calls admitted during the execution.                            |
 | `maxOutputBytes` | none - no truncation | Model-facing output: the serialized result value plus captured logs. |
 
 No limit has a default, on purpose: execution budgets are host policy, not library policy - a host that wants a bound sets one; a host that can interrupt the execution fiber (as OpenCode does on user cancel) may set no timeout, and a host with its own tool-output truncation (as OpenCode has) may leave `maxOutputBytes` unset. A host with neither should set `maxOutputBytes`, or oversized results silently flood model context.
@@ -254,28 +258,25 @@ Two interpreter internals are fixed constants rather than knobs: at most 8 tool 
 
 Failures are data:
 
-| Kind | Meaning |
-| --- | --- |
-| `ParseError` | Source is empty or cannot be parsed. |
-| `UnsupportedSyntax` | Parsed JavaScript is outside the supported subset. |
-| `UnknownTool` | A program referenced a tool the host did not provide. |
-| `InvalidToolInput` | Tool input failed schema decoding or safe-data copying. |
-| `InvalidToolOutput` | Tool output failed schema decoding or safe-data copying. |
-| `InvalidDataValue` | Program data violated the plain-data contract (depth, circularity, blocked properties, non-data values). |
-| `ToolCallLimitExceeded` | Calls exceeded `maxToolCalls`. |
-| `TimeoutExceeded` | Execution exceeded `timeoutMs`. |
-| `ToolFailure` | A tool refused or failed. |
-| `ExecutionFailure` | The program threw or another execution error occurred. |
+| Kind                    | Meaning                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| `ParseError`            | Source is empty or cannot be parsed.                                                                     |
+| `UnsupportedSyntax`     | Parsed JavaScript is outside the supported subset.                                                       |
+| `UnknownTool`           | A program referenced a tool the host did not provide.                                                    |
+| `InvalidToolInput`      | Tool input failed schema decoding or safe-data copying.                                                  |
+| `InvalidToolOutput`     | Tool output failed schema decoding or safe-data copying.                                                 |
+| `InvalidDataValue`      | Program data violated the plain-data contract (depth, circularity, blocked properties, non-data values). |
+| `ToolCallLimitExceeded` | Calls exceeded `maxToolCalls`.                                                                           |
+| `TimeoutExceeded`       | Execution exceeded `timeoutMs`.                                                                          |
+| `ToolFailure`           | A tool refused or failed.                                                                                |
+| `ExecutionFailure`      | The program threw or another execution error occurred.                                                   |
 
 Unknown host failures, defects, invalid outputs, and copying failures are sanitized. To return a safe operational refusal, fail with `toolError`:
 
 ```ts
 import { toolError } from "@opencode-ai/codemode"
 
-run: ({ id }) =>
-  authorized(id)
-    ? loadOrder(id)
-    : Effect.fail(toolError("Order is unavailable"))
+run: ({ id }) => (authorized(id) ? loadOrder(id) : Effect.fail(toolError("Order is unavailable")))
 ```
 
 Only the supplied message is model-visible. The optional cause is never returned in `ExecuteResult`; hosts should perform any required internal logging before crossing this boundary.

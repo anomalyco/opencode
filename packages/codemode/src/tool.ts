@@ -57,8 +57,7 @@ export type Options<I extends ToolSchema, O extends ToolSchema | undefined, R = 
 export const isDefinition = <R = never>(value: unknown): value is Definition<R> =>
   typeof value === "object" && value !== null && "_tag" in value && value._tag === "CodeModeTool"
 
-const isEffectSchema = (schema: ToolSchema): schema is Schema.Decoder<unknown> & Schema.Top =>
-  Schema.isSchema(schema)
+const isEffectSchema = (schema: ToolSchema): schema is Schema.Decoder<unknown> & Schema.Top => Schema.isSchema(schema)
 
 const renderLiteral = (value: unknown): string => JSON.stringify(value) ?? "unknown"
 
@@ -69,10 +68,12 @@ const renderLiteral = (value: unknown): string => JSON.stringify(value) ?? "unkn
 export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 /** Renders a property name as a valid TS object key: bare when an identifier, quoted otherwise. */
-const renderKey = (name: string): string => identifierSegment.test(name) ? name : JSON.stringify(name)
+const renderKey = (name: string): string => (identifierSegment.test(name) ? name : JSON.stringify(name))
 
 const effectNumberSentinel = (schema: JsonSchema) =>
-  schema.type === "string" && Array.isArray(schema.enum) && schema.enum.length === 1 &&
+  schema.type === "string" &&
+  Array.isArray(schema.enum) &&
+  schema.enum.length === 1 &&
   (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity")
 
 /**
@@ -118,7 +119,8 @@ const docTags = (schema: JsonSchema): Array<string> => {
  */
 const jsdoc = (description: string | undefined, tags: ReadonlyArray<string>, pad: string): string => {
   const lines = [...(description === undefined ? [] : description.split("\n")), ...tags].map((line) =>
-    line.replaceAll("*/", "* /").replace(/\s+$/, ""))
+    line.replaceAll("*/", "* /").replace(/\s+$/, ""),
+  )
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
   if (lines.length === 0) return ""
@@ -127,7 +129,12 @@ const jsdoc = (description: string | undefined, tags: ReadonlyArray<string>, pad
   return `${pad}/**\n${body}\n${pad} */\n`
 }
 
-const renderSchema = (schema: JsonSchema, ctx: RenderContext, depth = 0, seen: ReadonlySet<string> = new Set()): string => {
+const renderSchema = (
+  schema: JsonSchema,
+  ctx: RenderContext,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): string => {
   if (depth > MAX_RENDER_DEPTH) return "unknown"
   if (schema.$ref) {
     const name = schema.$ref.split("/").pop()
@@ -146,13 +153,16 @@ const renderSchema = (schema: JsonSchema, ctx: RenderContext, depth = 0, seen: R
     if (
       alternatives.some((item) => item.type === "number") &&
       alternatives.every((item) => item.type === "number" || effectNumberSentinel(item))
-    ) return "number"
+    )
+      return "number"
     // An empty Schema.Struct({}) emits `anyOf: [{ type: "object" }, { type: "array" }]`
     // (no properties/items); render the bare shape as {} instead of `{} | Array<unknown>`.
     if (
       alternatives.length === 2 &&
-      alternatives[0]?.type === "object" && alternatives[0].properties === undefined &&
-      alternatives[1]?.type === "array" && alternatives[1].items === undefined
+      alternatives[0]?.type === "object" &&
+      alternatives[0].properties === undefined &&
+      alternatives[1]?.type === "array" &&
+      alternatives[1].items === undefined
     ) {
       return "{}"
     }
@@ -170,7 +180,8 @@ const renderSchema = (schema: JsonSchema, ctx: RenderContext, depth = 0, seen: R
     const required = new Set(schema.required ?? [])
     const properties = Object.entries(schema.properties ?? {})
     const additional = schema.additionalProperties
-    const indexType = additional && typeof additional === "object" ? renderSchema(additional, ctx, depth + 1, seen) : undefined
+    const indexType =
+      additional && typeof additional === "object" ? renderSchema(additional, ctx, depth + 1, seen) : undefined
     const field = ([name, value]: readonly [string, JsonSchema]) =>
       `${renderKey(name)}${required.has(name) ? "" : "?"}: ${renderSchema(value, ctx, depth + 1, seen)}`
 
@@ -183,7 +194,9 @@ const renderSchema = (schema: JsonSchema, ctx: RenderContext, depth = 0, seen: R
     // Pretty: an indented block, each described field preceded by its JSDoc comment.
     if (properties.length === 0 && indexType === undefined) return "{}"
     const pad = "  ".repeat(depth + 1)
-    const lines = properties.map((entry) => `${jsdoc(entry[1].description, docTags(entry[1]), pad)}${pad}${field(entry)}`)
+    const lines = properties.map(
+      (entry) => `${jsdoc(entry[1].description, docTags(entry[1]), pad)}${pad}${field(entry)}`,
+    )
     if (indexType !== undefined) lines.push(`${pad}[key: string]: ${indexType}`)
     return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
   }
@@ -262,7 +275,9 @@ export const inputProperties = <R>(definition: Definition<R>): Array<InputProper
  * fields; the default stays the compact single-line form.
  */
 export const inputTypeScript = <R>(definition: Definition<R>, pretty = false): string =>
-  isEffectSchema(definition.input) ? toTypeScript(definition.input, false, pretty) : jsonSchemaToTypeScript(definition.input, pretty)
+  isEffectSchema(definition.input)
+    ? toTypeScript(definition.input, false, pretty)
+    : jsonSchemaToTypeScript(definition.input, pretty)
 
 /**
  * The model-visible TypeScript type of a tool's result; tools without an output schema
