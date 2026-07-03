@@ -202,7 +202,7 @@ describe("code mode execute", () => {
     expect(description).toContain("- zeta (1 tool)\n")
     expect(description).toContain("tools.zeta.only_tool(input: { topic: string }): Promise<unknown>")
     expect(description).toContain("tools.$codemode.search(")
-    expect(description).toContain("1. Find a tool (skip when it is already listed below)")
+    expect(description).toContain("1. If the exact signature is not listed below, first search:")
     expect(description).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
     )
