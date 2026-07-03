@@ -1210,11 +1210,14 @@ export default function Page() {
     },
   })
 
+  // Latch: defer only the first diff render off the mount critical path. This Page
+  // stays mounted across same-workspace session tab switches, so gating on every
+  // deferRender flip tore down and remounted the whole review pane on tab switch.
+  const reviewPanelV2Rendered = createMemo<boolean>((prev) => prev || !store.deferRender, false)
+
   const reviewPanelV2 = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
-      {/* The route remounts per session; defer the diff render off the switch critical path
-          like the legacy review tab does. */}
-      <Show when={!store.deferRender}>
+      <Show when={reviewPanelV2Rendered()}>
         <ReviewPanelV2 {...reviewPanelV2Props()} />
       </Show>
     </div>

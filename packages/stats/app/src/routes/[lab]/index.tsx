@@ -559,24 +559,28 @@ function LabModelRow(props: {
 }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const showTooltip = (x: number, y: number) => {
+  const showTooltip = (target: HTMLAnchorElement) => {
+    const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth
     const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight
+    const anchorX = viewportWidth > 0 ? Math.min(Math.max(rect.left + 320, 24), viewportWidth - 24) : rect.left + 320
     props.onTooltipChange({
       model: props.model,
-      placement: viewportWidth > 0 && x > viewportWidth - 280 ? "left" : "right",
+      placement: viewportWidth > 0 && anchorX > viewportWidth - 280 ? "left" : "right",
       usage: props.usage,
-      x,
-      y: viewportHeight > 0 ? Math.min(Math.max(y, 96), viewportHeight - 128) : y,
+      x: anchorX,
+      y:
+        viewportHeight > 0
+          ? Math.min(Math.max(rect.top + rect.height / 2, 96), viewportHeight - 128)
+          : rect.top + rect.height / 2,
     })
   }
   const showPointerTooltip: JSX.EventHandler<HTMLAnchorElement, PointerEvent> = (event) => {
     if (event.pointerType === "touch") return
-    showTooltip(event.clientX, event.clientY)
+    showTooltip(event.currentTarget)
   }
   const showFocusTooltip: JSX.EventHandler<HTMLAnchorElement, FocusEvent> = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    showTooltip(rect.left + rect.width * 0.58, rect.top + rect.height / 2)
+    showTooltip(event.currentTarget)
   }
   return (
     <a
@@ -587,11 +591,12 @@ function LabModelRow(props: {
       onBlur={() => props.onTooltipChange(undefined)}
       onFocus={showFocusTooltip}
       onPointerEnter={showPointerTooltip}
+      onPointerDown={() => props.onTooltipChange(undefined)}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
         props.onTooltipChange(undefined)
       }}
-      onPointerMove={showPointerTooltip}
+      onClick={() => props.onTooltipChange(undefined)}
     >
       <span data-slot="lab-model-cell" data-column="model" role="cell">
         <span data-slot="lab-model-avatar" aria-hidden="true">
@@ -851,7 +856,7 @@ function trimNumber(value: number, digits: number) {
 
 function usageStripHeight(value: number, max: number) {
   if (value <= 0 || max <= 0) return 0
-  return Math.max(1, (value / max) * 40)
+  return Math.max(2, (value / max) * 76)
 }
 
 function usageLineY(value: number, max: number) {

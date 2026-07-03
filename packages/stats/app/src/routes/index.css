@@ -2870,12 +2870,16 @@
   padding: 0 8px;
   overflow: hidden;
   background: var(--stats-layer-2);
-  color: var(--stats-hero-muted);
+  color: var(--stats-faint);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
   text-decoration: none;
   white-space: nowrap;
+}
+
+[data-page="stats"] a[data-slot="lab-hero-crumb"] {
+  color: var(--stats-faint);
 }
 
 [data-page="stats"] [data-component="lab-hero-menu"] {
@@ -2894,6 +2898,7 @@
 
 [data-page="stats"] [data-slot="lab-hero-crumb"][data-current="true"] {
   padding-right: 4px;
+  color: var(--stats-text);
 }
 
 [data-page="stats"] a[data-slot="lab-hero-crumb"]:hover,
@@ -2915,7 +2920,7 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  color: var(--stats-faint);
+  color: currentColor;
 }
 
 [data-page="stats"] [data-component="lab-hero-menu"][open] [data-slot="lab-hero-crumb"] svg {
@@ -3048,6 +3053,288 @@
   line-height: 1.5;
 }
 
+[data-page="stats"] [data-section="model-hero"] {
+  align-content: start;
+  gap: 24px;
+  min-height: 372px;
+  padding: 128px 0 40px;
+  overflow: visible;
+  box-shadow: none;
+}
+
+@media (max-width: 80rem) and (min-width: 74.001rem) {
+  [data-page="stats"] [data-section="model-hero"] {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+}
+
+[data-page="stats"] [data-component="model-hero-breadcrumb"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(100%, 280px);
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  overflow: hidden;
+  background: var(--stats-layer-2);
+  color: var(--stats-hero-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"][data-current="true"] {
+  padding-right: 4px;
+}
+
+[data-page="stats"] [data-component="model-hero-menu"] {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="model-hero-menu"] summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+[data-page="stats"] [data-component="model-hero-menu"] summary::-webkit-details-marker {
+  display: none;
+}
+
+[data-page="stats"] a[data-slot="model-hero-crumb"]:hover,
+[data-page="stats"] a[data-slot="model-hero-crumb"]:focus-visible,
+[data-page="stats"] summary[data-slot="model-hero-crumb"]:hover,
+[data-page="stats"] summary[data-slot="model-hero-crumb"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"] span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"] svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--stats-faint);
+}
+
+[data-page="stats"] [data-component="model-hero-menu"][open] [data-slot="model-hero-crumb"] svg {
+  transform: rotate(180deg);
+}
+
+[data-page="stats"] [data-slot="model-hero-options"] {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 5;
+  display: grid;
+  width: max-content;
+  min-width: 180px;
+  max-width: min(360px, calc(100vw - 48px));
+  max-height: min(360px, calc(100vh - 160px));
+  padding: 6px;
+  overflow: auto;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-bg);
+  box-shadow: 0 12px 32px #0000001a;
+  transform: translateX(-50%);
+}
+
+[data-page="stats"] [data-slot="model-hero-option"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-hero-option"]:hover,
+[data-page="stats"] [data-slot="model-hero-option"]:focus-visible {
+  background: var(--stats-layer-2);
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-hero-option"][data-current="true"] {
+  background: var(--stats-layer-2);
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="model-hero-separator"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 24px;
+  color: var(--stats-faint);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+[data-page="stats"] [data-slot="model-hero-title-row"] {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+  min-height: 60px;
+}
+
+[data-page="stats"] [data-slot="model-hero-avatar"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  background: var(--stats-accent-text);
+  box-shadow: inset 0 0 0 1px #0000001a;
+  color: #ffffff;
+}
+
+[data-page="stats"] [data-slot="model-hero-avatar"] svg {
+  width: 28px;
+  height: 28px;
+}
+
+[data-page="stats"] [data-section="model-hero"] h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 60px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-hero-actions"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+[data-page="stats"] [data-slot="model-hero-action"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  background: var(--stats-bg);
+  color: var(--stats-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow:
+    0 0 0 0 #00000024,
+    0 0 0 0.5px #00000024,
+    0 1px 1.5px 0 #0000001a;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-hero-action"]:hover,
+[data-page="stats"] [data-slot="model-hero-action"]:focus-visible {
+  background: var(--stats-layer-2);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-hero-action-icon"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+[data-page="stats"] [data-section="model-hero"] [data-slot="model-hero-pattern"] {
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  mask-position: center top;
+  -webkit-mask-position: center top;
+}
+
+[data-page="stats"] [data-slot="model-hero-rankline"],
+[data-page="stats"] [data-slot="model-hero-state"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  margin: 0;
+  color: var(--stats-muted);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+[data-page="stats"] [data-slot="model-hero-pill"],
+[data-page="stats"] [data-slot="model-hero-sparkline"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  background: var(--stats-layer-2);
+  color: var(--stats-hero-muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+[data-page="stats"] [data-slot="model-hero-rank-group"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+[data-page="stats"] [data-slot="model-hero-sparkline"] {
+  width: 36px;
+  padding: 0;
+  color: #198b43;
+}
+
+[data-page="stats"] [data-slot="model-hero-sparkline"] svg {
+  width: 36px;
+  height: 24px;
+}
+
 [data-page="stats"] [data-section="lab-overview"] {
   position: relative;
   box-sizing: border-box;
@@ -3117,7 +3404,7 @@
   box-sizing: border-box;
   min-width: 0;
   min-height: 192px;
-  padding: 40px 60px;
+  padding: 40px;
   position: relative;
 }
 
@@ -3147,9 +3434,9 @@
   min-width: 0;
   overflow: hidden;
   color: var(--stats-text);
-  font-size: 76px;
+  font-size: clamp(36px, 5.4vw, 76px);
   font-weight: 500;
-  line-height: 88px;
+  line-height: 1.15;
   letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4070,8 +4357,8 @@
 [data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] {
   --lab-usage-gap: 4px;
   --lab-usage-column-gutter: calc(var(--lab-usage-gap) / 2);
-  --lab-usage-bar-height: 40px;
-  --lab-usage-line-bottom: 80px;
+  --lab-usage-bar-height: 76px;
+  --lab-usage-line-bottom: 124px;
   --lab-usage-bar: #dbdbdb;
   --lab-usage-line: #808080;
   --lab-usage-active: #3b5cf6;
@@ -4688,6 +4975,11 @@
     padding: 104px 32px 40px;
   }
 
+  [data-page="stats"] [data-section="model-hero"] {
+    min-height: 340px;
+    padding: 104px 32px 40px;
+  }
+
   [data-page="stats"] [data-slot="lab-overview-copy"] {
     padding-right: 32px;
     padding-left: 32px;
@@ -4748,8 +5040,7 @@
 
   [data-page="stats"] [data-component="lab-overview-metric"] {
     min-height: 144px;
-    padding-top: 28px;
-    padding-bottom: 28px;
+    padding: 28px 40px;
     border-top: 1px solid var(--stats-line);
   }
 
@@ -4917,10 +5208,36 @@
 
   [data-page="stats"] [data-section="model-hero"] {
     gap: 20px;
+    min-height: 316px;
+    padding: 72px 24px 40px;
   }
 
-  [data-page="stats"] [data-slot="model-hero-grid"] {
-    gap: 24px;
+  [data-page="stats"] [data-component="model-hero-breadcrumb"] {
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  [data-page="stats"] [data-slot="model-hero-crumb"] {
+    max-width: min(100%, 240px);
+  }
+
+  [data-page="stats"] [data-slot="model-hero-title-row"] {
+    flex-wrap: wrap;
+    gap: 16px;
+    min-height: 0;
+  }
+
+  [data-page="stats"] [data-slot="model-hero-avatar"] {
+    display: none;
+  }
+
+  [data-page="stats"] [data-slot="model-hero-actions"] {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  [data-page="stats"] [data-slot="model-hero-action"] {
+    flex: 0 0 auto;
   }
 
   [data-page="stats"] [data-section="lab-hero"] {
@@ -4930,7 +5247,7 @@
   }
 
   [data-page="stats"] [data-section="lab-overview"] {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   [data-page="stats"] [data-slot="lab-overview-copy"] {
@@ -4958,12 +5275,16 @@
   }
 
   [data-page="stats"] [data-component="lab-overview-metric"]::before {
+    display: block;
+  }
+
+  [data-page="stats"] [data-component="lab-overview-metric"]:nth-of-type(1)::before {
     display: none;
   }
 
   [data-page="stats"] [data-component="lab-overview-metric"] strong {
-    font-size: 56px;
-    line-height: 64px;
+    font-size: clamp(36px, 10vw, 52px);
+    line-height: 1.08;
   }
 
   [data-page="stats"] [data-slot="lab-hero-title-row"] {
@@ -5012,12 +5333,22 @@
   }
 
   [data-page="stats"] [data-section="model-hero"] h1 {
+    flex-basis: 100%;
     font-size: 38px;
-    line-height: 1;
+    line-height: 44px;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   [data-page="stats"] [data-slot="model-hero-pattern"] {
-    height: 14px;
+    height: 16px;
+  }
+
+  [data-page="stats"] [data-slot="model-hero-rankline"],
+  [data-page="stats"] [data-slot="model-hero-state"] {
+    gap: 6px;
+    font-size: 14px;
+    line-height: 22px;
   }
 
   [data-page="stats"] [data-slot="model-catalog-grid"] {
@@ -5125,7 +5456,8 @@
     --model-usage-mobile-track-width: calc(
       var(--model-usage-count) * var(--model-usage-mobile-bar-width) + var(--model-usage-mobile-edge-space)
     );
-    --lab-usage-line-bottom: 64px;
+    --lab-usage-bar-height: 64px;
+    --lab-usage-line-bottom: 104px;
     grid-template-rows: minmax(0, 360px) 14px;
     gap: 24px;
     height: 398px;
