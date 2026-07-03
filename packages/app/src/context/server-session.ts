@@ -5,12 +5,12 @@ import type {
   OpencodeClient,
   Part,
   PermissionRequest,
+  QuestionRequest,
   Session,
   SessionStatus,
   SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
-import { isQuestionForm, type QuestionForm } from "@/utils/question-form"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { diffs as cleanDiffs, message as cleanMessage } from "@/utils/diffs"
@@ -136,7 +136,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     session_diff: {} as Record<string, SnapshotFileDiff[]>,
     todo: {} as Record<string, Todo[]>,
     permission: {} as Record<string, PermissionRequest[]>,
-    question: {} as Record<string, QuestionForm[]>,
+    question: {} as Record<string, QuestionRequest[]>,
     message: {} as Record<string, Message[]>,
     part: {} as Record<string, Part[]>,
     part_text_accum_delta: {} as Record<string, string>,
@@ -932,10 +932,8 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
         )
         return
       }
-      case "form.created": {
-        const properties = event.properties as { form?: unknown }
-        if (!isQuestionForm(properties.form)) return
-        const question = properties.form
+      case "question.asked": {
+        const question = event.properties as QuestionRequest
         const questions = data.question[question.sessionID]
         if (!questions) {
           setData("question", question.sessionID, [question])
@@ -951,15 +949,15 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
           )
         return
       }
-      case "form.replied":
-      case "form.cancelled": {
-        const props = event.properties as { sessionID: string; id: string }
+      case "question.replied":
+      case "question.rejected": {
+        const props = event.properties as { sessionID: string; requestID: string }
         setData(
           "question",
           props.sessionID,
           produce((draft) => {
             if (!draft) return
-            const result = Binary.search(draft, props.id, (item) => item.id)
+            const result = Binary.search(draft, props.requestID, (item) => item.id)
             if (result.found) draft.splice(result.index, 1)
           }),
         )

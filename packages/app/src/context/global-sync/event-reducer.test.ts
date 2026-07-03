@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
-import type { QuestionForm } from "@/utils/question-form"
 
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
@@ -49,18 +48,14 @@ const questionRequest = (id: string, sessionID: string, title = id) =>
   ({
     id,
     sessionID,
-    mode: "form",
-    metadata: { kind: "question" },
-    fields: [
+    questions: [
       {
-        key: "question_0",
-        title,
-        description: title,
-        type: "string",
-        options: [{ value: title, label: title, description: title }],
+        question: title,
+        header: title,
+        options: [{ label: title, description: title }],
       },
     ],
-  }) as QuestionForm
+  }) as QuestionRequest
 
 const baseState = (input: Partial<State> = {}) =>
   ({
@@ -510,7 +505,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission[sessionID]?.map((x) => x.id)).toEqual(["perm_1", "perm_3"])
 
     applyDirectoryEvent({
-      event: { type: "form.created", properties: { form: questionRequest("q_2", sessionID) } },
+      event: { type: "question.asked", properties: questionRequest("q_2", sessionID) },
       store,
       setStore,
       push() {},
@@ -520,18 +515,17 @@ describe("applyDirectoryEvent", () => {
     expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_2", "q_3"])
 
     applyDirectoryEvent({
-      event: { type: "form.created", properties: { form: questionRequest("q_2", sessionID, "updated") } },
+      event: { type: "question.asked", properties: questionRequest("q_2", sessionID, "updated") },
       store,
       setStore,
       push() {},
       directory: "/tmp",
       loadLsp() {},
     })
-    const form = store.question[sessionID]?.find((x) => x.id === "q_2")
-    expect(form?.mode === "form" ? form.fields[0]?.description : undefined).toBe("updated")
+    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions[0]?.header).toBe("updated")
 
     applyDirectoryEvent({
-      event: { type: "form.cancelled", properties: { sessionID, id: "q_2" } },
+      event: { type: "question.rejected", properties: { sessionID, requestID: "q_2" } },
       store,
       setStore,
       push() {},
@@ -539,34 +533,6 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
     expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_3"])
-  })
-
-  test("tracks global form lifecycles when session content is delegated", () => {
-    const [store, setStore] = createStore(baseState())
-
-    applyDirectoryEvent({
-      event: { type: "form.created", properties: { form: questionRequest("q_1", "global") } },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-      sessionContent: false,
-    })
-
-    expect(store.question.global?.map((x) => x.id)).toEqual(["q_1"])
-
-    applyDirectoryEvent({
-      event: { type: "form.cancelled", properties: { sessionID: "global", id: "q_1" } },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-      sessionContent: false,
-    })
-
-    expect(store.question.global).toEqual([])
   })
 
   test("updates vcs branch in store and cache", () => {

@@ -46,25 +46,6 @@ const tui: TuiPlugin = async (api) => {
     questions.delete(event.data.requestID)
   })
 
-  api.event.on("form.created", (event) => {
-    if (questions.has(event.data.form.id)) return
-    questions.add(event.data.form.id)
-    notify(
-      api,
-      event.data.form.sessionID === "global" ? undefined : event.data.form.sessionID,
-      "Form needs input",
-      "question",
-    )
-  })
-
-  api.event.on("form.replied", (event) => {
-    questions.delete(event.data.id)
-  })
-
-  api.event.on("form.cancelled", (event) => {
-    questions.delete(event.data.id)
-  })
-
   api.event.on("permission.asked", (event) => {
     if (permissions.has(event.data.id)) return
     permissions.add(event.data.id)

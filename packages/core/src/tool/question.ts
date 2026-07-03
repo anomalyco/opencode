@@ -2,10 +2,9 @@ export * as QuestionTool from "./question"
 
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
-import { optional } from "@opencode-ai/schema/schema"
-import { Form } from "../form"
 import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
+import { QuestionV2 } from "../question"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -23,40 +22,19 @@ Usage notes:
 - Answers are returned as arrays of labels; set \`multiple: true\` to allow selecting more than one
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label`
 
-export const Option = Schema.Struct({
-  label: Schema.String.annotate({ description: "Display text (1-5 words, concise)" }),
-  description: Schema.String.annotate({ description: "Explanation of choice" }),
-}).annotate({ identifier: "QuestionTool.Option" })
-export interface Option extends Schema.Schema.Type<typeof Option> {}
-
-export const Prompt = Schema.Struct({
-  question: Schema.String.annotate({ description: "Complete question" }),
-  header: Schema.String.annotate({ description: "Very short label (max 30 chars)" }),
-  options: Schema.Array(Option).annotate({ description: "Available choices" }),
-  multiple: Schema.Boolean.pipe(optional).annotate({ description: "Allow selecting multiple choices" }),
-  custom: Schema.Boolean.pipe(optional).annotate({ description: "Allow typing a custom answer (default: true)" }),
-}).annotate({ identifier: "QuestionTool.Prompt" })
-export interface Prompt extends Schema.Schema.Type<typeof Prompt> {}
-
-export const Answer = Schema.Array(Schema.String).annotate({ identifier: "QuestionTool.Answer" })
-export type Answer = typeof Answer.Type
-
 export const Input = Schema.Struct({
-  questions: Schema.Array(Prompt).annotate({ description: "Questions to ask" }),
+  questions: Schema.Array(QuestionV2.Prompt).annotate({ description: "Questions to ask" }),
 })
 
 export const Output = Schema.Struct({
-  answers: Schema.Array(Answer),
+  answers: Schema.Array(QuestionV2.Answer),
 })
 export type Output = typeof Output.Type
 
-export class RejectedError extends Error {
-  constructor() {
-    super("The user dismissed this question")
-  }
-}
-
-export const toModelOutput = (questions: ReadonlyArray<Prompt>, answers: ReadonlyArray<Answer>) => {
+export const toModelOutput = (
+  questions: ReadonlyArray<QuestionV2.Prompt>,
+  answers: ReadonlyArray<QuestionV2.Answer>,
+) => {
   const formatted = questions
     .map(
       (question, index) =>
@@ -69,7 +47,7 @@ export const toModelOutput = (questions: ReadonlyArray<Prompt>, answers: Readonl
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
-    const form = yield* Form.Service
+    const question = yield* QuestionV2.Service
     const permission = yield* PermissionV2.Service
 
     yield* tools
@@ -93,22 +71,15 @@ const layer = Layer.effectDiscard(
               .pipe(
                 Effect.mapError(() => new ToolFailure({ message: "Permission denied: question" })),
                 Effect.andThen(
-                  form
+                  question
                     .ask({
                       sessionID: context.sessionID,
-                      ...(input.questions.length === 1 ? {} : { title: "Questions" }),
-                      metadata: {
-                        kind: "question",
-                        tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
-                      },
-                      mode: "form",
-                      fields: input.questions.map(questionToField),
+                      questions: input.questions,
+                      tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
                     })
                     .pipe(Effect.orDie),
                 ),
-                Effect.flatMap((state) =>
-                  state.status === "answered" ? Effect.succeed({ answers: formToAnswers(input.questions, state.answer) }) : Effect.die(new RejectedError()),
-                ),
+                Effect.map((answers) => ({ answers })),
               ),
         }),
       })
@@ -119,33 +90,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/question",
   layer,
-  deps: [ToolRegistry.node, PermissionV2.node, Form.node],
+  deps: [ToolRegistry.node, PermissionV2.node, QuestionV2.node],
 })
-
-function questionToField(question: Prompt, index: number): Form.Field {
-  const base = {
-    key: key(index),
-    title: question.question,
-    description: question.header,
-  }
-  const options = question.options.map((option) => ({
-    value: option.label,
-    label: option.label,
-    description: option.description,
-  }))
-  if (question.multiple) return { ...base, type: "multiselect", options, custom: question.custom ?? true }
-  return { ...base, type: "string", options, custom: question.custom ?? true }
-}
-
-function formToAnswers(questions: ReadonlyArray<Prompt>, answer: Form.Answer): ReadonlyArray<Answer> {
-  return questions.map((_, index) => {
-    const value = answer[key(index)]
-    if (Array.isArray(value)) return value
-    if (typeof value === "string" && value.length > 0) return [value]
-    return []
-  })
-}
-
-function key(index: number) {
-  return `question_${index}`
-}

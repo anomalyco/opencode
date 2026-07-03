@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import type { QuestionForm } from "@/utils/question-form"
+import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { todoDockAtBoundary, todoState } from "./session-composer-state"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
@@ -20,10 +19,8 @@ const question = (id: string, sessionID: string) =>
   ({
     id,
     sessionID,
-    mode: "form",
-    metadata: { kind: "question" },
-    fields: [],
-  }) as QuestionForm
+    questions: [],
+  }) as QuestionRequest
 
 describe("sessionPermissionRequest", () => {
   test("prefers the current session permission", () => {

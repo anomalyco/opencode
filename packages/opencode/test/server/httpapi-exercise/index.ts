@@ -811,6 +811,11 @@ const scenarios: Scenario[] = [
     object(body.location)
     array(body.data)
   }),
+  http.protected.get("/api/question/request", "v2.question.request.list").json(200, (body) => {
+    object(body)
+    object(body.location)
+    array(body.data)
+  }),
   http.protected
     .post("/api/session/{sessionID}/permission", "v2.session.permission.create")
     .seeded((ctx) => ctx.session({ title: "Permission create owner" }))
@@ -845,6 +850,14 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
+    .get("/api/session/{sessionID}/question", "v2.session.question.list")
+    .seeded((ctx) => ctx.session({ title: "Question list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/question", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, data(array)),
+  http.protected
     .post("/api/session/{sessionID}/permission/{requestID}/reply", "v2.session.permission.reply")
     .seeded((ctx) => ctx.session({ title: "Permission owner" }))
     .at((ctx) => ({
@@ -854,6 +867,29 @@ const scenarios: Scenario[] = [
       }),
       headers: ctx.headers(),
       body: { reply: "once" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/question/{requestID}/reply", "v2.session.question.reply")
+    .seeded((ctx) => ctx.session({ title: "Question reply owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/question/{requestID}/reply", {
+        sessionID: ctx.state.id,
+        requestID: "que_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+      body: { answers: [] },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/question/{requestID}/reject", "v2.session.question.reject")
+    .seeded((ctx) => ctx.session({ title: "Question reject owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/question/{requestID}/reject", {
+        sessionID: ctx.state.id,
+        requestID: "que_httpapi_missing",
+      }),
+      headers: ctx.headers(),
     }))
     .json(404, object, "status"),
   http.protected.get("/api/permission/saved", "v2.permission.saved.list").json(200, (body) => {
@@ -1733,9 +1769,7 @@ const main = Effect.gen(function* () {
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
-  const selected = selectedScenarios(options, scenarios).filter((scenario) =>
-    effectRoutes.includes(routeKey(scenario)),
-  )
+  const selected = selectedScenarios(options, scenarios)
   const missing = effectRoutes.filter((route) => !scenarios.some((scenario) => route === routeKey(scenario)))
   const extra = scenarios.filter((scenario) => !effectRoutes.includes(routeKey(scenario)))
 

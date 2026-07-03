@@ -5,6 +5,7 @@ import type {
   Part,
   PermissionRequest,
   Project,
+  QuestionRequest,
   Session,
   SessionStatus,
   SnapshotFileDiff,
@@ -14,7 +15,6 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
-import { isQuestionForm } from "@/utils/question-form"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
@@ -28,9 +28,9 @@ const SESSION_CONTENT_EVENTS = new Set([
   "message.part.delta",
   "permission.asked",
   "permission.replied",
-  "form.created",
-  "form.replied",
-  "form.cancelled",
+  "question.asked",
+  "question.replied",
+  "question.rejected",
 ])
 
 export function applyGlobalEvent(input: {
@@ -120,7 +120,7 @@ export function applyDirectoryEvent(input: {
   permission?: State["permission"]
 }) {
   const event = input.event
-  if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type) && !isGlobalQuestionEvent(event)) return
+  if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type)) return
   const limit = Math.max(input.store.limit, input.retainedLimit ?? 0)
   switch (event.type) {
     case "server.instance.disposed": {
@@ -364,10 +364,8 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
-    case "form.created": {
-      const properties = event.properties as { form?: unknown }
-      if (!isQuestionForm(properties.form)) break
-      const question = properties.form
+    case "question.asked": {
+      const question = event.properties as QuestionRequest
       const questions = input.store.question[question.sessionID]
       if (!questions) {
         input.setStore("question", question.sessionID, [question])
@@ -387,12 +385,12 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
-    case "form.replied":
-    case "form.cancelled": {
-      const props = event.properties as { sessionID: string; id: string }
+    case "question.replied":
+    case "question.rejected": {
+      const props = event.properties as { sessionID: string; requestID: string }
       const questions = input.store.question[props.sessionID]
       if (!questions) break
-      const result = Binary.search(questions, props.id, (q) => q.id)
+      const result = Binary.search(questions, props.requestID, (q) => q.id)
       if (!result.found) break
       input.setStore(
         "question",
@@ -412,14 +410,4 @@ export function applyDirectoryEvent(input: {
       break
     }
   }
-}
-
-export function isGlobalQuestionEvent(event: { type: string; properties?: unknown }) {
-  if (event.type === "form.created") {
-    const form = (event.properties as { form?: unknown } | undefined)?.form
-    return isQuestionForm(form) && form.sessionID === "global"
-  }
-  if (event.type !== "form.replied" && event.type !== "form.cancelled") return false
-  const properties = event.properties as { sessionID?: unknown } | undefined
-  return properties?.sessionID === "global"
 }

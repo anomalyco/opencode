@@ -58,7 +58,7 @@ import { usePromptRef } from "../../context/prompt"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
-import { FormPrompt } from "./form"
+import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { sessionEpilogue } from "../../util/presentation"
 import { useTuiConfig } from "../../config"
@@ -181,20 +181,15 @@ export function Session() {
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
   })
-  const sessionForms = createMemo(() => {
+  const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return data.session.form.list(route.sessionID) ?? []
+    return data.session.question.list(route.sessionID) ?? []
   })
-  const locationForms = createMemo(() => {
-    if (session()?.parentID) return []
-    return data.location.form.list(location()) ?? []
-  })
-  const forms = createMemo(() => [...sessionForms(), ...locationForms()])
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
   })
-  const disabled = createMemo(() => permissions().length > 0 || forms().length > 0)
+  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.type === "assistant" && x.time.completed)?.id
@@ -251,7 +246,7 @@ export function Session() {
       await Promise.all([
         data.session.refresh(sessionID),
         data.session.permission.refresh(sessionID),
-        data.session.form.refresh(sessionID),
+        data.session.question.refresh(sessionID),
       ])
       const info = data.session.get(sessionID)
       if (!info) {
@@ -263,7 +258,6 @@ export function Session() {
         navigate({ type: "home" })
         return
       }
-      await data.location.form.refresh(info.location)
 
       project.workspace.set(info.location.workspaceID)
       editor.reconnect(info.location.directory)
@@ -945,8 +939,8 @@ export function Session() {
                   <Match when={permissions().length > 0}>
                     <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
                   </Match>
-                  <Match when={forms().length > 0}>
-                    <FormPrompt request={forms()[0]} location={location()} />
+                  <Match when={questions().length > 0}>
+                    <QuestionPrompt request={questions()[0]} directory={session()?.location.directory} />
                   </Match>
                   <Match when={!disabled()}>
                     <pluginRuntime.Slot
@@ -1393,7 +1387,13 @@ function UserMessage(props: { message: SessionMessageUser }) {
         >
           <text fg={theme.text}>{props.message.text}</text>
           <Show when={files().length}>
-            <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+            <box
+              flexDirection="row"
+              paddingBottom={metadataVisible() ? 1 : 0}
+              paddingTop={1}
+              gap={1}
+              flexWrap="wrap"
+            >
               <For each={files()}>
                 {(file) => {
                   const directory = file.mime === "application/x-directory"
@@ -1723,8 +1723,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
       return Boolean(shellID && data.shell.get(shellID))
     }
     if (display() === "subagent") {
-      const sessionID =
-        stringValue(props.part.state.structured.sessionID) ?? stringValue(props.part.state.structured.sessionId)
+      const sessionID = stringValue(props.part.state.structured.sessionID) ?? stringValue(props.part.state.structured.sessionId)
       return Boolean(sessionID && data.session.status(sessionID) === "running")
     }
     return false

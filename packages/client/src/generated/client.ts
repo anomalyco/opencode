@@ -91,20 +91,6 @@ import type {
   ProjectCurrentOutput,
   ProjectDirectoriesInput,
   ProjectDirectoriesOutput,
-  FormListRequestsInput,
-  FormListRequestsOutput,
-  FormListInput,
-  FormListOutput,
-  FormCreateInput,
-  FormCreateOutput,
-  FormGetInput,
-  FormGetOutput,
-  FormStateInput,
-  FormStateOutput,
-  FormReplyInput,
-  FormReplyOutput,
-  FormCancelInput,
-  FormCancelOutput,
   PermissionListRequestsInput,
   PermissionListRequestsOutput,
   PermissionListSavedInput,
@@ -151,6 +137,14 @@ import type {
   ShellOutputOutput,
   ShellRemoveInput,
   ShellRemoveOutput,
+  QuestionListRequestsInput,
+  QuestionListRequestsOutput,
+  QuestionListInput,
+  QuestionListOutput,
+  QuestionReplyInput,
+  QuestionReplyOutput,
+  QuestionRejectInput,
+  QuestionRejectOutput,
   ReferenceListInput,
   ReferenceListOutput,
   ProjectCopyCreateInput,
@@ -897,101 +891,6 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    form: {
-      listRequests: (input?: FormListRequestsInput, requestOptions?: RequestOptions) =>
-        request<FormListRequestsOutput>(
-          {
-            method: "GET",
-            path: `/api/form/request`,
-            query: { location: input?.["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      list: (input: FormListInput, requestOptions?: RequestOptions) =>
-        request<FormListOutput>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [400, 404, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      create: (input: FormCreateInput, requestOptions?: RequestOptions) =>
-        request<FormCreateOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
-            query: { location: input["location"] },
-            body: {
-              id: input["id"],
-              title: input["title"],
-              metadata: input["metadata"],
-              mode: input["mode"],
-              fields: input["fields"],
-              url: input["url"],
-            },
-            successStatus: 200,
-            declaredStatuses: [409, 400, 404, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      get: (input: FormGetInput, requestOptions?: RequestOptions) =>
-        request<FormGetOutput>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      state: (input: FormStateInput, requestOptions?: RequestOptions) =>
-        request<FormStateOutput>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/state`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      reply: (input: FormReplyInput, requestOptions?: RequestOptions) =>
-        request<FormReplyOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
-            query: { location: input["location"] },
-            body: { answer: input["answer"] },
-            successStatus: 204,
-            declaredStatuses: [409, 400, 404, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      cancel: (input: FormCancelInput, requestOptions?: RequestOptions) =>
-        request<FormCancelOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/cancel`,
-            query: { location: input["location"] },
-            successStatus: 204,
-            declaredStatuses: [409, 404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-    },
     permission: {
       listRequests: (input?: PermissionListRequestsInput, requestOptions?: RequestOptions) =>
         request<PermissionListRequestsOutput>(
@@ -1295,6 +1194,54 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    question: {
+      listRequests: (input?: QuestionListRequestsInput, requestOptions?: RequestOptions) =>
+        request<QuestionListRequestsOutput>(
+          {
+            method: "GET",
+            path: `/api/question/request`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      list: (input: QuestionListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: QuestionListOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/question`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      reply: (input: QuestionReplyInput, requestOptions?: RequestOptions) =>
+        request<QuestionReplyOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reply`,
+            body: { answers: input["answers"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      reject: (input: QuestionRejectInput, requestOptions?: RequestOptions) =>
+        request<QuestionRejectOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reject`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
             empty: true,
           },
           requestOptions,

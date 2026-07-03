@@ -9,7 +9,6 @@ import { Node } from "./effect/app-node"
 import { FileMutation } from "./file-mutation"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
-import { Form } from "./form"
 import { Generate } from "./generate"
 import { Watcher } from "./filesystem/watcher"
 import { Image } from "./image"
@@ -25,6 +24,7 @@ import { Policy } from "./policy"
 import { Project } from "./project"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
+import { QuestionV2 } from "./question"
 import { Shell } from "./shell"
 import { Reference } from "./reference"
 import { ReferenceGuidance } from "./reference/guidance"
@@ -83,7 +83,7 @@ export const locationServices = LayerNode.group([
   ReferenceGuidance.node,
   SessionTodo.node,
   SessionContextEntry.node,
-  Form.node,
+  QuestionV2.node,
   Generate.node,
   ReadToolFileSystem.node,
   BuiltInTools.node,

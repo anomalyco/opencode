@@ -255,9 +255,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         return
       }
 
-      await ctx.sdk.question.reply({
+      await ctx.sdk.v2.session.question.reply({
+        sessionID: state.sessionID,
         requestID: next.requestID,
-        answers: next.answers ?? [],
+        questionV2Reply: { answers: next.answers ?? [] },
       })
     },
     onQuestionReject: async (next) => {
@@ -265,7 +266,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         return
       }
 
-      await ctx.sdk.question.reject(next)
+      await ctx.sdk.v2.session.question.reject({ sessionID: state.sessionID, ...next })
     },
     onCycleVariant: () => {
       if (!state.model || state.variants.length === 0) {

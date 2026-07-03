@@ -18,7 +18,6 @@ test("exposes every standard HTTP API group", () => {
     "server.mcp",
     "credential",
     "project",
-    "form",
     "permission",
     "file",
     "command",
@@ -26,6 +25,7 @@ test("exposes every standard HTTP API group", () => {
     "event",
     "pty",
     "shell",
+    "question",
     "reference",
     "projectCopy",
   ])
@@ -43,53 +43,6 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["current", "directories"])
-  expect(Object.keys(client.form)).toEqual(["listRequests", "list", "create", "get", "state", "reply", "cancel"])
-})
-
-test("form methods use the public HTTP contract", async () => {
-  const requests: Array<{ method: string; url: string }> = []
-  const form = {
-    id: "frm_test",
-    sessionID: "ses_test",
-    mode: "form",
-    fields: [{ key: "choice", type: "string", options: [{ value: "yes", label: "Yes" }] }],
-  }
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      requests.push({ method: request.method, url: request.url })
-      if (request.url.endsWith("/reply") || request.url.endsWith("/cancel")) return new Response(null, { status: 204 })
-      if (request.url.endsWith("/state")) return Response.json({ data: { status: "pending" } })
-      if (request.url.includes("/form/frm_test")) return Response.json({ data: form })
-      if (request.method === "POST") return Response.json({ data: form })
-      return Response.json({
-        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
-        data: [form],
-      })
-    },
-  })
-
-  await client.form.listRequests({ location: { directory: "/tmp/project" } })
-  await client.form.list({ sessionID: "ses_test", location: { directory: "/tmp/project" } })
-  await client.form.create({ sessionID: "ses_test", mode: "form", fields: form.fields })
-  await client.form.get({ sessionID: "ses_test", formID: "frm_test" })
-  await client.form.state({ sessionID: "ses_test", formID: "frm_test" })
-  await client.form.reply({ sessionID: "ses_test", formID: "frm_test", answer: { choice: "yes" } })
-  await client.form.cancel({ sessionID: "ses_test", formID: "frm_test" })
-
-  expect(requests).toEqual([
-    { method: "GET", url: "http://localhost:3000/api/form/request?location%5Bdirectory%5D=%2Ftmp%2Fproject" },
-    {
-      method: "GET",
-      url: "http://localhost:3000/api/session/ses_test/form?location%5Bdirectory%5D=%2Ftmp%2Fproject",
-    },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/form" },
-    { method: "GET", url: "http://localhost:3000/api/session/ses_test/form/frm_test" },
-    { method: "GET", url: "http://localhost:3000/api/session/ses_test/form/frm_test/state" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/form/frm_test/reply" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/form/frm_test/cancel" },
-  ])
 })
 
 test("file.read returns binary content from the public HTTP contract", async () => {

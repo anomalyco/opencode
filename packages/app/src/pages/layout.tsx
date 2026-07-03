@@ -48,7 +48,6 @@ import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
-import { isQuestionForm } from "@/utils/question-form"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -404,22 +403,25 @@ export default function LegacyLayout(props: ParentProps) {
           return
         }
 
-        if (e.details?.type === "form.replied" || e.details?.type === "form.cancelled" || e.details?.type === "permission.replied") {
+        if (
+          e.details?.type === "question.replied" ||
+          e.details?.type === "question.rejected" ||
+          e.details?.type === "permission.replied"
+        ) {
           const props = e.details.properties as { sessionID: string }
           const sessionKey = `${e.name}:${props.sessionID}`
           dismissSessionAlert(sessionKey)
           return
         }
 
-        const questionForm = e.details?.type === "form.created" && isQuestionForm(e.details.properties?.form) ? e.details.properties.form : undefined
-        if (e.details?.type !== "permission.asked" && !questionForm) return
+        if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
         const title =
           e.details.type === "permission.asked"
             ? language.t("notification.permission.title")
             : language.t("notification.question.title")
         const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
         const directory = e.name
-        const props = questionForm ?? (e.details.properties as { sessionID: string })
+        const props = e.details.properties
         if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
 
         const [store] = serverSync().child(directory, { bootstrap: false })
@@ -448,7 +450,7 @@ export default function LegacyLayout(props: ParentProps) {
           }
         }
 
-        if (questionForm) {
+        if (e.details.type === "question.asked") {
           if (settings.notifications.agent()) {
             void platform.notify(title, description, href)
           }

@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
-import { Form } from "../src/form.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
 import { Pty } from "../src/pty.js"
+import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
 import { SessionTodo } from "../src/session-todo.js"
 import { optional } from "../src/schema.js"
@@ -28,7 +28,7 @@ describe("contract hygiene", () => {
   })
 
   test("current ID constructors expose create", () => {
-    expect(Form.ID.create()).toStartWith("frm_")
+    expect(Question.ID.create()).toStartWith("que_")
     expect(Pty.ID.create()).toStartWith("pty_")
   })
 

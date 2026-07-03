@@ -2,8 +2,8 @@ import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Form } from "@opencode-ai/core/form"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
@@ -13,7 +13,7 @@ import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/to
 
 const sessionID = SessionV2.ID.make("ses_question_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
-let captured: Form.CreateInput | undefined
+let captured: QuestionV2.AskInput | undefined
 let reject = false
 let deny = false
 const capturedInput = () => captured
@@ -31,27 +31,22 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const form = Layer.succeed(
-  Form.Service,
-  Form.Service.of({
-    create: () => Effect.die("unused"),
-    ask: (input: Form.CreateInput) =>
-      Effect.gen(function* () {
+const question = Layer.succeed(
+  QuestionV2.Service,
+  QuestionV2.Service.of({
+    ask: (input: QuestionV2.AskInput) =>
+      Effect.sync(() => {
         captured = input
-        if (reject) return { status: "cancelled" } as const
-        return { status: "answered", answer: { question_0: "Build" } } as const
-      }),
-    get: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-    state: () => Effect.die("unused"),
+      }).pipe(Effect.andThen(reject ? Effect.fail(new QuestionV2.RejectedError()) : Effect.succeed([["Build"], []]))),
     reply: () => Effect.die("unused"),
-    cancel: () => Effect.die("unused"),
+    reject: () => Effect.die("unused"),
+    list: () => Effect.die("unused"),
   }),
 )
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, QuestionTool.node]), [
     [PermissionV2.node, permission],
-    [Form.node, form],
+    [QuestionV2.node, question],
     [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
   ]),
 )
@@ -122,27 +117,8 @@ describe("QuestionTool", () => {
       expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
       expect(capturedInput()).toEqual({
         sessionID,
-        title: "Questions",
-        metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
-        mode: "form",
-        fields: [
-          {
-            key: "question_0",
-            title: "What should happen?",
-            description: "Action",
-            type: "string",
-            options: [{ value: "Build", label: "Build", description: "Build it" }],
-            custom: true,
-          },
-          {
-            key: "question_1",
-            title: "Which environment?",
-            description: "Environment",
-            type: "string",
-            options: [{ value: "Dev", label: "Dev", description: "Development" }],
-            custom: true,
-          },
-        ],
+        questions,
+        tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
       })
     }),
   )
@@ -161,10 +137,8 @@ describe("QuestionTool", () => {
       })
       expect(capturedInput()).toEqual({
         sessionID,
-        title: "Questions",
-        metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
-        mode: "form",
-        fields: [],
+        questions: [],
+        tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
       })
     }),
   )

@@ -74,9 +74,9 @@ export type Event =
   | EventShellCreated
   | EventShellExited
   | EventShellDeleted
-  | EventFormCreated
-  | EventFormReplied
-  | EventFormCancelled
+  | EventQuestionV2Asked
+  | EventQuestionV2Replied
+  | EventQuestionV2Rejected
   | EventTodoUpdated
   | EventLspUpdated
   | EventPermissionAsked
@@ -1447,26 +1447,32 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "form.created"
+        type: "question.v2.asked"
         properties: {
-          form: FormFormInfo | FormUrlInfo
+          id: string
+          sessionID: string
+          /**
+           * Questions to ask
+           */
+          questions: Array<QuestionV2Info>
+          tool?: QuestionV2Tool
         }
       }
     | {
         id: string
-        type: "form.replied"
+        type: "question.v2.replied"
         properties: {
-          id: string
           sessionID: string
-          answer: FormAnswer
+          requestID: string
+          answers: Array<QuestionV2Answer>
         }
       }
     | {
         id: string
-        type: "form.cancelled"
+        type: "question.v2.rejected"
         properties: {
-          id: string
           sessionID: string
+          requestID: string
         }
       }
     | {
@@ -2795,11 +2801,353 @@ export type WorkspaceWarpError = {
   }
 }
 
+export type UnauthorizedError = {
+  _tag: "UnauthorizedError"
+  message: string
+}
+
+export type SessionsResponse = {
+  data: Array<SessionV2Info>
+  cursor: {
+    previous?: string
+    next?: string
+  }
+}
+
+export type InvalidCursorError = {
+  _tag: "InvalidCursorError"
+  message: string
+}
+
+export type SessionActive = {
+  type: "running"
+}
+
+export type SessionNotFoundError = {
+  _tag: "SessionNotFoundError"
+  sessionID: string
+  message: string
+}
+
+export type MessageNotFoundError = {
+  _tag: "MessageNotFoundError"
+  sessionID: string
+  messageID: string
+  message: string
+}
+
+export type PromptInput = {
+  text: string
+  files?: Array<PromptInputFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+}
+
+export type ConflictError = {
+  _tag: "ConflictError"
+  message: string
+  resource?: string
+}
+
+export type CommandNotFoundError = {
+  _tag: "CommandNotFoundError"
+  command: string
+  message: string
+}
+
+export type CommandEvaluationError = {
+  _tag: "CommandEvaluationError"
+  command: string
+  message: string
+}
+
+export type SkillNotFoundError = {
+  _tag: "SkillNotFoundError"
+  skill: string
+  message: string
+}
+
+export type ServiceUnavailableError = {
+  _tag: "ServiceUnavailableError"
+  message: string
+  service?: string
+}
+
+export type UnknownError1 = {
+  _tag: "UnknownError"
+  message: string
+  ref?: string
+}
+
+export type SessionDurableEvent =
+  | SessionNextAgentSwitched
+  | SessionNextModelSwitched
+  | SessionNextMoved
+  | SessionNextRenamed
+  | SessionNextForked
+  | SessionNextPrompted
+  | SessionNextPromptAdmitted
+  | SessionNextContextUpdated
+  | SessionNextSynthetic
+  | SessionNextSkillActivated
+  | SessionNextShellStarted
+  | SessionNextShellEnded
+  | SessionNextStepStarted
+  | SessionNextStepEnded
+  | SessionNextStepFailed
+  | SessionNextTextStarted
+  | SessionNextTextEnded
+  | SessionNextToolInputStarted
+  | SessionNextToolInputEnded
+  | SessionNextToolCalled
+  | SessionNextToolProgress
+  | SessionNextToolSuccess
+  | SessionNextToolFailed
+  | SessionNextReasoningStarted
+  | SessionNextReasoningEnded
+  | SessionNextRetried
+  | SessionNextCompactionStarted
+  | SessionNextCompactionEnded
+  | SessionNextRevertStaged
+  | SessionNextRevertCleared
+  | SessionNextRevertCommitted
+
+export type SessionHistory = {
+  data: Array<SessionDurableEvent>
+  hasMore: boolean
+}
+
+export type SessionDurableEventStream = string
+
+export type SessionMessagesResponse = {
+  data: Array<SessionMessage>
+  cursor: {
+    previous?: string
+    next?: string
+  }
+}
+
+export type GenerateTextResponse = {
+  data: {
+    text: string
+  }
+}
+
+export type ProviderNotFoundError = {
+  _tag: "ProviderNotFoundError"
+  providerID: string
+  message: string
+}
+
+export type OutputFormat1 =
+  | {
+      type: "text"
+    }
+  | {
+      type: "json_schema"
+      schema: JsonSchema
+      retryCount?: number
+    }
+
+export type Shell1 = {
+  id: string
+  status: "running" | "exited" | "timeout" | "killed"
+  command: string
+  cwd: string
+  shell: string
+  file: string
+  pid?: number
+  exit?: number | "NaN" | "Infinity" | "-Infinity"
+  metadata: {
+    [key: string]: unknown
+  }
+  time: {
+    started: number | "NaN" | "Infinity" | "-Infinity"
+    completed?: number | "NaN" | "Infinity" | "-Infinity"
+  }
+}
+
+export type SessionStatus2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.status"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type QuestionReplied2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "question.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type QuestionRejected2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "question.rejected"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type V2Event =
+  | ModelsDevRefreshed
+  | IntegrationUpdated
+  | IntegrationConnectionUpdated
+  | CatalogUpdated
+  | AgentUpdated
+  | SessionCreated
+  | SessionUpdated
+  | SessionDeleted
+  | MessageUpdated
+  | MessageRemoved
+  | MessagePartUpdated
+  | MessagePartRemoved
+  | SessionNextAgentSwitched
+  | SessionNextModelSwitched
+  | SessionNextMoved
+  | SessionNextRenamed
+  | SessionNextForked
+  | SessionNextPrompted
+  | SessionNextPromptAdmitted
+  | SessionNextExecutionSettled
+  | SessionNextContextUpdated
+  | SessionNextSynthetic
+  | SessionNextSkillActivated
+  | SessionNextShellStarted
+  | SessionNextShellEnded
+  | SessionNextStepStarted
+  | SessionNextStepEnded
+  | SessionNextStepFailed
+  | SessionNextTextStarted
+  | SessionNextTextDelta
+  | SessionNextTextEnded
+  | SessionNextReasoningStarted
+  | SessionNextReasoningDelta
+  | SessionNextReasoningEnded
+  | SessionNextToolInputStarted
+  | SessionNextToolInputDelta
+  | SessionNextToolInputEnded
+  | SessionNextToolCalled
+  | SessionNextToolProgress
+  | SessionNextToolSuccess
+  | SessionNextToolFailed
+  | SessionNextRetried
+  | SessionNextCompactionStarted
+  | SessionNextCompactionDelta
+  | SessionNextCompactionEnded
+  | SessionNextRevertStaged
+  | SessionNextRevertCleared
+  | SessionNextRevertCommitted
+  | MessagePartDelta
+  | SessionDiff
+  | SessionError
+  | InstallationUpdated
+  | InstallationUpdateAvailable
+  | FileEdited
+  | ReferenceUpdated
+  | PermissionV2Asked
+  | PermissionV2Replied
+  | PluginAdded
+  | ProjectDirectoriesUpdated
+  | CommandUpdated
+  | SkillUpdated
+  | FileWatcherUpdated
+  | PtyCreated
+  | PtyUpdated
+  | PtyExited
+  | PtyDeleted
+  | ShellCreated
+  | ShellExited
+  | ShellDeleted
+  | QuestionV2Asked
+  | QuestionV2Replied
+  | QuestionV2Rejected
+  | TodoUpdated
+  | LspUpdated
+  | PermissionAsked
+  | PermissionReplied
+  | TuiPromptAppend
+  | TuiCommandExecute
+  | TuiToastShow
+  | TuiSessionSelect
+  | McpToolsChanged
+  | McpBrowserOpenFailed
+  | McpStatusChanged
+  | CommandExecuted
+  | ProjectUpdated
+  | SessionStatus2
+  | SessionIdle
+  | QuestionAsked
+  | QuestionReplied2
+  | QuestionRejected2
+  | SessionCompacted
+  | VcsBranchUpdated
+  | WorkspaceReady
+  | WorkspaceFailed
+  | WorkspaceStatus
+  | WorktreeReady
+  | WorktreeFailed
+  | ServerConnected
+  | GlobalDisposed
+
+export type V2EventStream = string
+
+export type ForbiddenError = {
+  _tag: "ForbiddenError"
+  message: string
+}
+
+export type ShellNotFoundError = {
+  _tag: "ShellNotFoundError"
+  id: string
+  message: string
+}
+
+export type ProjectCopyError = {
+  name: "ProjectCopyError"
+  data: {
+    message: string
+    forceRequired?: boolean
+  }
+}
+
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
 }
 
-export type Shell1 = {
+export type Shell2 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
   command: string
@@ -2984,120 +3332,40 @@ export type PermissionV2Source = {
 
 export type PermissionV2Reply = "once" | "always" | "reject"
 
-export type FormMetadata = {
-  [key: string]: unknown
-}
-
-export type FormWhen = {
-  key: string
-  op: "eq" | "neq"
-  value: string
-}
-
-export type FormOption = {
-  value: string
+export type QuestionV2Option = {
+  /**
+   * Display text (1-5 words, concise)
+   */
   label: string
-  description?: string
+  /**
+   * Explanation of choice
+   */
+  description: string
 }
 
-export type FormStringField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "string"
-  format?: "email" | "uri" | "date" | "date-time"
-  minLength?: number
-  maxLength?: number
-  pattern?: string
-  placeholder?: string
-  default?: string
-  options?: Array<FormOption>
+export type QuestionV2Info = {
+  /**
+   * Complete question
+   */
+  question: string
+  /**
+   * Very short label (max 30 chars)
+   */
+  header: string
+  /**
+   * Available choices
+   */
+  options: Array<QuestionV2Option>
+  multiple?: boolean
   custom?: boolean
 }
 
-export type FormNumberField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "number"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+export type QuestionV2Tool = {
+  messageID: string
+  callID: string
 }
 
-export type FormIntegerField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "integer"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormBooleanField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "boolean"
-  default?: boolean
-}
-
-export type FormMultiselectField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "multiselect"
-  options: Array<FormOption>
-  minItems?: number
-  maxItems?: number
-  custom?: boolean
-  default?: Array<string>
-}
-
-export type FormFormInfo = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata
-  mode: "form"
-  fields: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
-}
-
-export type FormUrlInfo = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata
-  mode: "url"
-  url: string
-}
-
-export type FormValue =
-  | string
-  | number
-  | "NaN"
-  | "Infinity"
-  | "-Infinity"
-  | "Infinity"
-  | "-Infinity"
-  | "NaN"
-  | boolean
-  | Array<string>
-
-export type FormAnswer = {
-  [key: string]: FormValue
-}
+export type QuestionV2Answer = Array<string>
 
 export type ProjectVcs = "git"
 
@@ -3853,6 +4121,2581 @@ export type WorkspaceEventConnectionStatus = {
   status: "connected" | "connecting" | "disconnected" | "error"
 }
 
+export type LocationInfo = {
+  directory: string
+  workspaceID?: string
+  project: {
+    id: string
+    directory: string
+  }
+}
+
+export type ProviderSettings = {
+  [key: string]: unknown
+}
+
+export type ProviderRequest = {
+  settings: ProviderSettings
+  headers: {
+    [key: string]: string
+  }
+  body: {
+    [key: string]: unknown
+  }
+}
+
+export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
+
+export type PermissionV2Effect = "allow" | "deny" | "ask"
+
+export type PermissionV2Rule = {
+  action: string
+  resource: string
+  effect: PermissionV2Effect
+}
+
+export type PermissionV2Ruleset = Array<PermissionV2Rule>
+
+export type AgentV2Info = {
+  id: string
+  model?: ModelRef
+  request: ProviderRequest
+  system?: string
+  description?: string
+  mode: "subagent" | "primary" | "all"
+  hidden: boolean
+  color?: AgentColor
+  steps?: number
+  permissions: PermissionV2Ruleset
+}
+
+export type PluginInfo = {
+  id: string
+}
+
+export type SessionV2Info = {
+  id: string
+  parentID?: string
+  projectID: string
+  agent?: string
+  model?: ModelRef
+  cost: number
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  time: {
+    created: number
+    updated: number
+    archived?: number
+  }
+  title: string
+  location: LocationRef
+  subpath?: string
+  revert?: RevertState
+}
+
+export type PromptInputFileAttachment = {
+  uri: string
+  name?: string
+  description?: string
+  source?: PromptSource
+}
+
+export type SessionInputAdmitted = {
+  admittedSeq: number
+  id: string
+  sessionID: string
+  prompt: Prompt
+  delivery: "steer" | "queue"
+  timeCreated: number
+  promotedSeq?: number
+}
+
+export type SessionMessageAgentSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "agent-switched"
+  agent: string
+}
+
+export type SessionMessageModelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "model-switched"
+  model: ModelRef
+}
+
+export type SessionMessageUser = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  type: "user"
+}
+
+export type SessionMessageSynthetic = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  sessionID: string
+  text: string
+  description?: string
+  type: "synthetic"
+}
+
+export type SessionMessageSystem = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "system"
+  text: string
+}
+
+export type SessionMessageSkill = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "skill"
+  name: string
+  text: string
+}
+
+export type SessionMessageShell = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    completed?: number
+  }
+  type: "shell"
+  callID: string
+  command: string
+  output: string
+}
+
+export type SessionMessageAssistantText = {
+  type: "text"
+  id: string
+  text: string
+}
+
+export type SessionMessageAssistantReasoning = {
+  type: "reasoning"
+  id: string
+  text: string
+  providerMetadata?: LlmProviderMetadata
+  time?: {
+    created: number
+    completed?: number
+  }
+}
+
+export type SessionMessageToolStatePending = {
+  status: "pending"
+  input: string
+}
+
+export type SessionMessageToolStateRunning = {
+  status: "running"
+  input: {
+    [key: string]: unknown
+  }
+  structured: {
+    [key: string]: unknown
+  }
+  content: Array<LlmToolContent>
+}
+
+export type SessionMessageToolStateCompleted = {
+  status: "completed"
+  input: {
+    [key: string]: unknown
+  }
+  attachments?: Array<PromptFileAttachment>
+  content: Array<LlmToolContent>
+  outputPaths?: Array<string>
+  structured: {
+    [key: string]: unknown
+  }
+  result?: unknown
+}
+
+export type SessionMessageToolStateError = {
+  status: "error"
+  input: {
+    [key: string]: unknown
+  }
+  content: Array<LlmToolContent>
+  structured: {
+    [key: string]: unknown
+  }
+  error: SessionErrorUnknown
+  result?: unknown
+}
+
+export type SessionMessageAssistantTool = {
+  type: "tool"
+  id: string
+  name: string
+  provider?: {
+    executed: boolean
+    metadata?: LlmProviderMetadata
+    resultMetadata?: LlmProviderMetadata
+  }
+  state:
+    | SessionMessageToolStatePending
+    | SessionMessageToolStateRunning
+    | SessionMessageToolStateCompleted
+    | SessionMessageToolStateError
+  time: {
+    created: number
+    ran?: number
+    completed?: number
+    pruned?: number
+  }
+}
+
+export type SessionMessageAssistant = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    completed?: number
+  }
+  type: "assistant"
+  agent: string
+  model: ModelRef
+  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  snapshot?: {
+    start?: string
+    end?: string
+    files?: Array<string>
+  }
+  finish?: string
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  error?: SessionErrorUnknown
+}
+
+export type SessionMessageCompaction = {
+  type: "compaction"
+  reason: "auto" | "manual"
+  summary: string
+  recent: string
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+}
+
+export type SessionMessage =
+  | SessionMessageAgentSwitched
+  | SessionMessageModelSwitched
+  | SessionMessageUser
+  | SessionMessageSynthetic
+  | SessionMessageSystem
+  | SessionMessageSkill
+  | SessionMessageShell
+  | SessionMessageAssistant
+  | SessionMessageCompaction
+
+export type SessionContextEntryKey = string
+
+export type SessionContextEntryInfo = {
+  key: SessionContextEntryKey
+  value: unknown
+}
+
+export type SessionNextAgentSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.agent.switched"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    agent: string
+  }
+}
+
+export type SessionNextModelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.model.switched"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    model: ModelRef
+  }
+}
+
+export type SessionNextMoved = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.moved"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    location: LocationRef
+    subdirectory?: string
+  }
+}
+
+export type SessionNextRenamed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.renamed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    title: string
+  }
+}
+
+export type SessionNextForked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.forked"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    parentID: string
+    messageID?: string
+  }
+}
+
+export type SessionNextPrompted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompted"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type SessionNextPromptAdmitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.prompt.admitted"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type SessionNextContextUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.context.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
+export type SessionNextSynthetic = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.synthetic"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    text: string
+    description?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
+}
+
+export type SessionNextSkillActivated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.skill.activated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    name: string
+    text: string
+  }
+}
+
+export type SessionNextShellStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.shell.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    callID: string
+    command: string
+  }
+}
+
+export type SessionNextShellEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.shell.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    output: string
+  }
+}
+
+export type SessionNextStepStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.step.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    agent: string
+    model: ModelRef
+    snapshot?: string
+  }
+}
+
+export type SessionNextStepEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.step.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    finish: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+    snapshot?: string
+    files?: Array<string>
+  }
+}
+
+export type SessionNextStepFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.step.failed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    error: SessionErrorUnknown
+  }
+}
+
+export type SessionNextTextStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.text.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    textID: string
+  }
+}
+
+export type SessionNextTextEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.text.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    textID: string
+    text: string
+  }
+}
+
+export type SessionNextToolInputStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.input.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    name: string
+  }
+}
+
+export type SessionNextToolInputEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.input.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    text: string
+  }
+}
+
+export type SessionNextToolCalled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.called"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    tool: string
+    input: {
+      [key: string]: unknown
+    }
+    provider: {
+      executed: boolean
+      metadata?: LlmProviderMetadata
+    }
+  }
+}
+
+export type SessionNextToolProgress = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.progress"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<LlmToolContent>
+  }
+}
+
+export type SessionNextToolSuccess = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.success"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<LlmToolContent>
+    outputPaths?: Array<string>
+    result?: unknown
+    provider: {
+      executed: boolean
+      metadata?: LlmProviderMetadata
+    }
+  }
+}
+
+export type SessionNextToolFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.failed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    error: SessionErrorUnknown
+    result?: unknown
+    provider: {
+      executed: boolean
+      metadata?: LlmProviderMetadata
+    }
+  }
+}
+
+export type SessionNextReasoningStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    providerMetadata?: LlmProviderMetadata
+  }
+}
+
+export type SessionNextReasoningEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    text: string
+    providerMetadata?: LlmProviderMetadata
+  }
+}
+
+export type SessionNextRetried = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.retried"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    attempt: number
+    error: SessionNextRetryError
+  }
+}
+
+export type SessionNextCompactionStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.compaction.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    reason: "auto" | "manual"
+  }
+}
+
+export type SessionNextCompactionEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.compaction.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    reason: "auto" | "manual"
+    text: string
+    recent: string
+  }
+}
+
+export type SessionNextRevertStaged = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.revert.staged"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    revert: RevertState
+  }
+}
+
+export type SessionNextRevertCleared = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.revert.cleared"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type SessionNextRevertCommitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.revert.committed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type ModelApi =
+  | {
+      id: string
+      type: "aisdk"
+      package: string
+      url?: string
+      settings?: {
+        [key: string]: unknown
+      }
+    }
+  | {
+      id: string
+      type: "native"
+      url?: string
+      settings: {
+        [key: string]: unknown
+      }
+    }
+
+export type ModelCapabilities = {
+  tools: boolean
+  input: Array<string>
+  output: Array<string>
+}
+
+export type ModelCost = {
+  tier?: {
+    type: "context"
+    size: number
+  }
+  input: number
+  output: number
+  cache: {
+    read: number
+    write: number
+  }
+}
+
+export type ModelV2Info = {
+  id: string
+  providerID: string
+  family?: string
+  name: string
+  api: ModelApi
+  capabilities: ModelCapabilities
+  request: {
+    settings: ProviderSettings
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    variant?: string
+  }
+  variants: Array<{
+    id: string
+    settings: ProviderSettings
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+  }>
+  time: {
+    released: number
+  }
+  cost: Array<ModelCost>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: {
+    context: number
+    input?: number
+    output: number
+  }
+}
+
+export type ProviderAisdk = {
+  type: "aisdk"
+  package: string
+  url?: string
+  settings?: {
+    [key: string]: unknown
+  }
+}
+
+export type ProviderNative = {
+  type: "native"
+  url?: string
+  settings: {
+    [key: string]: unknown
+  }
+}
+
+export type ProviderApi = ProviderAisdk | ProviderNative
+
+export type ProviderV2Info = {
+  id: string
+  integrationID?: string
+  name: string
+  disabled?: boolean
+  api: ProviderApi
+  request: ProviderRequest
+}
+
+export type IntegrationWhen = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
+
+export type IntegrationTextPrompt = {
+  type: "text"
+  key: string
+  message: string
+  placeholder?: string
+  when?: IntegrationWhen
+}
+
+export type IntegrationSelectPrompt = {
+  type: "select"
+  key: string
+  message: string
+  options: Array<{
+    label: string
+    value: string
+    hint?: string
+  }>
+  when?: IntegrationWhen
+}
+
+export type IntegrationOAuthMethod = {
+  id: string
+  type: "oauth"
+  label: string
+  prompts?: Array<IntegrationTextPrompt | IntegrationSelectPrompt>
+}
+
+export type IntegrationKeyMethod = {
+  type: "key"
+  label?: string
+}
+
+export type IntegrationEnvMethod = {
+  type: "env"
+  names: Array<string>
+}
+
+export type ConnectionCredentialInfo = {
+  type: "credential"
+  id: string
+  label: string
+}
+
+export type ConnectionEnvInfo = {
+  type: "env"
+  name: string
+}
+
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
+
+export type IntegrationInfo = {
+  id: string
+  name: string
+  methods: Array<IntegrationMethod>
+  connections: Array<ConnectionInfo>
+}
+
+export type IntegrationAttempt = {
+  attemptID: string
+  url: string
+  instructions: string
+  mode: "auto" | "code"
+  time: {
+    created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type IntegrationAttemptStatus =
+  | {
+      status: "pending"
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  | {
+      status: "complete"
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  | {
+      status: "failed"
+      message: string
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  | {
+      status: "expired"
+      time: {
+        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+
+export type McpStatusConnected2 = {
+  status: "connected"
+}
+
+export type McpStatusDisconnected = {
+  status: "disconnected"
+}
+
+export type McpStatusDisabled2 = {
+  status: "disabled"
+}
+
+export type McpStatusFailed2 = {
+  status: "failed"
+  error: string
+}
+
+export type McpStatusNeedsAuth2 = {
+  status: "needs_auth"
+}
+
+export type McpStatusNeedsClientRegistration2 = {
+  status: "needs_client_registration"
+  error: string
+}
+
+export type McpServer = {
+  name: string
+  status:
+    | McpStatusConnected2
+    | McpStatusDisconnected
+    | McpStatusDisabled2
+    | McpStatusFailed2
+    | McpStatusNeedsAuth2
+    | McpStatusNeedsClientRegistration2
+  integrationID?: string
+}
+
+export type ProjectCurrent = {
+  id: string
+  directory: string
+}
+
+export type PermissionV2Request = {
+  id: string
+  sessionID: string
+  action: string
+  resources: Array<string>
+  save?: Array<string>
+  metadata?: {
+    [key: string]: unknown
+  }
+  source?: PermissionV2Source
+}
+
+export type PermissionSavedInfo = {
+  id: string
+  projectID: string
+  action: string
+  resource: string
+}
+
+export type FileSystemEntry = {
+  path: string
+  type: "file" | "directory"
+}
+
+export type CommandV2Info = {
+  name: string
+  template: string
+  description?: string
+  agent?: string
+  model?: ModelRef
+  subtask?: boolean
+}
+
+export type SkillV2Info = {
+  name: string
+  description?: string
+  slash?: boolean
+  autoinvoke?: boolean
+  location: string
+  content: string
+}
+
+export type ModelsDevRefreshed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "models-dev.refreshed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type IntegrationUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "integration.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type IntegrationConnectionUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "integration.connection.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    integrationID: string
+  }
+}
+
+export type CatalogUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "catalog.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type AgentUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "agent.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionCreated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.created"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type SessionUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type SessionDeleted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.deleted"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type MessageUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "message.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    info: Message
+  }
+}
+
+export type MessageRemoved = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "message.removed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type MessagePartUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "message.part.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    part: Part
+    time: number
+  }
+}
+
+export type MessagePartRemoved = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "message.part.removed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+    partID: string
+  }
+}
+
+export type SessionNextExecutionSettled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.execution.settled"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    outcome: "success" | "failure" | "interrupted"
+    error?: SessionErrorUnknown
+  }
+}
+
+export type SessionNextTextDelta = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.text.delta"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    textID: string
+    delta: string
+  }
+}
+
+export type SessionNextReasoningDelta = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.delta"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    delta: string
+  }
+}
+
+export type SessionNextToolInputDelta = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.tool.input.delta"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    delta: string
+  }
+}
+
+export type SessionNextCompactionDelta = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.compaction.delta"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
+export type MessagePartDelta = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "message.part.delta"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+    partID: string
+    field: string
+    delta: string
+  }
+}
+
+export type SessionDiff = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.diff"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    diff: Array<SnapshotFileDiff>
+  }
+}
+
+export type SessionError = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.error"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID?: string
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | StructuredOutputError
+      | ContextOverflowError
+      | ContentFilterError
+      | ApiError
+  }
+}
+
+export type InstallationUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "installation.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    version: string
+  }
+}
+
+export type InstallationUpdateAvailable = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "installation.update-available"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    version: string
+  }
+}
+
+export type FileEdited = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "file.edited"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    file: string
+  }
+}
+
+export type ReferenceUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "reference.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type PermissionV2Asked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "permission.v2.asked"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
+    action: string
+    resources: Array<string>
+    save?: Array<string>
+    metadata?: {
+      [key: string]: unknown
+    }
+    source?: PermissionV2Source
+  }
+}
+
+export type PermissionV2Replied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "permission.v2.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requestID: string
+    reply: PermissionV2Reply
+  }
+}
+
+export type PluginAdded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "plugin.added"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+  }
+}
+
+export type ProjectDirectoriesUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "project.directories.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    projectID: string
+  }
+}
+
+export type CommandUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "command.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type SkillUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "skill.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type FileWatcherUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "file.watcher.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type PtyCreated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "pty.created"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    info: Pty
+  }
+}
+
+export type PtyUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "pty.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    info: Pty
+  }
+}
+
+export type PtyExited = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "pty.exited"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    exitCode: number
+  }
+}
+
+export type PtyDeleted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "pty.deleted"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+  }
+}
+
+export type ShellCreated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "shell.created"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    info: Shell1
+  }
+}
+
+export type ShellExited = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "shell.exited"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    exit?: number | "NaN" | "Infinity" | "-Infinity"
+    status: "running" | "exited" | "timeout" | "killed"
+  }
+}
+
+export type ShellDeleted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "shell.deleted"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+  }
+}
+
+export type QuestionV2Asked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "question.v2.asked"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
+    /**
+     * Questions to ask
+     */
+    questions: Array<QuestionV2Info>
+    tool?: QuestionV2Tool
+  }
+}
+
+export type QuestionV2Replied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "question.v2.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionV2Answer>
+  }
+}
+
+export type QuestionV2Rejected = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "question.v2.rejected"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type TodoUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "todo.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type LspUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "lsp.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type PermissionAsked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "permission.asked"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
+    permission: string
+    patterns: Array<string>
+    metadata: {
+      [key: string]: unknown
+    }
+    always: Array<string>
+    tool?: {
+      messageID: string
+      callID: string
+    }
+  }
+}
+
+export type PermissionReplied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "permission.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
+  }
+}
+
+export type TuiPromptAppend = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "tui.prompt.append"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    text: string
+  }
+}
+
+export type TuiCommandExecute = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "tui.command.execute"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.background"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type TuiToastShow = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "tui.toast.show"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    duration?: number
+  }
+}
+
+export type TuiSessionSelect = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "tui.session.select"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type McpToolsChanged = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "mcp.tools.changed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    server: string
+  }
+}
+
+export type McpBrowserOpenFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "mcp.browser.open.failed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    mcpName: string
+    url: string
+  }
+}
+
+export type McpStatusChanged = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "mcp.status.changed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    server: string
+  }
+}
+
+export type CommandExecuted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "command.executed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
+export type ProjectUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "project.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    worktree: string
+    vcs?: ProjectVcs
+    name?: string
+    icon?: ProjectIcon
+    commands?: ProjectCommands
+    time: ProjectTime
+    sandboxes: Array<string>
+  }
+}
+
+export type SessionIdle = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.idle"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+  }
+}
+
+export type QuestionAsked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "question.asked"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
+    /**
+     * Questions to ask
+     */
+    questions: Array<QuestionInfo>
+    tool?: QuestionTool
+  }
+}
+
+export type SessionCompacted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.compacted"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+  }
+}
+
+export type VcsBranchUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "vcs.branch.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    branch?: string
+  }
+}
+
+export type WorkspaceReady = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "workspace.ready"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    name: string
+  }
+}
+
+export type WorkspaceFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "workspace.failed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    message: string
+  }
+}
+
+export type WorkspaceStatus = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "workspace.status"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+  }
+}
+
+export type WorktreeReady = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "worktree.ready"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    name: string
+    branch?: string
+  }
+}
+
+export type WorktreeFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "worktree.failed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    message: string
+  }
+}
+
+export type ServerConnected = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "server.connected"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type GlobalDisposed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "global.disposed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type QuestionV2Request = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionV2Info>
+  tool?: QuestionV2Tool
+}
+
+export type QuestionV2Reply = {
+  /**
+   * User answers in order of questions (each answer is an array of selected labels)
+   */
+  answers: Array<QuestionV2Answer>
+}
+
+export type ReferenceLocalSource = {
+  type: "local"
+  path: string
+  description?: string
+  hidden?: boolean
+}
+
+export type ReferenceGitSource = {
+  type: "git"
+  repository: string
+  branch?: string
+  description?: string
+  hidden?: boolean
+}
+
+export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
+
+export type ReferenceInfo = {
+  name: string
+  path: string
+  description?: string
+  hidden?: boolean
+  source: ReferenceSource
+}
+
+export type ProjectCopyCopy = {
+  directory: string
+}
+
 export type EventModelsDevRefreshed = {
   id: string
   type: "models-dev.refreshed"
@@ -4584,7 +7427,7 @@ export type EventShellCreated = {
   id: string
   type: "shell.created"
   properties: {
-    info: Shell1
+    info: Shell2
   }
 }
 
@@ -4606,56 +7449,36 @@ export type EventShellDeleted = {
   }
 }
 
-export type FormNumberField1 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "number"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity"
-  default?: number | "NaN" | "Infinity" | "-Infinity"
-}
-
-export type FormIntegerField1 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen
-  type: "integer"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity"
-  default?: number | "NaN" | "Infinity" | "-Infinity"
-}
-
-export type EventFormCreated = {
+export type EventQuestionV2Asked = {
   id: string
-  type: "form.created"
-  properties: {
-    form: FormFormInfo | FormUrlInfo
-  }
-}
-
-export type FormValue1 = string | number | "NaN" | "Infinity" | "-Infinity" | boolean | Array<string>
-
-export type EventFormReplied = {
-  id: string
-  type: "form.replied"
+  type: "question.v2.asked"
   properties: {
     id: string
     sessionID: string
-    answer: FormAnswer
+    /**
+     * Questions to ask
+     */
+    questions: Array<QuestionV2Info>
+    tool?: QuestionV2Tool
   }
 }
 
-export type EventFormCancelled = {
+export type EventQuestionV2Replied = {
   id: string
-  type: "form.cancelled"
+  type: "question.v2.replied"
   properties: {
-    id: string
     sessionID: string
+    requestID: string
+    answers: Array<QuestionV2Answer>
+  }
+}
+
+export type EventQuestionV2Rejected = {
+  id: string
+  type: "question.v2.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
   }
 }
 
@@ -4899,49 +7722,6 @@ export type CredentialKey = {
   }
 }
 
-export type IntegrationWhen = {
-  key: string
-  op: "eq" | "neq"
-  value: string
-}
-
-export type IntegrationTextPrompt = {
-  type: "text"
-  key: string
-  message: string
-  placeholder?: string
-  when?: IntegrationWhen
-}
-
-export type IntegrationSelectPrompt = {
-  type: "select"
-  key: string
-  message: string
-  options: Array<{
-    label: string
-    value: string
-    hint?: string
-  }>
-  when?: IntegrationWhen
-}
-
-export type IntegrationOAuthMethod = {
-  id: string
-  type: "oauth"
-  label: string
-  prompts?: Array<IntegrationTextPrompt | IntegrationSelectPrompt>
-}
-
-export type IntegrationKeyMethod = {
-  type: "key"
-  label?: string
-}
-
-export type IntegrationEnvMethod = {
-  type: "env"
-  names: Array<string>
-}
-
 export type SkillV2DirectorySource = {
   type: "directory"
   path: string
@@ -4950,15 +7730,6 @@ export type SkillV2DirectorySource = {
 export type SkillV2UrlSource = {
   type: "url"
   url: string
-}
-
-export type SkillV2Info = {
-  name: string
-  description?: string
-  slash?: boolean
-  autoinvoke?: boolean
-  location: string
-  content: string
 }
 
 export type SkillV2EmbeddedSource = {
@@ -4971,3250 +7742,6 @@ export type BadRequestError = {
   data: {
     message: string
     kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
-  }
-}
-
-export type UnauthorizedError = {
-  _tag: "UnauthorizedError"
-  message: string
-}
-
-export type InvalidRequestErrorV2 = {
-  _tag: "InvalidRequestError"
-  message: string
-  kind?: string | null
-  field?: string | null
-}
-
-export type LocationInfo = {
-  directory: string
-  workspaceID?: string
-  project: {
-    id: string
-    directory: string
-  }
-}
-
-export type ModelRef2 = {
-  id: string
-  providerID: string
-  variant?: string
-}
-
-export type ProviderSettings = {
-  [key: string]: unknown
-}
-
-export type ProviderRequest = {
-  settings: ProviderSettings
-  headers: {
-    [key: string]: string
-  }
-  body: {
-    [key: string]: unknown
-  }
-}
-
-export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
-
-export type PermissionV2Effect = "allow" | "deny" | "ask"
-
-export type PermissionV2Rule = {
-  action: string
-  resource: string
-  effect: PermissionV2Effect
-}
-
-export type PermissionV2Ruleset = Array<PermissionV2Rule>
-
-export type AgentV2Info = {
-  id: string
-  model?: ModelRef2
-  request: ProviderRequest
-  system?: string
-  description?: string
-  mode: "subagent" | "primary" | "all"
-  hidden: boolean
-  color?: AgentColor
-  steps?: number
-  permissions: PermissionV2Ruleset
-}
-
-export type PluginInfo = {
-  id: string
-}
-
-export type LocationRef2 = {
-  directory: string
-  workspaceID?: string
-}
-
-export type FileDiff2 = {
-  path: string
-  status: "added" | "modified" | "deleted"
-  additions: number
-  deletions: number
-  patch: string
-}
-
-export type RevertState2 = {
-  messageID: string
-  partID?: string
-  snapshot?: string
-  diff?: string
-  files?: Array<FileDiff2>
-}
-
-export type SessionV2Info = {
-  id: string
-  parentID?: string
-  projectID: string
-  agent?: string
-  model?: ModelRef2
-  cost: number
-  tokens: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  time: {
-    created: number
-    updated: number
-    archived?: number
-  }
-  title: string
-  location: LocationRef2
-  subpath?: string
-  revert?: RevertState2
-}
-
-/**
- * Durable log seq each session's snapshot was computed at. Attach a live log read after the watermark to compose fetch and stream gap-free; apply a snapshot only where its watermark is at or beyond already-applied events. Sessions without durable events are absent.
- */
-export type SessionWatermarks = {
-  [key: string]: unknown | number
-}
-
-export type SessionsResponse = {
-  data: Array<SessionV2Info>
-  watermarks: SessionWatermarks
-  cursor: {
-    previous?: string | null
-    next?: string | null
-  }
-}
-
-export type InvalidCursorError = {
-  _tag: "InvalidCursorError"
-  message: string
-}
-
-export type InvalidRequestError1 = {
-  _tag: "InvalidRequestError"
-  message: string
-  kind?: string | null
-  field?: string | null
-}
-
-export type SessionActive = {
-  type: "running"
-}
-
-export type SessionNotFoundError = {
-  _tag: "SessionNotFoundError"
-  sessionID: string
-  message: string
-}
-
-export type MessageNotFoundError = {
-  _tag: "MessageNotFoundError"
-  sessionID: string
-  messageID: string
-  message: string
-}
-
-export type PromptSource2 = {
-  start: number
-  end: number
-  text: string
-}
-
-export type PromptInputFileAttachment = {
-  uri: string
-  name?: string
-  description?: string
-  source?: PromptSource2
-}
-
-export type PromptAgentAttachment2 = {
-  name: string
-  source?: PromptSource2
-}
-
-export type PromptInput = {
-  text: string
-  files?: Array<PromptInputFileAttachment>
-  agents?: Array<PromptAgentAttachment2>
-}
-
-export type PromptFileAttachment2 = {
-  uri: string
-  mime: string
-  name?: string
-  description?: string
-  source?: PromptSource2
-}
-
-export type PromptV2 = {
-  text: string
-  files?: Array<PromptFileAttachment2>
-  agents?: Array<PromptAgentAttachment2>
-}
-
-export type SessionInputAdmitted = {
-  admittedSeq: number
-  id: string
-  sessionID: string
-  prompt: PromptV2
-  delivery: "steer" | "queue"
-  timeCreated: number
-  promotedSeq?: number
-}
-
-export type ConflictError = {
-  _tag: "ConflictError"
-  message: string
-  resource?: string | null
-}
-
-export type CommandNotFoundError = {
-  _tag: "CommandNotFoundError"
-  command: string
-  message: string
-}
-
-export type CommandEvaluationError = {
-  _tag: "CommandEvaluationError"
-  command: string
-  message: string
-}
-
-export type SkillNotFoundError = {
-  _tag: "SkillNotFoundError"
-  skill: string
-  message: string
-}
-
-export type SessionBusyErrorV2 = {
-  _tag: "SessionBusyError"
-  sessionID: string
-  message: string
-}
-
-export type ServiceUnavailableError = {
-  _tag: "ServiceUnavailableError"
-  message: string
-  service?: string | null
-}
-
-export type UnknownErrorV2 = {
-  _tag: "UnknownError"
-  message: string
-  ref?: string | null
-}
-
-export type SessionMessageAgentSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "agent-switched"
-  agent: string
-}
-
-export type SessionMessageModelSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "model-switched"
-  model: ModelRef2
-}
-
-export type SessionMessageUser = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  text: string
-  files?: Array<PromptFileAttachment2>
-  agents?: Array<PromptAgentAttachment2>
-  type: "user"
-}
-
-export type SessionMessageSynthetic = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  sessionID: string
-  text: string
-  description?: string
-  type: "synthetic"
-}
-
-export type SessionMessageSystem = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "system"
-  text: string
-}
-
-export type SessionMessageSkill = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "skill"
-  name: string
-  text: string
-}
-
-export type SessionMessageShell = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    completed?: number
-  }
-  type: "shell"
-  callID: string
-  command: string
-  output: string
-}
-
-export type SessionMessageAssistantText = {
-  type: "text"
-  id: string
-  text: string
-}
-
-export type LlmProviderMetadata2 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionMessageAssistantReasoning = {
-  type: "reasoning"
-  id: string
-  text: string
-  providerMetadata?: LlmProviderMetadata2
-  time?: {
-    created: number
-    completed?: number
-  }
-}
-
-export type SessionMessageToolStatePending = {
-  status: "pending"
-  input: string
-}
-
-export type ToolTextContent2 = {
-  type: "text"
-  text: string
-}
-
-export type ToolFileContent2 = {
-  type: "file"
-  uri: string
-  mime: string
-  name?: string
-}
-
-export type LlmToolContent2 = ToolTextContent2 | ToolFileContent2
-
-export type SessionMessageToolStateRunning = {
-  status: "running"
-  input: {
-    [key: string]: unknown
-  }
-  structured: {
-    [key: string]: unknown
-  }
-  content: Array<LlmToolContent2>
-}
-
-export type SessionMessageToolStateCompleted = {
-  status: "completed"
-  input: {
-    [key: string]: unknown
-  }
-  attachments?: Array<PromptFileAttachment2>
-  content: Array<LlmToolContent2>
-  outputPaths?: Array<string>
-  structured: {
-    [key: string]: unknown
-  }
-  result?: unknown
-}
-
-export type SessionErrorUnknown2 = {
-  type: "unknown"
-  message: string
-}
-
-export type SessionMessageToolStateError = {
-  status: "error"
-  input: {
-    [key: string]: unknown
-  }
-  content: Array<LlmToolContent2>
-  structured: {
-    [key: string]: unknown
-  }
-  error: SessionErrorUnknown2
-  result?: unknown
-}
-
-export type SessionMessageAssistantTool = {
-  type: "tool"
-  id: string
-  name: string
-  provider?: {
-    executed: boolean
-    metadata?: LlmProviderMetadata2
-    resultMetadata?: LlmProviderMetadata2
-  }
-  state:
-    | SessionMessageToolStatePending
-    | SessionMessageToolStateRunning
-    | SessionMessageToolStateCompleted
-    | SessionMessageToolStateError
-  time: {
-    created: number
-    ran?: number
-    completed?: number
-    pruned?: number
-  }
-}
-
-export type SessionMessageAssistant = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    completed?: number
-  }
-  type: "assistant"
-  agent: string
-  model: ModelRef2
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
-  snapshot?: {
-    start?: string
-    end?: string
-    files?: Array<string>
-  }
-  finish?: string
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  error?: SessionErrorUnknown2
-}
-
-export type SessionMessageCompaction = {
-  type: "compaction"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-}
-
-export type SessionMessage =
-  | SessionMessageAgentSwitched
-  | SessionMessageModelSwitched
-  | SessionMessageUser
-  | SessionMessageSynthetic
-  | SessionMessageSystem
-  | SessionMessageSkill
-  | SessionMessageShell
-  | SessionMessageAssistant
-  | SessionMessageCompaction
-
-/**
- * Context entry key (lowercase alphanumerics plus . _ -)
- */
-export type SessionContextEntryKey = string
-
-export type SessionContextEntryInfo = {
-  key: SessionContextEntryKey
-  value: unknown
-}
-
-export type SessionNextAgentSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.agent.switched"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    agent: string
-  }
-}
-
-export type SessionNextModelSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.model.switched"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    model: ModelRef2
-  }
-}
-
-export type SessionNextMoved = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.moved"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    location: LocationRef2
-    subdirectory?: string
-  }
-}
-
-export type SessionNextRenamed = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.renamed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    title: string
-  }
-}
-
-export type SessionNextForked = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.forked"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    parentID: string
-    messageID?: string
-  }
-}
-
-export type SessionNextPrompted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.prompted"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    prompt: PromptV2
-    delivery: "steer" | "queue"
-  }
-}
-
-export type SessionNextPromptAdmitted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.prompt.admitted"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    prompt: PromptV2
-    delivery: "steer" | "queue"
-  }
-}
-
-export type SessionNextContextUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.context.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    text: string
-  }
-}
-
-export type SessionNextSynthetic = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.synthetic"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    text: string
-    description?: string
-    metadata?: {
-      [key: string]: unknown
-    }
-  }
-}
-
-export type SessionNextSkillActivated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.skill.activated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    name: string
-    text: string
-  }
-}
-
-export type SessionNextShellStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.shell.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    callID: string
-    command: string
-  }
-}
-
-export type SessionNextShellEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.shell.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    callID: string
-    output: string
-  }
-}
-
-export type SessionNextStepStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.step.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    agent: string
-    model: ModelRef2
-    snapshot?: string
-  }
-}
-
-export type SessionNextStepEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.step.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    finish: string
-    cost: number
-    tokens: {
-      input: number
-      output: number
-      reasoning: number
-      cache: {
-        read: number
-        write: number
-      }
-    }
-    snapshot?: string
-    files?: Array<string>
-  }
-}
-
-export type SessionNextStepFailed = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.step.failed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    error: SessionErrorUnknown2
-  }
-}
-
-export type SessionNextTextStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.text.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    textID: string
-  }
-}
-
-export type SessionNextTextEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.text.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    textID: string
-    text: string
-  }
-}
-
-export type SessionNextToolInputStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.input.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    name: string
-  }
-}
-
-export type SessionNextToolInputEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.input.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    text: string
-  }
-}
-
-export type LlmProviderMetadata3 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextToolCalled = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.called"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    tool: string
-    input: {
-      [key: string]: unknown
-    }
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata3
-    }
-  }
-}
-
-export type SessionNextToolProgress = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.progress"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    structured: {
-      [key: string]: unknown
-    }
-    content: Array<LlmToolContent2>
-  }
-}
-
-export type LlmProviderMetadata4 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextToolSuccess = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.success"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    structured: {
-      [key: string]: unknown
-    }
-    content: Array<LlmToolContent2>
-    outputPaths?: Array<string>
-    result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata4
-    }
-  }
-}
-
-export type LlmProviderMetadata5 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextToolFailed = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.failed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    error: SessionErrorUnknown2
-    result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata5
-    }
-  }
-}
-
-export type LlmProviderMetadata6 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextReasoningStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    providerMetadata?: LlmProviderMetadata6
-  }
-}
-
-export type LlmProviderMetadata7 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextReasoningEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    text: string
-    providerMetadata?: LlmProviderMetadata7
-  }
-}
-
-export type SessionNextRetryError2 = {
-  message: string
-  statusCode?: number
-  isRetryable: boolean
-  responseHeaders?: {
-    [key: string]: string
-  }
-  responseBody?: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type SessionNextRetried = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.retried"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    attempt: number
-    error: SessionNextRetryError2
-  }
-}
-
-export type SessionNextCompactionStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.compaction.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    reason: "auto" | "manual"
-  }
-}
-
-export type SessionNextCompactionEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.compaction.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    reason: "auto" | "manual"
-    text: string
-    recent: string
-  }
-}
-
-export type SessionNextRevertStaged = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.revert.staged"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    revert: RevertState2
-  }
-}
-
-export type SessionNextRevertCleared = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.revert.cleared"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-  }
-}
-
-export type SessionNextRevertCommitted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.revert.committed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-  }
-}
-
-export type SessionDurableEvent =
-  | SessionNextAgentSwitched
-  | SessionNextModelSwitched
-  | SessionNextMoved
-  | SessionNextRenamed
-  | SessionNextForked
-  | SessionNextPrompted
-  | SessionNextPromptAdmitted
-  | SessionNextContextUpdated
-  | SessionNextSynthetic
-  | SessionNextSkillActivated
-  | SessionNextShellStarted
-  | SessionNextShellEnded
-  | SessionNextStepStarted
-  | SessionNextStepEnded
-  | SessionNextStepFailed
-  | SessionNextTextStarted
-  | SessionNextTextEnded
-  | SessionNextToolInputStarted
-  | SessionNextToolInputEnded
-  | SessionNextToolCalled
-  | SessionNextToolProgress
-  | SessionNextToolSuccess
-  | SessionNextToolFailed
-  | SessionNextReasoningStarted
-  | SessionNextReasoningEnded
-  | SessionNextRetried
-  | SessionNextCompactionStarted
-  | SessionNextCompactionEnded
-  | SessionNextRevertStaged
-  | SessionNextRevertCleared
-  | SessionNextRevertCommitted
-
-/**
- * Marker emitted when a log read transitions from replay to live (or completes a finite read). The reader holds every event committed at or below seq.
- */
-export type EventLogCaughtUp = {
-  type: "log.caught_up"
-  aggregateID: string
-  seq?: number
-}
-
-export type SessionLogItem = SessionDurableEvent | EventLogCaughtUp
-
-export type SessionLogItemStream = string
-
-export type SessionMessagesResponse = {
-  data: Array<SessionMessage>
-  watermark?: number
-  cursor: {
-    previous?: string | null
-    next?: string | null
-  }
-}
-
-export type ModelApi =
-  | {
-      id: string
-      type: "aisdk"
-      package: string
-      url?: string
-      settings?: {
-        [key: string]: unknown
-      }
-    }
-  | {
-      id: string
-      type: "native"
-      url?: string
-      settings: {
-        [key: string]: unknown
-      }
-    }
-
-export type ModelCapabilities = {
-  tools: boolean
-  input: Array<string>
-  output: Array<string>
-}
-
-export type ModelCost = {
-  tier?: {
-    type: "context"
-    size: number
-  }
-  input: number
-  output: number
-  cache: {
-    read: number
-    write: number
-  }
-}
-
-export type ModelV2Info = {
-  id: string
-  providerID: string
-  family?: string
-  name: string
-  api: ModelApi
-  capabilities: ModelCapabilities
-  request: {
-    settings: ProviderSettings
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    variant?: string
-  }
-  variants: Array<{
-    id: string
-    settings: ProviderSettings
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }>
-  time: {
-    released: number
-  }
-  cost: Array<ModelCost>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: {
-    context: number
-    input?: number
-    output: number
-  }
-}
-
-export type GenerateTextResponse = {
-  data: {
-    text: string
-  }
-}
-
-export type ProviderAisdk = {
-  type: "aisdk"
-  package: string
-  url?: string
-  settings?: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderNative = {
-  type: "native"
-  url?: string
-  settings: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderApi = ProviderAisdk | ProviderNative
-
-export type ProviderV2Info = {
-  id: string
-  integrationID?: string
-  name: string
-  disabled?: boolean
-  api: ProviderApi
-  request: ProviderRequest
-}
-
-export type ProviderNotFoundError = {
-  _tag: "ProviderNotFoundError"
-  providerID: string
-  message: string
-}
-
-export type IntegrationWhen2 = {
-  key: string
-  op: "eq" | "neq"
-  value: string
-}
-
-export type IntegrationTextPrompt2 = {
-  type: "text"
-  key: string
-  message: string
-  placeholder?: string
-  when?: IntegrationWhen2
-}
-
-export type IntegrationSelectPrompt2 = {
-  type: "select"
-  key: string
-  message: string
-  options: Array<{
-    label: string
-    value: string
-    hint?: string
-  }>
-  when?: IntegrationWhen2
-}
-
-export type IntegrationOAuthMethod2 = {
-  id: string
-  type: "oauth"
-  label: string
-  prompts?: Array<IntegrationTextPrompt2 | IntegrationSelectPrompt2>
-}
-
-export type IntegrationKeyMethod2 = {
-  type: "key"
-  label?: string
-}
-
-export type IntegrationEnvMethod2 = {
-  type: "env"
-  names: Array<string>
-}
-
-export type IntegrationMethod2 = IntegrationOAuthMethod2 | IntegrationKeyMethod2 | IntegrationEnvMethod2
-
-export type ConnectionCredentialInfo = {
-  type: "credential"
-  id: string
-  label: string
-}
-
-export type ConnectionEnvInfo = {
-  type: "env"
-  name: string
-}
-
-export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
-
-export type IntegrationInfo = {
-  id: string
-  name: string
-  methods: Array<IntegrationMethod2>
-  connections: Array<ConnectionInfo>
-}
-
-export type IntegrationAttempt = {
-  attemptID: string
-  url: string
-  instructions: string
-  mode: "auto" | "code"
-  time: {
-    created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  }
-}
-
-export type IntegrationAttemptStatus =
-  | {
-      status: "pending"
-      time: {
-        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-    }
-  | {
-      status: "complete"
-      time: {
-        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-    }
-  | {
-      status: "failed"
-      message: string
-      time: {
-        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-    }
-  | {
-      status: "expired"
-      time: {
-        created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-    }
-
-export type McpStatusConnected2 = {
-  status: "connected"
-}
-
-export type McpStatusDisconnected = {
-  status: "disconnected"
-}
-
-export type McpStatusDisabled2 = {
-  status: "disabled"
-}
-
-export type McpStatusFailed2 = {
-  status: "failed"
-  error: string
-}
-
-export type McpStatusNeedsAuth2 = {
-  status: "needs_auth"
-}
-
-export type McpStatusNeedsClientRegistration2 = {
-  status: "needs_client_registration"
-  error: string
-}
-
-export type McpServer = {
-  name: string
-  status:
-    | McpStatusConnected2
-    | McpStatusDisconnected
-    | McpStatusDisabled2
-    | McpStatusFailed2
-    | McpStatusNeedsAuth2
-    | McpStatusNeedsClientRegistration2
-  integrationID?: string
-}
-
-export type ProjectCurrent = {
-  id: string
-  directory: string
-}
-
-export type ProjectDirectory2 = {
-  directory: string
-  strategy?: string
-}
-
-export type ProjectDirectories2 = Array<ProjectDirectory2>
-
-export type FormMetadata2 = {
-  [key: string]: unknown
-}
-
-export type FormWhen2 = {
-  key: string
-  op: "eq" | "neq"
-  value: string
-}
-
-export type FormOption2 = {
-  value: string
-  label: string
-  description?: string
-}
-
-export type FormStringField2 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "string"
-  format?: "email" | "uri" | "date" | "date-time"
-  minLength?: number
-  maxLength?: number
-  pattern?: string
-  placeholder?: string
-  default?: string
-  options?: Array<FormOption2>
-  custom?: boolean
-}
-
-export type FormNumberField2 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "number"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormIntegerField2 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "integer"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormBooleanField2 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "boolean"
-  default?: boolean
-}
-
-export type FormMultiselectField2 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "multiselect"
-  options: Array<FormOption2>
-  minItems?: number
-  maxItems?: number
-  custom?: boolean
-  default?: Array<string>
-}
-
-export type FormFormInfo2 = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata2
-  mode: "form"
-  fields: Array<FormStringField2 | FormNumberField2 | FormIntegerField2 | FormBooleanField2 | FormMultiselectField2>
-}
-
-export type FormUrlInfo2 = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata2
-  mode: "url"
-  url: string
-}
-
-export type FormCreatePayload = {
-  id?: string | null
-  title?: string
-  metadata?: FormMetadata2
-  mode: "form" | "url"
-  fields?: Array<
-    FormStringField2 | FormNumberField2 | FormIntegerField2 | FormBooleanField2 | FormMultiselectField2
-  > | null
-  url?: string | null
-}
-
-export type FormNotFoundError = {
-  _tag: "FormNotFoundError"
-  id: string
-  message: string
-}
-
-export type FormValue2 =
-  | string
-  | number
-  | "NaN"
-  | "Infinity"
-  | "-Infinity"
-  | "Infinity"
-  | "-Infinity"
-  | "NaN"
-  | boolean
-  | Array<string>
-
-export type FormAnswer2 = {
-  [key: string]: FormValue2
-}
-
-export type FormState =
-  | {
-      status: "pending"
-    }
-  | {
-      status: "answered"
-      answer: FormAnswer2
-    }
-  | {
-      status: "cancelled"
-    }
-
-export type FormReply = {
-  answer: FormAnswer2
-}
-
-export type FormAlreadySettledError = {
-  _tag: "FormAlreadySettledError"
-  id: string
-  message: string
-}
-
-export type FormInvalidAnswerError = {
-  _tag: "FormInvalidAnswerError"
-  id: string
-  message: string
-}
-
-export type PermissionV2Source2 = {
-  type: "tool"
-  messageID: string
-  callID: string
-}
-
-export type PermissionV2Request = {
-  id: string
-  sessionID: string
-  action: string
-  resources: Array<string>
-  save?: Array<string>
-  metadata?: {
-    [key: string]: unknown
-  }
-  source?: PermissionV2Source2
-}
-
-export type PermissionSavedInfo = {
-  id: string
-  projectID: string
-  action: string
-  resource: string
-}
-
-export type PermissionNotFoundErrorV2 = {
-  _tag: "PermissionNotFoundError"
-  requestID: string
-  message: string
-}
-
-export type PermissionV2Reply2 = "once" | "always" | "reject"
-
-export type FileSystemEntry = {
-  path: string
-  type: "file" | "directory"
-}
-
-export type CommandV2Info = {
-  name: string
-  template: string
-  description?: string
-  agent?: string
-  model?: ModelRef2
-  subtask?: boolean
-}
-
-export type SkillV2Info2 = {
-  name: string
-  description?: string
-  slash?: boolean
-  autoinvoke?: boolean
-  location: string
-  content: string
-}
-
-export type ModelsDevRefreshed = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "models-dev.refreshed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type IntegrationUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "integration.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type IntegrationConnectionUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "integration.connection.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    integrationID: string
-  }
-}
-
-export type CatalogUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "catalog.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type AgentUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "agent.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type SnapshotFileDiffV2 = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
-}
-
-export type PermissionActionV2 = "allow" | "deny" | "ask"
-
-export type PermissionRuleV2 = {
-  permission: string
-  pattern: string
-  action: PermissionActionV2
-}
-
-export type PermissionRulesetV2 = Array<PermissionRuleV2>
-
-export type SessionV2 = {
-  id: string
-  slug: string
-  projectID: string
-  workspaceID?: string
-  directory: string
-  path?: string
-  parentID?: string
-  summary?: {
-    additions: number
-    deletions: number
-    files: number
-    diffs?: Array<SnapshotFileDiffV2>
-  }
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  share?: {
-    url: string
-  }
-  title: string
-  agent?: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-  version: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    updated: number
-    compacting?: number
-    archived?: number
-  }
-  permission?: PermissionRulesetV2
-  revert?: {
-    messageID: string
-    partID?: string
-    snapshot?: string
-    diff?: string
-  }
-}
-
-export type SessionCreated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.created"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    info: SessionV2
-  }
-}
-
-export type SessionUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    info: SessionV2
-  }
-}
-
-export type SessionDeleted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.deleted"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    info: SessionV2
-  }
-}
-
-export type JsonSchemaV2 = {
-  [key: string]: unknown
-}
-
-export type OutputFormatV2 =
-  | {
-      type: "text"
-    }
-  | {
-      type: "json_schema"
-      schema: JsonSchemaV2
-      retryCount?: number | null | null
-    }
-
-export type UserMessageV2 = {
-  id: string
-  sessionID: string
-  role: "user"
-  time: {
-    created: number
-  }
-  format?: OutputFormatV2 | null
-  summary?: {
-    title?: string | null
-    body?: string | null
-    diffs: Array<SnapshotFileDiffV2>
-  } | null
-  agent: string
-  model: {
-    providerID: string
-    modelID: string
-    variant?: string | null
-  }
-  system?: string | null
-  tools?: {
-    [key: string]: boolean
-  } | null
-}
-
-export type ProviderAuthErrorV2 = {
-  name: "ProviderAuthError"
-  data: {
-    providerID: string
-    message: string
-  }
-}
-
-export type UnknownError1 = {
-  name: "UnknownError"
-  data: {
-    message: string
-    ref?: string | null
-  }
-}
-
-export type MessageOutputLengthErrorV2 = {
-  name: "MessageOutputLengthError"
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type MessageAbortedErrorV2 = {
-  name: "MessageAbortedError"
-  data: {
-    message: string
-  }
-}
-
-export type StructuredOutputErrorV2 = {
-  name: "StructuredOutputError"
-  data: {
-    message: string
-    retries: number
-  }
-}
-
-export type ContextOverflowErrorV2 = {
-  name: "ContextOverflowError"
-  data: {
-    message: string
-    responseBody?: string | null
-  }
-}
-
-export type ContentFilterErrorV2 = {
-  name: "ContentFilterError"
-  data: {
-    message: string
-  }
-}
-
-export type ApiErrorV2 = {
-  name: "APIError"
-  data: {
-    message: string
-    statusCode?: number | null
-    isRetryable: boolean
-    responseHeaders?: {
-      [key: string]: string
-    } | null
-    responseBody?: string | null
-    metadata?: {
-      [key: string]: string
-    } | null
-  }
-}
-
-export type AssistantMessageV2 = {
-  id: string
-  sessionID: string
-  role: "assistant"
-  time: {
-    created: number
-    completed?: number | null
-  }
-  error?:
-    | ProviderAuthErrorV2
-    | UnknownError1
-    | MessageOutputLengthErrorV2
-    | MessageAbortedErrorV2
-    | StructuredOutputErrorV2
-    | ContextOverflowErrorV2
-    | ContentFilterErrorV2
-    | ApiErrorV2
-    | null
-  parentID: string
-  modelID: string
-  providerID: string
-  mode: string
-  agent: string
-  path: {
-    cwd: string
-    root: string
-  }
-  summary?: boolean | null
-  cost: number
-  tokens: {
-    total?: number | null
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  structured?: unknown | null
-  variant?: string | null
-  finish?: string | null
-}
-
-export type MessageV2 = UserMessageV2 | AssistantMessageV2
-
-export type MessageUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "message.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    info: MessageV2
-  }
-}
-
-export type MessageRemoved = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "message.removed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    messageID: string
-  }
-}
-
-export type TextPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "text"
-  text: string
-  synthetic?: boolean | null
-  ignored?: boolean | null
-  time?: {
-    start: number
-    end?: number | null
-  } | null
-  metadata?: {
-    [key: string]: unknown
-  } | null
-}
-
-export type SubtaskPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "subtask"
-  prompt: string
-  description: string
-  agent: string
-  model?: {
-    providerID: string
-    modelID: string
-  } | null
-  command?: string | null
-}
-
-export type ReasoningPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "reasoning"
-  text: string
-  metadata?: {
-    [key: string]: unknown
-  } | null
-  time: {
-    start: number
-    end?: number | null
-  }
-}
-
-export type FilePartSourceTextV2 = {
-  value: string
-  start: number
-  end: number
-}
-
-export type FileSourceV2 = {
-  text: FilePartSourceTextV2
-  type: "file"
-  path: string
-}
-
-export type RangeV2 = {
-  start: {
-    line: number
-    character: number
-  }
-  end: {
-    line: number
-    character: number
-  }
-}
-
-export type SymbolSourceV2 = {
-  text: FilePartSourceTextV2
-  type: "symbol"
-  path: string
-  range: RangeV2
-  name: string
-  kind: number
-}
-
-export type ResourceSourceV2 = {
-  text: FilePartSourceTextV2
-  type: "resource"
-  clientName: string
-  uri: string
-}
-
-export type FilePartSourceV2 = FileSourceV2 | SymbolSourceV2 | ResourceSourceV2
-
-export type FilePartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "file"
-  mime: string
-  filename?: string | null
-  url: string
-  source?: FilePartSourceV2 | null
-}
-
-export type ToolStatePendingV2 = {
-  status: "pending"
-  input: {
-    [key: string]: unknown
-  }
-  raw: string
-}
-
-export type ToolStateRunningV2 = {
-  status: "running"
-  input: {
-    [key: string]: unknown
-  }
-  title?: string | null
-  metadata?: {
-    [key: string]: unknown
-  } | null
-  time: {
-    start: number
-  }
-}
-
-export type ToolStateCompletedV2 = {
-  status: "completed"
-  input: {
-    [key: string]: unknown
-  }
-  output: string
-  title: string
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    start: number
-    end: number
-    compacted?: number | null
-  }
-  attachments?: Array<FilePartV2> | null
-}
-
-export type ToolStateErrorV2 = {
-  status: "error"
-  input: {
-    [key: string]: unknown
-  }
-  error: string
-  metadata?: {
-    [key: string]: unknown
-  } | null
-  time: {
-    start: number
-    end: number
-  }
-}
-
-export type ToolStateV2 = ToolStatePendingV2 | ToolStateRunningV2 | ToolStateCompletedV2 | ToolStateErrorV2
-
-export type ToolPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "tool"
-  callID: string
-  tool: string
-  state: ToolStateV2
-  metadata?: {
-    [key: string]: unknown
-  } | null
-}
-
-export type StepStartPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "step-start"
-  snapshot?: string | null
-}
-
-export type StepFinishPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "step-finish"
-  reason: string
-  snapshot?: string | null
-  cost: number
-  tokens: {
-    total?: number | null
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-}
-
-export type SnapshotPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "snapshot"
-  snapshot: string
-}
-
-export type PatchPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "patch"
-  hash: string
-  files: Array<string>
-}
-
-export type AgentPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "agent"
-  name: string
-  source?: {
-    value: string
-    start: number
-    end: number
-  } | null
-}
-
-export type RetryPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "retry"
-  attempt: number
-  error: ApiErrorV2
-  time: {
-    created: number
-  }
-}
-
-export type CompactionPartV2 = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "compaction"
-  auto: boolean
-  overflow?: boolean | null
-  tail_start_id?: string | null
-}
-
-export type PartV2 =
-  | TextPartV2
-  | SubtaskPartV2
-  | ReasoningPartV2
-  | FilePartV2
-  | ToolPartV2
-  | StepStartPartV2
-  | StepFinishPartV2
-  | SnapshotPartV2
-  | PatchPartV2
-  | AgentPartV2
-  | RetryPartV2
-  | CompactionPartV2
-
-export type MessagePartUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "message.part.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    part: PartV2
-    time: number
-  }
-}
-
-export type MessagePartRemoved = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "message.part.removed"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    messageID: string
-    partID: string
-  }
-}
-
-export type SessionNextExecutionSettled = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.execution.settled"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: SessionErrorUnknown2
-  }
-}
-
-export type SessionNextTextDelta = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.text.delta"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    textID: string
-    delta: string
-  }
-}
-
-export type SessionNextReasoningDelta = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.delta"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    delta: string
-  }
-}
-
-export type SessionNextToolInputDelta = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.tool.input.delta"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    delta: string
-  }
-}
-
-export type SessionNextCompactionDelta = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.compaction.delta"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    messageID: string
-    text: string
-  }
-}
-
-export type FileEdited = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "file.edited"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    file: string
-  }
-}
-
-export type ReferenceUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "reference.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type PermissionV2Asked = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "permission.v2.asked"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-    sessionID: string
-    action: string
-    resources: Array<string>
-    save?: Array<string>
-    metadata?: {
-      [key: string]: unknown
-    }
-    source?: PermissionV2Source2
-  }
-}
-
-export type PermissionV2Replied = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "permission.v2.replied"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    requestID: string
-    reply: PermissionV2Reply2
-  }
-}
-
-export type PluginAdded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "plugin.added"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-  }
-}
-
-export type ProjectDirectoriesUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "project.directories.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    projectID: string
-  }
-}
-
-export type CommandUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "command.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type SkillUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "skill.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type FileWatcherUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "file.watcher.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
-export type PtyV2 = {
-  id: string
-  title: string
-  command: string
-  args: Array<string>
-  cwd: string
-  status: "running" | "exited"
-  pid: number
-  exitCode?: number
-}
-
-export type PtyCreated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "pty.created"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    info: PtyV2
-  }
-}
-
-export type PtyUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "pty.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    info: PtyV2
-  }
-}
-
-export type PtyExited = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "pty.exited"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-    exitCode: number
-  }
-}
-
-export type PtyDeleted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "pty.deleted"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-  }
-}
-
-export type ShellV2 = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number | "NaN" | "Infinity" | "-Infinity"
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    started: number | "NaN" | "Infinity" | "-Infinity"
-    completed?: number | "NaN" | "Infinity" | "-Infinity"
-  }
-}
-
-export type ShellCreated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "shell.created"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    info: ShellV2
-  }
-}
-
-export type ShellExited = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "shell.exited"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-    exit?: number | "NaN" | "Infinity" | "-Infinity"
-    status: "running" | "exited" | "timeout" | "killed"
-  }
-}
-
-export type ShellDeleted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "shell.deleted"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-  }
-}
-
-export type FormMetadata1 = {
-  [key: string]: unknown
-}
-
-export type FormNumberField12 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "number"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity"
-  default?: number | "NaN" | "Infinity" | "-Infinity"
-}
-
-export type FormIntegerField12 = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: FormWhen2
-  type: "integer"
-  minimum?: number | "NaN" | "Infinity" | "-Infinity"
-  maximum?: number | "NaN" | "Infinity" | "-Infinity"
-  default?: number | "NaN" | "Infinity" | "-Infinity"
-}
-
-export type FormFormInfo1 = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata1
-  mode: "form"
-  fields: Array<FormStringField2 | FormNumberField12 | FormIntegerField12 | FormBooleanField2 | FormMultiselectField2>
-}
-
-export type FormUrlInfo1 = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata1
-  mode: "url"
-  url: string
-}
-
-export type FormCreated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "form.created"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    form: FormFormInfo1 | FormUrlInfo1
-  }
-}
-
-export type FormValue12 = string | number | "NaN" | "Infinity" | "-Infinity" | boolean | Array<string>
-
-export type FormAnswer1 = {
-  [key: string]: FormValue12
-}
-
-export type FormReplied = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "form.replied"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-    sessionID: string
-    answer: FormAnswer1
-  }
-}
-
-export type FormCancelled = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "form.cancelled"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    id: string
-    sessionID: string
-  }
-}
-
-export type TodoV2 = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-}
-
-export type TodoUpdated = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "todo.updated"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    todos: Array<TodoV2>
-  }
-}
-
-export type V2EventServerConnected = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  } | null
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  } | null
-  location?: LocationRef2 | null
-  type: "server.connected"
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
-}
-
-export type V2Event =
-  | ModelsDevRefreshed
-  | IntegrationUpdated
-  | IntegrationConnectionUpdated
-  | CatalogUpdated
-  | AgentUpdated
-  | SessionCreated
-  | SessionUpdated
-  | SessionDeleted
-  | MessageUpdated
-  | MessageRemoved
-  | MessagePartUpdated
-  | MessagePartRemoved
-  | SessionNextAgentSwitched
-  | SessionNextModelSwitched
-  | SessionNextMoved
-  | SessionNextRenamed
-  | SessionNextForked
-  | SessionNextPrompted
-  | SessionNextPromptAdmitted
-  | SessionNextExecutionSettled
-  | SessionNextContextUpdated
-  | SessionNextSynthetic
-  | SessionNextSkillActivated
-  | SessionNextShellStarted
-  | SessionNextShellEnded
-  | SessionNextStepStarted
-  | SessionNextStepEnded
-  | SessionNextStepFailed
-  | SessionNextTextStarted
-  | SessionNextTextDelta
-  | SessionNextTextEnded
-  | SessionNextReasoningStarted
-  | SessionNextReasoningDelta
-  | SessionNextReasoningEnded
-  | SessionNextToolInputStarted
-  | SessionNextToolInputDelta
-  | SessionNextToolInputEnded
-  | SessionNextToolCalled
-  | SessionNextToolProgress
-  | SessionNextToolSuccess
-  | SessionNextToolFailed
-  | SessionNextRetried
-  | SessionNextCompactionStarted
-  | SessionNextCompactionDelta
-  | SessionNextCompactionEnded
-  | SessionNextRevertStaged
-  | SessionNextRevertCleared
-  | SessionNextRevertCommitted
-  | FileEdited
-  | ReferenceUpdated
-  | PermissionV2Asked
-  | PermissionV2Replied
-  | PluginAdded
-  | ProjectDirectoriesUpdated
-  | CommandUpdated
-  | SkillUpdated
-  | FileWatcherUpdated
-  | PtyCreated
-  | PtyUpdated
-  | PtyExited
-  | PtyDeleted
-  | ShellCreated
-  | ShellExited
-  | ShellDeleted
-  | FormCreated
-  | FormReplied
-  | FormCancelled
-  | TodoUpdated
-  | V2EventServerConnected
-
-export type V2EventStream = string
-
-/**
- * Payload-free change hint: the aggregate's durable log advanced to at least seq. Hints coalesce under backpressure (latest per aggregate) and are never a delivery guarantee.
- */
-export type EventLogHint = {
-  type: "log.hint"
-  aggregateID: string
-  seq: number
-}
-
-/**
- * Hints may have been lost; treat every aggregate as potentially dirty and recover via bounded sweep plus durable log reads. Emitted first on every (re)subscribe.
- */
-export type EventLogSweepRequired = {
-  type: "log.sweep_required"
-}
-
-export type EventLogChange = EventLogHint | EventLogSweepRequired
-
-export type EventLogChangeStream = string
-
-export type PtyNotFoundErrorV2 = {
-  _tag: "PtyNotFoundError"
-  ptyID: string
-  message: string
-}
-
-export type PtyTicketConnectToken2 = {
-  ticket: string
-  expires_in: number
-}
-
-export type ForbiddenError = {
-  _tag: "ForbiddenError"
-  message: string
-}
-
-export type Shell1V2 = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    started: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    completed?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  }
-}
-
-export type ShellNotFoundError = {
-  _tag: "ShellNotFoundError"
-  id: string
-  message: string
-}
-
-export type ReferenceLocalSource = {
-  type: "local"
-  path: string
-  description?: string
-  hidden?: boolean
-}
-
-export type ReferenceGitSource = {
-  type: "git"
-  repository: string
-  branch?: string
-  description?: string
-  hidden?: boolean
-}
-
-export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
-
-export type ReferenceInfo = {
-  name: string
-  path: string
-  description?: string
-  hidden?: boolean
-  source: ReferenceSource
-}
-
-export type ProjectCopyCopy = {
-  directory: string
-}
-
-export type ProjectCopyError = {
-  name: "ProjectCopyError"
-  data: {
-    message: string
-    forceRequired?: boolean | null
   }
 }
 
@@ -12351,42 +11878,6 @@ export type ExperimentalWorkspaceWarpResponses = {
 export type ExperimentalWorkspaceWarpResponse =
   ExperimentalWorkspaceWarpResponses[keyof ExperimentalWorkspaceWarpResponses]
 
-export type PtyConnectData = {
-  body?: never
-  path: {
-    ptyID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-    cursor?: string
-    ticket?: string
-  }
-  url: "/pty/{ptyID}/connect"
-}
-
-export type PtyConnectErrors = {
-  /**
-   * Forbidden
-   */
-  403: EffectHttpApiErrorForbidden
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
-
-export type PtyConnectResponses = {
-  /**
-   * Connected session
-   */
-  200: boolean
-}
-
-export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
-
 export type V2HealthGetData = {
   body?: never
   path?: never
@@ -12398,7 +11889,7 @@ export type V2HealthGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12423,9 +11914,9 @@ export type V2LocationGetData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/location"
 }
@@ -12434,7 +11925,7 @@ export type V2LocationGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12457,9 +11948,9 @@ export type V2AgentListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/agent"
 }
@@ -12468,7 +11959,7 @@ export type V2AgentListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12494,9 +11985,9 @@ export type V2PluginListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/plugin"
 }
@@ -12505,7 +11996,7 @@ export type V2PluginListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12544,6 +12035,9 @@ export type V2SessionListData = {
     directory?: string | null
     project?: string | null
     subpath?: string | null
+    /**
+     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.
+     */
     cursor?: string | null
   }
   url: "/api/session"
@@ -12553,7 +12047,7 @@ export type V2SessionListErrors = {
   /**
    * InvalidCursorError | InvalidRequestError
    */
-  400: InvalidCursorError | InvalidRequestError1 | InvalidRequestErrorV2
+  400: InvalidCursorError | InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12573,10 +12067,10 @@ export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListRe
 
 export type V2SessionCreateData = {
   body: {
-    id?: string | null
-    agent?: string | null
-    model?: ModelRef2 | null
-    location?: LocationRef2 | null
+    id?: string
+    agent?: string
+    model?: ModelRef
+    location?: LocationRef
   }
   path?: never
   query?: never
@@ -12587,7 +12081,7 @@ export type V2SessionCreateErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12618,7 +12112,7 @@ export type V2SessionActiveErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12635,7 +12129,6 @@ export type V2SessionActiveResponses = {
     data: {
       [key: string]: unknown | SessionActive
     }
-    watermarks: SessionWatermarks
   }
 }
 
@@ -12654,7 +12147,7 @@ export type V2SessionGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12680,7 +12173,7 @@ export type V2SessionGetResponse = V2SessionGetResponses[keyof V2SessionGetRespo
 
 export type V2SessionForkData = {
   body: {
-    messageID?: string | null
+    messageID?: string
   }
   path: {
     sessionID: string
@@ -12693,7 +12186,7 @@ export type V2SessionForkErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12732,7 +12225,7 @@ export type V2SessionSwitchAgentErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12756,7 +12249,7 @@ export type V2SessionSwitchAgentResponse = V2SessionSwitchAgentResponses[keyof V
 
 export type V2SessionSwitchModelData = {
   body: {
-    model: ModelRef2
+    model: ModelRef
   }
   path: {
     sessionID: string
@@ -12769,7 +12262,7 @@ export type V2SessionSwitchModelErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12806,7 +12299,7 @@ export type V2SessionRenameErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12830,10 +12323,10 @@ export type V2SessionRenameResponse = V2SessionRenameResponses[keyof V2SessionRe
 
 export type V2SessionPromptData = {
   body: {
-    id?: string | null
+    id?: string
     prompt: PromptInput
-    delivery?: "steer" | "queue" | null
-    resume?: boolean | null
+    delivery?: "steer" | "queue"
+    resume?: boolean
   }
   path: {
     sessionID: string
@@ -12846,7 +12339,7 @@ export type V2SessionPromptErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12876,15 +12369,15 @@ export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPr
 
 export type V2SessionCommandData = {
   body: {
-    id?: string | null
+    id?: string
     command: string
-    arguments?: string | null
-    agent?: string | null
-    model?: ModelRef2 | null
+    arguments?: string
+    agent?: string
+    model?: ModelRef
     files?: Array<PromptInputFileAttachment>
-    agents?: Array<PromptAgentAttachment2>
-    delivery?: "steer" | "queue" | null
-    resume?: boolean | null
+    agents?: Array<PromptAgentAttachment>
+    delivery?: "steer" | "queue"
+    resume?: boolean
   }
   path: {
     sessionID: string
@@ -12897,7 +12390,7 @@ export type V2SessionCommandErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12931,9 +12424,9 @@ export type V2SessionCommandResponse = V2SessionCommandResponses[keyof V2Session
 
 export type V2SessionSkillData = {
   body: {
-    id?: string | null
+    id?: string
     skill: string
-    resume?: boolean | null
+    resume?: boolean
   }
   path: {
     sessionID: string
@@ -12946,7 +12439,7 @@ export type V2SessionSkillErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -12971,7 +12464,7 @@ export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkil
 export type V2SessionSyntheticData = {
   body: {
     text: string
-    description?: string | null
+    description?: string
     metadata?: {
       [key: string]: unknown
     }
@@ -12987,7 +12480,7 @@ export type V2SessionSyntheticErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13022,7 +12515,7 @@ export type V2SessionCompactErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13034,11 +12527,11 @@ export type V2SessionCompactErrors = {
   /**
    * SessionBusyError
    */
-  409: SessionBusyErrorV2
+  409: SessionBusyError
   /**
    * UnknownError
    */
-  500: UnknownErrorV2
+  500: UnknownError1
   /**
    * ServiceUnavailableError
    */
@@ -13069,7 +12562,7 @@ export type V2SessionWaitErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13098,7 +12591,7 @@ export type V2SessionWaitResponse = V2SessionWaitResponses[keyof V2SessionWaitRe
 export type V2SessionRevertStageData = {
   body: {
     messageID: string
-    files?: boolean | null
+    files?: boolean
   }
   path: {
     sessionID: string
@@ -13111,7 +12604,7 @@ export type V2SessionRevertStageErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13123,11 +12616,11 @@ export type V2SessionRevertStageErrors = {
   /**
    * SessionBusyError
    */
-  409: SessionBusyErrorV2
+  409: SessionBusyError
   /**
    * UnknownError
    */
-  500: UnknownErrorV2
+  500: UnknownError1
 }
 
 export type V2SessionRevertStageError = V2SessionRevertStageErrors[keyof V2SessionRevertStageErrors]
@@ -13137,7 +12630,7 @@ export type V2SessionRevertStageResponses = {
    * Success
    */
   200: {
-    data: RevertState2
+    data: RevertState
   }
 }
 
@@ -13156,7 +12649,7 @@ export type V2SessionRevertClearErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13168,11 +12661,11 @@ export type V2SessionRevertClearErrors = {
   /**
    * SessionBusyError
    */
-  409: SessionBusyErrorV2
+  409: SessionBusyError
   /**
    * UnknownError
    */
-  500: UnknownErrorV2
+  500: UnknownError1
 }
 
 export type V2SessionRevertClearError = V2SessionRevertClearErrors[keyof V2SessionRevertClearErrors]
@@ -13199,7 +12692,7 @@ export type V2SessionRevertCommitErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13211,7 +12704,7 @@ export type V2SessionRevertCommitErrors = {
   /**
    * SessionBusyError
    */
-  409: SessionBusyErrorV2
+  409: SessionBusyError
 }
 
 export type V2SessionRevertCommitError = V2SessionRevertCommitErrors[keyof V2SessionRevertCommitErrors]
@@ -13238,7 +12731,7 @@ export type V2SessionContextErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13250,7 +12743,7 @@ export type V2SessionContextErrors = {
   /**
    * UnknownError
    */
-  500: UnknownErrorV2
+  500: UnknownError1
 }
 
 export type V2SessionContextError = V2SessionContextErrors[keyof V2SessionContextErrors]
@@ -13279,7 +12772,7 @@ export type V2SessionContextEntryListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13318,7 +12811,7 @@ export type V2SessionContextEntryRemoveErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13358,7 +12851,7 @@ export type V2SessionContextEntryPutErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13381,23 +12874,23 @@ export type V2SessionContextEntryPutResponses = {
 export type V2SessionContextEntryPutResponse =
   V2SessionContextEntryPutResponses[keyof V2SessionContextEntryPutResponses]
 
-export type V2SessionLogData = {
+export type V2SessionHistoryData = {
   body?: never
   path: {
     sessionID: string
   }
   query?: {
-    after?: number | null
-    follow?: "true" | "false" | null
+    limit?: number
+    after?: number
   }
-  url: "/api/session/{sessionID}/log"
+  url: "/api/session/{sessionID}/history"
 }
 
-export type V2SessionLogErrors = {
+export type V2SessionHistoryErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13408,20 +12901,57 @@ export type V2SessionLogErrors = {
   404: SessionNotFoundError
 }
 
-export type V2SessionLogError = V2SessionLogErrors[keyof V2SessionLogErrors]
+export type V2SessionHistoryError = V2SessionHistoryErrors[keyof V2SessionHistoryErrors]
 
-export type V2SessionLogResponses = {
+export type V2SessionHistoryResponses = {
+  /**
+   * SessionHistory
+   */
+  200: SessionHistory
+}
+
+export type V2SessionHistoryResponse = V2SessionHistoryResponses[keyof V2SessionHistoryResponses]
+
+export type V2SessionEventsData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    after?: string
+  }
+  url: "/api/session/{sessionID}/event"
+}
+
+export type V2SessionEventsErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionEventsError = V2SessionEventsErrors[keyof V2SessionEventsErrors]
+
+export type V2SessionEventsResponses = {
   /**
    * Success
    */
   200: {
-    id: string | null
+    id: string
     event: string
-    data: SessionLogItemStream
+    data: SessionDurableEventStream
   }
 }
 
-export type V2SessionLogResponse = V2SessionLogResponses[keyof V2SessionLogResponses]
+export type V2SessionEventsResponse = V2SessionEventsResponses[keyof V2SessionEventsResponses]
 
 export type V2SessionInterruptData = {
   body?: never
@@ -13436,7 +12966,7 @@ export type V2SessionInterruptErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13471,7 +13001,7 @@ export type V2SessionBackgroundErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13507,7 +13037,7 @@ export type V2SessionMessageErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13537,15 +13067,12 @@ export type V2SessionMessagesData = {
     sessionID: string
   }
   query?: {
+    limit?: number
+    order?: "asc" | "desc"
     /**
-     * Maximum number of messages to return. When omitted, the endpoint returns its default page size.
+     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.
      */
-    limit?: string | null
-    /**
-     * Message order for the first page. Use desc for newest first or asc for oldest first.
-     */
-    order?: "asc" | "desc" | null
-    cursor?: string | null
+    cursor?: string
   }
   url: "/api/session/{sessionID}/message"
 }
@@ -13554,7 +13081,7 @@ export type V2SessionMessagesErrors = {
   /**
    * InvalidCursorError | InvalidRequestError
    */
-  400: InvalidCursorError | InvalidRequestErrorV2
+  400: InvalidCursorError | InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13566,7 +13093,7 @@ export type V2SessionMessagesErrors = {
   /**
    * UnknownError
    */
-  500: UnknownErrorV2
+  500: UnknownError1
 }
 
 export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]
@@ -13585,9 +13112,9 @@ export type V2ModelListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/model"
 }
@@ -13596,7 +13123,7 @@ export type V2ModelListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13626,9 +13153,9 @@ export type V2ModelDefaultData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/model/default"
 }
@@ -13637,7 +13164,7 @@ export type V2ModelDefaultErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13656,7 +13183,7 @@ export type V2ModelDefaultResponses = {
    */
   200: {
     location: LocationInfo
-    data: ModelV2Info | null
+    data: ModelV2Info
   }
 }
 
@@ -13665,14 +13192,14 @@ export type V2ModelDefaultResponse = V2ModelDefaultResponses[keyof V2ModelDefaul
 export type V2GenerateTextData = {
   body: {
     prompt: string
-    model?: ModelRef2 | null
+    model?: ModelRef
   }
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/generate"
 }
@@ -13681,7 +13208,7 @@ export type V2GenerateTextErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13708,9 +13235,9 @@ export type V2ProviderListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/provider"
 }
@@ -13719,7 +13246,7 @@ export type V2ProviderListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13751,9 +13278,9 @@ export type V2ProviderGetData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/provider/{providerID}"
 }
@@ -13762,7 +13289,7 @@ export type V2ProviderGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13796,9 +13323,9 @@ export type V2IntegrationListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration"
 }
@@ -13807,7 +13334,7 @@ export type V2IntegrationListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13835,9 +13362,9 @@ export type V2IntegrationGetData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration/{integrationID}"
 }
@@ -13846,7 +13373,7 @@ export type V2IntegrationGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13861,7 +13388,7 @@ export type V2IntegrationGetResponses = {
    */
   200: {
     location: LocationInfo
-    data: IntegrationInfo | null
+    data: IntegrationInfo
   }
 }
 
@@ -13870,16 +13397,16 @@ export type V2IntegrationGetResponse = V2IntegrationGetResponses[keyof V2Integra
 export type V2IntegrationConnectKeyData = {
   body: {
     key: string
-    label?: string | null
+    label?: string
   }
   path: {
     integrationID: string
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration/{integrationID}/connect/key"
 }
@@ -13888,7 +13415,7 @@ export type V2IntegrationConnectKeyErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13912,16 +13439,16 @@ export type V2IntegrationConnectOauthData = {
     inputs: {
       [key: string]: string
     }
-    label?: string | null
+    label?: string
   }
   path: {
     integrationID: string
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration/{integrationID}/connect/oauth"
 }
@@ -13930,7 +13457,7 @@ export type V2IntegrationConnectOauthErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13959,9 +13486,9 @@ export type V2IntegrationAttemptCancelData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration/attempt/{attemptID}"
 }
@@ -13970,7 +13497,7 @@ export type V2IntegrationAttemptCancelErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -13996,9 +13523,9 @@ export type V2IntegrationAttemptStatusData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration/attempt/{attemptID}"
 }
@@ -14007,7 +13534,7 @@ export type V2IntegrationAttemptStatusErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14031,16 +13558,16 @@ export type V2IntegrationAttemptStatusResponse =
 
 export type V2IntegrationAttemptCompleteData = {
   body: {
-    code?: string | null
+    code?: string
   }
   path: {
     attemptID: string
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/integration/attempt/{attemptID}/complete"
 }
@@ -14049,7 +13576,7 @@ export type V2IntegrationAttemptCompleteErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14074,9 +13601,9 @@ export type V2McpListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/mcp"
 }
@@ -14085,7 +13612,7 @@ export type V2McpListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14113,9 +13640,9 @@ export type V2CredentialRemoveData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/credential/{credentialID}"
 }
@@ -14124,7 +13651,7 @@ export type V2CredentialRemoveErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14151,9 +13678,9 @@ export type V2CredentialUpdateData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/credential/{credentialID}"
 }
@@ -14162,7 +13689,7 @@ export type V2CredentialUpdateErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14185,9 +13712,9 @@ export type V2ProjectCurrentData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/project/current"
 }
@@ -14196,7 +13723,7 @@ export type V2ProjectCurrentErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14221,9 +13748,9 @@ export type V2ProjectDirectoriesData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/project/{projectID}/directories"
 }
@@ -14232,7 +13759,7 @@ export type V2ProjectDirectoriesErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14245,324 +13772,19 @@ export type V2ProjectDirectoriesResponses = {
   /**
    * Project.Directories
    */
-  200: ProjectDirectories2
+  200: ProjectDirectories
 }
 
 export type V2ProjectDirectoriesResponse = V2ProjectDirectoriesResponses[keyof V2ProjectDirectoriesResponses]
-
-export type V2FormRequestListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/form/request"
-}
-
-export type V2FormRequestListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2FormRequestListError = V2FormRequestListErrors[keyof V2FormRequestListErrors]
-
-export type V2FormRequestListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Array<FormFormInfo2 | FormUrlInfo2>
-  }
-}
-
-export type V2FormRequestListResponse = V2FormRequestListResponses[keyof V2FormRequestListResponses]
-
-export type V2SessionFormListData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/session/{sessionID}/form"
-}
-
-export type V2SessionFormListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError
-   */
-  404: SessionNotFoundError
-}
-
-export type V2SessionFormListError = V2SessionFormListErrors[keyof V2SessionFormListErrors]
-
-export type V2SessionFormListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: Array<FormFormInfo2 | FormUrlInfo2>
-  }
-}
-
-export type V2SessionFormListResponse = V2SessionFormListResponses[keyof V2SessionFormListResponses]
-
-export type V2SessionFormCreateData = {
-  body: FormCreatePayload
-  path: {
-    sessionID: string
-  }
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/session/{sessionID}/form"
-}
-
-export type V2SessionFormCreateErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError
-   */
-  404: SessionNotFoundError
-  /**
-   * ConflictError
-   */
-  409: ConflictError
-}
-
-export type V2SessionFormCreateError = V2SessionFormCreateErrors[keyof V2SessionFormCreateErrors]
-
-export type V2SessionFormCreateResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: FormFormInfo2 | FormUrlInfo2
-  }
-}
-
-export type V2SessionFormCreateResponse = V2SessionFormCreateResponses[keyof V2SessionFormCreateResponses]
-
-export type V2SessionFormGetData = {
-  body?: never
-  path: {
-    sessionID: string
-    formID: string
-  }
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/session/{sessionID}/form/{formID}"
-}
-
-export type V2SessionFormGetErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * FormNotFoundError | SessionNotFoundError
-   */
-  404: FormNotFoundError | SessionNotFoundError
-}
-
-export type V2SessionFormGetError = V2SessionFormGetErrors[keyof V2SessionFormGetErrors]
-
-export type V2SessionFormGetResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: FormFormInfo2 | FormUrlInfo2
-  }
-}
-
-export type V2SessionFormGetResponse = V2SessionFormGetResponses[keyof V2SessionFormGetResponses]
-
-export type V2SessionFormStateData = {
-  body?: never
-  path: {
-    sessionID: string
-    formID: string
-  }
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/session/{sessionID}/form/{formID}/state"
-}
-
-export type V2SessionFormStateErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * FormNotFoundError | SessionNotFoundError
-   */
-  404: FormNotFoundError | SessionNotFoundError
-}
-
-export type V2SessionFormStateError = V2SessionFormStateErrors[keyof V2SessionFormStateErrors]
-
-export type V2SessionFormStateResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfo
-    data: FormState
-  }
-}
-
-export type V2SessionFormStateResponse = V2SessionFormStateResponses[keyof V2SessionFormStateResponses]
-
-export type V2SessionFormReplyData = {
-  body: FormReply
-  path: {
-    sessionID: string
-    formID: string
-  }
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/session/{sessionID}/form/{formID}/reply"
-}
-
-export type V2SessionFormReplyErrors = {
-  /**
-   * FormInvalidAnswerError | InvalidRequestError
-   */
-  400: FormInvalidAnswerError | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * FormNotFoundError | SessionNotFoundError
-   */
-  404: FormNotFoundError | SessionNotFoundError
-  /**
-   * FormAlreadySettledError
-   */
-  409: FormAlreadySettledError
-}
-
-export type V2SessionFormReplyError = V2SessionFormReplyErrors[keyof V2SessionFormReplyErrors]
-
-export type V2SessionFormReplyResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2SessionFormReplyResponse = V2SessionFormReplyResponses[keyof V2SessionFormReplyResponses]
-
-export type V2SessionFormCancelData = {
-  body?: never
-  path: {
-    sessionID: string
-    formID: string
-  }
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/session/{sessionID}/form/{formID}/cancel"
-}
-
-export type V2SessionFormCancelErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * FormNotFoundError | SessionNotFoundError
-   */
-  404: FormNotFoundError | SessionNotFoundError
-  /**
-   * FormAlreadySettledError
-   */
-  409: FormAlreadySettledError
-}
-
-export type V2SessionFormCancelError = V2SessionFormCancelErrors[keyof V2SessionFormCancelErrors]
-
-export type V2SessionFormCancelResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2SessionFormCancelResponse = V2SessionFormCancelResponses[keyof V2SessionFormCancelResponses]
 
 export type V2PermissionRequestListData = {
   body?: never
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/permission/request"
 }
@@ -14571,7 +13793,7 @@ export type V2PermissionRequestListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14596,7 +13818,7 @@ export type V2PermissionSavedListData = {
   body?: never
   path?: never
   query?: {
-    projectID?: string | null
+    projectID?: string
   }
   url: "/api/permission/saved"
 }
@@ -14605,7 +13827,7 @@ export type V2PermissionSavedListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14638,7 +13860,7 @@ export type V2PermissionSavedRemoveErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14669,7 +13891,7 @@ export type V2SessionPermissionListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14695,15 +13917,15 @@ export type V2SessionPermissionListResponse = V2SessionPermissionListResponses[k
 
 export type V2SessionPermissionCreateData = {
   body: {
-    id?: string | null
+    id?: string
     action: string
     resources: Array<string>
     save?: Array<string>
     metadata?: {
       [key: string]: unknown
     }
-    source?: PermissionV2Source2
-    agent?: string | null
+    source?: PermissionV2Source
+    agent?: string
   }
   path: {
     sessionID: string
@@ -14716,7 +13938,7 @@ export type V2SessionPermissionCreateErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14758,7 +13980,7 @@ export type V2SessionPermissionGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14766,7 +13988,7 @@ export type V2SessionPermissionGetErrors = {
   /**
    * SessionNotFoundError | PermissionNotFoundError
    */
-  404: PermissionNotFoundErrorV2 | SessionNotFoundError
+  404: PermissionNotFoundError | SessionNotFoundError
 }
 
 export type V2SessionPermissionGetError = V2SessionPermissionGetErrors[keyof V2SessionPermissionGetErrors]
@@ -14784,8 +14006,8 @@ export type V2SessionPermissionGetResponse = V2SessionPermissionGetResponses[key
 
 export type V2SessionPermissionReplyData = {
   body: {
-    reply: PermissionV2Reply2
-    message?: string | null
+    reply: PermissionV2Reply
+    message?: string
   }
   path: {
     sessionID: string
@@ -14799,7 +14021,7 @@ export type V2SessionPermissionReplyErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14807,7 +14029,7 @@ export type V2SessionPermissionReplyErrors = {
   /**
    * SessionNotFoundError | PermissionNotFoundError
    */
-  404: PermissionNotFoundErrorV2 | SessionNotFoundError
+  404: PermissionNotFoundError | SessionNotFoundError
 }
 
 export type V2SessionPermissionReplyError = V2SessionPermissionReplyErrors[keyof V2SessionPermissionReplyErrors]
@@ -14827,9 +14049,9 @@ export type V2FsReadData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/fs/read/*"
 }
@@ -14838,7 +14060,7 @@ export type V2FsReadErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14861,10 +14083,10 @@ export type V2FsListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-    path?: string | null
+      directory?: string
+      workspace?: string
+    }
+    path?: string
   }
   url: "/api/fs/list"
 }
@@ -14873,7 +14095,7 @@ export type V2FsListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14899,12 +14121,12 @@ export type V2FsFindData = {
   path?: never
   query: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
     query: string
     type?: "file" | "directory"
-    limit?: string | null
+    limit?: string
   }
   url: "/api/fs/find"
 }
@@ -14913,7 +14135,7 @@ export type V2FsFindErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14939,9 +14161,9 @@ export type V2CommandListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/command"
 }
@@ -14950,7 +14172,7 @@ export type V2CommandListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -14976,9 +14198,9 @@ export type V2SkillListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/skill"
 }
@@ -14987,7 +14209,7 @@ export type V2SkillListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15002,7 +14224,7 @@ export type V2SkillListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<SkillV2Info2>
+    data: Array<SkillV2Info>
   }
 }
 
@@ -15019,7 +14241,7 @@ export type V2EventSubscribeErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15030,58 +14252,21 @@ export type V2EventSubscribeError = V2EventSubscribeErrors[keyof V2EventSubscrib
 
 export type V2EventSubscribeResponses = {
   /**
-   * Success
+   * Event stream
    */
-  200: {
-    id: string | null
-    event: string
-    data: V2EventStream
-  }
+  200: V2Event
 }
 
 export type V2EventSubscribeResponse = V2EventSubscribeResponses[keyof V2EventSubscribeResponses]
-
-export type V2EventChangesData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/api/event/changes"
-}
-
-export type V2EventChangesErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2EventChangesError = V2EventChangesErrors[keyof V2EventChangesErrors]
-
-export type V2EventChangesResponses = {
-  /**
-   * Success
-   */
-  200: {
-    id: string | null
-    event: string
-    data: EventLogChangeStream
-  }
-}
-
-export type V2EventChangesResponse = V2EventChangesResponses[keyof V2EventChangesResponses]
 
 export type V2PtyListData = {
   body?: never
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/pty"
 }
@@ -15090,7 +14275,7 @@ export type V2PtyListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15105,7 +14290,7 @@ export type V2PtyListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<PtyV2>
+    data: Array<Pty>
   }
 }
 
@@ -15124,9 +14309,9 @@ export type V2PtyCreateData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/pty"
 }
@@ -15135,7 +14320,7 @@ export type V2PtyCreateErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15150,7 +14335,7 @@ export type V2PtyCreateResponses = {
    */
   200: {
     location: LocationInfo
-    data: PtyV2
+    data: Pty
   }
 }
 
@@ -15163,9 +14348,9 @@ export type V2PtyRemoveData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/pty/{ptyID}"
 }
@@ -15174,7 +14359,7 @@ export type V2PtyRemoveErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15182,7 +14367,7 @@ export type V2PtyRemoveErrors = {
   /**
    * PtyNotFoundError
    */
-  404: PtyNotFoundErrorV2
+  404: PtyNotFoundError
 }
 
 export type V2PtyRemoveError = V2PtyRemoveErrors[keyof V2PtyRemoveErrors]
@@ -15203,9 +14388,9 @@ export type V2PtyGetData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/pty/{ptyID}"
 }
@@ -15214,7 +14399,7 @@ export type V2PtyGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15222,7 +14407,7 @@ export type V2PtyGetErrors = {
   /**
    * PtyNotFoundError
    */
-  404: PtyNotFoundErrorV2
+  404: PtyNotFoundError
 }
 
 export type V2PtyGetError = V2PtyGetErrors[keyof V2PtyGetErrors]
@@ -15233,7 +14418,7 @@ export type V2PtyGetResponses = {
    */
   200: {
     location: LocationInfo
-    data: PtyV2
+    data: Pty
   }
 }
 
@@ -15252,9 +14437,9 @@ export type V2PtyUpdateData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/pty/{ptyID}"
 }
@@ -15263,7 +14448,7 @@ export type V2PtyUpdateErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15271,7 +14456,7 @@ export type V2PtyUpdateErrors = {
   /**
    * PtyNotFoundError
    */
-  404: PtyNotFoundErrorV2
+  404: PtyNotFoundError
 }
 
 export type V2PtyUpdateError = V2PtyUpdateErrors[keyof V2PtyUpdateErrors]
@@ -15282,7 +14467,7 @@ export type V2PtyUpdateResponses = {
    */
   200: {
     location: LocationInfo
-    data: PtyV2
+    data: Pty
   }
 }
 
@@ -15295,9 +14480,9 @@ export type V2PtyConnectTokenData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/pty/{ptyID}/connect-token"
 }
@@ -15306,7 +14491,7 @@ export type V2PtyConnectTokenErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15318,7 +14503,7 @@ export type V2PtyConnectTokenErrors = {
   /**
    * PtyNotFoundError
    */
-  404: PtyNotFoundErrorV2
+  404: PtyNotFoundError
 }
 
 export type V2PtyConnectTokenError = V2PtyConnectTokenErrors[keyof V2PtyConnectTokenErrors]
@@ -15329,7 +14514,7 @@ export type V2PtyConnectTokenResponses = {
    */
   200: {
     location: LocationInfo
-    data: PtyTicketConnectToken2
+    data: PtyTicketConnectToken
   }
 }
 
@@ -15353,7 +14538,7 @@ export type V2PtyConnectErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15365,7 +14550,7 @@ export type V2PtyConnectErrors = {
   /**
    * PtyNotFoundError
    */
-  404: PtyNotFoundErrorV2
+  404: PtyNotFoundError
 }
 
 export type V2PtyConnectError = V2PtyConnectErrors[keyof V2PtyConnectErrors]
@@ -15384,9 +14569,9 @@ export type V2ShellListData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/shell"
 }
@@ -15395,7 +14580,7 @@ export type V2ShellListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15410,7 +14595,7 @@ export type V2ShellListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<Shell1V2>
+    data: Array<Shell>
   }
 }
 
@@ -15428,9 +14613,9 @@ export type V2ShellCreateData = {
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/shell"
 }
@@ -15439,7 +14624,7 @@ export type V2ShellCreateErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15454,7 +14639,7 @@ export type V2ShellCreateResponses = {
    */
   200: {
     location: LocationInfo
-    data: Shell1V2
+    data: Shell
   }
 }
 
@@ -15467,9 +14652,9 @@ export type V2ShellRemoveData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/shell/{id}"
 }
@@ -15478,7 +14663,7 @@ export type V2ShellRemoveErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15507,9 +14692,9 @@ export type V2ShellGetData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/shell/{id}"
 }
@@ -15518,7 +14703,7 @@ export type V2ShellGetErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15537,7 +14722,7 @@ export type V2ShellGetResponses = {
    */
   200: {
     location: LocationInfo
-    data: Shell1V2
+    data: Shell
   }
 }
 
@@ -15550,9 +14735,9 @@ export type V2ShellOutputData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
     cursor?: string
     limit?: string
   }
@@ -15563,7 +14748,7 @@ export type V2ShellOutputErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15593,14 +14778,160 @@ export type V2ShellOutputResponses = {
 
 export type V2ShellOutputResponse = V2ShellOutputResponses[keyof V2ShellOutputResponses]
 
+export type V2QuestionRequestListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/question/request"
+}
+
+export type V2QuestionRequestListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2QuestionRequestListError = V2QuestionRequestListErrors[keyof V2QuestionRequestListErrors]
+
+export type V2QuestionRequestListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<QuestionV2Request>
+  }
+}
+
+export type V2QuestionRequestListResponse = V2QuestionRequestListResponses[keyof V2QuestionRequestListResponses]
+
+export type V2SessionQuestionListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/question"
+}
+
+export type V2SessionQuestionListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionQuestionListError = V2SessionQuestionListErrors[keyof V2SessionQuestionListErrors]
+
+export type V2SessionQuestionListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<QuestionV2Request>
+  }
+}
+
+export type V2SessionQuestionListResponse = V2SessionQuestionListResponses[keyof V2SessionQuestionListResponses]
+
+export type V2SessionQuestionReplyData = {
+  body: QuestionV2Reply
+  path: {
+    sessionID: string
+    requestID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/question/{requestID}/reply"
+}
+
+export type V2SessionQuestionReplyErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | QuestionNotFoundError
+   */
+  404: QuestionNotFoundError | SessionNotFoundError
+}
+
+export type V2SessionQuestionReplyError = V2SessionQuestionReplyErrors[keyof V2SessionQuestionReplyErrors]
+
+export type V2SessionQuestionReplyResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionQuestionReplyResponse = V2SessionQuestionReplyResponses[keyof V2SessionQuestionReplyResponses]
+
+export type V2SessionQuestionRejectData = {
+  body?: never
+  path: {
+    sessionID: string
+    requestID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/question/{requestID}/reject"
+}
+
+export type V2SessionQuestionRejectErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | QuestionNotFoundError
+   */
+  404: QuestionNotFoundError | SessionNotFoundError
+}
+
+export type V2SessionQuestionRejectError = V2SessionQuestionRejectErrors[keyof V2SessionQuestionRejectErrors]
+
+export type V2SessionQuestionRejectResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionQuestionRejectResponse = V2SessionQuestionRejectResponses[keyof V2SessionQuestionRejectResponses]
+
 export type V2ReferenceListData = {
   body?: never
   path?: never
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/api/reference"
 }
@@ -15609,7 +14940,7 @@ export type V2ReferenceListErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError
   /**
    * UnauthorizedError
    */
@@ -15631,7 +14962,7 @@ export type V2ReferenceListResponses = {
 export type V2ReferenceListResponse = V2ReferenceListResponses[keyof V2ReferenceListResponses]
 
 export type V2ProjectCopyRemoveData = {
-  body: {
+  body?: {
     directory: string
     force: boolean
   }
@@ -15640,9 +14971,9 @@ export type V2ProjectCopyRemoveData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/experimental/project/{projectID}/copy"
 }
@@ -15651,11 +14982,7 @@ export type V2ProjectCopyRemoveErrors = {
   /**
    * ProjectCopyError | InvalidRequestError
    */
-  400: ProjectCopyError | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
+  400: ProjectCopyError | InvalidRequestError
 }
 
 export type V2ProjectCopyRemoveError = V2ProjectCopyRemoveErrors[keyof V2ProjectCopyRemoveErrors]
@@ -15670,7 +14997,7 @@ export type V2ProjectCopyRemoveResponses = {
 export type V2ProjectCopyRemoveResponse = V2ProjectCopyRemoveResponses[keyof V2ProjectCopyRemoveResponses]
 
 export type V2ProjectCopyCreateData = {
-  body: {
+  body?: {
     strategy: string
     directory: string
     name?: string
@@ -15680,9 +15007,9 @@ export type V2ProjectCopyCreateData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/experimental/project/{projectID}/copy"
 }
@@ -15691,11 +15018,7 @@ export type V2ProjectCopyCreateErrors = {
   /**
    * ProjectCopyError | InvalidRequestError
    */
-  400: ProjectCopyError | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
+  400: ProjectCopyError | InvalidRequestError
 }
 
 export type V2ProjectCopyCreateError = V2ProjectCopyCreateErrors[keyof V2ProjectCopyCreateErrors]
@@ -15716,9 +15039,9 @@ export type V2ProjectCopyRefreshData = {
   }
   query?: {
     location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
+      directory?: string
+      workspace?: string
+    }
   }
   url: "/experimental/project/{projectID}/copy/refresh"
 }
@@ -15727,11 +15050,7 @@ export type V2ProjectCopyRefreshErrors = {
   /**
    * ProjectCopyError | InvalidRequestError
    */
-  400: ProjectCopyError | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
+  400: ProjectCopyError | InvalidRequestError
 }
 
 export type V2ProjectCopyRefreshError = V2ProjectCopyRefreshErrors[keyof V2ProjectCopyRefreshErrors]
@@ -15744,3 +15063,39 @@ export type V2ProjectCopyRefreshResponses = {
 }
 
 export type V2ProjectCopyRefreshResponse = V2ProjectCopyRefreshResponses[keyof V2ProjectCopyRefreshResponses]
+
+export type PtyConnectData = {
+  body?: never
+  path: {
+    ptyID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    ticket?: string
+  }
+  url: "/pty/{ptyID}/connect"
+}
+
+export type PtyConnectErrors = {
+  /**
+   * Forbidden
+   */
+  403: EffectHttpApiErrorForbidden
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
+
+export type PtyConnectResponses = {
+  /**
+   * Connected session
+   */
+  200: boolean
+}
+
+export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]

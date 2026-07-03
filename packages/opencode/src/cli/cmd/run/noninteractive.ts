@@ -114,7 +114,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
   const rejectQuestion = async (request: { id: string }) => {
     questionRejected = true
-    await input.client.question.reject({ requestID: request.id }).catch(() => {})
+    await input.client.v2.session.question.reject({ sessionID: input.sessionID, requestID: request.id }).catch(() => {})
   }
 
   const consume = async () => {
@@ -127,7 +127,7 @@ export async function runNonInteractivePrompt(input: Input) {
         await replyPermission(event.data)
         continue
       }
-      if (event.type === "question.asked" && submitted && event.data.sessionID === input.sessionID) {
+      if (event.type === "question.v2.asked" && submitted && event.data.sessionID === input.sessionID) {
         await rejectQuestion(event.data)
         continue
       }
@@ -408,11 +408,11 @@ export async function runNonInteractivePrompt(input: Input) {
 
     const [permissions, questions] = await Promise.all([
       input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.question.list().catch(() => undefined),
+      input.client.v2.session.question.list({ sessionID: input.sessionID }).catch(() => undefined),
     ])
     await Promise.all([
       ...(permissions?.data?.data ?? []).map(replyPermission),
-      ...(questions?.data ?? []).filter((question) => question.sessionID === input.sessionID).map(rejectQuestion),
+      ...(questions?.data?.data ?? []).map(rejectQuestion),
     ])
     await completed
   } finally {

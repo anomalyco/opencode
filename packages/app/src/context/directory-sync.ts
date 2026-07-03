@@ -30,13 +30,11 @@ export const createDirSyncContext = (
   const data = new Proxy({} as State, {
     get(_, property: keyof State) {
       if (property === "session_working") return serverSync.session.data.session_working.bind(serverSync.session.data)
-      if (property === "question") return { ...serverSync.session.data.question, global: current()[0].question.global ?? [] }
       if (sessionFields.has(property)) return serverSync.session.data[property as keyof typeof serverSync.session.data]
       return current()[0][property]
     },
   })
   const set = ((...input: unknown[]) => {
-    if (input[0] === "question" && input[1] === "global") return (current()[1] as (...args: unknown[]) => unknown)(...input)
     if (typeof input[0] === "string" && sessionFields.has(input[0])) {
       return (serverSync.session.set as (...args: unknown[]) => unknown)(...input)
     }

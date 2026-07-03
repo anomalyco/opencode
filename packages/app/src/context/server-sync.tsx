@@ -25,7 +25,7 @@ import {
   loadReferencesQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
-import { applyDirectoryEvent, applyGlobalEvent, isGlobalQuestionEvent } from "./global-sync/event-reducer"
+import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
@@ -375,7 +375,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const event = e.details
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
-    if (!isGlobalQuestionEvent(event)) session.apply(event)
+    session.apply(event)
 
     if (directory === "global") {
       applyGlobalEvent({

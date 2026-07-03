@@ -16,12 +16,12 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
-import { Form } from "@opencode-ai/core/form"
 import { Job } from "@opencode-ai/core/job"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { QuestionV2 } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
@@ -39,7 +39,6 @@ import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionRunnerSystemPrompt } from "@opencode-ai/core/session/runner/system-prompt"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
@@ -277,7 +276,7 @@ const it = testEffect(
     LayerNode.group([
       Database.node,
       EventV2.node,
-      Form.node,
+      QuestionV2.node,
       SessionProjector.node,
       SessionStore.node,
       AgentV2.node,
@@ -2856,19 +2855,14 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const registry = yield* ToolRegistry.Service
-      const forms = yield* Form.Service
+      const questions = yield* QuestionV2.Service
       yield* registry.register({
         question: Tool.make({
           description: "Ask the user",
           input: Schema.Struct({}),
           output: Schema.Struct({}),
           execute: (_, context) =>
-            forms.ask({ sessionID: context.sessionID, mode: "form", fields: [] }).pipe(
-              Effect.orDie,
-              Effect.flatMap((state) =>
-                state.status === "answered" ? Effect.succeed({}) : Effect.die(new QuestionTool.RejectedError()),
-              ),
-            ),
+            questions.ask({ sessionID: context.sessionID, questions: [] }).pipe(Effect.as({}), Effect.orDie),
         }),
       })
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Ask then stop" }), resume: false })
@@ -2885,12 +2879,12 @@ describe("SessionRunnerLLM", () => {
       ]
 
       const run = yield* session.resume(sessionID).pipe(Effect.exit, Effect.forkChild)
-      let pending = yield* forms.list({ sessionID })
+      let pending = yield* questions.list()
       while (pending.length === 0) {
         yield* Effect.yieldNow
-        pending = yield* forms.list({ sessionID })
+        pending = yield* questions.list()
       }
-      yield* forms.cancel(pending[0]!.id)
+      yield* questions.reject(pending[0]!.id)
       const exit = yield* Fiber.join(run)
 
       expect(exit._tag).toBe("Failure")
