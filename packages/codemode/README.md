@@ -178,7 +178,7 @@ const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide
 
 `fromSpec` is synchronous and returns `{ tools, skipped }`; operations it cannot represent (non-JSON request bodies, non-absolute server URLs) land in `skipped` with a reason instead of producing broken tools. Tool inputs group parameters by location - `{ path, query, headers, body }` - and never include auth. Non-2xx responses become safe tool failures carrying the status and a size-capped body summary, so programs can `catch` and read them.
 
-Auth follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the adapter. See the `Options` and `AuthResolver` docstrings in `src/adapters/openapi.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
+Auth follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the adapter. See the `Options` and `AuthResolver` docstrings in `src/adapters/openapi/types.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
 
 ## Discovery
 
