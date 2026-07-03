@@ -23,7 +23,6 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import {
-  BatchDeletePayload,
   CommandPayload,
   DiffQuery,
   ForkPayload,
@@ -37,6 +36,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
+import { NotFoundError } from "@/storage/storage"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
@@ -177,31 +177,27 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* SessionError.mapStorageNotFound(session.remove(ctx.params.sessionID))
+      const raw = ctx.params.sessionID as string
+      const ids = raw.includes(",") ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [raw]
+
+      if (ids.length === 1) {
+        yield* SessionError.mapStorageNotFound(session.remove(ids[0] as SessionID))
+        return true
+      }
+
+      const notFound: string[] = []
+      for (const id of ids) {
+        yield* session.remove(id as SessionID).pipe(
+          Effect.catchIf(NotFoundError.isInstance, () => {
+            notFound.push(id)
+            return Effect.void
+          }),
+        )
+      }
+      if (notFound.length > 0) {
+        yield* Effect.logWarning("batch delete: some sessions not found", { notFound })
+      }
       return true
-    })
-
-    const batchDelete = Effect.fn("SessionHttpApi.batchDelete")(function* (ctx: {
-      payload: typeof BatchDeletePayload.Type
-    }) {
-      const payload = ctx.payload
-
-      if (payload.all) {
-        const sessions = yield* session.list({ roots: true })
-        for (const s of sessions) {
-          yield* session.remove(s.id)
-        }
-        return true
-      }
-
-      if (payload.ids && payload.ids.length > 0) {
-        for (const id of payload.ids) {
-          yield* SessionError.mapStorageNotFound(session.remove(id))
-        }
-        return true
-      }
-
-      return yield* new HttpApiError.BadRequest({})
     })
 
     const update = Effect.fn("SessionHttpApi.update")(function* (ctx: {
@@ -445,7 +441,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("message", message)
       .handleRaw("create", createRaw)
       .handle("remove", remove)
-      .handle("batchDelete", batchDelete)
       .handle("update", update)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)

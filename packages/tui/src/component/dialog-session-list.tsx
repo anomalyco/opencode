@@ -250,7 +250,7 @@ export function DialogSessionList() {
           : isSelected
             ? `[x] ${x.title}`
             : x.title,
-        bg: isDeleting ? theme.error : isSelected ? theme.selection : undefined,
+        bg: isDeleting ? theme.error : isSelected ? theme.backgroundElement : undefined,
         value: x.id,
         category,
         footer,
@@ -285,8 +285,10 @@ export function DialogSessionList() {
       onFilter={setSearch}
       onMove={() => {
         setToDelete(undefined)
+        setSelected(new Set())
       }}
       onSelect={(option) => {
+        setSelected(new Set())
         route.navigate({
           type: "session",
           sessionID: option.value,
@@ -324,20 +326,13 @@ export function DialogSessionList() {
             
             if (selectedIds.size > 0) {
               if (toDelete() === "batch") {
-                let failed = 0
-                for (const id of selectedIds) {
-                  try {
-                    const result = await sdk.client.session.delete({ sessionID: id })
-                    if (result.error) failed++
-                  } catch {
-                    failed++
-                  }
-                }
-                
-                if (failed > 0) {
+                const ids = Array.from(selectedIds).join(",")
+                const result = await sdk.client.session.delete({ sessionID: ids })
+                if (result.error) {
                   toast.show({
                     variant: "error",
-                    title: `Failed to delete ${failed} session(s)`,
+                    title: "Failed to delete sessions",
+                    message: errorMessage(result.error),
                   })
                 }
                 

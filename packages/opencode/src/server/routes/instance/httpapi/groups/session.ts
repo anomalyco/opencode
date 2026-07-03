@@ -75,11 +75,6 @@ export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
 
-export const BatchDeletePayload = Schema.Struct({
-  ids: Schema.optional(Schema.Array(SessionID)),
-  all: Schema.optional(Schema.Boolean),
-})
-
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
@@ -91,7 +86,6 @@ export const SessionPaths = {
   message: `${root}/:sessionID/message/:messageID`,
   create: root,
   remove: `${root}/:sessionID`,
-  batchDelete: root,
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
@@ -228,17 +222,6 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.delete",
             summary: "Delete session",
             description: "Delete a session and permanently remove all associated data, including messages and history.",
-          }),
-        ),
-        HttpApiEndpoint.delete("batchDelete", SessionPaths.batchDelete, {
-          payload: BatchDeletePayload,
-          success: described(Schema.Boolean, "Successfully deleted sessions"),
-          error: [HttpApiError.BadRequest],
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.batchDelete",
-            summary: "Batch delete sessions",
-            description: "Delete multiple sessions by IDs or delete all sessions.",
           }),
         ),
         HttpApiEndpoint.patch("update", SessionPaths.update, {

@@ -41,6 +41,19 @@ function pagerCmd(): string[] {
   return ["cmd", "/c", "more"]
 }
 
+function confirm(message: string): Effect.Effect<boolean> {
+  return Effect.promise(async () => {
+    const readline = await import("readline")
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    return new Promise<boolean>((resolve) => {
+      rl.question(message, (answer) => {
+        rl.close()
+        resolve(answer.toLowerCase() === "y")
+      })
+    })
+  })
+}
+
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
@@ -67,19 +80,11 @@ export const SessionDeleteCommand = effectCmd({
 
     if (ids.length === 0) {
       yield* fail("No session IDs provided")
+      return
     }
 
     if (ids.length > 1) {
-      const confirmed = yield* Effect.promise(async () => {
-        const readline = await import("readline")
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-        return new Promise<boolean>((resolve) => {
-          rl.question(`Delete ${ids.length} sessions? (y/N) `, (answer) => {
-            rl.close()
-            resolve(answer.toLowerCase() === "y")
-          })
-        })
-      })
+      const confirmed = yield* confirm(`Delete ${ids.length} sessions? (y/N) `)
 
       if (!confirmed) {
         UI.println(UI.Style.TEXT_WARNING + "Cancelled" + UI.Style.TEXT_NORMAL)
@@ -118,16 +123,7 @@ export const SessionCleanCommand = effectCmd({
       return
     }
 
-    const confirmed = yield* Effect.promise(async () => {
-      const readline = await import("readline")
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-      return new Promise<boolean>((resolve) => {
-        rl.question(`Delete all ${sessions.length} sessions? (y/N) `, (answer) => {
-          rl.close()
-          resolve(answer.toLowerCase() === "y")
-        })
-      })
-    })
+    const confirmed = yield* confirm(`Delete all ${sessions.length} sessions? (y/N) `)
 
     if (!confirmed) {
       UI.println(UI.Style.TEXT_WARNING + "Cancelled" + UI.Style.TEXT_NORMAL)
