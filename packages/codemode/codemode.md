@@ -883,6 +883,72 @@ restructure; fixes the §4 permission-advertising bug):
     excluded without MCP tools, excluded with flag off, and deny/ask catalog filtering
     through `registry.tools()`. Suites: 43 + 16 adapter tests, 16 registry tests, all green.
 
+**Shared MCP invocation middle (`McpInvoke.invoke`)** (closes the §4 "plugin hooks skip
+child calls" gap):
+  - `packages/opencode/src/mcp/invoke.ts` extracts the duplicated "invoke an MCP tool"
+    middle into one shared `McpInvoke.invoke(input)`: plugin `tool.execute.before` hook →
+    permission ask (`{ permission: key, patterns: ["*"], always: ["*"] }` via the caller's
+    `ctx.ask`) → dispatch through the ai-sdk tool's execute inside the `Tool.execute`
+    tracing span (`tool.name`/`tool.call_id`/`session.id`/`message.id` attributes) →
+    plugin `tool.execute.after` hook. It returns the RAW result the ai-sdk execute
+    resolved with; each caller keeps its own shaping edge — the legacy per-MCP loop in
+    `SessionTools.resolve` applies its existing model-facing shaping/truncation, code
+    mode applies `toSandboxResult`. It lives under `src/mcp/` because both callers
+    already depend on MCP and the function is about invoking an MCP-backed ai-sdk tool,
+    not about sessions or code mode.
+  - **After-hook payload**: fired inside `McpInvoke.invoke` with the raw MCP result —
+    which is exactly what the legacy loop always passed (the raw `CallToolResult`, not
+    the shaped `{title, output, metadata}`), so legacy behavior is preserved bit-for-bit
+    and the hook payload cannot drift between callers. No callback/edge-firing design
+    was needed.
+  - **Synthetic child callID**: code-mode child calls pass `${parentCallID}/${n}` as the
+    hook/span callID (`parentCallID` = the `execute` call's `ctx.callID`, falling back to
+    the entry key; `n` = per-execution counter starting at 1, shared across all child
+    calls in one program). callID is an opaque string — nothing parses it. The ai-sdk
+    `toolCallId` (`options.toolCallId`) stays each caller's existing value
+    (`ctx.callID ?? entry.key` for code mode).
+  - **Child-scoped hook failures**: `CodeModeTool` (which now also yields
+    `Plugin.Service`) wraps the whole child call — hooks, ask, dispatch — in
+    `toCatchable` (the generalization of the old `askPermission` catchCause), so a plugin
+    hook failure fails ONLY that child call as a catchable in-program `toolError`; other
+    calls in the same program keep running and interruption still propagates as
+    interruption. Legacy semantics unchanged: a hook failure fails the tool call.
+  - **Tests**: `test/tool/code-mode.test.ts` +2 (child calls fire before/after with the
+    MCP key and `parent/1`, `parent/2` ids, after hook carries the raw MCP result; a
+    failing before hook is caught in-program, gates dispatch, and leaves the outer
+    execute ok) — both code-mode harnesses gained a `Plugin.Service` mock (pass-through
+    trigger by default, overridable). New `test/session/tools.test.ts` (3 tests) pins
+    `SessionTools.resolve` at the real-registry seam (LayerNode.compile, fake MCP layer):
+    flag on + MCP tools → `execute` present, raw MCP keys suppressed; flag off → raw
+    keys present, `execute` absent; and the legacy raw-MCP execute fires before/after
+    hooks keyed by the ai-sdk toolCallId with the raw result payload. Suites: adapter
+    45 + 16, session/tool/permission all green; this package untouched (211 pass).
+
+**Signature rendering + compound-assignment parity fixes** (externally reported, both
+verified real with failing tests before fixing):
+  - **Non-identifier property names in rendered signatures** (`src/tool.ts`): `renderSchema`
+    emitted raw property names, so schema properties like `foo-bar`/`@type`/`x.y`/`123`
+    rendered invalid TypeScript (`{ foo-bar?: string }`). Fixed with a `renderKey` helper —
+    bare identifiers stay bare, everything else is `JSON.stringify`-quoted — applied in the
+    single `field` closure both the compact and pretty renderings share. The
+    `identifierSegment` regex now lives in `tool.ts` (exported) and `tool-runtime.ts`'s
+    bracket-notation `toolExpression` imports it: one source of truth for "is this a bare
+    identifier" across object keys and tool paths. Tests: `signature.test.ts` +4 (compact,
+    pretty with JSDoc on a quoted key, JSON Schema input+output, Effect Schema struct).
+  - **Compound assignment now matches binary-operator semantics** (`src/codemode.ts`):
+    `applyCompoundAssignment` did raw JS ops on interpreter wrapper objects, so `x += y`
+    diverged from `x = x + y` (sandbox Date `d += 1` produced `"[object Object]1"`;
+    `d -= 400` gave `NaN` instead of epoch arithmetic). The operator table + coercion moved
+    verbatim out of `evaluateBinaryExpression` into a shared `applyBinaryOperator`;
+    compound assignment validates against a `compoundOperators` set (`+=` … `>>>=`) and
+    dispatches through it (`operator.slice(0, -1)`). Logical assignments (`&&=`/`||=`/`??=`)
+    keep their separate short-circuit path (`evaluateLogicalAssignment`), and both
+    assignment call sites still wrap results in `boundedData`. Deliberate side effect:
+    compound assignment now rejects opaque references, consistent with binary operators.
+    Tests: `parity.test.ts` +5 (Date `+=` concat parity, Date `-=`/`/=` epoch parity,
+    string `+=` object/array, member-target compound, 13-case operator sweep vs real JS).
+    Package suite: 220 pass.
+
 ---
 
 ## 4. Remaining work (detailed TODO)
@@ -917,6 +983,42 @@ focused interpreter-surface pass rather than picked off piecemeal.
       stamped into every output schema — rejected (more digging per call, verbose
       signatures). Result quality is dominated by whether servers declare output schemas;
       revisit once real usage shows which failure modes matter.
+
+### Next iteration: stdlib surface (prioritized)
+Current instructions say "usual Array/String/Object/Math/JSON methods," but the interpreter is
+intentionally a subset. Keep CodeMode focused on orchestration and data shaping, not a full host
+runtime, but close the high-friction gaps models are likely to reach for.
+
+- [ ] **P0: tighten wording first** — change instructions/docs to say "common stdlib subset"
+      until the surface is broader. This avoids misleading the model into assuming every JS
+      helper exists.
+- [ ] **P1: URL parsing helpers** — add `URL` and `URLSearchParams`. These are high-value for
+      tool orchestration (query strings, ids in URLs, API links), deterministic, and do not add
+      ambient host authority.
+- [ ] **P2: Math completion** — add the missing standard deterministic `Math` methods
+      (`sin`/`cos`/`tan`, inverse/hyperbolic variants, `atan2`, `log1p`, `expm1`, `imul`,
+      `fround`, `clz32`, etc.). Decide explicitly on `Math.random`: likely acceptable because
+      `Date.now()` is already exposed, but document the nondeterminism if enabled.
+- [ ] **P3: base64 helpers** — add string-only `atob`/`btoa` equivalents. Useful for API/tool
+      payload cleanup and does not require opening the broader binary boundary.
+- [ ] **P4: small crypto helper** — consider `crypto.randomUUID()` only, not full `crypto`.
+      UUID generation is a common orchestration need; broader crypto can wait until there is a
+      concrete use case and a clear capability boundary.
+- [ ] **P5: text/binary primitives** — consider `TextEncoder`/`TextDecoder` first, then
+      `ArrayBuffer`/typed arrays/`DataView`/`Blob`/`File` only with an explicit boundary design
+      (serialization, size limits, and how values cross tool args/results). This is reasonable
+      but lower priority than URL/base64 because CodeMode is still plain-data oriented.
+- [ ] **P6: date/formatting conveniences** — consider `Date` setters and common formatting
+      helpers (`toUTCString`, maybe `Intl` later). Lower priority; most orchestration can use
+      existing getters, `Date.parse`, `Date.UTC`, and ISO strings.
+- [ ] **P7: environment/config access** — do not expose raw `process.env` as a global ambient
+      authority. If this becomes useful, add an explicit host-provided/whitelisted capability
+      (for example a small env/config tool or injected read-only object) so secrets are not
+      accidentally exposed to arbitrary CodeMode programs.
+
+Explicit non-goals for now: `structuredClone`, `WeakMap`/`WeakSet`, and timers
+(`setTimeout`/`setInterval`/`queueMicrotask`). They do not materially improve the current tool
+orchestration use case.
 
 ### Wiring-review findings (subagent code review of the OpenCode integration, triaged)
 Pre-PR fixes (user-approved cut):
@@ -964,10 +1066,14 @@ Pre-PR fixes (user-approved cut):
       `title: "execute"` sites in `code-mode.ts` now reference `CODE_MODE_TOOL`.
 
 Post-MVP (logged, not blocking an experimental flag):
-- [ ] **Plugin `tool.execute.before/after` hooks skip child calls** — legacy MCP
+- [x] **Plugin `tool.execute.before/after` hooks skip child calls** — legacy MCP
       registration fires them per tool (`tools.ts:419-441`); under code mode only the
       outer `execute` fires them, so auditing/intercepting plugins silently lose MCP
       coverage when the flag flips.
+      DONE (see the "Shared MCP invocation middle" entry in §3): both paths now run
+      `McpInvoke.invoke` (`src/mcp/invoke.ts`) — hooks AND the `Tool.execute` span fire
+      for child calls with synthetic `${parentCallID}/${n}` callIDs; hook failures are
+      child-scoped, catchable in-program errors.
 - [x] Description/preview rebuilt every assistant turn — `registry.tools()` re-runs
       `groupByServer` + a throwaway `CodeMode.make(...).instructions()` per turn
       (`describeCodeMode`). DECIDED as an explicit non-goal: memoizing the catalog
@@ -992,6 +1098,10 @@ Post-MVP (logged, not blocking an experimental flag):
       names that are no longer directly callable under code mode.
 
 ### Backlog / loose ends (non-blocking, any order)
+- [ ] `evaluateUpdateExpression` (`++`/`--`) still uses raw `Number(current)`, so `d++` on a
+      sandbox Date yields `NaN` where `d += 1` now uses epoch semantics (and real JS `d++`
+      would give epoch+0 numeric). Pre-existing, out of scope of the compound-assignment
+      parity fix; route it through `applyBinaryOperator` if it ever matters.
 - [ ] Media-only marker could name what it attached when MCP provides names: `image`/`audio`
       blocks carry no filename (mime + data only) so the generic
       `[N images attached to the result]` stays, but `resource`/`resource_link` blocks have

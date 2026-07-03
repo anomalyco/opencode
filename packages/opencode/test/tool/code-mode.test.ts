@@ -15,6 +15,7 @@ import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
+import { Plugin } from "@/plugin"
 import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
@@ -50,14 +51,20 @@ function mcpTool(
 // Truncate echoes its input so assertions read the exact program output. Agent.get is
 // consulted by the shared wrapper during truncation AND at execute time for the
 // permission ruleset that filters the dispatchable tool tree; Session.get supplies the
-// (empty) session-level ruleset half of that merge.
+// (empty) session-level ruleset half of that merge. Plugin.trigger defaults to the
+// pass-through the real service uses when no plugin implements a hook; tests observing
+// or failing hooks override it.
 function harness(input: {
   mcpTools: Record<string, AITool>
   defs?: Record<string, MCPToolDef>
   servers: string[]
   permission?: PermissionV1.Rule[]
+  trigger?: Plugin.Interface["trigger"]
 }) {
   return Layer.mergeAll(
+    Layer.mock(Plugin.Service, {
+      trigger: input.trigger ?? (((_name, _input, output) => Effect.succeed(output)) as Plugin.Interface["trigger"]),
+    }),
     Layer.mock(Truncate.Service, {
       output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
     }),
@@ -86,12 +93,13 @@ function build(
   defs: Record<string, MCPToolDef> = {},
   servers?: string[],
   permission?: PermissionV1.Rule[],
+  trigger?: Plugin.Interface["trigger"],
 ) {
   const names = serverNames(mcpTools, servers)
   return Effect.runPromise(
     CodeModeTool.pipe(
       Effect.flatMap(Tool.init),
-      Effect.provide(harness({ mcpTools, defs, servers: names, permission })),
+      Effect.provide(harness({ mcpTools, defs, servers: names, permission, trigger })),
     ),
   )
 }
@@ -409,6 +417,83 @@ describe("code mode execute", () => {
     // The MCP tool itself never ran.
     expect(called).toEqual([])
     expect(output.metadata.toolCalls).toEqual([{ tool: "a.tool", status: "error" }])
+  })
+
+  test("child calls fire plugin tool.execute hooks with the MCP key and synthetic parent/N call ids", async () => {
+    const events: { name: string; input: any; output: any }[] = []
+    const trigger = ((name: unknown, input: unknown, output: unknown) =>
+      Effect.sync(() => {
+        events.push({ name: name as string, input, output })
+        return output
+      })) as Plugin.Interface["trigger"]
+    const tool = await build(
+      {
+        a_tool: mcpTool("a", () => ({ content: [{ type: "text", text: "one" }] })),
+        b_tool: mcpTool("b", () => ({ content: [{ type: "text", text: "two" }] })),
+      },
+      {},
+      undefined,
+      undefined,
+      trigger,
+    )
+
+    const out = await Effect.runPromise(
+      tool.execute({ code: "await tools.a.tool({ x: 1 }); await tools.b.tool({}); return 'done'" }, ctx),
+    )
+
+    expect(out.output).toBe("done")
+    // callID is synthetic and per-execution: `${parentCallID}/${n}`, n starting at 1.
+    expect(events.map((e) => [e.name, e.input.tool, e.input.callID])).toEqual([
+      ["tool.execute.before", "a_tool", "call_code_mode/1"],
+      ["tool.execute.after", "a_tool", "call_code_mode/1"],
+      ["tool.execute.before", "b_tool", "call_code_mode/2"],
+      ["tool.execute.after", "b_tool", "call_code_mode/2"],
+    ])
+    const [before, after] = events
+    expect(before!.input.sessionID).toBe(ctx.sessionID)
+    expect(before!.output).toEqual({ args: { x: 1 } })
+    expect(after!.input.args).toEqual({ x: 1 })
+    // The after hook sees the raw MCP result — the same payload the legacy path passes.
+    expect(after!.output).toEqual({ content: [{ type: "text", text: "one" }] })
+  })
+
+  test("a failing before hook fails only that child call as a catchable in-program error", async () => {
+    const trigger = ((name: unknown, input: any, output: unknown) => {
+      if (name === "tool.execute.before" && input.tool === "a_tool") return Effect.die(new Error("hook exploded"))
+      return Effect.succeed(output)
+    }) as Plugin.Interface["trigger"]
+    const called: string[] = []
+    const record = (name: string) => () => {
+      called.push(name)
+      return { content: [{ type: "text", text: "ok" }] }
+    }
+    const tool = await build(
+      { a_tool: mcpTool("a", record("a")), b_tool: mcpTool("b", record("b")) },
+      {},
+      undefined,
+      undefined,
+      trigger,
+    )
+
+    const out = await Effect.runPromise(
+      tool.execute(
+        {
+          code: `
+            let caught
+            try { await tools.a.tool({}) } catch (e) { caught = e.message }
+            const r = await tools.b.tool({})
+            return caught + " / " + r
+          `,
+        },
+        ctx,
+      ),
+    )
+
+    // The program handled the hook failure; the rest ran and the outer result is ok.
+    expect(out.metadata.error).toBeUndefined()
+    expect(out.output).toBe("hook exploded / ok")
+    // The before hook gates dispatch: the failed child's tool never executed.
+    expect(called).toEqual(["b"])
   })
 
   test("streams live per-call metadata as a call starts and finishes", async () => {

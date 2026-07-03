@@ -12,9 +12,11 @@ import {
 } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
+import { McpInvoke } from "@/mcp/invoke"
 import { Agent } from "@/agent/agent"
 import { Session } from "@/session/session"
 import { Permission } from "@/permission"
+import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
 
@@ -279,11 +281,12 @@ function toolTree(catalog: readonly CatalogEntry[], run: (entry: CatalogEntry) =
   return tree
 }
 
-/** Per-child permission gate: every MCP call inside a program asks before it runs —
- *  approving `execute` does not approve any child call. Denials become safe,
- *  catchable tool failures inside the program. */
-const askPermission = (ctx: Tool.Context, entry: CatalogEntry) =>
-  ctx.ask({ permission: entry.key, metadata: {}, patterns: ["*"], always: ["*"] }).pipe(
+/** Failures inside a child call — plugin hook failures, permission denials, and tool
+ *  failures alike — become safe, catchable in-program errors via toolError, so a
+ *  program can try/catch one call without the whole execution dying. Interruption
+ *  (user cancel) keeps propagating as interruption. */
+const toCatchable = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
     Effect.catchCause((cause) => {
       if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
       const error = Cause.squash(cause)
@@ -297,6 +300,7 @@ export const CodeModeTool = Tool.define(
     const mcp = yield* MCP.Service
     const agents = yield* Agent.Service
     const sessions = yield* Session.Service
+    const plugin = yield* Plugin.Service
 
     const init: Tool.DefWithoutID<typeof Parameters, Metadata> = {
       description: DESCRIPTION,
@@ -332,26 +336,34 @@ export const CodeModeTool = Tool.define(
         // tool part shows each child call appearing and resolving while the program runs.
         const publish = () => ctx.metadata({ title: CODE_MODE_TOOL, metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
 
-        // One CodeMode tool per MCP tool: gate on permission, dispatch through the
-        // ai-sdk wrapper (which owns callTool timeouts/progress and turns an MCP
-        // isError into a thrown Error), and shape the raw result for the sandbox.
-        // Failures surface as safe, catchable in-program errors via toolError.
+        // One CodeMode tool per MCP tool, running the same shared middle as legacy
+        // per-tool registration (McpInvoke.invoke: plugin before hook → permission
+        // ask → Tool.execute span → dispatch through the ai-sdk wrapper, which owns
+        // callTool timeouts/progress and turns an MCP isError into a thrown Error →
+        // plugin after hook), so plugins observe child calls too. Each child gets a
+        // synthetic hook/span callID `${parentCallID}/${n}` (per-execution counter,
+        // opaque — nothing parses it); the ai-sdk toolCallId is unchanged. Failures —
+        // hook, denial, or tool — fail only that child call as a safe, catchable
+        // in-program error (toCatchable); the raw result is then shaped for the sandbox.
+        let childCalls = 0
         const callTool = (entry: CatalogEntry) => (input: unknown) =>
-          Effect.gen(function* () {
-            yield* askPermission(ctx, entry)
-            const raw = yield* Effect.tryPromise({
-              try: () =>
-                Promise.resolve(
-                  entry.tool.execute!(input ?? {}, {
-                    toolCallId: ctx.callID ?? entry.key,
-                    abortSignal: ctx.abort,
-                    messages: [],
-                  }),
-                ),
-              catch: (error) => toolError(error instanceof Error ? error.message : String(error), error),
-            })
-            return toSandboxResult(raw, collect)
-          })
+          toCatchable(
+            Effect.gen(function* () {
+              childCalls += 1
+              const raw = yield* McpInvoke.invoke({
+                plugin,
+                key: entry.key,
+                execute: entry.tool.execute!,
+                args: input ?? {},
+                callID: `${ctx.callID ?? entry.key}/${childCalls}`,
+                options: { toolCallId: ctx.callID ?? entry.key, abortSignal: ctx.abort, messages: [] },
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                ask: ctx.ask,
+              })
+              return toSandboxResult(raw, collect)
+            }),
+          )
 
         const runtime = CodeMode.make({
           tools: toolTree(catalog, callTool),

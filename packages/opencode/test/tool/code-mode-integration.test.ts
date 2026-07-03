@@ -3,6 +3,7 @@ import { CodeModeTool, catalogInstructions } from "@/tool/code-mode"
 import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
 import { MCP } from "@/mcp"
+import { Plugin } from "@/plugin"
 import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
@@ -107,6 +108,10 @@ async function buildTool() {
   // supply the (empty) permission rulesets the execute path merges; MCP serves the tools
   // this real in-memory server listed — the same snapshot shape the live service returns.
   const layer = Layer.mergeAll(
+    Layer.mock(Plugin.Service, {
+      trigger: (((_name: unknown, _input: unknown, output: unknown) =>
+        Effect.succeed(output)) as Plugin.Interface["trigger"]),
+    }),
     Layer.mock(Truncate.Service, {
       output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
     }),
