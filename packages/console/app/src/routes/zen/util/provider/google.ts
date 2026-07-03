@@ -31,6 +31,7 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
   modifyUrl: (providerApi: string, isStream?: boolean) =>
     `${providerApi}/models/${providerModel}:${isStream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
   modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
+    headers.delete("authorization")
     headers.set("x-goog-api-key", apiKey)
   },
   modifyBody: (body: Record<string, any>) => {
