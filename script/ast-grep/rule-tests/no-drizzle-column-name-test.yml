@@ -1,0 +1,14 @@
+id: no-drizzle-column-name
+valid:
+  - |
+    const table = sqliteTable("session", {
+      project_id: text().notNull(),
+      time_created: integer().notNull(),
+      payload: text({ mode: "json" }),
+    })
+invalid:
+  - |
+    const table = sqliteTable("session", {
+      projectID: text("project_id").notNull(),
+      createdAt: integer("time_created").notNull(),
+    })

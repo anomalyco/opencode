@@ -1,0 +1,10 @@
+id: no-import-alias
+language: TypeScript
+message: Do not alias named imports.
+severity: error
+rule:
+  all:
+    - kind: import_specifier
+    - has:
+        field: alias
+        kind: identifier
