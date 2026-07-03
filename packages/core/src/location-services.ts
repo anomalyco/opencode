@@ -44,6 +44,7 @@ import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
+import { Vcs } from "./vcs"
 
 export { LocationServiceMap } from "./location-service-map"
 
@@ -92,6 +93,7 @@ export const locationServices = LayerNode.group([
   SessionTitle.node,
   Snapshot.node,
   SessionRunnerLLM.node,
+  Vcs.node,
 ])
 
 export type LocationServices = LayerNode.Output<typeof locationServices>
