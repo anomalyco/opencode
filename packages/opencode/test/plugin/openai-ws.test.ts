@@ -559,21 +559,28 @@ describe("plugin.openai.ws-pool", () => {
   })
 
   test("retries failed websocket streams before using HTTP fallback", async () => {
+    const attempts: Array<(socket: WebSocket) => void> = []
     await using server = await createWebSocketServer((socket) => {
       socket.once("message", () => {
         socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+        attempts.shift()?.(socket)
       })
     })
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
       url: server.url,
-      idleTimeout: 20,
       streamRetries: 1,
     })
 
+    const firstAttempt = new Promise<WebSocket>((resolve) => attempts.push(resolve))
     const first = await fetch(server.url, streamRequest())
-    expect((await readTextError(first.text())).message).toContain("idle timeout waiting for websocket")
+    const firstSocket = await firstAttempt
+    firstSocket.terminate()
+    expect((await readTextError(first.text())).message).toContain("WebSocket closed before response.completed")
+    const secondAttempt = new Promise<WebSocket>((resolve) => attempts.push(resolve))
     const second = await fetch(server.url, streamRequest())
-    expect((await readTextError(second.text())).message).toContain("idle timeout waiting for websocket")
+    const secondSocket = await secondAttempt
+    secondSocket.terminate()
+    expect((await readTextError(second.text())).message).toContain("WebSocket closed before response.completed")
     const third = await fetch(server.url, streamRequest())
 
     expect(await third.text()).toBe("http")

@@ -25,7 +25,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRevert") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sessions = yield* Session.Service
@@ -137,24 +137,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(SessionRunState.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(Snapshot.defaultLayer),
-    Layer.provide(Storage.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(SessionSummary.defaultLayer),
-  ),
-)
-
-export const node = LayerNode.make(layer, [
-  Session.node,
-  Snapshot.node,
-  Storage.node,
-  EventV2Bridge.node,
-  SessionSummary.node,
-  SessionRunState.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Session.node, Snapshot.node, Storage.node, EventV2Bridge.node, SessionSummary.node, SessionRunState.node],
+})
 
 export * as SessionRevert from "./revert"

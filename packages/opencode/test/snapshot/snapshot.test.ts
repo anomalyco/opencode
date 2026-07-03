@@ -1,6 +1,7 @@
 import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
 import path from "path"
@@ -15,7 +16,11 @@ import {
 } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, FSUtil.defaultLayer, testInstanceStoreLayer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer),
+)
+// Windows forbids both * and : in directory names.
+const nonWindowsIt = process.platform === "win32" ? it.live.skip : it.live
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
@@ -72,11 +77,12 @@ const withTrackedSnapshot = <A, E, R>(
   })
 
 const bootstrapScoped = Effect.fn("SnapshotTest.bootstrapScoped")(function* () {
-  const dir = yield* tmpdirScoped({ git: true }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer))
+  const dir = yield* tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
   return { path: dir, extra: yield* initialize(dir) }
 })
 
-const scopedGitTmpdir = () => tmpdirScoped({ git: true }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer))
+const scopedGitTmpdir = () =>
+  tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
 
 const cleanupWorktree = (repo: string, worktree: string, files: string[] = []) =>
   Effect.promise(async () => {
@@ -445,6 +451,97 @@ it.live(
       expect(patch.files).not.toContain(fwd(dir, "build/output.js"))
       expect(patch.files).not.toContain(fwd(dir, "build/new-build.js"))
     }).pipe(provideInstance(dir))
+  }),
+)
+
+it.live(
+  "subdirectory snapshots include scoped changes only",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const frontend = path.join(dir, "frontend")
+    yield* write(`${frontend}/tracked.txt`, "initial")
+    yield* write(`${frontend}/deleted.txt`, "initial")
+    yield* write(`${dir}/backend/tracked.txt`, "initial")
+    yield* write(`${dir}/backend/deleted.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${frontend}/tracked.txt`, "changed")
+      yield* write(`${frontend}/untracked.txt`, "new")
+      yield* rm(`${frontend}/deleted.txt`)
+      yield* write(`${dir}/backend/tracked.txt`, "changed")
+      yield* rm(`${dir}/backend/deleted.txt`)
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(frontend, "tracked.txt"))
+      expect(patch.files).toContain(fwd(frontend, "untracked.txt"))
+      expect(patch.files).toContain(fwd(frontend, "deleted.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "backend", "tracked.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "backend", "deleted.txt"))
+      expect(diff).not.toContain("backend/tracked.txt")
+      expect(diff).not.toContain("backend/deleted.txt")
+    }).pipe(provideInstance(frontend))
+  }),
+)
+
+nonWindowsIt(
+  "subdirectory snapshots treat wildcard characters literally",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, "src*")
+    yield* write(`${subdir}/file.txt`, "initial")
+    yield* write(`${subdir}/later-ignored.txt`, "initial")
+    yield* write(`${dir}/srca/file.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/file.txt`, "changed")
+      yield* write(`${subdir}/later-ignored.txt`, "changed")
+      yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
+      yield* write(`${dir}/srca/file.txt`, "changed")
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(subdir, "file.txt"))
+      expect(patch.files).toContain(fwd(subdir, ".gitignore"))
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "srca", "file.txt"))
+      expect(diff).toContain("src*/later-ignored.txt")
+      expect(diff).toContain("deleted file mode")
+      expect(diff).not.toContain("srca/file.txt")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+nonWindowsIt(
+  "subdirectory snapshots treat leading colons literally",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, ":src")
+    yield* write(`${subdir}/kept.txt`, "initial")
+    yield* write(`${subdir}/later-ignored.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/kept.txt`, "changed")
+      yield* write(`${subdir}/later-ignored.txt`, "changed")
+      yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(subdir, "kept.txt"))
+      expect(patch.files).toContain(fwd(subdir, ".gitignore"))
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(diff).toContain(":src/later-ignored.txt")
+      expect(diff).toContain("deleted file mode")
+    }).pipe(provideInstance(subdir))
   }),
 )
 

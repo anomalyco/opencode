@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Effect, Layer } from "effect"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -16,7 +18,8 @@ import { Provider } from "@/provider/provider"
 
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
-import { InstanceLayer } from "@/project/instance-layer"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { InstanceStore } from "@/project/instance-store"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -57,14 +60,18 @@ afterEach(async () => {
 })
 
 const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Provider.layer.pipe(
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(ModelsDev.defaultLayer),
-    Layer.provide(RuntimeFlags.layer(flags)),
+  LayerNode.compile(
+    LayerNode.group([
+      Provider.node,
+      FSUtil.node,
+      Env.node,
+      Config.node,
+      Auth.node,
+      Plugin.node,
+      ModelsDev.node,
+      RuntimeFlags.node,
+    ]),
+    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 
 const list = Provider.use.list()
@@ -77,7 +84,7 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
 
-const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Provider.node, Env.node, Plugin.node])))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
 
 const alphaProviderConfig = {
@@ -354,6 +361,17 @@ it.instance(
     expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
   }),
   { config: { model: "anthropic/claude-sonnet-4-20250514" } },
+)
+
+it.instance(
+  "defaultModel treats empty provider config as no allowlist",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const model = yield* Provider.use.defaultModel()
+    expect(model.providerID).toBeDefined()
+    expect(model.modelID).toBeDefined()
+  }),
+  { config: { provider: {} } },
 )
 
 it.instance(
@@ -649,6 +667,102 @@ it.instance("getSmallModel returns appropriate small model", () =>
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.anthropic)
     expect(model).toBeDefined()
     expect(model?.id).toContain("haiku")
+  }),
+)
+
+it.instance("getSmallModel prefers Gemini for Google Vertex", () =>
+  Effect.gen(function* () {
+    yield* set("GOOGLE_VERTEX_PROJECT", "test-project")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.googleVertex)
+    expect(model).toBeDefined()
+    expect(model?.id).toContain("gemini")
+  }),
+)
+
+it.instance(
+  "getSmallModel selects the latest model in the preferred family",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model?.id).toBe(ModelV2.ID.make("new-flash"))
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "old-flash": { family: "gemini-flash", release_date: "2025-01-01" },
+            "new-flash": { family: "gemini-flash", release_date: "2026-01-01" },
+            "newer-haiku": { family: "claude-haiku", release_date: "2026-06-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "getSmallModel matches exact model families",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model?.id).toBe(ModelV2.ID.make("claude-haiku"))
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "glm-flash": { family: "glm-flash", release_date: "2026-06-01" },
+            "claude-haiku": { family: "claude-haiku", release_date: "2026-01-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "getSmallModel ignores model IDs without family metadata",
+  Effect.gen(function* () {
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
+    expect(model).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test Provider",
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "gpt-5-nano": { release_date: "2026-01-01" },
+          },
+          options: { apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance("getSmallModel skips inferred models for Azure", () =>
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.azure)
+    expect(model).toBeUndefined()
+  }),
+)
+
+it.instance("getSmallModel skips inferred models for Azure Cognitive Services", () =>
+  Effect.gen(function* () {
+    yield* set("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_COGNITIVE_SERVICES_API_KEY", "test-key")
+    const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("azure-cognitive-services"))
+    expect(model).toBeUndefined()
   }),
 )
 
@@ -1016,6 +1130,8 @@ it.instance("ModelNotFoundError includes suggestions for typos", () =>
       .pipe(Effect.flip)
     expect(error.suggestions).toBeDefined()
     expect((error.suggestions ?? []).length).toBeGreaterThan(0)
+    expect(error.message).toContain("Model not found: anthropic/claude-sonet-4")
+    expect(error.message).toContain("Did you mean:")
   }),
 )
 
@@ -1646,8 +1762,11 @@ it.instance(
 // Tests that need plugin file setup or multi-instance flows fall back to a
 // scoped tmpdir + provideInstance pattern via it.effect.
 
+const instanceStoreLayer = LayerNode.compile(InstanceStore.node, [
+  [InstanceStore.bootstrapNode, InstanceBootstrap.node],
+])
 const provideMultiInstance = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
-  eff.pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+  eff.pipe(Effect.provide(instanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
 it.effect("plugin config providers persist after instance dispose", () =>
   Effect.gen(function* () {
@@ -1750,7 +1869,7 @@ it.effect("opencode loader keeps paid models when config apiKey is present", () 
       Provider.use
         .list()
         .pipe(provideInstanceEffect(directory))
-        .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+        .pipe(Effect.provide(instanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
     const none = paid(yield* listIn(noneDir))
     const keyedCount = paid(yield* listIn(keyedDir))
@@ -1769,7 +1888,7 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
       Provider.use
         .list()
         .pipe(provideInstanceEffect(directory))
-        .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+        .pipe(Effect.provide(instanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
     const none = paid(yield* listIn(noneDir))
 
