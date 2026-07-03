@@ -171,6 +171,66 @@ describe("pretty signature rendering", () => {
   })
 })
 
+describe("non-identifier property names render as quoted keys", () => {
+  // MCP-style schemas routinely carry property names that are not bare TS identifiers
+  // (`foo-bar`, `@type`, dotted names); the rendered signature must quote them so the
+  // model sees a valid TypeScript object type. Bare identifiers stay unquoted.
+  const rawSchema = {
+    type: "object",
+    properties: {
+      "foo-bar": { type: "string" },
+      "@type": { type: "string" },
+      "x.y": { type: "number", description: "Dotted name" },
+      "123": { type: "number" },
+      plain: { type: "boolean" },
+    },
+    required: ["@type"],
+  } as const
+
+  test("compact rendering quotes non-identifier keys and leaves identifiers bare", () => {
+    expect(jsonSchemaToTypeScript(rawSchema)).toBe(
+      '{ "123"?: number; "foo-bar"?: string; "@type": string; "x.y"?: number; plain?: boolean }',
+    )
+  })
+
+  test("pretty rendering quotes non-identifier keys and keeps their JSDoc", () => {
+    expect(jsonSchemaToTypeScript(rawSchema, true)).toBe(
+      [
+        "{",
+        '  "123"?: number',
+        '  "foo-bar"?: string',
+        '  "@type": string',
+        "  /** Dotted name */",
+        '  "x.y"?: number',
+        "  plain?: boolean",
+        "}",
+      ].join("\n"),
+    )
+  })
+
+  test("JSON Schema input and output signatures of a tool both quote", () => {
+    const tool = Tool.make({
+      description: "Adapter tool with awkward field names",
+      input: rawSchema,
+      output: { type: "object", properties: { "content-type": { type: "string" } }, required: ["content-type"] } as const,
+      run: () => Effect.succeed({ "content-type": "text/plain" }),
+    })
+    expect(inputTypeScript(tool)).toContain('"foo-bar"?: string')
+    expect(outputTypeScript(tool)).toBe('{ "content-type": string }')
+    expect(outputTypeScript(tool, true)).toBe(["{", '  "content-type": string', "}"].join("\n"))
+  })
+
+  test("Effect Schema structs with non-identifier field names quote too", () => {
+    const tool = Tool.make({
+      description: "Schema tool with awkward field names",
+      input: Schema.Struct({ "foo-bar": Schema.String, plain: Schema.optionalKey(Schema.Number) }),
+      run: () => Effect.succeed(null),
+    })
+    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
+    expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string', "  plain?: number", "}"].join("\n"))
+  })
+})
+
 describe("pretty signatures in search results", () => {
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 

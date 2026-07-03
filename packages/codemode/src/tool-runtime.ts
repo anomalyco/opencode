@@ -3,6 +3,7 @@ import { ToolError, toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
+  identifierSegment,
   inputProperties,
   inputTypeScript,
   isDefinition as isToolDefinition,
@@ -68,8 +69,6 @@ const reservedNamespace = "$codemode"
 const defaultMaxInlineCatalogTokens = 2_000
 const defaultSearchLimit = 10
 const searchSignature = "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
-const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
-
 const toolExpression = (path: string) =>
   "tools" + path
     .split(".")

@@ -63,6 +63,15 @@ const isEffectSchema = (schema: ToolSchema): schema is Schema.Decoder<unknown> &
 const renderLiteral = (value: unknown): string => JSON.stringify(value) ?? "unknown"
 
 /**
+ * Bare TypeScript identifier — usable unquoted as an object key (and, in the tool runtime,
+ * with dot access as a tool-path segment). Anything else must be quoted/bracketed.
+ */
+export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
+
+/** Renders a property name as a valid TS object key: bare when an identifier, quoted otherwise. */
+const renderKey = (name: string): string => identifierSegment.test(name) ? name : JSON.stringify(name)
+
+/**
  * Recursion ceiling for schema rendering. Object, array, and union recursion all increment
  * depth, so this bounds every recursion path — pathological or structurally cyclic schemas
  * degrade to `unknown` instead of overflowing the stack (rendering must never throw).
@@ -152,7 +161,7 @@ const renderSchema = (schema: JsonSchema, ctx: RenderContext, depth = 0, seen: R
     const additional = schema.additionalProperties
     const indexType = additional && typeof additional === "object" ? renderSchema(additional, ctx, depth + 1, seen) : undefined
     const field = ([name, value]: readonly [string, JsonSchema]) =>
-      `${name}${required.has(name) ? "" : "?"}: ${renderSchema(value, ctx, depth + 1, seen)}`
+      `${renderKey(name)}${required.has(name) ? "" : "?"}: ${renderSchema(value, ctx, depth + 1, seen)}`
 
     if (!ctx.pretty) {
       const fields = properties.map(field)

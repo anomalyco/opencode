@@ -289,6 +289,76 @@ describe("string methods: localeCompare, normalize, trim aliases", () => {
   })
 })
 
+describe("compound assignment matches its binary operator", () => {
+  // `x op= y` must behave exactly like `x = x op y`, sharing the binary operator's coercion
+  // semantics (Dates string-coerce for `+` and use their time value for arithmetic; data
+  // objects/arrays coerce to their JS string form).
+  const pair = async (compound: string, expanded: string) => {
+    const [a, b] = await Promise.all([value(compound), value(expanded)])
+    expect(a).toEqual(b)
+    return a
+  }
+
+  test("sandbox Date += concatenates its string form, like d = d + 1", async () => {
+    const result = await pair(
+      `let d = new Date(1000); d += 1; return d`,
+      `let d = new Date(1000); d = d + 1; return d`,
+    )
+    expect(result).toBe("1970-01-01T00:00:01.000Z1")
+  })
+
+  test("sandbox Date numeric compound ops use its time value", async () => {
+    expect(await pair(
+      `let d = new Date(1000); d -= 400; return d`,
+      `let d = new Date(1000); d = d - 400; return d`,
+    )).toBe(600)
+    expect(await pair(
+      `let d = new Date(1000); d /= 4; return d`,
+      `let d = new Date(1000); d = d / 4; return d`,
+    )).toBe(250)
+  })
+
+  test("string += object/array matches x = x + obj", async () => {
+    expect(await pair(
+      `let x = "a"; x += { b: 1 }; return x`,
+      `let x = "a"; x = x + { b: 1 }; return x`,
+    )).toBe("a[object Object]")
+    expect(await pair(
+      `let x = "a"; x += [1, 2]; return x`,
+      `let x = "a"; x = x + [1, 2]; return x`,
+    )).toBe("a1,2")
+  })
+
+  test("compound assignment through a member target coerces the same way", async () => {
+    expect(await pair(
+      `const o = { s: "t" }; o.s += new Date(0); return o.s`,
+      `const o = { s: "t" }; o.s = o.s + new Date(0); return o.s`,
+    )).toBe("t1970-01-01T00:00:00.000Z")
+  })
+
+  test("numeric and string compound operators sweep identically to their expansions", async () => {
+    const cases: Array<[string, number | string]> = [
+      [`let x = 7; x += 3; return x`, 7 + 3],
+      [`let x = 7; x -= 3; return x`, 7 - 3],
+      [`let x = 7; x *= 3; return x`, 7 * 3],
+      [`let x = 7; x /= 2; return x`, 7 / 2],
+      [`let x = 7; x %= 3; return x`, 7 % 3],
+      [`let x = 7; x **= 2; return x`, 7 ** 2],
+      [`let x = 7; x &= 3; return x`, 7 & 3],
+      [`let x = 7; x |= 8; return x`, 7 | 8],
+      [`let x = 7; x ^= 2; return x`, 7 ^ 2],
+      [`let x = 7; x <<= 2; return x`, 7 << 2],
+      [`let x = -7; x >>= 1; return x`, -7 >> 1],
+      [`let x = -7; x >>>= 1; return x`, -7 >>> 1],
+      [`let x = "a"; x += "b"; return x`, "ab"],
+    ]
+    for (const [compound, expected] of cases) {
+      expect(await value(compound)).toBe(expected)
+      expect(await value(compound.replace(/x (\S+)= /, (_, op) => `x = x ${op} `))).toBe(expected)
+    }
+  })
+})
+
 describe("H5: builtin coercion functions work as array callbacks", () => {
   test("filter(Boolean) drops falsy values", async () => {
     expect(await value(`return [0, 1, "", 2, null, 3].filter(Boolean)`)).toEqual([1, 2, 3])

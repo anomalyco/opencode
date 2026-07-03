@@ -911,6 +911,9 @@ const coerceToString = (value: unknown): string => {
   return String(value)
 }
 
+/** Compound assignment operators (`x op= y`), each applying the binary operator `op`. */
+const compoundOperators = new Set(["+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>="])
+
 const coerceToNumber = (value: unknown): number => {
   if (value instanceof SandboxDate) return value.time
   if (isSandboxValue(value)) return Number.NaN
@@ -2164,55 +2167,62 @@ class Interpreter<R> {
       // function operand is a legitimate question, not an error), so it is handled before
       // the data-only operand check.
       if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
-      if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
-        throw new InterpreterRuntimeError("Binary operators require data values in CodeMode.", node, "InvalidDataValue")
-      }
-      // Data objects/arrays are null-prototype, so JS's ToPrimitive throws an opaque host
-      // "No default value" TypeError when an operator coerces them. Coerce to their JS string
-      // form first (as String(x) / template literals do) so operators behave like JavaScript.
-      // A Date follows its ToPrimitive hints: string for `+` (concatenation), its time value
-      // for arithmetic and ordering — so `end - start` and `a < b` work as in JS.
-      // Identity (=== / !==) and the right operand of `in` keep their raw object value.
-      const coerceOperand = (operand: unknown): unknown => {
-        if (operand instanceof SandboxDate) return operator === "+" ? coerceToString(operand) : operand.time
-        return operand !== null && typeof operand === "object" ? coerceToString(operand) : operand
-      }
-      const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"
-      const l = coerceOperand(lhs) as any
-      const r = coerceOperand(rhs) as any
-      let result: unknown
-      switch (operator) {
-        case "+": result = l + r; break
-        case "-": result = l - r; break
-        case "*": result = l * r; break
-        case "/": result = l / r; break
-        case "%": result = l % r; break
-        case "**": result = l ** r; break
-        // Two objects compare by identity in JS (no ToPrimitive); only object-vs-primitive coerces.
-        case "==": result = bothObjects ? lhs === rhs : l == r; break
-        case "===": result = lhs === rhs; break
-        case "!=": result = bothObjects ? lhs !== rhs : l != r; break
-        case "!==": result = lhs !== rhs; break
-        case "<": result = l < r; break
-        case "<=": result = l <= r; break
-        case ">": result = l > r; break
-        case ">=": result = l >= r; break
-        case "&": result = l & r; break
-        case "|": result = l | r; break
-        case "^": result = l ^ r; break
-        case "<<": result = l << r; break
-        case ">>": result = l >> r; break
-        case ">>>": result = l >>> r; break
-        case "in":
-          if (rhs === null || typeof rhs !== "object") {
-            throw new InterpreterRuntimeError("The 'in' operator requires a data object on the right-hand side.", node)
-          }
-          // Own properties only, so arrays don't leak the host Array.prototype (map/constructor/...).
-          result = Object.hasOwn(rhs as object, coerceOperand(lhs) as PropertyKey); break
-        default: throw new InterpreterRuntimeError(`Unsupported binary operator '${operator}'.`, node)
-      }
-      return boundedData(result, "Binary expression result")
+      return boundedData(self.applyBinaryOperator(operator, lhs, rhs, node), "Binary expression result")
     })
+  }
+
+  /**
+   * Applies a binary operator to two already-evaluated operands with CodeMode's coercion
+   * semantics. Shared by binary expressions and compound assignment (`x op= y` must behave
+   * exactly like `x = x op y`, coercion included).
+   */
+  private applyBinaryOperator(operator: string, lhs: any, rhs: any, node: AstNode): unknown {
+    if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
+      throw new InterpreterRuntimeError("Binary operators require data values in CodeMode.", node, "InvalidDataValue")
+    }
+    // Data objects/arrays are null-prototype, so JS's ToPrimitive throws an opaque host
+    // "No default value" TypeError when an operator coerces them. Coerce to their JS string
+    // form first (as String(x) / template literals do) so operators behave like JavaScript.
+    // A Date follows its ToPrimitive hints: string for `+` (concatenation), its time value
+    // for arithmetic and ordering — so `end - start` and `a < b` work as in JS.
+    // Identity (=== / !==) and the right operand of `in` keep their raw object value.
+    const coerceOperand = (operand: unknown): unknown => {
+      if (operand instanceof SandboxDate) return operator === "+" ? coerceToString(operand) : operand.time
+      return operand !== null && typeof operand === "object" ? coerceToString(operand) : operand
+    }
+    const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"
+    const l = coerceOperand(lhs) as any
+    const r = coerceOperand(rhs) as any
+    switch (operator) {
+      case "+": return l + r
+      case "-": return l - r
+      case "*": return l * r
+      case "/": return l / r
+      case "%": return l % r
+      case "**": return l ** r
+      // Two objects compare by identity in JS (no ToPrimitive); only object-vs-primitive coerces.
+      case "==": return bothObjects ? lhs === rhs : l == r
+      case "===": return lhs === rhs
+      case "!=": return bothObjects ? lhs !== rhs : l != r
+      case "!==": return lhs !== rhs
+      case "<": return l < r
+      case "<=": return l <= r
+      case ">": return l > r
+      case ">=": return l >= r
+      case "&": return l & r
+      case "|": return l | r
+      case "^": return l ^ r
+      case "<<": return l << r
+      case ">>": return l >> r
+      case ">>>": return l >>> r
+      case "in":
+        if (rhs === null || typeof rhs !== "object") {
+          throw new InterpreterRuntimeError("The 'in' operator requires a data object on the right-hand side.", node)
+        }
+        // Own properties only, so arrays don't leak the host Array.prototype (map/constructor/...).
+        return Object.hasOwn(rhs as object, coerceOperand(lhs) as PropertyKey)
+      default: throw new InterpreterRuntimeError(`Unsupported binary operator '${operator}'.`, node)
+    }
   }
 
   private evaluateLogicalExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
@@ -3104,37 +3114,14 @@ class Interpreter<R> {
     incoming: unknown,
     node: AstNode,
   ): unknown {
-    const lhs = current as any
-    const rhs = incoming as any
-
-    switch (operator) {
-      case "+=":
-        return lhs + rhs
-      case "-=":
-        return lhs - rhs
-      case "*=":
-        return lhs * rhs
-      case "/=":
-        return lhs / rhs
-      case "%=":
-        return lhs % rhs
-      case "**=":
-        return lhs ** rhs
-      case "&=":
-        return lhs & rhs
-      case "|=":
-        return lhs | rhs
-      case "^=":
-        return lhs ^ rhs
-      case "<<=":
-        return lhs << rhs
-      case ">>=":
-        return lhs >> rhs
-      case ">>>=":
-        return lhs >>> rhs
-      default:
-        throw new InterpreterRuntimeError(`Unsupported assignment operator '${operator}'.`, node)
+    // `x op= y` is `x = x op y`: dispatch through the shared binary operator implementation
+    // so compound assignment inherits the same coercion semantics (Dates, data objects, ...).
+    // Only the arithmetic/bitwise operators are compoundable; logical assignments (&&=/||=/??=)
+    // short-circuit and are handled by evaluateLogicalAssignment before reaching here.
+    if (!compoundOperators.has(operator)) {
+      throw new InterpreterRuntimeError(`Unsupported assignment operator '${operator}'.`, node)
     }
+    return this.applyBinaryOperator(operator.slice(0, -1), current, incoming, node)
   }
 
   private getMemberReference(node: AstNode): Effect.Effect<MemberReference | ToolReference | PromiseMethodReference | IntrinsicReference | GlobalMethodReference | ComputedValue | typeof OptionalShortCircuit | undefined, unknown, R> {
