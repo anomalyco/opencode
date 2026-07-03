@@ -78,7 +78,7 @@ describe("SessionV2.log", () => {
 
   it.effect("reads across undecodable gaps in aggregate order and marks the true log position", () =>
     Effect.gen(function* () {
-      const GapEvent = EventV2.define({
+      const GapEvent = EventV2.durable({
         type: "test.session.log.gap",
         durable: { aggregate: "sessionID", version: 1 },
         schema: { sessionID: SessionV2.ID, value: Schema.String },

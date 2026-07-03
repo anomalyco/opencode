@@ -22,14 +22,14 @@ const locationLayer = Layer.succeed(
     location({ directory: AbsolutePath.make("project"), workspaceID: WorkspaceV2.ID.make("wrk_test") }),
   ),
 )
-const Message = EventV2.define({
+const Message = EventV2.ephemeral({
   type: "test.message",
   schema: {
     text: Schema.String,
   },
 })
 
-const SyncMessage = EventV2.define({
+const SyncMessage = EventV2.durable({
   type: "test.sync",
   durable: {
     version: 1,
@@ -41,7 +41,7 @@ const SyncMessage = EventV2.define({
   },
 })
 
-const SyncSent = EventV2.define({
+const SyncSent = EventV2.durable({
   type: "test.sent",
   durable: {
     version: 1,
@@ -53,14 +53,14 @@ const SyncSent = EventV2.define({
   },
 })
 
-const GlobalMessage = EventV2.define({
+const GlobalMessage = EventV2.ephemeral({
   type: "test.global",
   schema: {
     text: Schema.String,
   },
 })
 
-const VersionedMessage = EventV2.define({
+const VersionedMessage = EventV2.durable({
   type: "test.versioned",
   durable: {
     version: 2,
@@ -129,12 +129,12 @@ describe("EventV2", () => {
 
   it.effect("selects the latest durable definition independent of declaration order", () =>
     Effect.sync(() => {
-      const latest = EventV2.define({
+      const latest = EventV2.durable({
         type: "test.out-of-order",
         durable: { version: 2, aggregate: "id" },
         schema: { id: Schema.String },
       })
-      const historical = EventV2.define({
+      const historical = EventV2.durable({
         type: "test.out-of-order",
         durable: { version: 1, aggregate: "id" },
         schema: { id: Schema.String },

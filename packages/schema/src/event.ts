@@ -61,13 +61,6 @@ type Input<Type extends string, Fields extends Readonly<Record<PropertyKey, Sche
   readonly schema: Fields
 }
 
-export function define<
-  const Type extends string,
-  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
->(input: Input<Type, Fields>) {
-  return makeDefinition(input.durable === undefined ? "ephemeral" : "durable", input)
-}
-
 function makeDefinition<
   const Type extends string,
   const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,

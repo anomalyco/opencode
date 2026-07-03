@@ -92,8 +92,9 @@ export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberO
   { capacity: Schema.Int },
 ) {}
 
-export const define = Event.define
 export const versionedType = Event.versionedType
+export const durable = Event.durable
+export const ephemeral = Event.ephemeral
 
 export interface PublishOptions {
   readonly id?: ID
