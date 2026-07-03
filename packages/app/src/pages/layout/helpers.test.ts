@@ -38,7 +38,14 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
-    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
+  })
+
+  test("parses open-project deep links with a session", () => {
+    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo&session=ses_123")).toEqual({
+      directory: "/tmp/demo",
+      sessionId: "ses_123",
+    })
   })
 
   test("ignores non-project deep links", () => {
@@ -55,7 +62,7 @@ describe("layout deep links", () => {
     const original = Object.getOwnPropertyDescriptor(URL, "canParse")
     Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
     try {
-      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
     } finally {
       if (original) Object.defineProperty(URL, "canParse", original)
       if (!original) Reflect.deleteProperty(URL, "canParse")
@@ -73,7 +80,7 @@ describe("layout deep links", () => {
       "opencode://other?directory=/b",
       "opencode://open-project?directory=/c",
     ])
-    expect(result).toEqual(["/a", "/c"])
+    expect(result).toEqual([{ directory: "/a" }, { directory: "/c" }])
   })
 
   test("parses new-session deep links with optional prompt", () => {

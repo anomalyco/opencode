@@ -1169,7 +1169,7 @@ export default function LegacyLayout(props: ParentProps) {
     return root
   }
 
-  async function navigateToProject(directory: string | undefined) {
+  async function navigateToProject(directory: string | undefined, sessionId?: string) {
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(root)
@@ -1207,6 +1207,11 @@ export default function LegacyLayout(props: ParentProps) {
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
+    }
+
+    if (sessionId) {
+      await refreshDirs(directory)
+      if (await openSession({ directory, id: sessionId })) return
     }
 
     const projectSession = store.lastProjectSession[root]
@@ -1249,16 +1254,16 @@ export default function LegacyLayout(props: ParentProps) {
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
-  function openProject(directory: string, navigate = true) {
+  function openProject(directory: string, navigate = true, sessionId?: string) {
     layout.projects.open(directory)
-    if (navigate) return navigateToProject(directory)
+    if (navigate) return navigateToProject(directory, sessionId)
   }
 
   const handleDeepLinks = (urls: string[]) => {
     if (!server.isLocal()) return
 
-    for (const directory of collectOpenProjectDeepLinks(urls)) {
-      void openProject(directory)
+    for (const link of collectOpenProjectDeepLinks(urls)) {
+      void openProject(link.directory, true, link.sessionId)
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
