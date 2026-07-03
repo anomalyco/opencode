@@ -184,35 +184,44 @@ export function FormPrompt(props: { request: PromptForm; location?: LocationRef 
   }
 
   function buildAnswer(items: FormField[]): { answer: FormAnswer } | { error: string } {
-    const answer: FormAnswer = {}
-    for (const item of items) {
-      if (!isActive(item, answer)) continue
-      if (item.type === "boolean") {
-        if (store.boolean[item.key] !== undefined || item.default !== undefined || item.required)
-          answer[item.key] = store.boolean[item.key] ?? item.default ?? false
-        continue
-      }
-      if (item.type === "multiselect") {
-        const value = store.multiselect[item.key] ?? item.default ?? []
-        if (value.length > 0 || item.required) answer[item.key] = value
-        continue
-      }
-      const text = fieldText(item).trim()
-      if (!text) {
-        if (item.required) answer[item.key] = ""
-        continue
-      }
-      if (item.type === "number" || item.type === "integer") {
-        const value = Number(text)
-        if (!Number.isFinite(value)) return { error: `Expected number for ${fieldLabel(item)}` }
-        if (item.type === "integer" && !Number.isInteger(value))
-          return { error: `Expected integer for ${fieldLabel(item)}` }
-        answer[item.key] = value
-        continue
-      }
-      answer[item.key] = text
-    }
-    return { answer }
+    const result = items.reduce<{ answer: FormAnswer; error?: string }>(
+      (state, item) => {
+        if (state.error) return state
+        if (!isActive(item, state.answer)) return state
+        if (item.type === "boolean") {
+          if (store.boolean[item.key] !== undefined || item.default !== undefined || item.required) {
+            return {
+              ...state,
+              answer: { ...state.answer, [item.key]: store.boolean[item.key] ?? item.default ?? false },
+            }
+          }
+          return state
+        }
+        if (item.type === "multiselect") {
+          const value = store.multiselect[item.key] ?? item.default ?? []
+          if (value.length > 0 || item.required) {
+            return { ...state, answer: { ...state.answer, [item.key]: value } }
+          }
+          return state
+        }
+        const text = fieldText(item).trim()
+        if (!text) {
+          if (item.required) return { ...state, answer: { ...state.answer, [item.key]: "" } }
+          return state
+        }
+        if (item.type === "number" || item.type === "integer") {
+          const value = Number(text)
+          if (!Number.isFinite(value)) return { ...state, error: `Expected number for ${fieldLabel(item)}` }
+          if (item.type === "integer" && !Number.isInteger(value))
+            return { ...state, error: `Expected integer for ${fieldLabel(item)}` }
+          return { ...state, answer: { ...state.answer, [item.key]: value } }
+        }
+        return { ...state, answer: { ...state.answer, [item.key]: text } }
+      },
+      { answer: {} },
+    )
+    if (result.error) return { error: result.error }
+    return { answer: result.answer }
   }
 
   onMount(() => {

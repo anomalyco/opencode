@@ -316,12 +316,6 @@ export const layer = Layer.effect(
       })
     })
 
-    const completeUrlElicitation = Effect.fnUntraced(function* (server: string, elicitationID: string) {
-      const formID = urlElicitations.get(elicitationKey(server, elicitationID))
-      if (!formID) return
-      yield* forms.reply({ id: formID, answer: {} }).pipe(Effect.ignore)
-    })
-
     const elicitation = {
       create: (input: {
         readonly server: string
@@ -329,27 +323,65 @@ export const layer = Layer.effect(
         readonly signal: AbortSignal
       }) =>
         Effect.gen(function* () {
-          if (isUrlElicitation(input.params)) {
+          const toResult = (state: Form.State): MCPClient.ElicitationResult => {
+            if (state.status !== "answered") return { action: "cancel" }
+            if (input.params.mode === "url") return { action: "accept" }
+            return {
+              action: "accept",
+              content: Object.fromEntries(
+                Object.entries(state.answer).map(
+                  ([key, value]): [string, NonNullable<MCPClient.ElicitationResult["content"]>[string]] => {
+                    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+                      return [key, value]
+                    return [key, Array.from(value)]
+                  },
+                ),
+              ),
+            }
+          }
+          if (input.params.mode === "url") {
             const formID = Form.ID.create()
-            const key = elicitationKey(input.server, input.params.elicitationId)
+            const key = input.server + "\u0000" + input.params.elicitationId
             urlElicitations.set(key, formID)
             return yield* forms
-              .ask(toElicitationForm(input.server, input.params, formID))
+              .ask({
+                id: formID,
+                sessionID: GLOBAL_ELICITATION_SESSION_ID,
+                title: `${input.server} is requesting input`,
+                metadata: {
+                  kind: "mcp-elicitation",
+                  server: input.server,
+                  elicitationID: input.params.elicitationId,
+                  message: input.params.message,
+                },
+                mode: "url",
+                url: input.params.url,
+              })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
                 Effect.ensuring(Effect.sync(() => urlElicitations.delete(key))),
-                Effect.map((state) => toElicitationResult(input.params, state)),
+                Effect.map(toResult),
               )
           }
+          const params = input.params
           return yield* forms
-            .ask(toElicitationForm(input.server, input.params))
-            .pipe(
-              Effect.raceFirst(waitForAbort(input.signal)),
-              Effect.map((state) => toElicitationResult(input.params, state)),
-            )
+            .ask({
+              sessionID: GLOBAL_ELICITATION_SESSION_ID,
+              title: `${input.server} is requesting input`,
+              metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
+              mode: "form",
+              fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+                toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
+              ),
+            })
+            .pipe(Effect.raceFirst(waitForAbort(input.signal)), Effect.map(toResult))
         }),
       complete: (input: { readonly server: string; readonly elicitationID: string }) =>
-        completeUrlElicitation(input.server, input.elicitationID),
+        Effect.gen(function* () {
+          const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
+          if (!formID) return
+          yield* forms.reply({ id: formID, answer: {} }).pipe(Effect.ignore)
+        }),
     } satisfies MCPClient.ElicitationHandler
 
     const toTool = (server: ServerName, def: MCPClient.ToolDefinition) =>
@@ -608,59 +640,6 @@ export const node = makeLocationNode({
   deps: [Config.node, Location.node, EventV2.node, Form.node, Integration.node, Credential.node],
 })
 
-function elicitationKey(server: string, elicitationID: string) {
-  return server + "\u0000" + elicitationID
-}
-
-function isUrlElicitation(
-  params: MCPClient.ElicitationParams,
-): params is Extract<MCPClient.ElicitationParams, { mode: "url" }> {
-  return params.mode === "url"
-}
-
-function toElicitationResult(params: MCPClient.ElicitationParams, state: Form.State): MCPClient.ElicitationResult {
-  if (state.status !== "answered") return { action: "cancel" }
-  if (isUrlElicitation(params)) return { action: "accept" }
-  return { action: "accept", content: toElicitationContent(state.answer) }
-}
-
-function toElicitationContent(answer: Form.Answer): NonNullable<MCPClient.ElicitationResult["content"]> {
-  return Object.fromEntries(
-    Object.entries(answer).map(([key, value]): [string, ElicitationContentValue] => [key, toElicitationValue(value)]),
-  )
-}
-
-function toElicitationValue(value: Form.Answer[string]): ElicitationContentValue {
-  if (isStringArrayValue(value)) return Array.from(value)
-  return value
-}
-
-function isStringArrayValue(value: Form.Answer[string]): value is ReadonlyArray<string> {
-  return Array.isArray(value)
-}
-
-function toElicitationForm(server: string, params: MCPClient.ElicitationParams, id?: Form.ID): Form.CreateInput {
-  if (isUrlElicitation(params)) {
-    return {
-      id,
-      sessionID: GLOBAL_ELICITATION_SESSION_ID,
-      title: `${server} is requesting input`,
-      metadata: { kind: "mcp-elicitation", server, elicitationID: params.elicitationId, message: params.message },
-      mode: "url",
-      url: params.url,
-    }
-  }
-  return {
-    sessionID: GLOBAL_ELICITATION_SESSION_ID,
-    title: `${server} is requesting input`,
-    metadata: { kind: "mcp-elicitation", server, message: params.message },
-    mode: "form",
-    fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
-      toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
-    ),
-  }
-}
-
 function toElicitationField(key: string, property: ElicitationProperty, required: boolean): Form.Field {
   const title = elicitationFieldTitle(key, property)
   const description = property.description === title ? undefined : property.description
@@ -670,39 +649,51 @@ function toElicitationField(key: string, property: ElicitationProperty, required
     ...(description === undefined ? {} : { description }),
     ...(required ? { required: true } : {}),
   }
-  if (isBooleanProperty(property)) {
-    return { ...base, type: "boolean", ...(property.default === undefined ? {} : { default: property.default }) }
-  }
-  if (isNumberProperty(property)) {
-    return {
-      ...base,
-      type: property.type,
-      ...(property.minimum === undefined ? {} : { minimum: property.minimum }),
-      ...(property.maximum === undefined ? {} : { maximum: property.maximum }),
-      ...(property.default === undefined ? {} : { default: property.default }),
+  switch (property.type) {
+    case "boolean":
+      return { ...base, type: "boolean", ...(property.default === undefined ? {} : { default: property.default }) }
+    case "number":
+    case "integer":
+      return {
+        ...base,
+        type: property.type,
+        ...(property.minimum === undefined ? {} : { minimum: property.minimum }),
+        ...(property.maximum === undefined ? {} : { maximum: property.maximum }),
+        ...(property.default === undefined ? {} : { default: property.default }),
+      }
+    case "array":
+      return {
+        ...base,
+        type: "multiselect",
+        options:
+          "anyOf" in property.items
+            ? property.items.anyOf.map((option) => ({ value: option.const, label: option.title }))
+            : property.items.enum.map((value) => ({ value, label: value })),
+        custom: false,
+        ...(property.minItems === undefined ? {} : { minItems: property.minItems }),
+        ...(property.maxItems === undefined ? {} : { maxItems: property.maxItems }),
+        ...(property.default === undefined ? {} : { default: property.default }),
+      }
+    case "string": {
+      const options =
+        "oneOf" in property
+          ? property.oneOf.map((option) => ({ value: option.const, label: option.title }))
+          : "enum" in property
+            ? property.enum.map((value, index) => ({
+                value,
+                label: ("enumNames" in property ? property.enumNames?.[index] : undefined) ?? value,
+              }))
+            : undefined
+      return {
+        ...base,
+        type: "string",
+        ...(!("format" in property) || property.format === undefined ? {} : { format: property.format }),
+        ...(!("minLength" in property) || property.minLength === undefined ? {} : { minLength: property.minLength }),
+        ...(!("maxLength" in property) || property.maxLength === undefined ? {} : { maxLength: property.maxLength }),
+        ...(property.default === undefined ? {} : { default: property.default }),
+        ...(options === undefined ? {} : { options, custom: false }),
+      }
     }
-  }
-  if (isArrayProperty(property)) {
-    return {
-      ...base,
-      type: "multiselect",
-      options: arrayOptions(property),
-      custom: false,
-      ...(property.minItems === undefined ? {} : { minItems: property.minItems }),
-      ...(property.maxItems === undefined ? {} : { maxItems: property.maxItems }),
-      ...(property.default === undefined ? {} : { default: property.default }),
-    }
-  }
-  const options = isStringProperty(property) ? stringOptions(property) : undefined
-  const constraints = isStringProperty(property) ? stringConstraints(property) : undefined
-  return {
-    ...base,
-    type: "string",
-    ...(constraints?.format === undefined ? {} : { format: constraints.format }),
-    ...(constraints?.minLength === undefined ? {} : { minLength: constraints.minLength }),
-    ...(constraints?.maxLength === undefined ? {} : { maxLength: constraints.maxLength }),
-    ...(isStringProperty(property) && property.default !== undefined ? { default: property.default } : {}),
-    ...(options === undefined ? {} : { options, custom: false }),
   }
 }
 
@@ -716,49 +707,4 @@ function isSchemaTypeTitle(title: string) {
   return /^(boolean|string|number|integer|array|object)(\s+with\b.*|\s+in\b.*)?$/i.test(title.trim())
 }
 
-type ElicitationContent = NonNullable<MCPClient.ElicitationResult["content"]>
-type ElicitationContentValue = ElicitationContent[string]
 type ElicitationProperty = MCPClient.ElicitationFormParams["requestedSchema"]["properties"][string]
-type ElicitationStringProperty = Extract<ElicitationProperty, { type: "string" }>
-type ElicitationArrayProperty = Extract<ElicitationProperty, { type: "array" }>
-
-function isBooleanProperty(
-  property: ElicitationProperty,
-): property is Extract<ElicitationProperty, { type: "boolean" }> {
-  return property.type === "boolean"
-}
-
-function isNumberProperty(
-  property: ElicitationProperty,
-): property is Extract<ElicitationProperty, { type: "number" | "integer" }> {
-  return property.type === "number" || property.type === "integer"
-}
-
-function isArrayProperty(property: ElicitationProperty): property is ElicitationArrayProperty {
-  return property.type === "array"
-}
-
-function isStringProperty(property: ElicitationProperty): property is ElicitationStringProperty {
-  return property.type === "string"
-}
-
-function stringOptions(property: ElicitationStringProperty) {
-  if ("oneOf" in property) return property.oneOf.map((option) => ({ value: option.const, label: option.title }))
-  if ("enum" in property)
-    return property.enum.map((value, index) => ({
-      value,
-      label: ("enumNames" in property ? property.enumNames?.[index] : undefined) ?? value,
-    }))
-  return undefined
-}
-
-function stringConstraints(property: ElicitationStringProperty) {
-  if (!("format" in property || "minLength" in property || "maxLength" in property)) return undefined
-  return { format: property.format, minLength: property.minLength, maxLength: property.maxLength }
-}
-
-function arrayOptions(property: ElicitationArrayProperty) {
-  if ("anyOf" in property.items)
-    return property.items.anyOf.map((option) => ({ value: option.const, label: option.title }))
-  return property.items.enum.map((value) => ({ value, label: value }))
-}
