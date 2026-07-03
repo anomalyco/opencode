@@ -69,7 +69,6 @@ export type Skipped = {
   readonly reason: string
 }
 
-/** Unrepresentable; reported in `skipped`. */
 type Skip = { readonly reason: string }
 
 export type Tools = { readonly [name: string]: Definition<HttpClient.HttpClient> }
@@ -95,12 +94,16 @@ const asArray = (value: unknown): ReadonlyArray<unknown> => (Array.isArray(value
 const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined
 
+// Guards record lookups keyed by spec- or model-controlled names against
+// prototype-inherited values (e.g. a parameter named `toString`).
+const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
+  Object.hasOwn(record, key) ? record[key] : undefined
+
 /**
  * Builds a CodeMode tool subtree from an OpenAPI 3.x document, one tool per
- * operation. Auth is never model-visible: credentials come from `auth.resolve`
- * per the operation's effective `security` and are injected into the carrier
- * the scheme declares. Generated tools require `HttpClient.HttpClient` from the
- * Effect environment. Unrepresentable operations land in `skipped`.
+ * operation. Auth is resolved host-side via `auth.resolve` and never
+ * model-visible. Tools require `HttpClient.HttpClient`; unrepresentable
+ * operations land in `skipped`.
  */
 export const fromSpec = (options: Options): Result => {
   const document = options.spec
@@ -190,9 +193,11 @@ const projectSchema = (value: unknown, depth = 0): JsonSchema => {
   if (depth > 24 || !isRecord(value)) return {}
   const ref = nonEmptyString(value.$ref)
   if (ref !== undefined) {
-    // `#/components/schemas/X` becomes `#/$defs/X`, the only ref form the signature renderer resolves.
+    // `#/components/schemas/X` becomes `#/$defs/X`, the only ref form the
+    // signature renderer resolves. `~` is unescaped to match the `$defs` key;
+    // `/` must stay escaped because the renderer takes the last `/` segment.
     const name = ref.match(/^#\/components\/schemas\/(.+)$/)?.[1]
-    return { $ref: name === undefined ? ref : `#/$defs/${name.replaceAll("~1", "/").replaceAll("~0", "~")}` }
+    return { $ref: name === undefined ? ref : `#/$defs/${name.replaceAll("~0", "~")}` }
   }
 
   const type = Array.isArray(value.type)
@@ -465,7 +470,6 @@ type Plan = {
   readonly headers: Readonly<Record<string, string>>
 }
 
-/** Applied credentials for one satisfied security alternative. */
 type AppliedAuth = {
   readonly headers: Readonly<Record<string, string>>
   readonly query: Readonly<Record<string, string>>
@@ -490,7 +494,7 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
     for (const parameter of plan.parameters) {
       if (parameter.location !== "query") continue
-      const item = query[parameter.name]
+      const item = own(query, parameter.name)
       if (item === undefined || item === null) continue
       const rendered = Array.isArray(item) ? item.map(renderPrimitive) : [renderPrimitive(item)]
       for (const one of rendered) {
@@ -504,7 +508,7 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     request = HttpClientRequest.setHeaders(request, plan.headers)
     for (const parameter of plan.parameters) {
       if (parameter.location !== "header") continue
-      const item = headers[parameter.name]
+      const item = own(headers, parameter.name)
       if (item === undefined || item === null) continue
       request = HttpClientRequest.setHeader(request, parameter.name, renderPrimitive(item))
     }
@@ -523,6 +527,7 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
           Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} failed: transport error`, cause)),
         ),
       )
+    // Best effort: an unreadable body degrades to the status-only error/null result.
     const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
     const parsed = text === "" ? null : Option.getOrElse(decodeJson(text), () => text)
     if (response.status < 200 || response.status >= 300) {
@@ -548,11 +553,17 @@ const buildUrl = (plan: Plan, path: Readonly<Record<string, unknown>>): string |
   let url = plan.url
   for (const parameter of plan.parameters) {
     if (parameter.location !== "path") continue
-    const item = path[parameter.name]
+    const item = own(path, parameter.name)
     if (item === undefined || item === null) {
       return toolError(`Missing required path parameter '${parameter.name}'.`)
     }
-    url = url.replaceAll(`{${parameter.name}}`, encodeURIComponent(renderPrimitive(item)))
+    const rendered = encodeURIComponent(renderPrimitive(item))
+    // '.'/'..' survive encoding and URL normalization collapses them, letting a
+    // model-supplied value retarget the request to a different endpoint.
+    if (rendered === "" || rendered === "." || rendered === "..") {
+      return toolError(`Invalid path parameter '${parameter.name}'.`)
+    }
+    url = url.replaceAll(`{${parameter.name}}`, rendered)
   }
   const unresolved = url.match(/\{[^{}]+\}/)
   if (unresolved !== null) return toolError(`Unresolved path parameter ${unresolved[0]}.`)
@@ -575,7 +586,7 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
       if (names.length === 0) return none
       const credentials: Array<readonly [SecurityScheme, Credential]> = []
       for (const name of names) {
-        const scheme = plan.schemes[name]
+        const scheme = own(plan.schemes, name)
         if (scheme === undefined || plan.auth === undefined) {
           unavailable.push(name)
           continue alternatives

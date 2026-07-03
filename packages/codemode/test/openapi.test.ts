@@ -394,6 +394,134 @@ describe("OpenAPI.fromSpec", () => {
     expect(instructions).toContain("tools.api.createThing(input: {}): Promise<{ id?: string }>")
   })
 
+  test("operation names are sanitized, deduplicated, and derived when operationId is missing", () => {
+    const messy = {
+      openapi: "3.1.0",
+      info: { title: "Messy", version: "1.0.0" },
+      servers: [{ url: "https://messy.example" }],
+      paths: {
+        "/a": {
+          get: { operationId: "get widgets!", responses: { "200": { description: "ok" } } },
+          post: { operationId: "dup", responses: { "200": { description: "ok" } } },
+        },
+        "/b": {
+          get: { operationId: "dup", responses: { "200": { description: "ok" } } },
+          post: { responses: { "200": { description: "ok" } } },
+        },
+      },
+    }
+    const result = OpenAPI.fromSpec({ spec: messy })
+    expect(Object.keys(result.tools).sort()).toStrictEqual(["dup", "dup_2", "get_widgets", "post__b"])
+  })
+
+  test("the operations filter curates tools without reporting them as skipped", () => {
+    const result = OpenAPI.fromSpec({ spec, auth, operations: (operation) => operation.method === "GET" })
+    expect(Object.keys(result.tools)).toStrictEqual(["listWidgets"])
+    expect(result.skipped.map((entry) => entry.path)).not.toContain("/widgets/{id}")
+  })
+
+  test("declared header parameters are sent, override host headers, and reserved names are ignored", async () => {
+    const headed = {
+      openapi: "3.1.0",
+      info: { title: "Headed", version: "1.0.0" },
+      servers: [{ url: "https://headed.example" }],
+      paths: {
+        "/h": {
+          get: {
+            operationId: "h",
+            parameters: [
+              { name: "X-Trace", in: "header", schema: { type: "string" } },
+              { name: "Authorization", in: "header", required: true, schema: { type: "string" } },
+            ],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+    }
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({
+      tools: { api: OpenAPI.fromSpec({ spec: headed, headers: { "x-trace": "host", "x-static": "kept" } }).tools },
+    })
+    expect(runtime.instructions()).not.toContain("Authorization")
+
+    const result = await Effect.runPromise(
+      runtime.execute('return await tools.api.h({ headers: { "X-Trace": "model" } })').pipe(Effect.provide(layer)),
+    )
+
+    expect(result).toMatchObject({ ok: true })
+    expect(requests[0]!.headers["x-trace"]).toBe("model")
+    expect(requests[0]!.headers["x-static"]).toBe("kept")
+    expect(requests[0]!.headers["authorization"]).toBeUndefined()
+  })
+
+  test("path-level parameters merge and operation-level ones win", () => {
+    const layered = {
+      openapi: "3.1.0",
+      info: { title: "Layered", version: "1.0.0" },
+      servers: [{ url: "https://layered.example" }],
+      paths: {
+        "/l": {
+          parameters: [
+            { name: "v", in: "query", required: true, schema: { type: "integer" } },
+            { name: "shared", in: "query", schema: { type: "string" } },
+          ],
+          get: {
+            operationId: "l",
+            parameters: [{ name: "v", in: "query", schema: { type: "string" } }],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+    }
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: layered }).tools } })
+    expect(runtime.instructions()).toContain("tools.api.l(input: { query?: { v?: string; shared?: string } })")
+  })
+
+  test("allOf schemas render as intersections with parenthesized unions", () => {
+    const composed = {
+      openapi: "3.1.0",
+      info: { title: "Composed", version: "1.0.0" },
+      servers: [{ url: "https://composed.example" }],
+      paths: {
+        "/c": {
+          get: {
+            operationId: "c",
+            responses: {
+              "200": {
+                description: "ok",
+                content: {
+                  "application/json": {
+                    schema: {
+                      allOf: [
+                        { type: "object", properties: { id: { type: "string" } } },
+                        { type: ["string", "null"] },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: composed }).tools } })
+    expect(runtime.instructions()).toContain("Promise<{ id?: string } & (string | null)>")
+  })
+
+  test("path parameter values that would retarget the URL are rejected", async () => {
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({ tools: { widgets: OpenAPI.fromSpec({ spec, auth }).tools } })
+
+    const result = await Effect.runPromise(
+      runtime.execute('return await tools.widgets.deleteWidget({ path: { id: ".." } })').pipe(Effect.provide(layer)),
+    )
+
+    expect(result).toMatchObject({ ok: false })
+    expect(JSON.stringify(result)).toContain("Invalid path parameter 'id'")
+    expect(requests).toHaveLength(0)
+  })
+
   test("non-absolute server URLs are skipped unless baseUrl overrides them", () => {
     const templated = {
       openapi: "3.1.0",
