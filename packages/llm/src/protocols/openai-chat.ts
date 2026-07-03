@@ -145,6 +145,10 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
   reasoning_content: optionalNull(Schema.String),
+  // Some OpenAI-compatible providers (Scaleway, vLLM/SGLang, OpenRouter, ...)
+  // stream reasoning under `reasoning` rather than `reasoning_content`. Accept
+  // both so their thinking is not silently dropped.
+  reasoning: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -416,8 +420,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
-    if (delta?.reasoning_content)
-      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
+    const reasoningText = delta?.reasoning_content ?? delta?.reasoning
+    if (reasoningText) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", reasoningText)
 
     if (delta?.content) {
       lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
