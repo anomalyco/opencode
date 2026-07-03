@@ -6,6 +6,7 @@ import {
   CodeMode,
   Tool as CodeModeTool,
   toolError,
+  type ExecuteResult,
   type JsonSchema,
   type ToolDefinition,
 } from "@opencode-ai/codemode"
@@ -13,11 +14,12 @@ import {
 export const CODE_MODE_TOOL = "execute"
 
 // OpenCode sets NO execution limits: no timeout, no tool-call cap, and no CodeMode output
-// truncation. Cancelling the tool call interrupts the execution fiber, and structured
-// concurrency takes the program and its in-flight child calls down with it; every child call
-// is permission-gated anyway. Output bounding is OpenCode's native tool-output truncation
-// (Tool.define's shared wrapper), which applies to `execute` like any other tool and dumps
-// the full output to a file when it triggers.
+// truncation. Cancelling the tool call aborts `ctx.abort`, which wins the race below and
+// interrupts the execution fiber — structured concurrency takes the program and its
+// in-flight child calls down with it; every child call is permission-gated anyway. Output
+// bounding is OpenCode's native tool-output truncation (Tool.define's shared wrapper),
+// which applies to `execute` like any other tool and dumps the full output to a file when
+// it triggers.
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
@@ -264,6 +266,15 @@ export function define(
       description,
       parameters: Parameters,
       execute: Effect.fn("CodeMode.execute")(function* (params, ctx) {
+        // Already cancelled: don't start the program at all. (The mid-flight case is the
+        // race below; racing alone would still let the program run its first steps.)
+        if (ctx.abort.aborted) {
+          return {
+            title: "execute",
+            metadata: { toolCalls: [], error: true },
+            output: "Execution cancelled.",
+          } satisfies Tool.ExecuteResult<Metadata>
+        }
         const calls: CallEntry[] = []
         // Media stripped from child tool results accumulates here for the life of the
         // call; the bytes never enter the sandbox (see toSandboxResult).
@@ -310,7 +321,26 @@ export function define(
             }),
         })
 
-        const result = yield* runtime.execute(params.code)
+        // The shared tool runner does not wire ctx.abort to fiber interruption (it runs
+        // tools via Effect.runPromise with no abort handling), so without this race the
+        // program would keep running after the user cancels. The abort signal winning the
+        // race interrupts the execution fiber; the cancelled result keeps the runner's
+        // post-abort bookkeeping (completeToolCall) on its normal path.
+        const cancelled = Effect.callback<ExecuteResult>((resume) => {
+          const onAbort = () =>
+            resume(
+              Effect.succeed<ExecuteResult>({
+                ok: false,
+                error: { kind: "ExecutionFailure", message: "Execution cancelled." },
+                toolCalls: calls.map((call) => ({ name: call.tool })),
+              }),
+            )
+          if (ctx.abort.aborted) return onAbort()
+          ctx.abort.addEventListener("abort", onAbort, { once: true })
+          return Effect.sync(() => ctx.abort.removeEventListener("abort", onAbort))
+        })
+
+        const result = yield* Effect.raceFirst(runtime.execute(params.code), cancelled)
         const logs = result.logs ?? []
         const attached = attachments.length > 0 ? { attachments } : {}
 

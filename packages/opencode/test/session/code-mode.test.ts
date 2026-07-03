@@ -423,6 +423,40 @@ describe("code mode execute", () => {
     expect(output.metadata.error).toBe(true)
   })
 
+  test("cancelling via ctx.abort interrupts the running program", async () => {
+    // The child call triggers the abort itself, deterministically, while the program
+    // swallows the call's failure and heads into an infinite loop. If abort did not
+    // interrupt the execution fiber, this test would hang on the busy loop.
+    const controller = new AbortController()
+    const tool = await build({
+      host_trigger: mcpTool("trigger", () => {
+        controller.abort()
+        return new Promise(() => {})
+      }),
+    })
+    const output = await Effect.runPromise(
+      tool.execute(
+        { code: "try { await tools.host.trigger({}) } catch {} while (true) {}" },
+        { ...ctx, abort: controller.signal },
+      ),
+    )
+    expect(output.output).toBe("Execution cancelled.")
+    expect(output.metadata.error).toBe(true)
+    expect(output.metadata.toolCalls).toEqual([{ tool: "host.trigger", status: "running" }])
+  })
+
+  test("a pre-aborted signal cancels before the program runs", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const ran: string[] = []
+    const tool = await build({ host_touch: mcpTool("touch", () => (ran.push("called"), "ok")) })
+    const output = await Effect.runPromise(
+      tool.execute({ code: "return await tools.host.touch({})" }, { ...ctx, abort: controller.signal }),
+    )
+    expect(output.output).toBe("Execution cancelled.")
+    expect(ran).toEqual([])
+  })
+
   test("leaves oversized results to OpenCode's native tool-output truncation", async () => {
     // No CodeMode output limit is set, so the full result reaches the shared Tool.define
     // wrapper intact (the harness Truncate fake passes it through un-truncated).
