@@ -49,7 +49,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Auth") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fsys = yield* FSUtil.Service
@@ -92,8 +92,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer))
-
-export const node = LayerNode.make(layer, [FSUtil.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node] })
 
 export * as Auth from "."

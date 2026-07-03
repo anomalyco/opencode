@@ -50,16 +50,12 @@ const brokenPluginLayer = Layer.succeed(
 
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
-  LayerNode.replace(Config.node, configLayer),
-  LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer()),
-]
+  [Config.node, configLayer],
+  [RuntimeFlags.node, RuntimeFlags.layer()],
+] as const
 
-const it = testEffect(LayerNode.buildLayer(root, { replacements }))
-const withBrokenPlugin = testEffect(
-  LayerNode.buildLayer(root, {
-    replacements: [...replacements, LayerNode.replace(Plugin.node, brokenPluginLayer)],
-  }),
-)
+const it = testEffect(LayerNode.compile(root, replacements))
+const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
 
 afterEach(async () => {
   await disposeAllInstances()

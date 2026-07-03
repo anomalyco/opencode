@@ -29,8 +29,7 @@ const api: ElectronAPI = {
     refreshDistros: () => ipcRenderer.invoke("wsl-servers-refresh-distros"),
     installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
     installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
-    probeDistro: (name) => ipcRenderer.invoke("wsl-servers-probe-distro", name),
-    probeOpencode: (name) => ipcRenderer.invoke("wsl-servers-probe-opencode", name),
+    probeAddable: (distros) => ipcRenderer.invoke("wsl-servers-probe-addable", distros),
     installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
     openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
     addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
@@ -73,6 +72,7 @@ const api: ElectronAPI = {
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
 
   getWindowCount: () => ipcRenderer.invoke("get-window-count"),
+  getWindowID: () => ipcRenderer.invoke("get-window-id"),
   onMenuCommand: (cb) => {
     const handler = (_: unknown, id: string) => cb(id)
     ipcRenderer.on("menu-command", handler)
