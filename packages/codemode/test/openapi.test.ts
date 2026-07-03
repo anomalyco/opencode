@@ -94,9 +94,9 @@ describe("OpenAPI.fromSpec", () => {
     const entries = toolPathEntries(spec)
     expect(entries.every((entry) => toolAt(result.tools, entry.name) !== undefined)).toBe(true)
     expect(result.skipped).toStrictEqual([])
-    expect(toolAt(result.tools, "global.health")).not.toBeUndefined()
-    expect(toolAt(result.tools, "file.read")).not.toBeUndefined()
-    expect(toolAt(result.tools, "session.create")).not.toBeUndefined()
+    expect(toolAt(result.tools, "v2.health.get")).not.toBeUndefined()
+    expect(toolAt(result.tools, "v2.session.get")).not.toBeUndefined()
+    expect(toolAt(result.tools, "v2.session.create")).not.toBeUndefined()
 
     for (const item of entries) {
       const tool = toolAt(result.tools, item.name)
@@ -147,7 +147,7 @@ describe("OpenAPI.fromSpec", () => {
 
     expect(spec.security).toStrictEqual([])
     expect(isRecord(components.securitySchemes) ? Object.keys(components.securitySchemes) : []).toStrictEqual([])
-    const health = toolAt(result.tools, "global.health")
+    const health = toolAt(result.tools, "v2.health.get")
     const healthInput = isRecord(health) ? health.input : undefined
     expect(healthInput).toMatchObject({ type: "object", properties: {} })
     const input = isRecord(healthInput) ? healthInput : {}
@@ -168,28 +168,27 @@ describe("OpenAPI.fromSpec", () => {
     expect(result.value).toMatchObject({
       items: [
         {
-          path: "tools.opencode.global.health",
-          description: "Get health information about the OpenCode server.",
+          path: "tools.opencode.v2.health.get",
+          description: "Check whether the API server is ready to accept requests.",
         },
       ],
     })
     expect(JSON.stringify(result.value)).toContain("healthy: true")
-    expect(JSON.stringify(result.value)).toContain("version: string")
   })
 
-  test("invokes real opencode paths, query parameters, and JSON request bodies", async () => {
+  test("invokes real opencode path parameters and JSON request bodies", async () => {
     const { requests, layer } = recordingClient((request) => {
-      if (request.method === "GET") return json({ type: "raw", content: "hello" })
-      return json({ id: "ses_123", version: "v2", time: { created: 0, updated: 0 }, title: "hello" })
+      if (request.method === "GET") return json({ id: "ses_123" })
+      return json({ id: "ses_456" })
     })
     const runtime = CodeMode.make({ tools: { opencode: OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools } })
 
     const result = await Effect.runPromise(
       runtime
         .execute(`
-          const file = await tools.opencode.file.read({ query: { path: "README.md", directory: "/repo" } })
-          const session = await tools.opencode.session.create({ body: { title: "hello" } })
-          return { file, session }
+          const existing = await tools.opencode.v2.session.get({ path: { sessionID: "ses_123" } })
+          const created = await tools.opencode.v2.session.create({ body: { id: "ses_456" } })
+          return { existing, created }
         `)
         .pipe(Effect.provide(layer)),
     )
@@ -197,13 +196,11 @@ describe("OpenAPI.fromSpec", () => {
     expect(result).toMatchObject({ ok: true })
     expect(requests).toHaveLength(2)
     expect(requests[0]).toMatchObject({ method: "GET", body: undefined })
-    expect(new URL(requests[0]!.url).pathname).toBe("/file/content")
-    expect(new URL(requests[0]!.url).searchParams.get("path")).toBe("README.md")
-    expect(new URL(requests[0]!.url).searchParams.get("directory")).toBe("/repo")
+    expect(new URL(requests[0]!.url).pathname).toBe("/api/session/ses_123")
     expect(requests[1]).toMatchObject({
       method: "POST",
-      url: "http://localhost:4096/session",
-      body: { title: "hello" },
+      url: "http://localhost:4096/api/session",
+      body: { id: "ses_456" },
     })
   })
 
@@ -212,11 +209,11 @@ describe("OpenAPI.fromSpec", () => {
     const runtime = CodeMode.make({ tools: { opencode: OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools } })
 
     const result = await Effect.runPromise(
-      runtime.execute("return await tools.opencode.file.read({})").pipe(Effect.provide(layer)),
+      runtime.execute("return await tools.opencode.v2.session.get({})").pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({ ok: false })
-    expect(JSON.stringify(result)).toContain("Missing required query parameter 'path'")
+    expect(JSON.stringify(result)).toContain("Missing required path parameter 'sessionID'")
     expect(requests).toHaveLength(0)
   })
 })
