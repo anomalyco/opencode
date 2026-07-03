@@ -54,6 +54,7 @@ export function DialogSessionList() {
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
   const [deleted, setDeleted] = createSignal(new Set<string>())
+  const [selected, setSelected] = createSignal(new Set<string>())
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
@@ -233,7 +234,8 @@ export function DialogSessionList() {
       const footer =
         directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
 
-      const isDeleting = toDelete() === x.id
+      const isDeleting = toDelete() === x.id || (toDelete() === "batch" && selected().has(x.id))
+      const isSelected = selected().has(x.id)
       const status = sync.data.session_status?.[x.id]
       const isWorking = status?.type === "busy" || status?.type === "retry"
       const slot = slotByID.get(x.id)
@@ -243,8 +245,12 @@ export function DialogSessionList() {
           ? () => <text fg={theme.accent}>{slot}</text>
           : undefined
       return {
-        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
-        bg: isDeleting ? theme.error : undefined,
+        title: isDeleting
+          ? `Press ${deleteHint()} again to confirm`
+          : isSelected
+            ? `[x] ${x.title}`
+            : x.title,
+        bg: isDeleting ? theme.error : isSelected ? theme.selection : undefined,
         value: x.id,
         category,
         footer,
@@ -289,6 +295,21 @@ export function DialogSessionList() {
       }}
       actions={[
         {
+          command: "session.select",
+          title: "select",
+          onTrigger: (option: { value: string }) => {
+            setSelected((current) => {
+              const next = new Set(current)
+              if (next.has(option.value)) {
+                next.delete(option.value)
+              } else {
+                next.add(option.value)
+              }
+              return next
+            })
+          },
+        },
+        {
           command: "session.pin.toggle",
           title: "pin/unpin",
           onTrigger: (option: { value: string }) => {
@@ -299,6 +320,37 @@ export function DialogSessionList() {
           command: "session.delete",
           title: "delete",
           onTrigger: async (option) => {
+            const selectedIds = selected()
+            
+            if (selectedIds.size > 0) {
+              if (toDelete() === "batch") {
+                let failed = 0
+                for (const id of selectedIds) {
+                  try {
+                    const result = await sdk.client.session.delete({ sessionID: id })
+                    if (result.error) failed++
+                  } catch {
+                    failed++
+                  }
+                }
+                
+                if (failed > 0) {
+                  toast.show({
+                    variant: "error",
+                    title: `Failed to delete ${failed} session(s)`,
+                  })
+                }
+                
+                setSelected(new Set())
+                setToDelete(undefined)
+                await refetchBrowse()
+                if (search()) await refetch()
+                return
+              }
+              setToDelete("batch")
+              return
+            }
+            
             if (toDelete() === option.value) {
               const session = sessions().find((item) => item.id === option.value)
               const status = session?.workspaceID ? project.workspace.status(session.workspaceID) : undefined
