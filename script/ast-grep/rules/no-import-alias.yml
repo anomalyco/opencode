@@ -1,6 +1,6 @@
 id: no-import-alias
 language: TypeScript
-message: Do not alias named imports.
+message: Do not alias value imports. For type name collisions, alias inside a dedicated `import type` statement.
 severity: error
 rule:
   all:
@@ -8,3 +8,7 @@ rule:
     - has:
         field: alias
         kind: identifier
+    - not:
+        inside:
+          pattern: import type { $$$SPECS } from "$MOD"
+          stopBy: end
