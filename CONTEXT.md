@@ -9,7 +9,7 @@ The structured collection of contextual facts presented to the model as initial 
 _Avoid_: System prompt
 
 **Session History**:
-The projected chronological conversation selected for a provider turn after applying the active compaction and **Context Epoch** cutoffs.
+The projected chronological conversation selected for a **Step** after applying the active compaction and **Context Epoch** cutoffs.
 _Avoid_: Session Context
 
 **Context Source**:
@@ -31,13 +31,13 @@ The full **System Context** rendered at the start of a **Context Epoch**.
 _Avoid_: Live system prompt
 
 **Context Snapshot**:
-The overwriteable model-hidden JSON state used to compare each **Context Source** with the value last admitted to a provider turn.
+The overwriteable model-hidden JSON state used to compare each **Context Source** with the value last admitted to a **Step**.
 
 **Unavailable Context**:
 An expected temporary inability to observe a **Context Source** value; the runtime retains its prior effective state and emits no update, or omits it until first successfully loaded.
 
-**Safe Provider-Turn Boundary**:
-The point immediately before a provider call, after durable input promotion and any required tool settlement, where context changes may be admitted chronologically.
+**Safe Step Boundary**:
+The point immediately before a provider request, after durable input promotion and any required tool settlement, where context changes may be admitted chronologically.
 
 **Admitted Prompt**:
 A durable user input accepted into the Session inbox but not yet included in **Session History**.
@@ -45,11 +45,24 @@ A durable user input accepted into the Session inbox but not yet included in **S
 **Prompt Promotion**:
 The durable transition that removes an **Admitted Prompt** from pending input and appends its user message to **Session History**.
 
-**Provider Turn**:
-One request to a model provider and the response projected from that request.
+**Step**:
+One logical LLM call spanning pre-flight context checkpoint preparation, input promotion, request build, and compaction check; the provider stream; and tool settlement.
+_Avoid_: provider turn, turn (unqualified)
+
+**Physical Attempt**:
+One actual provider request on the wire in service of a **Step**; most Steps have one Physical Attempt, while overflow-triggered compaction recovery may give one Step two.
+
+**Assistant Turn**:
+A reserved name for the not-yet-modeled unit containing all **Steps** from prompt promotion until the assistant yields the floor; do not reify it until something durable needs it.
+
+**Settlement**:
+The terminal transition for a unit of work: Step and tool settlement are durable, while drain and execution settlement are coordinator-observed.
+
+**Execution**:
+One session-scoped coordinator busy period from first wake until idle. An Execution is process-local coordination rather than a durable domain entity.
 
 **Session Drain**:
-One process-local execution span that promotes eligible input and runs required **Provider Turns** until no immediate continuation remains. A Session Drain has no durable identity or transcript boundary.
+One process-local execution span that promotes eligible input and runs required **Steps** until no immediate continuation remains. A Session Drain has no durable identity or transcript boundary.
 
 **Model Tool Output**:
 The bounded projection of a Core-executed tool result persisted in Session history and replayed to the model. A tool may shape this projection semantically, but the Tool Registry enforces the final size limit.
@@ -89,23 +102,25 @@ _Avoid_: Response envelope
 
 - A **System Context** is an opaque carrier composed from zero or more **Context Sources**.
 - **Session History** contains projected conversational messages and admitted **Mid-Conversation System Messages**; the active **Baseline System Context** remains separate provider-request state.
-- The **System Context Registry** uses stable-keyed scoped contributions to assemble the current **System Context**; contributor removal naturally removes its sources at the next **Safe Provider-Turn Boundary**.
+- The **System Context Registry** uses stable-keyed scoped contributions to assemble the current **System Context**; contributor removal naturally removes its sources at the next **Safe Step Boundary**.
 - A changed **Context Source** may produce one **Mid-Conversation System Message** containing its newly effective state.
 - A **Mid-Conversation System Message** persists the exact combined rendered text sent to the model.
 - The current **Context Snapshot** advances atomically with the corresponding durable **Mid-Conversation System Message**.
 - A **Context Snapshot** stores one codec-encoded JSON value and, for removable dynamic sources, a pre-rendered removal message per stable **Context Source** key.
 - Changes from multiple **Context Sources** admitted at one safe boundary combine into one **Mid-Conversation System Message**.
-- Context changes are sampled and admitted lazily at a **Safe Provider-Turn Boundary**, never pushed asynchronously when their source changes.
-- At a **Safe Provider-Turn Boundary**, newly promoted user input or settled tool results precede any combined **Mid-Conversation System Message**.
+- Context changes are sampled and admitted lazily at a **Safe Step Boundary**, never pushed asynchronously when their source changes.
+- At a **Safe Step Boundary**, newly promoted user input or settled tool results precede any combined **Mid-Conversation System Message**.
 - An **Admitted Prompt** is replayable pending input, not yet model-visible **Session History**.
 - **Prompt Promotion** atomically consumes the pending inbox entry and appends its model-visible user message.
-- Steering prompts promote at the next **Safe Provider-Turn Boundary** while the current **Session Drain** still requires continuation. Promoting any newly admitted user input resets the selected agent's provider-turn allowance; multiple prompts promoted at one boundary reset it once.
+- Steering prompts promote at the next **Safe Step Boundary** while the current **Session Drain** still requires continuation. Promoting any newly admitted user input resets the selected agent's step allowance; multiple prompts promoted at one boundary reset it once.
 - A queued prompt does not promote while the current **Session Drain** requires continuation. The runner promotes one queued prompt when the Session would otherwise become idle, then reevaluates continuation before promoting another.
-- A **Session Drain** is process-local coordination rather than a durable domain entity. Durable recovery must reason from prompts, projected history, provider attempts, and tool state rather than inventing an enclosing execution identity.
-- The first provider turn renders the latest complete **Baseline System Context** and initializes its **Context Snapshot** without emitting a redundant **Mid-Conversation System Message**; unavailable initial context blocks the turn instead of persisting an incomplete baseline.
+- A **Session Drain** is process-local coordination rather than a durable domain entity. Durable recovery must reason from prompts, projected history, physical attempts, and tool state rather than inventing an enclosing execution identity.
+- An **Execution** contains one or more **Session Drains**; a **Session Drain** contains one reserved assistant-turn span at a time; that span contains **Steps**; and each **Step** contains one or more **Physical Attempts** plus any tool calls it requires.
+- A **Step** record covers only the model-visible span from first assistant output through tool settlement; pre-flight leaves no record, and one Step settles at most one record.
+- The first **Step** renders the latest complete **Baseline System Context** and initializes its **Context Snapshot** without emitting a redundant **Mid-Conversation System Message**; unavailable initial context blocks the Step instead of persisting an incomplete baseline.
 - Initial **System Context** preparation precedes the first durable input promotion so an unavailable baseline leaves that input pending and retryable; ordinary reconciliation remains after promotion.
 - Compaction starts a new **Context Epoch** with a freshly rendered **Baseline System Context** and **Context Snapshot**; prior **Mid-Conversation System Messages** remain durable audit history but leave projected model history.
-- A newly registered core or plugin-defined **Context Source** absent from the current snapshot emits its baseline rendering once at the next **Safe Provider-Turn Boundary**.
+- A newly registered core or plugin-defined **Context Source** absent from the current snapshot emits its baseline rendering once at the next **Safe Step Boundary**.
 - **Context Source** keys are stable and namespaced; duplicate keys fail composition. `SystemContext.combine(...)` preserves caller order; the **System Context Registry** evaluates producers concurrently and combines them in stable contribution-key order so rendered context remains deterministic.
 - Each **Context Source** loader returns one coherent typed value. `SystemContext.make(...)` hides that value type so differently typed sources compose uniformly. Its codec compares and stores that value; its pure renderers produce model-visible baseline, update, and removal text only when needed.
 - `SystemContext.initialize(...)` observes a composed **System Context** once and produces a fresh **Baseline System Context** with its **Context Snapshot**.
@@ -113,26 +128,26 @@ _Avoid_: Response envelope
 - `SystemContext.replace(...)` renders a fresh generation after completed compaction or another baseline-replacing transition; it reports replacement blocked while previously admitted context is unavailable.
 - **Unavailable Context** uses stale-while-revalidate semantics and is distinct from a successfully loaded absence, which may emit removal text.
 - Ordinary **Context Source** loaders return values directly; loaders that intentionally use stale-while-revalidate may explicitly return **Unavailable Context**.
-- Nested project instruction discovery after successful reads remains a follow-up; when implemented, discovered instructions must be admitted durably at the next **Safe Provider-Turn Boundary**.
+- Nested project instruction discovery after successful reads remains a follow-up; when implemented, discovered instructions must be admitted durably at the next **Safe Step Boundary**.
 - Location-scoped services naturally re-resolve effective context when a moved session next runs in its destination location.
 - Moving a Session clears its active **Context Epoch**, so the destination must initialize a complete baseline before another prompt can promote.
 - Instruction discovery, source identity, persistence, and file loading belong to the instruction service; the **System Context** abstraction only composes effectful producers and renders loaded values.
-- The first instruction-service slice observes global and upward project `AGENTS.md` files as one ordered aggregate **Context Source** at each **Safe Provider-Turn Boundary**.
+- The first instruction-service slice observes global and upward project `AGENTS.md` files as one ordered aggregate **Context Source** at each **Safe Step Boundary**.
 - Built-in and instruction context producers register through the **System Context Registry** with stable contribution keys. Plugin-defined context registration and hot-reload lifecycle remain a follow-up built on the same scoped registry seam.
 - Selected-agent available-skill guidance is a **Context Source** composed with Location-wide registry sources immediately before Context Epoch admission. It lists only names and descriptions permitted for that agent; skill bodies and locations are exposed only through the permission-checked `skill` tool.
-- The selected agent and model are sampled when a provider turn starts. Changes admitted after that boundary apply to the next provider turn and do not restart the current turn.
+- The selected agent and model are sampled when a **Step** starts. Changes admitted after that boundary apply to the next Step and do not restart the current Step.
 - Selected-agent available-skill guidance remains a **Context Source**. An agent switch that changes that guidance produces a **Mid-Conversation System Message** while preserving the current baseline.
-- Local tool authorization and pending permission requests retain the effective agent of the provider turn that issued the call; a later agent switch cannot change that call's policy.
-- Context source changes never wake idle sessions; the next naturally scheduled **Safe Provider-Turn Boundary** loads and compares current values lazily.
-- Once admitted, a **Mid-Conversation System Message** remains durable even if the following provider attempt fails and is replayed unchanged on retry.
+- Local tool authorization and pending permission requests retain the effective agent of the **Step** that issued the call; a later agent switch cannot change that call's policy.
+- Context source changes never wake idle sessions; the next naturally scheduled **Safe Step Boundary** loads and compares current values lazily.
+- Once admitted, a **Mid-Conversation System Message** remains durable even if the following **Physical Attempt** fails and is replayed unchanged on retry.
 - **Mid-Conversation System Messages** remain durable Session-message history; normal user-facing transcript surfaces may hide them.
 - The date **Context Source** initially preserves host-local calendar-date behavior; a configured user timezone may replace that default later.
 - A **Context Epoch** begins with one immutable **Baseline System Context**.
 - A **Baseline System Context** is stored durably and reused verbatim across process restarts within its **Context Epoch**.
 - A **Baseline System Context** durably preserves the exact joined text used for the active provider-cache prefix.
-- Completed compaction starts a new **Context Epoch** on the next provider attempt, folding the current complete **System Context** into a fresh baseline and removing earlier **Mid-Conversation System Messages** from active model history.
-- A model/provider switch preserves the current **Context Epoch** and chronological conversation history; the new selection applies to the next provider turn.
-- **Native Continuation Metadata** remains in durable history. Provider-turn projection includes it only for a successful exact originating provider/model match; failed turns and incompatible models omit opaque metadata, while non-empty visible reasoning lowers to ordinary assistant text after a model switch. This conservative relation may widen only when recorded provider tests establish compatibility.
+- Completed compaction starts a new **Context Epoch** on the next **Physical Attempt**, folding the current complete **System Context** into a fresh baseline and removing earlier **Mid-Conversation System Messages** from active model history.
+- A model/provider switch preserves the current **Context Epoch** and chronological conversation history; the new selection applies to the next **Step**.
+- **Native Continuation Metadata** remains in durable history. Step projection includes it only for a successful exact originating provider/model match; failed Steps and incompatible models omit opaque metadata, while non-empty visible reasoning lowers to ordinary assistant text after a model switch. This conservative relation may widen only when recorded provider tests establish compatibility.
 - **Model Request Options** remain provider-semantic through Catalog resolution. The Session runner maps them into the LLM package's provider-option namespace; the selected protocol adapter alone owns provider wire encoding.
 - **Generation Controls**, protocol-semantic **Model Request Options**, and compatibility request body fields are separate Catalog domains. A shared ingestion adapter partitions legacy and models.dev AI-SDK-shaped options before routing.
 - The **PTY Environment** is a server concern rather than a Core PTY concern. PTY creation merges caller values, then the host overlay, then Core-forced terminal invariants such as `TERM` and `OPENCODE_TERMINAL`.

@@ -21,17 +21,17 @@ through legacy `SessionPrompt.loop(...)`:
 - process-global `SessionExecution.resume(sessionID)` discovers Location from
   the Session read model
 - cached Location-scoped `SessionRunner` resolves one supported catalog model
-  and issues one explicit `llm.stream(request)` provider turn at a time
+  and issues one explicit `llm.stream(request)` step at a time
 - durable V2 projections record text, reasoning, provider failures, tool calls,
   tool results, and assistant output
 - a scoped `ToolRegistry` advertises definitions and the first permission-checked
   `read` built-in
-- local continuation reloads projected history, and promoting new user input resets the selected agent's configured provider-turn allowance
+- local continuation reloads projected history, and promoting new user input resets the selected agent's configured step allowance
 - concurrent resumes for one Session join one process-local run while different
   Sessions remain concurrent
 
 Prompt admission now uses a durable `session_input` inbox rather than immediate
-transcript projection. `steer` inputs promote at the next safe provider-turn
+transcript projection. `steer` inputs promote at the next safe step
 boundary while the current drain requires continuation. `queue` inputs remain in
 a FIFO until the Session would otherwise become idle and then promote one at a time.
 
@@ -39,12 +39,12 @@ Next reviewed slices:
 
 - preserve eager structured local-tool settlement: durably record each complete
   call, start its child execution immediately, await every settlement after the
-  provider turn closes, then reload projected history once
-- revisit per-turn tool-call limits, output truncation, and operational
+  step closes, then reload projected history once
+- revisit per-step tool-call limits, output truncation, and operational
   backpressure before broadening exposure; eager local execution is deliberately
   unbounded in the current local slice while SQLite publication stays serialized
 - remove the public in-memory `@opencode-ai/llm` tool loop after replacing its
-  remaining one-turn native-adapter use with a narrow typed dispatcher
+  remaining single-step native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
 - expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
 - integrate the new Job service with V2 tool execution: support background
@@ -56,14 +56,14 @@ Next reviewed slices:
 ### Deferred durable continuation recovery
 
 Do not infer that ambiguous provider work is safe to retry from an advisory wake.
-The first inbox-driven runner intentionally omits outer provider-attempt markers
+The first inbox-driven runner intentionally omits outer physical-attempt markers
 until they have a concrete consumer and a complete recovery policy.
 
 Design post-crash continuation recovery as one explicit slice. It should model:
 
 - promoted input and projected-history state
 - queued-input promotion and steering assignment
-- provider-attempt preparation versus provider-dispatch ambiguity
+- physical-attempt preparation versus provider-dispatch ambiguity
 - required post-tool continuation across process loss
 - explicit `retry` and `abandon` decisions for unknown outcomes
 - bounded automatic retry only where provider and tool idempotency make it safe
