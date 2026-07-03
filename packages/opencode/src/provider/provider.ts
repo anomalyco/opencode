@@ -1521,10 +1521,13 @@ export const layer = Layer.effect(
           if (!stored) continue
           if (!plugin.auth.loader) continue
 
+          const dbEntry = database[providerID]
+          if (!dbEntry) continue
+
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              toPublicInfo(database[plugin.auth!.provider]),
+              toPublicInfo(dbEntry),
             ),
           )
           const opts = options ?? {}
