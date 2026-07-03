@@ -171,7 +171,6 @@ export namespace Shell {
     ...options,
     schema: {
       ...Base,
-      callID: Schema.String,
       shell: ShellSchema.Info,
     },
   })
@@ -182,7 +181,6 @@ export namespace Shell {
     ...options,
     schema: {
       ...Base,
-      callID: Schema.String,
       shell: ShellSchema.Info,
       output: ShellSchema.Output,
     },

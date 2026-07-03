@@ -126,8 +126,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         const item = position === undefined ? undefined : messages[position]
         return item?.type === "assistant" ? item : undefined
       },
-      activeShell(messages: SessionMessage[], callID: string) {
-        const item = messages.findLast((item) => item.type === "shell" && item.callID === callID)
+      shell(messages: SessionMessage[], shellID: string) {
+        const item = messages.findLast((item) => item.type === "shell" && item.shell.id === shellID)
         return item?.type === "shell" ? item : undefined
       },
       latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
@@ -305,7 +305,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
               type: "shell",
-              callID: event.data.callID,
               shell: event.data.shell,
               time: { created: event.created },
             })
@@ -313,8 +312,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "shell.ended":
           setStore("session", "status", event.data.sessionID, "idle")
-          message.update(event.data.sessionID, (draft, index) => {
-            const match = message.activeShell(draft, event.data.callID)
+          message.update(event.data.sessionID, (draft) => {
+            const match = message.shell(draft, event.data.shell.id)
             if (!match) return
             match.shell = event.data.shell
             match.output = event.data.output

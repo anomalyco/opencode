@@ -10,7 +10,7 @@ export type MemoryState = {
 export interface Adapter {
   readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
-  readonly getCurrentShell: (callID: string) => Effect.Effect<SessionMessage.Shell | undefined>
+  readonly getShell: (shellID: SessionMessage.Shell["shell"]["id"]) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Message) => Effect.Effect<void>
@@ -19,10 +19,10 @@ export interface Adapter {
 export function memory(state: MemoryState): Adapter {
   const assistantIndex = (messageID: SessionMessage.ID) =>
     state.messages.findLastIndex((message) => message.id === messageID)
+  const shellIndex = (messageID: SessionMessage.ID) =>
+    state.messages.findLastIndex((message) => message.id === messageID)
   // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
   const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
-  const activeShellIndex = (callID: string) =>
-    state.messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
 
   return {
     getCurrentAssistant() {
@@ -41,12 +41,11 @@ export function memory(state: MemoryState): Adapter {
         return assistant?.type === "assistant" ? assistant : undefined
       })
     },
-    getCurrentShell(callID) {
+    getShell(shellID) {
       return Effect.sync(() => {
-        const index = activeShellIndex(callID)
-        if (index < 0) return
-        const shell = state.messages[index]
-        return shell?.type === "shell" ? shell : undefined
+        return state.messages.find((message): message is SessionMessage.Shell => {
+          return message.type === "shell" && message.shell.id === shellID
+        })
       })
     },
     updateAssistant(assistant) {
@@ -60,7 +59,7 @@ export function memory(state: MemoryState): Adapter {
     },
     updateShell(shell) {
       return Effect.sync(() => {
-        const index = activeShellIndex(shell.callID)
+        const index = shellIndex(shell.id)
         if (index < 0) return
         const current = state.messages[index]
         if (current?.type !== "shell") return
@@ -167,7 +166,6 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             id: SessionMessage.ID.fromEvent(event.id),
             type: "shell",
             metadata: event.metadata,
-            callID: event.data.callID,
             shell: event.data.shell,
             time: { created: event.created },
           }),
@@ -175,7 +173,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "shell.ended": (event) => {
         return Effect.gen(function* () {
-          const currentShell = yield* adapter.getCurrentShell(event.data.callID)
+          const currentShell = yield* adapter.getShell(event.data.shell.id)
           if (currentShell) {
             yield* adapter.updateShell(
               produce(currentShell, (draft) => {

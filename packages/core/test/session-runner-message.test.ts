@@ -88,7 +88,6 @@ describe("toLLMMessages", () => {
         SessionMessage.Shell.make({
           id: id("shell"),
           type: "shell",
-          callID: "shell-1",
           shell: Shell.Info.make({
             id: Shell.ID.make("sh_test"),
             status: "exited",

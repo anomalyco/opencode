@@ -258,7 +258,6 @@ describe("SessionProjector", () => {
       })
       yield* events.publish(SessionEvent.Shell.Started, {
         sessionID,
-        callID: "shell-1",
         shell: Shell.Info.make({
           id: Shell.ID.make("sh_projector"),
           status: "running",
@@ -272,7 +271,6 @@ describe("SessionProjector", () => {
       })
       yield* events.publish(SessionEvent.Shell.Ended, {
         sessionID,
-        callID: "shell-1",
         shell: Shell.Info.make({
           id: Shell.ID.make("sh_projector"),
           status: "exited",

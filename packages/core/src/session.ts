@@ -41,7 +41,6 @@ import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
 import { CommandV2 } from "./command"
-import { Identifier } from "./util/identifier"
 import { Shell } from "./shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 
@@ -537,7 +536,6 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             activeShells.add(input.sessionID)
             if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
-            const callID = Identifier.ascending()
             const started = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
               return yield* shell.create({ command: input.command, cwd: session.location.directory })
@@ -546,7 +544,6 @@ const layer = Layer.effect(
               SessionEvent.Shell.Started,
               {
                 sessionID: input.sessionID,
-                callID,
                 shell: started,
               },
               { id: input.id },
@@ -574,7 +571,6 @@ const layer = Layer.effect(
               )
             yield* events.publish(SessionEvent.Shell.Ended, {
               sessionID: input.sessionID,
-              callID,
               shell: completed.shell,
               output: completed.output,
             })

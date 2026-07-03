@@ -62,7 +62,7 @@ type SessionCommit = StreamCommit
 // - sent:   part ID → byte offset of last flushed text (for incremental output)
 // - visible: part ID → rendered text for an active part after display transforms
 // - end:    part IDs whose time.end has arrived (part is finished)
-// - shell:  shell call ID → chosen transcript source for direct shell calls
+// - shell:  shell ID → chosen transcript source for direct shell calls
 // - echo:   message ID → bash outputs to strip from the next assistant chunk
 type ShellCall = {
   source: "shell" | "tool"
@@ -607,12 +607,12 @@ function toolCommit(
   }
 }
 
-function shellPartID(callID: string): string {
-  return `shell:${callID}`
+function shellPartID(shellID: string): string {
+  return `shell:${shellID}`
 }
 
-function claimShell(data: SessionData, callID: string, source: ShellCall["source"], command?: string): ShellCall {
-  const current = data.shell.get(callID)
+function claimShell(data: SessionData, shellID: string, source: ShellCall["source"], command?: string): ShellCall {
+  const current = data.shell.get(shellID)
   if (current) {
     if (command && !current.command) {
       current.command = command
@@ -625,7 +625,7 @@ function claimShell(data: SessionData, callID: string, source: ShellCall["source
     source,
     ...(command ? { command } : {}),
   } satisfies ShellCall
-  data.shell.set(callID, next)
+  data.shell.set(shellID, next)
   return next
 }
 
@@ -733,18 +733,18 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    const shell = claimShell(data, event.properties.callID, "shell", event.properties.shell.command)
+    const shell = claimShell(data, event.properties.shell.id, "shell", event.properties.shell.command)
     if (shell.source !== "shell") {
       return out(data, commits)
     }
 
-    const partID = shellPartID(event.properties.callID)
+    const partID = shellPartID(event.properties.shell.id)
     if (data.ids.has(partID) || data.tools.has(partID)) {
       return out(data, commits, patch({ status: "running shell" }))
     }
 
     data.tools.add(partID)
-    commits.push(startShell(event.properties.callID, shell.command ?? event.properties.shell.command))
+    commits.push(startShell(event.properties.shell.id, shell.command ?? event.properties.shell.command))
     return out(data, commits, patch({ status: "running shell" }))
   }
 
@@ -753,12 +753,12 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    const shell = claimShell(data, event.properties.callID, "shell")
+    const shell = claimShell(data, event.properties.shell.id, "shell")
     if (shell.source !== "shell") {
       return out(data, commits)
     }
 
-    const partID = shellPartID(event.properties.callID)
+    const partID = shellPartID(event.properties.shell.id)
     const seen = data.tools.has(partID)
     const command = shell.command ?? ""
     data.tools.delete(partID)
@@ -767,11 +767,11 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     }
 
     if (!seen && command) {
-      commits.push(startShell(event.properties.callID, command))
+      commits.push(startShell(event.properties.shell.id, command))
     }
 
     data.ids.add(partID)
-    commits.push(doneShell(event.properties.callID, command, event.properties.output.output))
+    commits.push(doneShell(event.properties.shell.id, command, event.properties.output.output))
     return out(data, commits)
   }
 
