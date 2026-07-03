@@ -13,6 +13,7 @@ export type JsonSchema = {
   readonly const?: unknown
   readonly anyOf?: ReadonlyArray<JsonSchema>
   readonly oneOf?: ReadonlyArray<JsonSchema>
+  readonly allOf?: ReadonlyArray<JsonSchema>
   readonly properties?: Readonly<Record<string, JsonSchema>>
   readonly required?: ReadonlyArray<string>
   readonly items?: JsonSchema
@@ -168,6 +169,7 @@ const renderSchema = (
     }
     return alternatives.map((item) => renderSchema(item, ctx, depth + 1, seen)).join(" | ")
   }
+  if (schema.allOf) return schema.allOf.map((item) => renderSchema(item, ctx, depth + 1, seen)).join(" & ")
   if (Array.isArray(schema.type)) {
     return schema.type.map((item) => renderSchema({ type: item }, ctx, depth + 1, seen)).join(" | ")
   }

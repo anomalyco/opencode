@@ -152,6 +152,38 @@ interface ExecuteFailure {
 
 `onToolCallEnd` receives `{ index, name, input, durationMs, outcome, message? }` when an admitted call settles. `outcome` is `"success"` or `"failure"`; `message` is the model-safe failure message and is present only on failure. Interrupted calls (for example when the execution timeout fires) do not produce an end event. Both hooks are Effect-returning and must not fail.
 
+### OpenAPI tools
+
+`OpenAPI.fromSpec` (from `@opencode-ai/codemode/openapi`) turns an OpenAPI 3.x document into a tool subtree - one tool per operation, named from `operationId`. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+
+```ts
+import { CodeMode } from "@opencode-ai/codemode"
+import { OpenAPI } from "@opencode-ai/codemode/openapi"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const api = OpenAPI.fromSpec({
+  spec: await Bun.file("openapi.json").json(), // parsed object or JSON text (no YAML)
+  auth: {
+    resolve: ({ schemeName, scopes, operation }) =>
+      schemeName === "BearerAuth"
+        ? Effect.succeed({ type: "bearer", token })
+        : Effect.succeed(undefined),
+  },
+})
+
+const runtime = CodeMode.make({ tools: { opencode: api.tools } })
+const result = yield * runtime.execute(code).pipe(Effect.provide(FetchHttpClient.layer))
+```
+
+`fromSpec` is synchronous and returns `{ tools, skipped }`. It throws on structurally invalid specs; operations it cannot represent (non-JSON request bodies, unresolved server URL templates) are reported in `skipped` with a reason instead of producing broken tools. `baseUrl` overrides the spec's `servers`; `serverVariables` fills templated server URLs; `operations` filters which operations become tools; `headers` adds static host headers to every request (never model-visible).
+
+Tool inputs group parameters by OpenAPI location - `{ path, query, headers, cookies, body }` - and never include auth. Output schemas come from the first 2xx JSON response; `#/components/schemas/*` refs are shared with the signature renderer, so catalog signatures and search results expand referenced types. Operations with no JSON response content (e.g. 204) resolve to `null`. Non-2xx responses become safe tool failures carrying the status and a size-capped body summary, so programs can `catch` and read them.
+
+Auth follows OpenAPI `security` semantics: root-level security is the default, operation-level security replaces it, `security: []` (and an empty `{}` alternative) means unauthenticated. The requirement list is OR - the adapter picks the first alternative whose every scheme (AND) resolves. `auth.resolve` is called per scheme per invocation with `{ schemeName, scheme, scopes, operation }` and returns credential material: `{ type: "bearer" | "basic" | "apiKey" | "header", ... }`. The carrier for an `apiKey` credential comes from the scheme declaration (header, query, or cookie), never from the host. Returning `undefined` skips to the next alternative; failing aborts the call - an expired refresh token must not silently fall through to an unauthenticated alternative. Two credentials colliding on one header (e.g. two bearer tokens) fail with a clear error.
+
+Credential storage, OAuth flows, and token refresh stay host-side behind `resolve`; the adapter only asks for a valid credential at call time. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
+
 ## Discovery
 
 The agent-tool instructions use a budgeted catalog. Every tool namespace is always listed with its tool count regardless of budget, and as many complete tool signatures (each with a one-line description) as fit an estimated-token budget are inlined. Selection is round-robin across namespaces for fairness: in each round (namespaces alphabetical), every namespace still holding un-inlined tools attempts to place its next-cheapest signature line against the shared budget, and a namespace whose next line does not fit drops out while the others keep going - so every namespace gets some representation before any namespace gets everything. The instructions state exactly how comprehensive the list is, both overall (`COMPLETE list` vs `PARTIAL - N of M shown`) and per namespace (`(3 tools)`, `(3 tools, 1 shown)`, `(3 tools, none shown)`).
