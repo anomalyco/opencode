@@ -33,10 +33,7 @@ async function setup() {
         },
       },
       event: {
-        on: <Type extends V2Event["type"]>(
-          type: Type,
-          handler: (event: Extract<V2Event, { type: Type }>) => void,
-        ) => {
+        on: <Type extends V2Event["type"]>(type: Type, handler: (event: Extract<V2Event, { type: Type }>) => void) => {
           const list = handlers.get(type) ?? []
           const wrapped = handler as (event: V2Event) => void
           list.push(wrapped)
@@ -86,10 +83,15 @@ function permission(id: string, sessionID = "session"): PermissionRequest {
   }
 }
 
+function durable(sessionID: string) {
+  return { aggregateID: sessionID, seq: 0, version: 1 }
+}
+
 function stepStarted(id: string, sessionID = "session"): V2Event {
   return {
     id,
     type: "session.next.step.started",
+    durable: durable(sessionID),
     data: {
       sessionID,
       assistantMessageID: `msg_${id}`,
@@ -104,6 +106,7 @@ function stepEnded(id: string, sessionID = "session", finish = "stop"): V2Event 
   return {
     id,
     type: "session.next.step.ended",
+    durable: durable(sessionID),
     data: {
       sessionID,
       assistantMessageID: `msg_${id}`,
@@ -119,6 +122,7 @@ function stepFailed(id: string, sessionID = "session"): V2Event {
   return {
     id,
     type: "session.next.step.failed",
+    durable: durable(sessionID),
     data: {
       sessionID,
       assistantMessageID: `msg_${id}`,

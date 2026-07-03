@@ -21,6 +21,10 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: V2Event)
   events.emit({ ...event, location: { directory } })
 }
 
+function durable(sessionID: string, seq = 0, version = 1) {
+  return { aggregateID: sessionID, seq, version }
+}
+
 test("refreshes resources into reactive getters", async () => {
   const events = createEventStream()
   const location = {
@@ -261,6 +265,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_step_started",
       type: "session.next.step.started",
+      durable: durable("session-live"),
       data: {
         sessionID: "session-live",
         assistantMessageID: "message-live",
@@ -274,6 +279,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_step_ended",
       type: "session.next.step.ended",
+      durable: durable("session-live", 1, 2),
       data: {
         sessionID: "session-live",
         assistantMessageID: "message-live",
@@ -303,6 +309,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_failed_step_started",
       type: "session.next.step.started",
+      durable: durable("session-failed"),
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
@@ -316,6 +323,7 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_step_failed",
       type: "session.next.step.failed",
+      durable: durable("session-failed", 1, 2),
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
@@ -548,7 +556,10 @@ test("keeps shell state scoped to location", async () => {
     if (url.pathname !== "/api/shell") return
     const requestDirectory = url.searchParams.get("location[directory]")
     return json({
-      location: { directory: requestDirectory ?? directory, project: { id: "proj_test", directory: requestDirectory ?? directory } },
+      location: {
+        directory: requestDirectory ?? directory,
+        project: { id: "proj_test", directory: requestDirectory ?? directory },
+      },
       data: [
         {
           id: requestDirectory === other ? "sh_other" : "sh_default",
@@ -773,11 +784,13 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_agent_1",
       type: "session.next.agent.switched",
+      durable: durable("session-1"),
       data: { sessionID: "session-1", messageID: "msg_agent_1", timestamp: 0, agent: "build" },
     })
     emitEvent(events, {
       id: "evt_model_1",
       type: "session.next.model.switched",
+      durable: durable("session-1", 1),
       data: {
         sessionID: "session-1",
         messageID: "msg_model_1",
@@ -788,6 +801,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_step_started_1",
       type: "session.next.step.started",
+      durable: durable("session-1", 2),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
@@ -799,6 +813,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_input_1",
       type: "session.next.tool.input.started",
+      durable: durable("session-1", 3),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
@@ -810,6 +825,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_called_1",
       type: "session.next.tool.called",
+      durable: durable("session-1", 4),
       data: {
         sessionID: "session-1",
         timestamp: 2,
@@ -823,6 +839,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_failed_1",
       type: "session.next.tool.failed",
+      durable: durable("session-1", 5),
       data: {
         sessionID: "session-1",
         timestamp: 3,
@@ -912,6 +929,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     emitEvent(events, {
       id: "evt_admitted_1",
       type: "session.next.prompt.admitted",
+      durable: durable(sessionID),
       data: {
         sessionID,
         messageID,
@@ -930,6 +948,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     emitEvent(events, {
       id: "evt_prompted_1",
       type: "session.next.prompted",
+      durable: durable(sessionID, 1),
       data: {
         sessionID,
         messageID,
@@ -989,6 +1008,7 @@ test("projects live context updates with their message ID", async () => {
     emitEvent(events, {
       id: "evt_context_1",
       type: "session.next.context.updated",
+      durable: durable("session-1"),
       data: {
         sessionID: "session-1",
         messageID: "msg_context_1",

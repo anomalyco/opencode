@@ -9,7 +9,6 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/un
 const fields = {
   id: Event.ID,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  durable: Schema.optional(Schema.Struct({ aggregateID: Schema.String, seq: Event.Seq, version: Event.Version })),
   location: Schema.optional(Location.Ref),
 }
 
