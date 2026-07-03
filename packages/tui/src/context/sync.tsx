@@ -8,7 +8,7 @@ import type {
   Todo,
   Command,
   PermissionRequest,
-  QuestionRequest,
+  QuestionV2Request,
   LspStatus,
   McpStatus,
   McpResource,
@@ -77,7 +77,7 @@ export const {
         [sessionID: string]: PermissionRequest[]
       }
       question: {
-        [sessionID: string]: QuestionRequest[]
+        [sessionID: string]: QuestionV2Request[]
       }
       config: Config
       session: Session[]
@@ -218,8 +218,8 @@ export const {
           break
         }
 
-        case "question.replied":
-        case "question.rejected": {
+        case "question.v2.replied":
+        case "question.v2.rejected": {
           const requests = store.question[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -234,7 +234,7 @@ export const {
           break
         }
 
-        case "question.asked": {
+        case "question.v2.asked": {
           const request = event.properties
           const requests = store.question[request.sessionID]
           if (!requests) {

@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionV2Request } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
@@ -11,7 +11,7 @@ import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const QUESTION_MODE = "question"
 
-export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
+export function QuestionPrompt(props: { request: QuestionV2Request; directory?: string }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
