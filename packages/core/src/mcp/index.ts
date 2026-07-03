@@ -10,9 +10,11 @@ import { Config } from "../config"
 import { ConfigMCP } from "../config/mcp"
 import { Credential } from "../credential"
 import { EventV2 } from "../event"
+import { Form } from "../form"
 import { Integration } from "../integration"
 import { IntegrationConnection } from "../integration/connection"
 import { Location } from "../location"
+import { waitForAbort } from "../process"
 import { MCPClient } from "./client"
 import { MCPOAuth } from "./oauth"
 
@@ -145,6 +147,10 @@ type ServerEntry = {
   integrationID?: Integration.ID
 }
 
+// Temporary MCP elicitation escape hatch. Public Form routes remain session-shaped, but MCP
+// elicitations are still Location-scoped until the protocol path can attribute them to a Session.
+const GLOBAL_ELICITATION_SESSION_ID = "global"
+
 export interface Interface {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly tools: () => Effect.Effect<Tool[]>
@@ -175,6 +181,7 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const location = yield* Location.Service
     const events = yield* EventV2.Service
+    const forms = yield* Form.Service
     const integration = yield* Integration.Service
     const credentials = yield* Credential.Service
     const root = yield* Scope.make()
@@ -189,6 +196,7 @@ export const layer = Layer.effect(
     )
     // Later config files win for duplicate server names; per-server timeout overrides globals.
     const runtime = new Map<ServerName, ServerEntry>()
+    const urlElicitations = new Map<string, Form.ID>()
     for (const entry of documents) {
       for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
         runtime.set(ServerName.make(name), {
@@ -308,6 +316,39 @@ export const layer = Layer.effect(
       })
     })
 
+    const completeUrlElicitation = Effect.fnUntraced(function* (server: string, elicitationID: string) {
+      const formID = urlElicitations.get(elicitationKey(server, elicitationID))
+      if (!formID) return
+      yield* forms.reply({ id: formID, answer: {} }).pipe(Effect.ignore)
+    })
+
+    const elicitation = {
+      create: (input: {
+        readonly server: string
+        readonly params: MCPClient.ElicitationParams
+        readonly signal: AbortSignal
+      }) =>
+        Effect.gen(function* () {
+          if (isUrlElicitation(input.params)) {
+            const formID = Form.ID.create()
+            const key = elicitationKey(input.server, input.params.elicitationId)
+            urlElicitations.set(key, formID)
+            return yield* forms
+              .ask(toElicitationForm(input.server, input.params, formID))
+              .pipe(
+                Effect.raceFirst(waitForAbort(input.signal)),
+                Effect.ensuring(Effect.sync(() => urlElicitations.delete(key))),
+                Effect.map(toElicitationResult),
+              )
+          }
+          return yield* forms
+            .ask(toElicitationForm(input.server, input.params))
+            .pipe(Effect.raceFirst(waitForAbort(input.signal)), Effect.map(toElicitationResult))
+        }),
+      complete: (input: { readonly server: string; readonly elicitationID: string }) =>
+        completeUrlElicitation(input.server, input.elicitationID),
+    } satisfies MCPClient.ElicitationHandler
+
     const toTool = (server: ServerName, def: MCPClient.ToolDefinition) =>
       new Tool({ server, name: def.name, description: def.description, inputSchema: def.inputSchema })
 
@@ -396,7 +437,7 @@ export const layer = Layer.effect(
         const authProvider = yield* connectProvider(entry)
         // List tools as part of connect so a failure here marks the server failed rather than
         // leaving it connected with a silently empty tool list and no path to recover.
-        const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider).pipe(
+        const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider, elicitation).pipe(
           Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
           Scope.provide(scope),
           Effect.exit,
@@ -561,5 +602,158 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Config.node, Location.node, EventV2.node, Integration.node, Credential.node],
+  deps: [Config.node, Location.node, EventV2.node, Form.node, Integration.node, Credential.node],
 })
+
+function elicitationKey(server: string, elicitationID: string) {
+  return server + "\u0000" + elicitationID
+}
+
+function isUrlElicitation(
+  params: MCPClient.ElicitationParams,
+): params is Extract<MCPClient.ElicitationParams, { mode: "url" }> {
+  return params.mode === "url"
+}
+
+function toElicitationResult(state: Form.State): MCPClient.ElicitationResult {
+  if (state.status !== "answered") return { action: "cancel" }
+  return { action: "accept", content: toElicitationContent(state.answer) }
+}
+
+function toElicitationContent(answer: Form.Answer): NonNullable<MCPClient.ElicitationResult["content"]> {
+  return Object.fromEntries(
+    Object.entries(answer).map(([key, value]): [string, ElicitationContentValue] => [key, toElicitationValue(value)]),
+  )
+}
+
+function toElicitationValue(value: Form.Answer[string]): ElicitationContentValue {
+  if (isStringArrayValue(value)) return Array.from(value)
+  return value
+}
+
+function isStringArrayValue(value: Form.Answer[string]): value is ReadonlyArray<string> {
+  return Array.isArray(value)
+}
+
+function toElicitationForm(server: string, params: MCPClient.ElicitationParams, id?: Form.ID): Form.CreateInput {
+  if (isUrlElicitation(params)) {
+    return {
+      id,
+      sessionID: GLOBAL_ELICITATION_SESSION_ID,
+      title: `${server} is requesting input`,
+      metadata: { kind: "mcp-elicitation", server, elicitationID: params.elicitationId },
+      mode: "url",
+      url: params.url,
+    }
+  }
+  return {
+    sessionID: GLOBAL_ELICITATION_SESSION_ID,
+    title: `${server} is requesting input`,
+    metadata: { kind: "mcp-elicitation", server },
+    mode: "form",
+    fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+      toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
+    ),
+  }
+}
+
+function toElicitationField(key: string, property: ElicitationProperty, required: boolean): Form.Field {
+  const title = elicitationFieldTitle(key, property)
+  const description = property.description === title ? undefined : property.description
+  const base = {
+    key,
+    ...(title === undefined ? {} : { title }),
+    ...(description === undefined ? {} : { description }),
+    ...(required ? { required: true } : {}),
+  }
+  if (isBooleanProperty(property)) {
+    return { ...base, type: "boolean", ...(property.default === undefined ? {} : { default: property.default }) }
+  }
+  if (isNumberProperty(property)) {
+    return {
+      ...base,
+      type: property.type,
+      ...(property.minimum === undefined ? {} : { minimum: property.minimum }),
+      ...(property.maximum === undefined ? {} : { maximum: property.maximum }),
+      ...(property.default === undefined ? {} : { default: property.default }),
+    }
+  }
+  if (isArrayProperty(property)) {
+    return {
+      ...base,
+      type: "multiselect",
+      options: arrayOptions(property),
+      ...(property.minItems === undefined ? {} : { minItems: property.minItems }),
+      ...(property.maxItems === undefined ? {} : { maxItems: property.maxItems }),
+      ...(property.default === undefined ? {} : { default: property.default }),
+    }
+  }
+  const options = isStringProperty(property) ? stringOptions(property) : undefined
+  const constraints = isStringProperty(property) ? stringConstraints(property) : undefined
+  return {
+    ...base,
+    type: "string",
+    ...(constraints?.format === undefined ? {} : { format: constraints.format }),
+    ...(constraints?.minLength === undefined ? {} : { minLength: constraints.minLength }),
+    ...(constraints?.maxLength === undefined ? {} : { maxLength: constraints.maxLength }),
+    ...(isStringProperty(property) && property.default !== undefined ? { default: property.default } : {}),
+    ...(options === undefined ? {} : { options, custom: false }),
+  }
+}
+
+function elicitationFieldTitle(key: string, property: ElicitationProperty) {
+  if (property.description) return property.description
+  if (property.title && !isSchemaTypeTitle(property.title)) return property.title
+  return key
+}
+
+function isSchemaTypeTitle(title: string) {
+  return /^(boolean|string|number|integer|array|object)(\s+with\b.*|\s+in\b.*)?$/i.test(title.trim())
+}
+
+type ElicitationContent = NonNullable<MCPClient.ElicitationResult["content"]>
+type ElicitationContentValue = ElicitationContent[string]
+type ElicitationProperty = MCPClient.ElicitationFormParams["requestedSchema"]["properties"][string]
+type ElicitationStringProperty = Extract<ElicitationProperty, { type: "string" }>
+type ElicitationArrayProperty = Extract<ElicitationProperty, { type: "array" }>
+
+function isBooleanProperty(
+  property: ElicitationProperty,
+): property is Extract<ElicitationProperty, { type: "boolean" }> {
+  return property.type === "boolean"
+}
+
+function isNumberProperty(
+  property: ElicitationProperty,
+): property is Extract<ElicitationProperty, { type: "number" | "integer" }> {
+  return property.type === "number" || property.type === "integer"
+}
+
+function isArrayProperty(property: ElicitationProperty): property is ElicitationArrayProperty {
+  return property.type === "array"
+}
+
+function isStringProperty(property: ElicitationProperty): property is ElicitationStringProperty {
+  return property.type === "string"
+}
+
+function stringOptions(property: ElicitationStringProperty) {
+  if ("oneOf" in property) return property.oneOf.map((option) => ({ value: option.const, label: option.title }))
+  if ("enum" in property)
+    return property.enum.map((value, index) => ({
+      value,
+      label: ("enumNames" in property ? property.enumNames?.[index] : undefined) ?? value,
+    }))
+  return undefined
+}
+
+function stringConstraints(property: ElicitationStringProperty) {
+  if (!("format" in property || "minLength" in property || "maxLength" in property)) return undefined
+  return { format: property.format, minLength: property.minLength, maxLength: property.maxLength }
+}
+
+function arrayOptions(property: ElicitationArrayProperty) {
+  if ("anyOf" in property.items)
+    return property.items.anyOf.map((option) => ({ value: option.const, label: option.title }))
+  return property.items.enum.map((value) => ({ value, label: value }))
+}

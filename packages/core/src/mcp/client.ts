@@ -9,7 +9,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  ElicitationCompleteNotificationSchema,
+  ElicitRequestSchema,
   GetPromptResultSchema,
+  type ElicitRequestFormParams,
+  type ElicitRequestParams,
+  type ElicitRequestURLParams,
+  type ElicitResult,
   ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
@@ -82,6 +88,22 @@ export interface CallToolResult {
   readonly content: ReadonlyArray<CallToolContent>
 }
 
+export type ElicitationFormParams = ElicitRequestFormParams
+export type ElicitationParams = ElicitRequestParams
+export type ElicitationResult = ElicitResult
+
+export interface ElicitationHandler {
+  readonly create: (input: {
+    readonly server: string
+    readonly params: ElicitationParams
+    readonly signal: AbortSignal
+  }) => Effect.Effect<ElicitationResult, Error>
+  readonly complete: (input: {
+    readonly server: string
+    readonly elicitationID: ElicitRequestURLParams["elicitationId"]
+  }) => Effect.Effect<void>
+}
+
 export interface LogMessage {
   readonly level: LoggingMessageNotification["params"]["level"]
   readonly logger?: LoggingMessageNotification["params"]["logger"]
@@ -123,6 +145,7 @@ export const connect = Effect.fnUntraced(function* (
   // Only consumed by the remote transport; stdio servers have no auth concept. A provider with no
   // stored token (and a no-op redirect) surfaces an UnauthorizedError, which we map to needs_auth.
   authProvider?: OAuthClientProvider,
+  elicitation?: ElicitationHandler,
 ) {
   const transport: Transport = yield* Effect.gen(function* () {
     if (config.type === "local") {
@@ -149,6 +172,7 @@ export const connect = Effect.fnUntraced(function* (
     { name: "opencode", version: InstallationVersion },
     {
       capabilities: {
+        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
         // https://github.com/anomalyco/opencode/issues/2308
         roots: {},
       },
@@ -157,6 +181,14 @@ export const connect = Effect.fnUntraced(function* (
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
+  if (elicitation) {
+    client.setRequestHandler(ElicitRequestSchema, (request, extra) =>
+      Effect.runPromise(elicitation.create({ server, params: request.params, signal: extra.signal })),
+    )
+    client.setNotificationHandler(ElicitationCompleteNotificationSchema, (notification) =>
+      Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
+    )
+  }
 
   const exit = yield* Effect.tryPromise({
     try: (signal) => client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),

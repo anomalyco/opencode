@@ -18,12 +18,15 @@ import type {
   Shell,
   SkillV2Info,
   V2Event,
+  FormFormInfo,
+  FormUrlInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { createSignal, onCleanup } from "solid-js"
-import { isQuestionForm, type QuestionForm } from "../util/question-form"
+
+type FormInfo = FormFormInfo | FormUrlInfo
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -35,6 +38,7 @@ type LocationData = {
   model?: ModelV2Info[]
   provider?: ProviderV2Info[]
   reference?: ReferenceInfo[]
+  form?: FormInfo[]
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, Shell>
@@ -51,7 +55,7 @@ type Data = {
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessage[]>
     permission: Record<string, PermissionV2Request[]>
-    question: Record<string, QuestionForm[]>
+    form: Record<string, FormInfo[]>
   }
   project: {
     permission: Record<string, PermissionSavedInfo[]>
@@ -85,7 +89,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         status: {},
         message: {},
         permission: {},
-        question: {},
+        form: {},
       },
       project: {
         permission: {},
@@ -181,17 +185,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       const info = store.session.info[sessionID]
       if (!info) return
       const rootID = resolveRoot(sessionID)
-      setStore("session", "family", produce((draft) => {
-        if (sessionID !== rootID && draft[sessionID]) {
-          const members = draft[rootID] ??= []
-          for (const id of draft[sessionID]) {
-            if (!members.includes(id)) members.push(id)
+      setStore(
+        "session",
+        "family",
+        produce((draft) => {
+          if (sessionID !== rootID && draft[sessionID]) {
+            const members = (draft[rootID] ??= [])
+            for (const id of draft[sessionID]) {
+              if (!members.includes(id)) members.push(id)
+            }
+            delete draft[sessionID]
           }
-          delete draft[sessionID]
-        }
-        const family = draft[rootID] ??= []
-        if (!family.includes(sessionID)) family.push(sessionID)
-      }))
+          const family = (draft[rootID] ??= [])
+          if (!family.includes(sessionID)) family.push(sessionID)
+        }),
+      )
     }
 
     function handleEvent(event: V2Event) {
@@ -568,10 +576,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           )
           break
         case "form.created":
-          if (!isQuestionForm(event.data.form)) break
-          if (store.session.question[event.data.form.sessionID]?.some((request) => request.id === event.data.form.id)) break
-          setStore("session", "question", event.data.form.sessionID, [
-            ...(store.session.question[event.data.form.sessionID] ?? []),
+          if (event.data.form.sessionID === "global") {
+            const key = locationKey(event.location ?? defaultLocation())
+            if (store.location[key]?.form?.some((request) => request.id === event.data.form.id)) break
+            setStore("location", key, (data) => ({ ...data, form: [...(data?.form ?? []), event.data.form] }))
+            break
+          }
+          if (store.session.form[event.data.form.sessionID]?.some((request) => request.id === event.data.form.id)) break
+          setStore("session", "form", event.data.form.sessionID, [
+            ...(store.session.form[event.data.form.sessionID] ?? []),
             event.data.form,
           ])
           break
@@ -579,11 +592,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "form.cancelled":
           setStore(
             "session",
-            "question",
+            "form",
             event.data.sessionID,
-            (store.session.question[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.id,
-            ),
+            (store.session.form[event.data.sessionID] ?? []).filter((request) => request.id !== event.data.id),
+          )
+          if (event.location) {
+            setStore("location", locationKey(event.location), (data) => ({
+              ...data,
+              form: (data?.form ?? []).filter((request) => request.id !== event.data.id),
+            }))
+            break
+          }
+          setStore(
+            "location",
+            produce((draft) => {
+              for (const data of Object.values(draft))
+                data.form = data.form?.filter((request) => request.id !== event.data.id)
+            }),
           )
           break
         case "shell.created":
@@ -691,8 +716,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
                 return liveByID.get(message.id) ?? message
               }),
               ...live.filter((message) => !loadedIDs.has(message.id)),
-            ]
-              .toSorted((a, b) => a.time.created - b.time.created)
+            ].toSorted((a, b) => a.time.created - b.time.created)
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, messages)
           },
@@ -705,17 +729,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "permission", sessionID, mutable(await sdk.api.permission.list({ sessionID })))
           },
         },
-        question: {
+        form: {
           list(sessionID: string) {
-            return store.session.question[sessionID]
+            return store.session.form[sessionID]
           },
           async refresh(sessionID: string) {
-            setStore(
-              "session",
-              "question",
-              sessionID,
-              mutable((await sdk.api.form.list({ sessionID })).data.flatMap((form) => (isQuestionForm(form) ? [form] : []))),
-            )
+            setStore("session", "form", sessionID, mutable((await sdk.api.form.list({ sessionID })).data))
+          },
+        },
+        question: {
+          list(sessionID: string) {
+            return store.session.form[sessionID]
+          },
+          async refresh(sessionID: string) {
+            setStore("session", "form", sessionID, mutable((await sdk.api.form.list({ sessionID })).data))
           },
         },
       },
@@ -806,6 +833,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("location", key, { ...store.location[key], mcp: result.data.data })
           },
         },
+        form: {
+          list(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.form
+          },
+          async refresh(ref?: LocationRef) {
+            const result = await sdk.client.v2.form.request.list(
+              { location: locationQuery(ref) },
+              { throwOnError: true },
+            )
+            const key = locationKey(result.data.location)
+            setStore("location", key, {
+              ...store.location[key],
+              form: result.data.data.filter((form) => form.sessionID === "global"),
+            })
+          },
+        },
         model: {
           list(location?: LocationRef) {
             return store.location[locationKey(location ?? defaultLocation())]?.model
@@ -882,6 +925,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         result.location.agent.refresh(),
         result.location.integration.refresh(),
         result.location.mcp.refresh(),
+        result.location.form.refresh(),
         result.location.model.refresh(),
         result.location.provider.refresh(),
         result.location.reference.refresh(),

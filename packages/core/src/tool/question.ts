@@ -96,7 +96,7 @@ const layer = Layer.effectDiscard(
                   form
                     .ask({
                       sessionID: context.sessionID,
-                      title: input.questions.length === 1 ? input.questions[0]?.header : "Questions",
+                      ...(input.questions.length === 1 ? {} : { title: "Questions" }),
                       metadata: {
                         kind: "question",
                         tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
