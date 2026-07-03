@@ -35,7 +35,7 @@ const layer = Layer.effect(
     // Resolved once for the Location layer; the synthetic text and dedup ledger keep
     // absolute paths, but the human-facing description shows paths relative to the project
     // root so opening a subdirectory still describes paths from the project root.
-    const root = FSUtil.resolve(location.project.directory)
+    const root = yield* fs.resolve(location.project.directory)
     // Same-turn parallel reads settle concurrently, so an in-memory claim guards each
     // Session/path pair before any filesystem work. The durable history check below covers
     // paths injected in earlier turns after this Location layer was reopened.

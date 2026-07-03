@@ -97,8 +97,8 @@ export const Plugin = {
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
                 if (target.externalDirectory !== undefined) return
-                const resolved = FSUtil.resolve(target.canonical)
-                const root = FSUtil.resolve(location.directory)
+                const resolved = yield* fs.resolve(target.canonical)
+                const root = yield* fs.resolve(location.directory)
                 // up() searches its stop directory, so the Location-root AGENTS.md (already
                 // supplied by the core/instructions baseline) is dropped by the dirname filter.
                 const discovered = yield* fs.up({
@@ -106,7 +106,7 @@ export const Plugin = {
                   start: type === "directory" ? resolved : dirname(resolved),
                   stop: root,
                 })
-                const candidates = discovered.map(FSUtil.resolve).filter((file) => dirname(file) !== root)
+                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter((file) => dirname(file) !== root)
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(
