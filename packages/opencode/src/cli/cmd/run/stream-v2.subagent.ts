@@ -657,8 +657,8 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       // Family index: adopt children directly from the current session list so
       // historical subagents beyond the projected message window still get tabs.
       const family = await input.sdk.v2.session
-        .list({ limit: FAMILY_LIST_LIMIT, order: "desc" }, { throwOnError: true })
-        .then((response) => response.data.data.filter((session) => session.parentID === input.sessionID))
+        .list({ parentID: input.sessionID, limit: FAMILY_LIST_LIMIT, order: "desc" }, { throwOnError: true })
+        .then((response) => response.data.data)
         .catch(() => [])
       for (const session of family) {
         const child = ensureChild(session.id)

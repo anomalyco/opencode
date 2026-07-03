@@ -119,11 +119,20 @@ function sdk(input: {
   // The generated methods have conditional return types for throwOnError; the
   // minimal shapes below are enough for family discovery and model fallback.
   spyOn(client.v2.session, "list").mockImplementation(
-    () =>
-      ok({
+    (request) => {
+      const parentID = request?.parentID
+      return ok({
         location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
-        data: input.sessions ?? [],
-      }) as never,
+        data:
+          input.sessions?.filter((session) =>
+            parentID === undefined
+              ? true
+              : parentID === null
+                ? session.parentID === undefined
+                : session.parentID === parentID,
+          ) ?? [],
+      }) as never
+    },
   )
   spyOn(client.v2.model, "default").mockImplementation(
     () =>
@@ -1237,6 +1246,10 @@ describe("V2 mini transport", () => {
       footer: ui.api,
     })
     const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    expect(client.v2.session.list).toHaveBeenCalledWith(
+      { parentID: "ses_1", limit: 100, order: "desc" },
+      { throwOnError: true },
+    )
     expect(states.at(-1)?.tabs).toMatchObject([
       {
         sessionID: "ses_child_old",
