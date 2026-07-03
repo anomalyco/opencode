@@ -4,7 +4,6 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -17,6 +16,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import type { ToolOutput } from "@opencode-ai/llm"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -42,6 +42,7 @@ let result: AppProcess.RunResult = {
   stderrTruncated: false,
 }
 let runFailure: AppProcess.AppProcessError | undefined
+let outputChunks: string[] = []
 let afterPermission = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
@@ -68,7 +69,9 @@ const appProcess = Layer.succeed(
       Effect.suspend(() => {
         if (command._tag !== "StandardCommand") throw new Error("expected standard command")
         runs.push({ command: command.command, cwd: command.options.cwd, shell: command.options.shell, options })
-        return runFailure ? Effect.fail(runFailure) : Effect.succeed(result)
+        return Effect.forEach(outputChunks, (chunk) => options?.onOutputChunk?.(Buffer.from(chunk)) ?? Effect.void, {
+          discard: true,
+        }).pipe(Effect.andThen(runFailure ? Effect.fail(runFailure) : Effect.succeed(result)))
       }),
   } as unknown as AppProcess.Interface),
 )
@@ -84,6 +87,7 @@ const reset = () => {
   runs.length = 0
   denyAction = undefined
   runFailure = undefined
+  outputChunks = []
   afterPermission = () => Effect.void
   result = {
     command: "mock",
@@ -191,6 +195,48 @@ describe("BashTool", () => {
           ),
           Effect.andThen(
             Effect.sync(() => expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }])),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("publishes shell progress and cleans carriage-return frames from final output", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const raw =
+          "\r  0%|          | 0/10 [00:00<?, ?it/s]\r 50%|█████     | 5/10 [00:01<00:01, 5.0it/s]\r100%|██████████| 10/10 [00:02<00:00, 5.0it/s]\ndone\n"
+        result = { ...result, output: Buffer.from(raw) }
+        outputChunks = [raw]
+        const progress: ToolOutput[] = []
+        return withTool(tmp.path, (registry) =>
+          registry.materialize().pipe(
+            Effect.flatMap((materialized) =>
+              materialized.settle({
+                ...call({ command: "python train.py" }),
+                progress: (output) => Effect.sync(() => progress.push(output)),
+              }),
+            ),
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(progress.at(-1)?.structured).toMatchObject({
+                  kind: "shell.progress",
+                  percent: 100,
+                  done: true,
+                })
+                expect(settled.output?.content[0]).toMatchObject({
+                  type: "text",
+                  text: expect.stringContaining("[progress:"),
+                })
+                expect(settled.output?.content[0]).toMatchObject({
+                  type: "text",
+                  text: expect.not.stringContaining("█████"),
+                })
+              }),
+            ),
           ),
         )
       },

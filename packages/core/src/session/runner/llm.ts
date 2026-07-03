@@ -249,6 +249,24 @@ const layer = Layer.effect(
                   agent: agent.id,
                   assistantMessageID,
                   call: event,
+                  progress: (output) =>
+                    Effect.gen(function* () {
+                      yield* withPublication(
+                        events.publish(SessionEvent.Tool.Progress, {
+                          sessionID: session.id,
+                          timestamp: yield* DateTime.now,
+                          assistantMessageID,
+                          callID: event.id,
+                          structured:
+                            typeof output.structured === "object" &&
+                            output.structured !== null &&
+                            !Array.isArray(output.structured)
+                              ? (output.structured as Record<string, unknown>)
+                              : { value: output.structured },
+                          content: output.content,
+                        }),
+                      )
+                    }),
                 }),
               ).pipe(
                 Effect.flatMap((settlement) =>

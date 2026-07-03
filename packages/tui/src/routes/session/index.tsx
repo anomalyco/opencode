@@ -76,6 +76,7 @@ import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
+import { toolDisplayMetadata } from "../../util/tool-display"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
@@ -1712,7 +1713,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   const toolprops = {
     get metadata() {
-      return props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
+      if (props.part.state.status === "pending") return {}
+      const metadata = "metadata" in props.part.state ? recordValue(props.part.state.metadata) : undefined
+      return { ...(metadata ?? {}), ...toolDisplayMetadata(props.part.state) }
     },
     get input() {
       return props.part.state.input ?? {}
@@ -1788,6 +1791,55 @@ type ToolProps = {
   output?: string
   part: ToolPart
 }
+
+type ShellProgressSnapshot = {
+  kind: "shell.progress"
+  label?: string
+  percent?: number
+  current?: number
+  total?: number
+  rate?: string
+  eta?: string
+  frame?: string
+  done?: boolean
+}
+
+function shellProgress(value: Record<string, unknown>): ShellProgressSnapshot | undefined {
+  if (value.kind !== "shell.progress") return undefined
+  return {
+    kind: "shell.progress",
+    ...(typeof value.label === "string" ? { label: value.label } : {}),
+    ...(typeof value.percent === "number" ? { percent: value.percent } : {}),
+    ...(typeof value.current === "number" ? { current: value.current } : {}),
+    ...(typeof value.total === "number" ? { total: value.total } : {}),
+    ...(typeof value.rate === "string" ? { rate: value.rate } : {}),
+    ...(typeof value.eta === "string" ? { eta: value.eta } : {}),
+    ...(typeof value.frame === "string" ? { frame: value.frame } : {}),
+    ...(typeof value.done === "boolean" ? { done: value.done } : {}),
+  }
+}
+
+function shellProgressText(progress: ShellProgressSnapshot, width: number) {
+  const percent = typeof progress.percent === "number" ? Math.max(0, Math.min(100, progress.percent)) : undefined
+  const barWidth = Math.max(8, Math.min(24, width - 42))
+  const filled = percent === undefined ? 0 : Math.round((percent / 100) * barWidth)
+  const bar = percent === undefined ? "" : `${"█".repeat(filled)}${"░".repeat(barWidth - filled)}`
+  const ratio =
+    typeof progress.current === "number" && typeof progress.total === "number"
+      ? `${progress.current}/${progress.total}`
+      : undefined
+  return [
+    progress.label,
+    percent === undefined ? undefined : `${percent}%`,
+    bar,
+    ratio,
+    progress.rate,
+    progress.eta && !progress.done ? `ETA ${progress.eta}` : undefined,
+  ]
+    .filter((part): part is string => typeof part === "string" && part.length > 0)
+    .join("  ")
+}
+
 function GenericTool(props: ToolProps) {
   const { theme } = useTheme()
   const ctx = use()
@@ -2041,7 +2093,10 @@ function Shell(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  const output = createMemo(() => stripAnsi(stringValue(props.metadata.output)?.trim() ?? ""))
+  const progress = createMemo(() => shellProgress(props.metadata))
+  const output = createMemo(() =>
+    progress() && isRunning() ? "" : stripAnsi(stringValue(props.metadata.output)?.trim() ?? ""),
+  )
   const [expanded, setExpanded] = createSignal(false)
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
@@ -2067,7 +2122,7 @@ function Shell(props: ToolProps) {
 
   return (
     <Switch>
-      <Match when={stringValue(props.metadata.output) !== undefined}>
+      <Match when={stringValue(props.metadata.output) !== undefined || progress()}>
         <BlockTool
           title={title()}
           part={props.part}
@@ -2076,6 +2131,9 @@ function Shell(props: ToolProps) {
           <box gap={1}>
             <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
               <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+            </Show>
+            <Show when={progress()}>
+              {(value) => <text fg={theme.success}>{shellProgressText(value(), ctx.width)}</text>}
             </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>

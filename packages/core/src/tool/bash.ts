@@ -12,6 +12,7 @@ import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
 import { ToolRegistry } from "./registry"
+import { ShellProgress } from "./shell-progress"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -163,11 +164,20 @@ const layer = Layer.effectDiscard(
                 forceKillAfter: Duration.seconds(3),
               })
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
+              const progress = ShellProgress.makeState()
               const result = yield* appProcess
                 .run(command, {
                   combineOutput: true,
                   timeout: Duration.millis(timeout),
                   maxOutputBytes: MAX_CAPTURE_BYTES,
+                  onOutputChunk: (chunk) => {
+                    const snapshot = ShellProgress.observe(progress, Buffer.from(chunk).toString("utf8"))
+                    if (!snapshot || !context.progress) return Effect.void
+                    return context.progress({
+                      structured: { ...snapshot, output: snapshot.frame },
+                      content: [{ type: "text", text: snapshot.frame }],
+                    })
+                  },
                 })
                 .pipe(
                   Effect.catchTag("AppProcessError", (error) =>
@@ -183,7 +193,8 @@ const layer = Layer.effectDiscard(
                 }
               }
 
-              const output = result.output?.toString("utf8") || "(no output)"
+              const cleaned = ShellProgress.cleanOutput(result.output?.toString("utf8") ?? "")
+              const output = cleaned.output || "(no output)"
               const notice = result.outputTruncated
                 ? "[output capture truncated at the in-memory safety limit]"
                 : undefined

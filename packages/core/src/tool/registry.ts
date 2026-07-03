@@ -18,6 +18,7 @@ export type ExecuteInput = {
   readonly agent: AgentV2.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly call: ToolCall
+  readonly progress?: (output: ToolOutput) => Effect.Effect<void>
 }
 
 export interface Interface {
@@ -64,6 +65,7 @@ const registryLayer = Layer.effect(
         agent: input.agent,
         assistantMessageID: input.assistantMessageID,
         toolCallID: input.call.id,
+        progress: input.progress,
       }).pipe(
         Effect.map((output) => ({ output })),
         Effect.catchTag("LLM.ToolFailure", (failure) =>
