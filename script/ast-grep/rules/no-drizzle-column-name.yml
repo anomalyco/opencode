@@ -4,7 +4,7 @@ message: Use snake_case object keys instead of explicit drizzle column names.
 severity: error
 files:
   - packages/core/src/**/sql.ts
-  - "*.ts"
+  - packages/core/src/**/*.sql.ts
 rule:
   any:
     - pattern: text($NAME)
