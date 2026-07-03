@@ -340,7 +340,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 state: "output-error",
                 toolCallId: part.callID,
                 input: part.state.input,
-                errorText: part.state.error,
+                errorText: part.state.error
+                  + ("sessionId" in (part.state.metadata ?? {})
+                    ? `\n\n\`task_id: ${part.state.metadata.sessionId}\``
+                    : ""),
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
                 ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
@@ -354,7 +357,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               state: "output-error",
               toolCallId: part.callID,
               input: part.state.input,
-              errorText: "[Tool execution was interrupted]",
+              errorText: "[Tool execution was interrupted]"
+                + ("sessionId" in (part.state.metadata ?? {})
+                  ? `\n\`task_id: ${part.state.metadata.sessionId}\``
+                  : ""),
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
               ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
