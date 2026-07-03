@@ -15,7 +15,7 @@ type Recorded = {
 }
 
 const opencodeSpec = async (): Promise<Document> => {
-  return Bun.file(new URL("./fixtures/opencode-openapi.json", import.meta.url)).json() as Promise<Document>
+  return Bun.file(new URL("./fixtures/opencode-v2-openapi.json", import.meta.url)).json() as Promise<Document>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
