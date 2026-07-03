@@ -344,7 +344,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.next.step.ended":
-          setStore("session", "status", event.data.sessionID, event.data.finish === "tool-calls" ? "running" : "idle")
+          setStore("session", "status", event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
             if (!currentAssistant) return
@@ -357,7 +357,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.next.step.failed":
-          setStore("session", "status", event.data.sessionID, "idle")
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
             if (!currentAssistant) return
@@ -526,6 +525,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.next.retried":
         case "session.next.compaction.started":
           setStore("session", "status", event.data.sessionID, "running")
+          break
+        case "session.next.execution.settled":
+          setStore("session", "status", event.data.sessionID, "idle")
           break
         case "session.next.revert.staged":
           if (store.session.info[event.data.sessionID])

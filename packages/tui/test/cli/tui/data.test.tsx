@@ -283,6 +283,21 @@ test("tracks session status from active sessions and execution events", async ()
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       },
     })
+    await wait(() => {
+      const assistant = data.session.message.get("session-live", "message-live")
+      return assistant?.type === "assistant" && assistant.finish === "stop"
+    })
+    expect(data.session.status("session-live")).toBe("running")
+
+    emitEvent(events, {
+      id: "evt_execution_settled",
+      type: "session.next.execution.settled",
+      data: {
+        sessionID: "session-live",
+        timestamp: 3,
+        outcome: "success",
+      },
+    })
     await wait(() => data.session.status("session-live") === "idle")
 
     emitEvent(events, {
@@ -305,6 +320,22 @@ test("tracks session status from active sessions and execution events", async ()
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
         timestamp: 4,
+        error: { type: "unknown", message: "Provider unavailable" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-failed", "message-failed")
+      return assistant?.type === "assistant" && assistant.finish === "error"
+    })
+    expect(data.session.status("session-failed")).toBe("running")
+
+    emitEvent(events, {
+      id: "evt_failed_execution_settled",
+      type: "session.next.execution.settled",
+      data: {
+        sessionID: "session-failed",
+        timestamp: 5,
+        outcome: "failure",
         error: { type: "unknown", message: "Provider unavailable" },
       },
     })
