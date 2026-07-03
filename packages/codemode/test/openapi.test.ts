@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { $ } from "bun"
 import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { CodeMode } from "../src/index.js"
@@ -16,11 +15,7 @@ type Recorded = {
 }
 
 const opencodeSpec = async (): Promise<Document> => {
-  const fixture = new URL("../../sdk/openapi.json", import.meta.url)
-  if (!(await Bun.file(fixture).exists())) {
-    await $`bun dev generate > ${fixture}`.cwd(new URL("../../opencode", import.meta.url).pathname)
-  }
-  return Bun.file(fixture).json() as Promise<Document>
+  return Bun.file(new URL("./fixtures/opencode-openapi.json", import.meta.url)).json() as Promise<Document>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
