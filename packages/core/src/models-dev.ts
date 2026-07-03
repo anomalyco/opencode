@@ -47,7 +47,7 @@ const Cost = Schema.Struct({
 const ReasoningOption = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("effort"),
-    values: Schema.Array(Schema.String),
+    values: Schema.Array(Schema.Union([Schema.String, Schema.Null])),
   }),
   Schema.Struct({
     type: Schema.Literal("toggle"),
@@ -125,6 +125,10 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
+const Providers = Schema.Record(Schema.String, Provider)
+const decodeProviders = Schema.decodeUnknownEffect(Schema.fromJsonString(Providers))
+const decodeProvidersUnknown = Schema.decodeUnknownEffect(Providers)
+
 export const Event = ModelsDev.Event
 
 declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
@@ -176,6 +180,7 @@ const layer = Layer.effect(
     })
 
     const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
+      Effect.flatMap(decodeProvidersUnknown),
       Effect.catch((error) => {
         if (
           Flag.OPENCODE_MODELS_PATH === undefined &&
@@ -186,11 +191,15 @@ const layer = Layer.effect(
         }
         return Effect.succeed(undefined)
       }),
-      Effect.map((v) => v as Record<string, Provider> | undefined),
     )
 
     const loadSnapshot = Effect.sync(() =>
       typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
+    ).pipe(
+      Effect.flatMap((snapshot) =>
+        snapshot === undefined ? Effect.succeed(undefined) : decodeProvidersUnknown(snapshot),
+      ),
+      Effect.catch(() => Effect.succeed(undefined)),
     )
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
@@ -221,7 +230,7 @@ const layer = Layer.effect(
           return yield* fetchAndWrite()
         }),
       )
-      return JSON.parse(text) as Record<string, Provider>
+      return yield* decodeProviders(text)
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)

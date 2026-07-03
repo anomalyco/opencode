@@ -32,7 +32,8 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
       .handle(
         "pty.list",
         Effect.fn(function* () {
-          return yield* response((yield* Pty.Service).list())
+          const pty = yield* Pty.Service
+          return yield* response(pty.list())
         }),
       )
       .handle(

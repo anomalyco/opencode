@@ -14,6 +14,7 @@
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "lint": "oxlint",
+    "lint:effect-patterns": "ast-grep scan --rule script/ast-grep/no-json-parse-cast.yml packages/core/src packages/server/src packages/protocol/src && ast-grep scan --rule script/ast-grep/no-nested-effect-service-yield.yml packages/core/src packages/server/src packages/protocol/src",
     "typecheck": "bun turbo typecheck",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",

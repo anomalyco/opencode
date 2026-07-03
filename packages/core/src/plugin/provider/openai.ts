@@ -1,7 +1,7 @@
 import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Deferred, Effect, Semaphore, Stream } from "effect"
+import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import { Credential } from "../../credential"
 import { EventV2 } from "../../event"
@@ -32,11 +32,7 @@ type TokenResponse = {
   expires_in?: number
 }
 
-type Claims = {
-  chatgpt_account_id?: string
-  organizations?: Array<{ id: string }>
-  "https://api.openai.com/auth"?: { chatgpt_account_id?: string }
-}
+const decodeClaimPayload = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 const browser = {
   integrationID: Integration.ID.make("openai"),
@@ -315,14 +311,20 @@ function extractAccountID(tokens: TokenResponse) {
 function claim(token: string) {
   const part = token.split(".")[1]
   if (!part) return
-  try {
-    const claims = JSON.parse(Buffer.from(part, "base64url").toString()) as Claims
-    return (
-      claims.chatgpt_account_id ??
-      claims["https://api.openai.com/auth"]?.chatgpt_account_id ??
-      claims.organizations?.[0]?.id
-    )
-  } catch {
-    return
-  }
+  const claims = Option.getOrUndefined(decodeClaimPayload(Buffer.from(part, "base64url").toString()))
+  if (typeof claims !== "object" || claims === null) return
+  const auth = Reflect.get(claims, "https://api.openai.com/auth")
+  const organizations = Reflect.get(claims, "organizations")
+  return (
+    stringProperty(claims, "chatgpt_account_id") ??
+    (typeof auth === "object" && auth !== null ? stringProperty(auth, "chatgpt_account_id") : undefined) ??
+    (Array.isArray(organizations) && typeof organizations[0] === "object" && organizations[0] !== null
+      ? stringProperty(organizations[0], "id")
+      : undefined)
+  )
+}
+
+function stringProperty(value: object, key: string) {
+  const result = Reflect.get(value, key)
+  return typeof result === "string" ? result : undefined
 }

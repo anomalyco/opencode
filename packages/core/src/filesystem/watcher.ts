@@ -113,7 +113,8 @@ const layer = Layer.effect(
       )
     }
 
-    const config = (yield* (yield* Config.Service).entries())
+    const configService = yield* Config.Service
+    const config = (yield* configService.entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
     yield* Effect.forkScoped(

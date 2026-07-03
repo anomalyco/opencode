@@ -14,22 +14,27 @@ export const SapAICorePlugin = define({
         const serviceKey =
           process.env.AICORE_SERVICE_KEY ??
           (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined)
-        if (serviceKey && !process.env.AICORE_SERVICE_KEY) process.env.AICORE_SERVICE_KEY = serviceKey
+        if (serviceKey && !process.env.AICORE_SERVICE_KEY)
+          yield* Effect.sync(() => {
+            process.env.AICORE_SERVICE_KEY = serviceKey
+          })
 
         const installedPath = evt.package.startsWith("file://")
           ? evt.package
           : (yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint
-        if (!installedPath) throw new Error(`Package ${evt.package} has no import entrypoint`)
+        if (!installedPath) return yield* Effect.die(`Package ${evt.package} has no import entrypoint`)
 
-        const mod = yield* Effect.promise(async () => {
-          return (await import(
-            installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
-          )) as Record<string, (options: any) => any>
+        const mod = yield* Effect.tryPromise({
+          try: () => import(installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href),
+          catch: (cause) => cause,
         }).pipe(Effect.orDie)
         const match = Object.keys(mod).find((name) => name.startsWith("create"))
-        if (!match) throw new Error(`Package ${evt.package} has no provider factory export`)
+        if (!match) return yield* Effect.die(`Package ${evt.package} has no provider factory export`)
+        const factory = mod[match]
+        if (typeof factory !== "function")
+          return yield* Effect.die(`Package ${evt.package} provider factory export is not callable`)
 
-        evt.sdk = mod[match](
+        evt.sdk = factory(
           serviceKey
             ? { deploymentId: process.env.AICORE_DEPLOYMENT_ID, resourceGroup: process.env.AICORE_RESOURCE_GROUP }
             : {},

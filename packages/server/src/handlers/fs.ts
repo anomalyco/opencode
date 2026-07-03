@@ -11,7 +11,8 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
     return handlers
       .handleRaw("fs.read", (ctx) =>
         Effect.gen(function* () {
-          const file = yield* (yield* FileSystem.Service).read({
+          const fs = yield* FileSystem.Service
+          const file = yield* fs.read({
             path: RelativePath.make(
               decodeURIComponent(new URL(ctx.request.url, "http://localhost").pathname.slice(13)),
             ),

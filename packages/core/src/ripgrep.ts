@@ -232,10 +232,9 @@ const layer = Layer.effect(
           parse: (line) =>
             (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
               ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
-              : Effect.try({
-                  try: () => JSON.parse(line) as unknown,
-                  catch: (cause) => failure("Invalid ripgrep JSON output", cause),
-                })
+              : Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(line).pipe(
+                  Effect.mapError((cause) => failure("Invalid ripgrep JSON output", cause)),
+                )
             ).pipe(
               Effect.flatMap((json) => {
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")

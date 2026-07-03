@@ -7,6 +7,7 @@ import {
   type Model,
   type ProviderMetadata,
 } from "@opencode-ai/llm"
+import { Option, Schema } from "effect"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
@@ -18,14 +19,12 @@ const media = (file: FileAttachment): ContentPart => ({
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
-const toolInput = (tool: SessionMessage.AssistantTool) => {
-  if (tool.state.status !== "pending") return tool.state.input
-  try {
-    return JSON.parse(tool.state.input) as unknown
-  } catch {
-    return tool.state.input
-  }
-}
+const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+const toolInput = (tool: SessionMessage.AssistantTool) =>
+  tool.state.status === "pending"
+    ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
+    : tool.state.input
 
 const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ContentPart =>
   ToolCallPart.make({

@@ -131,7 +131,8 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const directories = yield* ProjectDirectories.Service
-    const db = (yield* Database.Service).db
+    const database = yield* Database.Service
+    const db = database.db
     const events = yield* EventV2.Service
 
     const changed = Effect.fnUntraced(function* (projectID: Project.ID, update: boolean) {
@@ -202,7 +203,8 @@ const layer = Layer.effect(
       const copyDirectory = yield* canonical(input.directory)
       const stored = yield* directories.get({ projectID: input.projectID, directory: copyDirectory })
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: copyDirectory })
-      yield* (yield* getStrategy(StrategyID.make(stored.strategy))).remove({
+      const strategy = yield* getStrategy(StrategyID.make(stored.strategy))
+      yield* strategy.remove({
         directory: copyDirectory,
         force: input.force,
       })
