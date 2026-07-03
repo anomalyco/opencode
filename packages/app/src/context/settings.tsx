@@ -28,6 +28,8 @@ export interface Settings {
     showSearch: boolean
     showStatus: boolean
     showTerminal: boolean
+    showPreview: boolean
+    previewUrl: string
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
@@ -113,6 +115,8 @@ const defaultSettings: Settings = {
     showSearch: false,
     showStatus: false,
     showTerminal: false,
+    showPreview: false,
+    previewUrl: "",
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
@@ -160,6 +164,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+    const showPreview = withFallback(() => store.general?.showPreview, defaultSettings.general.showPreview)
+    const previewUrl = withFallback(() => store.general?.previewUrl, defaultSettings.general.previewUrl)
     const newLayoutDesigns = withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault)
     const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
 
@@ -216,6 +222,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
+        showPreview,
+        setShowPreview(value: boolean) {
+          setStore("general", "showPreview", value)
+        },
+        previewUrl,
+        setPreviewUrl(value: string) {
+          setStore("general", "previewUrl", value)
+        },
         showReasoningSummaries: withFallback(
           () => store.general?.showReasoningSummaries,
           defaultSettings.general.showReasoningSummaries,
@@ -258,6 +272,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         search: visible(showSearch),
         status: visible(showStatus),
         customAgents: visible(showCustomAgents),
+        preview: visible(showPreview),
       },
       appearance: {
         fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),

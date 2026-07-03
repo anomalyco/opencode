@@ -219,6 +219,8 @@ export function SessionHeader() {
     focusTerminalById(id)
   }
 
+  const togglePreview = () => view().preview.toggle()
+
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
@@ -463,6 +465,23 @@ export function SessionHeader() {
                         <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
                       </Button>
                     </TooltipKeybind>
+                    <Show when={settings.visibility.preview()}>
+                      <TooltipKeybind
+                        title={language.t("command.preview.toggle")}
+                        keybind={command.keybind("preview.toggle")}
+                      >
+                        <Button
+                          variant="ghost"
+                          class="group/preview-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                          onClick={togglePreview}
+                          aria-label={language.t("command.preview.toggle")}
+                          aria-expanded={view().preview.opened()}
+                          aria-controls="preview-panel"
+                        >
+                          <Icon size="small" name="window-cursor" />
+                        </Button>
+                      </TooltipKeybind>
+                    </Show>
 
                     <div class="hidden md:flex items-center gap-1 shrink-0">
                       <TooltipKeybind

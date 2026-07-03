@@ -403,6 +403,47 @@ export const SettingsGeneralV2: Component<{
     </div>
   )
 
+  const PreviewSection = () => (
+    <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("preview.title")}</h3>
+
+      <SettingsListV2>
+        <SettingsRowV2
+          title={language.t("settings.general.row.showPreview.title")}
+          description={language.t("settings.general.row.showPreview.description")}
+        >
+          <div data-action="settings-show-preview">
+            <Switch
+              checked={settings.general.showPreview()}
+              onChange={(checked) => settings.general.setShowPreview(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("preview.url.label")}
+          description={language.t("settings.general.row.previewUrl.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextInputV2
+              data-action="settings-preview-url"
+              type="text"
+              appearance="base"
+              value={settings.general.previewUrl()}
+              onInput={(event) => settings.general.setPreviewUrl(event.currentTarget.value)}
+              placeholder={language.t("preview.url.placeholder")}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              aria-label={language.t("preview.url.label")}
+            />
+          </div>
+        </SettingsRowV2>
+      </SettingsListV2>
+    </div>
+  )
+
   const AppearanceSection = () => (
     <div class="settings-v2-section">
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
@@ -706,6 +747,8 @@ export const SettingsGeneralV2: Component<{
         </Show>
 
         <DisplaySection />
+
+        <PreviewSection />
 
         <AdvancedSection />
       </div>

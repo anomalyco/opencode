@@ -29,6 +29,7 @@ const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const DEFAULT_PREVIEW_HEIGHT = 280
 const DEFAULT_REVIEW_PANEL_OPENED = false
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
@@ -279,6 +280,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         terminal: {
           height: DEFAULT_TERMINAL_HEIGHT,
+          opened: false,
+        },
+        preview: {
+          height: DEFAULT_PREVIEW_HEIGHT,
           opened: false,
         },
         review: {
@@ -673,6 +678,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "height", height)
         },
       },
+      preview: {
+        height: createMemo(() => store.preview.height),
+        resize(height: number) {
+          setStore("preview", "height", height)
+        },
+      },
       review: {
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
@@ -792,6 +803,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const previewOpened = createMemo(() => store.preview?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
@@ -805,6 +817,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const value = current.opened ?? false
           if (value === next) return
           setStore("terminal", "opened", next)
+        }
+
+        function setPreviewOpened(next: boolean) {
+          const current = store.preview
+          if (!current) {
+            setStore("preview", { height: DEFAULT_PREVIEW_HEIGHT, opened: next })
+            return
+          }
+
+          const value = current.opened ?? false
+          if (value === next) return
+          setStore("preview", "opened", next)
         }
 
         function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
@@ -858,6 +882,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setTerminalOpened(!terminalOpened())
+            },
+          },
+          preview: {
+            opened: previewOpened,
+            open() {
+              setPreviewOpened(true)
+            },
+            close() {
+              setPreviewOpened(false)
+            },
+            toggle() {
+              setPreviewOpened(!previewOpened())
             },
           },
           reviewPanel: {
