@@ -49,21 +49,58 @@ export const SessionCommand = cmd({
 })
 
 export const SessionDeleteCommand = effectCmd({
-  command: "delete <sessionID>",
-  describe: "delete a session",
+  command: "delete <sessionIDs>",
+  describe: "delete one or more sessions (comma-separated IDs)",
   builder: (yargs) =>
-    yargs.positional("sessionID", {
-      describe: "session ID to delete",
+    yargs.positional("sessionIDs", {
+      describe: "session ID(s) to delete, comma-separated for multiple",
       type: "string",
       demandOption: true,
     }),
   handler: Effect.fn("Cli.session.delete")(function* (args) {
     const svc = yield* Session.Service
-    const sessionID = SessionID.make(args.sessionID)
-    yield* svc
-      .remove(sessionID)
-      .pipe(Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)))
-    UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
+    const ids = args.sessionIDs
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+    if (ids.length === 0) {
+      yield* fail("No session IDs provided")
+    }
+
+    if (ids.length > 1) {
+      const confirmed = yield* Effect.promise(async () => {
+        const readline = await import("readline")
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+        return new Promise<boolean>((resolve) => {
+          rl.question(`Delete ${ids.length} sessions? (y/N) `, (answer) => {
+            rl.close()
+            resolve(answer.toLowerCase() === "y")
+          })
+        })
+      })
+
+      if (!confirmed) {
+        UI.println(UI.Style.TEXT_WARNING + "Cancelled" + UI.Style.TEXT_NORMAL)
+        return
+      }
+    }
+
+    let deleted = 0
+    for (const id of ids) {
+      const sessionID = SessionID.make(id)
+      yield* svc
+        .remove(sessionID)
+        .pipe(
+          Effect.catchIf(NotFoundError.isInstance, () => {
+            UI.println(UI.Style.TEXT_WARNING + `Session not found: ${id}` + UI.Style.TEXT_NORMAL)
+            return Effect.void
+          }),
+        )
+      deleted++
+    }
+
+    UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Deleted ${deleted} session(s)` + UI.Style.TEXT_NORMAL)
   }),
 })
 
