@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.8",
+  "version": "1.17.13",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,8 @@
     "opencode": "./bin/opencode"
   },
   "exports": {
-    "./public": "./src/public/index.ts",
+    "./effect/layer-node": "./src/effect/layer-node.ts",
+    "./effect/app-node": "./src/effect/app-node.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
     "./*": "./src/*.ts"
@@ -91,6 +92,8 @@
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/effect-sqlite-node": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
@@ -101,10 +104,11 @@
     "ai-gateway-provider": "3.1.2",
     "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",
+    "diff": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.9.3",
+    "gitlab-ai-provider": "6.10.0",
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
@@ -117,7 +121,7 @@
     "npm-package-arg": "13.0.2",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
-    "venice-ai-sdk-provider": "2.0.2",
+    "venice-ai-sdk-provider": "2.1.1",
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
     "zod": "catalog:"

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
@@ -11,7 +12,7 @@ import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const context = Context.empty() as Context.Context<unknown>
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, httpApiLayer))
+const it = testEffect(Layer.mergeAll(LayerNode.compile(Session.node), httpApiLayer))
 
 afterEach(async () => {
   mock.restore()

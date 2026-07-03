@@ -395,6 +395,10 @@ describe("Anthropic Messages route", () => {
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
+      expect(response.message.content).toEqual([
+        { type: "text", text: "Hello!" },
+        { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
+      ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
         reason: "stop",

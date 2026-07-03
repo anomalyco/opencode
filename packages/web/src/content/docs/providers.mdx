@@ -48,6 +48,42 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
+#### Hiding models
+
+You can hide specific models from the `/models` picker for a provider using the `blacklist` option. This is useful when a provider exposes models you don't want to use or select.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "blacklist": ["claude-opus-4-20250514"]
+    }
+  }
+}
+```
+
+The inverse `whitelist` option hides every model except the ones listed.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "whitelist": ["claude-sonnet-4-20250514"]
+    }
+  }
+}
+```
+
+Both options take an array of model IDs — the same IDs shown in the `/models` picker.
+
+- `blacklist` removes the listed models from the picker.
+- `whitelist` keeps only the listed models and hides the rest.
+- You can combine them: `whitelist` narrows the set, then `blacklist` removes entries from it.
+
+---
+
 ## OpenCode Zen
 
 OpenCode Zen is a list of models provided by the OpenCode team that have been
@@ -1063,6 +1099,35 @@ subscription](https://github.com/features/copilot/plans) to use.
    ```
 
 3. Now run the `/models` command to select the model you want.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GMI Cloud
+
+To use GMI Cloud with OpenCode:
+
+1. Head over to the [GMI Cloud console](https://console.gmicloud.ai/) to create an API key. You can also review the [API reference](https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference) for the endpoint details.
+
+2. Run the `/connect` command and search for **GMI Cloud**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your GMI Cloud API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select the model you want.
 
    ```txt
    /models
