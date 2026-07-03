@@ -2350,22 +2350,14 @@ function Execute(props: ToolProps) {
   const showOutput = createMemo(() => output() && hasRuntimeError())
   const detailPadding = 3 + INLINE_TOOL_ICON_WIDTH
 
-  const complete = createMemo(() => (props.part.state.status === "pending" ? false : "execute"))
-
   return (
     <>
       <InlineTool
-        icon={
-          props.part.state.status === "completed" && !hasRuntimeError()
-            ? "✓"
-            : props.part.state.status === "error" || hasRuntimeError()
-              ? "✗"
-              : "│"
-        }
+        icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
         color={hasRuntimeError() ? theme.error : undefined}
         spinner={isLoading()}
         pending="execute"
-        complete={complete()}
+        complete={true}
         part={props.part}
       >
         execute
