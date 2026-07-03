@@ -348,6 +348,47 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests[1]!.headers["cookie"]).toBe("session=secret")
   })
 
+  test("2XX wildcard responses and error-only responses advertise the right output", () => {
+    const ranges = {
+      openapi: "3.1.0",
+      info: { title: "Ranges", version: "1.0.0" },
+      servers: [{ url: "https://ranges.example" }],
+      paths: {
+        "/wild": {
+          get: {
+            operationId: "wild",
+            responses: {
+              "2XX": {
+                description: "ok",
+                content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } },
+              },
+            },
+          },
+        },
+        "/errors": {
+          get: { operationId: "errorsOnly", responses: { "404": { description: "missing" } } },
+        },
+      },
+    }
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: ranges }).tools } })
+    const instructions = runtime.instructions()
+    expect(instructions).toContain("tools.api.wild(input: {}): Promise<{ ok?: boolean }>")
+    expect(instructions).toContain("tools.api.errorsOnly(input: {}): Promise<unknown>")
+  })
+
+  test("a missing required body fails clearly without hitting the network", async () => {
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({ tools: { widgets: OpenAPI.fromSpec({ spec, auth }).tools } })
+
+    const result = await Effect.runPromise(
+      runtime.execute("return await tools.widgets.createWidget({})").pipe(Effect.provide(layer)),
+    )
+
+    expect(result).toMatchObject({ ok: false })
+    expect(JSON.stringify(result)).toContain("Missing required request body")
+    expect(requests).toHaveLength(0)
+  })
+
   test("declared non-JSON responses advertise unknown instead of null", () => {
     const plain = {
       openapi: "3.1.0",

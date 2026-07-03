@@ -120,9 +120,10 @@ export const fromSpec = (options: Options): Result => {
   const defaultSecurity = securityRequirements(document.security)
   const definitions = componentDefinitions(document)
   const paths = isRecord(document.paths) ? document.paths : {}
+  const base = options.baseUrl ?? specServerUrl(document, options.serverVariables ?? {})
   const used = new Set<string>()
   const skipped: Array<Skipped> = []
-  const tools: Record<string, Definition<HttpClient.HttpClient>> = {}
+  const tools: { -readonly [K in keyof Tools]: Tools[K] } = {}
 
   for (const [path, pathValue] of Object.entries(paths)) {
     if (!isRecord(pathValue)) continue
@@ -137,9 +138,8 @@ export const fromSpec = (options: Options): Result => {
       }
       if (options.operations !== undefined && !options.operations(operation)) continue
 
-      const url = resolveUrl(document, options, path)
-      if (typeof url !== "string") {
-        skipped.push({ method: operation.method, path, reason: url.reason })
+      if (typeof base !== "string") {
+        skipped.push({ method: operation.method, path, reason: base.reason })
         continue
       }
       const body = requestBody(document, operationValue)
@@ -152,7 +152,7 @@ export const fromSpec = (options: Options): Result => {
         operationValue.security === undefined ? defaultSecurity : securityRequirements(operationValue.security)
       const plan = {
         operation,
-        url,
+        url: `${base.replace(/\/+$/, "")}${path}`,
         parameters: operationParameters(document, pathValue, operationValue),
         body,
         security,
@@ -163,7 +163,7 @@ export const fromSpec = (options: Options): Result => {
       used.add(operation.id)
       tools[operation.id] = Tool.make({
         description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
-        input: inputSchema(document, plan.parameters, body, definitions),
+        input: inputSchema(plan.parameters, body, definitions),
         output: outputSchema(document, operationValue, definitions),
         run: (input) => invoke(plan, input),
       })
@@ -333,7 +333,6 @@ const isJsonMediaType = (mediaType: string): boolean => {
 }
 
 const inputSchema = (
-  document: Document,
   parameters: ReadonlyArray<Parameter>,
   body: Body | undefined,
   definitions: Readonly<Record<string, JsonSchema>>,
@@ -376,8 +375,10 @@ const outputSchema = (
 ): JsonSchema | undefined => {
   if (!isRecord(operation.responses)) return undefined
   const entries = Object.entries(operation.responses)
+  // Literal 2xx codes, then the 2XX wildcard range, then default.
   const preferred = [
     ...entries.filter(([status]) => /^2\d\d$/.test(status)).sort(([a], [b]) => a.localeCompare(b)),
+    ...entries.filter(([status]) => status.toUpperCase() === "2XX"),
     ...entries.filter(([status]) => status === "default"),
   ]
   for (const [, ref] of preferred) {
@@ -392,8 +393,9 @@ const outputSchema = (
     // returns the raw body, so advertise unknown rather than a wrong null.
     if (Object.keys(content).length > 0) return undefined
   }
-  // 2xx with no content at all (e.g. 204): the tool resolves to null.
-  return { type: "null" }
+  // Success responses declared with no content at all (e.g. 204) resolve to
+  // null. Without any recognized success/default response the shape is unknown.
+  return preferred.length > 0 ? { type: "null" } : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -415,12 +417,6 @@ const operationName = (
   if (!used.has(base)) return base
   const next = (index: number): string => (used.has(`${base}_${index}`) ? next(index + 1) : `${base}_${index}`)
   return next(2)
-}
-
-const resolveUrl = (document: Document, options: Options, path: string): string | Skip => {
-  const base = options.baseUrl ?? specServerUrl(document, options.serverVariables ?? {})
-  if (typeof base !== "string") return base
-  return `${base.replace(/\/+$/, "")}${path}`
 }
 
 const specServerUrl = (document: Document, variables: Readonly<Record<string, string>>): string | Skip => {
@@ -549,6 +545,9 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     ]
     if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
     request = HttpClientRequest.setHeaders(request, auth.headers)
+    if (plan.body?.required === true && value.body === undefined) {
+      return yield* Effect.fail(toolError("Missing required request body."))
+    }
     if (plan.body !== undefined && value.body !== undefined) {
       request = HttpClientRequest.bodyJsonUnsafe(request, value.body)
     }
