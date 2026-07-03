@@ -445,6 +445,72 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests).toHaveLength(0)
   })
 
+  test("a no-content success response resolves to null even when default declares an error shape", () => {
+    const mixed = {
+      openapi: "3.1.0",
+      info: { title: "Mixed", version: "1.0.0" },
+      servers: [{ url: "https://mixed.example" }],
+      paths: {
+        "/thing": {
+          delete: {
+            operationId: "deleteThing",
+            responses: {
+              "204": { description: "deleted" },
+              default: {
+                description: "error",
+                content: {
+                  "application/json": { schema: { type: "object", properties: { message: { type: "string" } } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: mixed }).tools } })
+    expect(runtime.instructions()).toContain("tools.api.deleteThing(input: {}): Promise<null>")
+  })
+
+  test("auth cookies shadow model cookie parameters and model values are encoded", async () => {
+    const cookieSpec = {
+      openapi: "3.1.0",
+      info: { title: "Cookies", version: "1.0.0" },
+      servers: [{ url: "https://cookies.example" }],
+      paths: {
+        "/c": {
+          get: {
+            operationId: "c",
+            security: [{ CookieKey: [] }],
+            parameters: [
+              { name: "session", in: "cookie", schema: { type: "string" } },
+              { name: "theme", in: "cookie", schema: { type: "string" } },
+            ],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+      components: { securitySchemes: { CookieKey: { type: "apiKey", in: "cookie", name: "session" } } },
+    }
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({
+      tools: {
+        api: OpenAPI.fromSpec({
+          spec: cookieSpec,
+          auth: { resolve: () => Effect.succeed({ type: "apiKey", value: "real" } as const) },
+        }).tools,
+      },
+    })
+
+    const result = await Effect.runPromise(
+      runtime
+        .execute(`return await tools.api.c({ cookies: { session: "forged", theme: "dark; session=forged" } })`)
+        .pipe(Effect.provide(layer)),
+    )
+
+    expect(result).toMatchObject({ ok: true })
+    expect(requests[0]!.headers["cookie"]).toBe("session=real; theme=dark%3B%20session%3Dforged")
+  })
+
   test("spec server variables substitute defaults and explicit values", () => {
     const templated = {
       openapi: "3.1.0",

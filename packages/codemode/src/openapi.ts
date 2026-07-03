@@ -375,13 +375,14 @@ const outputSchema = (
 ): JsonSchema | undefined => {
   if (!isRecord(operation.responses)) return undefined
   const entries = Object.entries(operation.responses)
-  // Literal 2xx codes, then the 2XX wildcard range, then default.
-  const preferred = [
+  // Literal 2xx codes, then the 2XX wildcard range. `default` typically
+  // describes errors, so it is consulted only when no success response exists.
+  const successes = [
     ...entries.filter(([status]) => /^2\d\d$/.test(status)).sort(([a], [b]) => a.localeCompare(b)),
     ...entries.filter(([status]) => status.toUpperCase() === "2XX"),
-    ...entries.filter(([status]) => status === "default"),
   ]
-  for (const [, ref] of preferred) {
+  const candidates = successes.length > 0 ? successes : entries.filter(([status]) => status === "default")
+  for (const [, ref] of candidates) {
     const response = resolve(document, ref)
     if (!isRecord(response)) continue
     const content = isRecord(response.content) ? response.content : {}
@@ -392,10 +393,11 @@ const outputSchema = (
     // Declared content without a usable JSON schema (e.g. text/plain): the tool
     // returns the raw body, so advertise unknown rather than a wrong null.
     if (Object.keys(content).length > 0) return undefined
+    // A success response declared with no content at all (e.g. 204) resolves
+    // to null; do not fall through to a later (likely error) response shape.
+    return { type: "null" }
   }
-  // Success responses declared with no content at all (e.g. 204) resolve to
-  // null. Without any recognized success/default response the shape is unknown.
-  return preferred.length > 0 ? { type: "null" } : undefined
+  return undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -534,14 +536,20 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
       if (item === undefined || item === null) continue
       request = HttpClientRequest.setHeader(request, parameter.name, renderPrimitive(item))
     }
+    // Auth cookies come first and shadow model cookie parameters with the same
+    // name (servers take the first occurrence). Model values are encoded so a
+    // value containing ';' or '=' cannot inject extra cookie pairs; host
+    // credentials are trusted and sent verbatim.
     const cookiePairs = [
+      ...Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`),
       ...plan.parameters
-        .filter((parameter) => parameter.location === "cookie")
+        .filter((parameter) => parameter.location === "cookie" && auth.cookies[parameter.name] === undefined)
         .flatMap((parameter) => {
           const item = cookies[parameter.name]
-          return item === undefined || item === null ? [] : [`${parameter.name}=${renderPrimitive(item)}`]
+          return item === undefined || item === null
+            ? []
+            : [`${parameter.name}=${encodeURIComponent(renderPrimitive(item))}`]
         }),
-      ...Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`),
     ]
     if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
     request = HttpClientRequest.setHeaders(request, auth.headers)
