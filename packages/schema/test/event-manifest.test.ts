@@ -9,11 +9,11 @@ import { WorkspaceEvent } from "../src/workspace-event.js"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
-    expect(EventManifest.ServerDefinitions.filter((definition) => definition.type !== "agent.updated").length).toBe(66)
+    expect(EventManifest.ServerDefinitions.filter((definition) => definition.type !== "agent.updated").length).toBe(86)
     expect(EventManifest.ServerDefinitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])
-    expect(EventManifest.Definitions.filter((definition) => definition.type !== "agent.updated").length).toBe(96)
+    expect(EventManifest.Definitions.filter((definition) => definition.type !== "agent.updated").length).toBe(101)
     expect(EventManifest.Definitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])
@@ -29,7 +29,7 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(96)
+    expect(Array.from(EventManifest.Latest.keys()).filter((type) => type !== "agent.updated").length).toBe(101)
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)

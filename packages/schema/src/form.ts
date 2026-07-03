@@ -1,10 +1,10 @@
-export * as Form from "./form"
+export * as Form from "./form.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event"
-import { ascending } from "./identifier"
-import { NonNegativeInt, optional, statics } from "./schema"
-import { SessionID } from "./session-id"
+import { define, inventory } from "./event.js"
+import { ascending } from "./identifier.js"
+import { NonNegativeInt, optional, statics } from "./schema.js"
+import { SessionID } from "./session-id.js"
 
 const IDSchema = Schema.String.check(Schema.isStartsWith("frm_")).pipe(Schema.brand("Form.ID"))
 
