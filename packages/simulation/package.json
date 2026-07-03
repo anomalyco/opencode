@@ -1,21 +1,23 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/server",
+  "name": "@opencode-ai/simulation",
   "version": "1.17.13",
   "private": true,
   "type": "module",
   "license": "MIT",
   "exports": {
-    "./*": "./src/*.ts"
+    "./backend": "./src/backend/index.ts",
+    "./backend/*": "./src/backend/*.ts",
+    "./frontend": "./src/frontend/simulation.ts",
+    "./frontend/*": "./src/frontend/*.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "@opencode-ai/simulation": "workspace:*",
-    "drizzle-orm": "catalog:",
+    "@opencode-ai/llm": "workspace:*",
+    "@opentui/core": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
