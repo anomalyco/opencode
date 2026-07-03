@@ -1544,7 +1544,7 @@ export type SessionLogOutput =
           readonly data: { readonly timestamp: number; readonly sessionID: string; readonly messageID: string }
         }
     )
-  | { readonly type: "log.caught_up"; readonly aggregateID: string; readonly seq?: number }
+  | { readonly type: "log.synced"; readonly aggregateID: string; readonly seq?: number }
 
 export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
