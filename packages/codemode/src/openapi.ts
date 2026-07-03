@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/unstable/http"
 import { ToolError, toolError } from "./tool-error.js"
 import { Tool, type Definition, type JsonSchema } from "./tool.js"
@@ -99,7 +99,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const asArray = (value: unknown): ReadonlyArray<unknown> => (Array.isArray(value) ? value : [])
 
-const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined)
+const nonEmptyString = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" ? value : undefined
 
 /**
  * Builds a CodeMode tool subtree from an OpenAPI 3.x document. One tool per
@@ -133,8 +134,8 @@ export const fromSpec = (options: Options): Result => {
         id: operationName(method, path, operationValue, used),
         method: method.toUpperCase(),
         path,
-        summary: asString(operationValue.summary),
-        description: asString(operationValue.description),
+        summary: nonEmptyString(operationValue.summary),
+        description: nonEmptyString(operationValue.description),
       }
       if (options.operations !== undefined && !options.operations(operation)) continue
 
@@ -181,9 +182,9 @@ export const OpenAPI = { fromSpec }
 
 const parseDocument = (spec: Document | string): Document => {
   if (typeof spec !== "string") return spec
-  const parsed = JSON.parse(spec) as unknown
-  if (!isRecord(parsed)) throw new Error("OpenAPI spec must be a JSON object.")
-  return parsed
+  const parsed = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(spec)
+  if (Option.isNone(parsed) || !isRecord(parsed.value)) throw new Error("OpenAPI spec must be a JSON object.")
+  return parsed.value
 }
 
 const pointerSegment = (segment: string) => segment.replaceAll("~1", "/").replaceAll("~0", "~")
@@ -200,7 +201,7 @@ const resolvePointer = (document: Document, ref: string): unknown => {
 /** Resolves a top-level `$ref` on parameter/requestBody/response objects. */
 const resolve = (document: Document, value: unknown): unknown => {
   if (!isRecord(value)) return value
-  const ref = asString(value.$ref)
+  const ref = nonEmptyString(value.$ref)
   if (ref === undefined) return value
   return resolvePointer(document, ref) ?? value
 }
@@ -218,14 +219,14 @@ const rewriteRef = (ref: string): string => {
 
 const projectSchema = (value: unknown, depth = 0): JsonSchema => {
   if (depth > 24 || !isRecord(value)) return {}
-  const ref = asString(value.$ref)
+  const ref = nonEmptyString(value.$ref)
   if (ref !== undefined) return { $ref: rewriteRef(ref) }
 
   const type = Array.isArray(value.type)
     ? value.type.filter((item): item is string => typeof item === "string")
-    : asString(value.type)
-  const description = asString(value.description)
-  const format = asString(value.format)
+    : nonEmptyString(value.type)
+  const description = nonEmptyString(value.description)
+  const format = nonEmptyString(value.format)
   const projected: JsonSchema = {
     ...(type === undefined ? {} : { type }),
     ...(Array.isArray(value.enum) ? { enum: value.enum } : {}),
@@ -296,15 +297,15 @@ const operationParameters = (
   for (const raw of [...asArray(pathItem.parameters), ...asArray(operation.parameters)]) {
     const resolved = resolve(document, raw)
     if (!isRecord(resolved)) continue
-    const name = asString(resolved.name)
-    const location = asString(resolved.in)
+    const name = nonEmptyString(resolved.name)
+    const location = nonEmptyString(resolved.in)
     if (name === undefined || location === undefined || !parameterLocations.has(location)) continue
     const base = projectSchema(resolved.schema)
     merged.set(`${location}:${name}`, {
       name,
       location: location as ParameterLocation,
       required: resolved.required === true || location === "path",
-      schema: { ...base, ...(base.description === undefined ? { description: asString(resolved.description) } : {}) },
+      schema: { ...base, ...(base.description === undefined ? { description: nonEmptyString(resolved.description) } : {}) },
     })
   }
   return [...merged.values()]
@@ -386,21 +387,23 @@ const outputSchema = (
     ...entries.filter(([status]) => /^2\d\d$/.test(status)).sort(([a], [b]) => a.localeCompare(b)),
     ...entries.filter(([status]) => status.toUpperCase() === "2XX"),
   ]
-  const candidates = successes.length > 0 ? successes : entries.filter(([status]) => status === "default")
-  for (const [, ref] of candidates) {
-    const response = resolve(document, ref)
-    if (!isRecord(response)) continue
-    const content = isRecord(response.content) ? response.content : {}
-    const schema = jsonContentSchema(content)
+  const candidates = (successes.length > 0 ? successes : entries.filter(([status]) => status === "default"))
+    .map(([, ref]) => resolve(document, ref))
+    .filter(isRecord)
+  // The first candidate declaring a JSON schema wins, even when an earlier
+  // sibling has no content (e.g. "200": no content plus "201": JSON).
+  for (const response of candidates) {
+    const schema = jsonContentSchema(isRecord(response.content) ? response.content : {})
     if (schema !== undefined) return withDefinitions(projectSchema(schema), definitions)
-    // Declared content without a usable JSON schema (e.g. text/plain): the tool
-    // returns the raw body, so advertise unknown rather than a wrong null.
-    if (Object.keys(content).length > 0) return undefined
-    // A success response declared with no content at all (e.g. 204) resolves
-    // to null; do not fall through to a later (likely error) response shape.
-    return { type: "null" }
   }
-  return undefined
+  // Declared content without a usable JSON schema (e.g. text/plain): the tool
+  // returns the raw body, so advertise unknown rather than a wrong null.
+  const declaresContent = candidates.some(
+    (response) => isRecord(response.content) && Object.keys(response.content).length > 0,
+  )
+  if (declaresContent) return undefined
+  // Only no-content success responses (e.g. 204) remain: the tool resolves to null.
+  return candidates.length > 0 ? { type: "null" } : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +416,7 @@ const operationName = (
   operation: Record<string, unknown>,
   used: ReadonlySet<string>,
 ): string => {
-  const raw = asString(operation.operationId) ?? `${method}_${path.replaceAll(/[{}]/g, "")}`
+  const raw = nonEmptyString(operation.operationId) ?? `${method}_${path.replaceAll(/[{}]/g, "")}`
   const base =
     raw
       .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
@@ -426,14 +429,14 @@ const operationName = (
 
 const specServerUrl = (document: Document, variables: Readonly<Record<string, string>>): string | Skip => {
   const server = asArray(document.servers).find(isRecord)
-  const url = server === undefined ? undefined : asString(server.url)
+  const url = server === undefined ? undefined : nonEmptyString(server.url)
   if (url === undefined) return { reason: "spec declares no servers; pass baseUrl" }
   const defaults = isRecord(server?.variables) ? server.variables : {}
   const substituted = url.replaceAll(/\{([^{}]+)\}/g, (whole, name: string) => {
     const explicit = variables[name]
     if (explicit !== undefined) return explicit
     const declared = defaults[name]
-    return (isRecord(declared) ? asString(declared.default) : undefined) ?? whole
+    return (isRecord(declared) ? nonEmptyString(declared.default) : undefined) ?? whole
   })
   if (/\{[^{}]+\}/.test(substituted)) {
     return { reason: `server URL has unresolved variables: ${url}; pass baseUrl or serverVariables` }
@@ -473,9 +476,9 @@ const securitySchemes = (document: Document): Readonly<Record<string, SecuritySc
     Object.entries(declared).flatMap(([name, value]) => {
       const resolved = resolve(document, value)
       if (!isRecord(resolved)) return []
-      const type = asString(resolved.type)
+      const type = nonEmptyString(resolved.type)
       if (type === undefined || !schemeTypes.has(type)) return []
-      const carrier = asString(resolved.in)
+      const carrier = nonEmptyString(resolved.in)
       return [
         [
           name,
@@ -483,8 +486,8 @@ const securitySchemes = (document: Document): Readonly<Record<string, SecuritySc
             name,
             type: type as SecurityScheme["type"],
             in: carrier === "header" || carrier === "query" || carrier === "cookie" ? carrier : undefined,
-            parameterName: asString(resolved.name),
-            scheme: asString(resolved.scheme)?.toLowerCase(),
+            parameterName: nonEmptyString(resolved.name),
+            scheme: nonEmptyString(resolved.scheme)?.toLowerCase(),
           },
         ] as const,
       ]
@@ -526,8 +529,11 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     // never triggers credential work (e.g. a token refresh).
     const url = buildUrl(plan, path)
     if (url instanceof ToolError) return yield* Effect.fail(url)
+    const hostHeaders = new Set(Object.keys(plan.headers).map((name) => name.toLowerCase()))
     for (const parameter of plan.parameters) {
       if (parameter.location === "path" || !parameter.required) continue
+      // A required header parameter is satisfied by a static host header.
+      if (parameter.location === "header" && hostHeaders.has(parameter.name.toLowerCase())) continue
       const group = parameter.location === "query" ? query : parameter.location === "header" ? headers : cookies
       const item = group[parameter.name]
       if (item === undefined || item === null) {

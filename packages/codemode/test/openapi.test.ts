@@ -552,6 +552,56 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests).toHaveLength(0)
   })
 
+  test("a static host header satisfies a required header parameter", async () => {
+    const tenanted = {
+      openapi: "3.1.0",
+      info: { title: "Tenanted", version: "1.0.0" },
+      servers: [{ url: "https://tenanted.example" }],
+      paths: {
+        "/t": {
+          get: {
+            operationId: "t",
+            parameters: [{ name: "X-Tenant", in: "header", required: true, schema: { type: "string" } }],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+    }
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({
+      tools: { api: OpenAPI.fromSpec({ spec: tenanted, headers: { "x-tenant": "acme" } }).tools },
+    })
+
+    const result = await Effect.runPromise(runtime.execute("return await tools.api.t({})").pipe(Effect.provide(layer)))
+
+    expect(result).toMatchObject({ ok: true })
+    expect(requests[0]!.headers["x-tenant"]).toBe("acme")
+  })
+
+  test("a JSON success sibling wins over an earlier no-content success", () => {
+    const siblings = {
+      openapi: "3.1.0",
+      info: { title: "Siblings", version: "1.0.0" },
+      servers: [{ url: "https://siblings.example" }],
+      paths: {
+        "/thing": {
+          post: {
+            operationId: "createThing",
+            responses: {
+              "200": { description: "no content variant" },
+              "201": {
+                description: "created",
+                content: { "application/json": { schema: { type: "object", properties: { id: { type: "string" } } } } },
+              },
+            },
+          },
+        },
+      },
+    }
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: siblings }).tools } })
+    expect(runtime.instructions()).toContain("tools.api.createThing(input: {}): Promise<{ id?: string }>")
+  })
+
   test("relative server URLs are skipped with a clear reason", () => {
     const relative = {
       openapi: "3.1.0",
