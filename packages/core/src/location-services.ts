@@ -22,7 +22,6 @@ import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
 import { PluginInternal } from "./plugin/internal"
 import { Policy } from "./policy"
-import { Project } from "./project"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
 import { QuestionV2 } from "./question"
@@ -49,8 +48,7 @@ import { Vcs } from "./vcs"
 
 export { LocationServiceMap } from "./location-service-map"
 
-export const locationServices = LayerNode.group([
-  Project.node,
+const locationServiceNodes = [
   Location.node,
   Policy.node,
   Config.node,
@@ -96,7 +94,9 @@ export const locationServices = LayerNode.group([
   Snapshot.node,
   SessionRunnerLLM.node,
   Vcs.node,
-])
+] as const satisfies readonly Node.LocationNode<unknown, unknown>[]
+
+export const locationServices = LayerNode.group<typeof locationServiceNodes>(locationServiceNodes)
 
 export type LocationServices = LayerNode.Output<typeof locationServices>
 export type LocationError = LayerNode.Error<typeof locationServices>

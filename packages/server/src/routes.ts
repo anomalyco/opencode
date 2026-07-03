@@ -6,6 +6,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { Project } from "@opencode-ai/core/project"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { Job } from "@opencode-ai/core/job"
@@ -33,6 +34,7 @@ const applicationServices = LayerNode.group([
   httpClient,
   ToolOutputStore.cleanupNode,
   Job.node,
+  Project.node,
   SessionV2.node,
   PluginRuntime.providerNode,
   PermissionSaved.node,

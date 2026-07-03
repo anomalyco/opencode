@@ -3,6 +3,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
+import { Project } from "@opencode-ai/core/project"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import { Context, Effect, Layer, Scope } from "effect"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -12,7 +13,7 @@ export const create = Effect.fn("OpenCode.create")(function* () {
   const memoMap = yield* Layer.makeMemoMap
   const sdkPlugins = SdkPlugins.makeStore()
   const context = yield* Layer.buildWithMemoMap(
-    AppNodeBuilder.build(LayerNode.group([PermissionSaved.node, SdkPlugins.node]), [
+    AppNodeBuilder.build(LayerNode.group([PermissionSaved.node, Project.node, SdkPlugins.node]), [
       [SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)],
     ]),
     memoMap,
@@ -20,11 +21,13 @@ export const create = Effect.fn("OpenCode.create")(function* () {
   )
   const plugins = Context.get(context, SdkPlugins.Service)
   const permissions = Context.get(context, PermissionSaved.Service)
+  const project = Context.get(context, Project.Service)
   const web = yield* Effect.acquireRelease(
     Effect.sync(() =>
       HttpRouter.toWebHandler(
         createEmbeddedRoutes(sdkPlugins).pipe(
           HttpRouter.provideRequest(Layer.succeed(PermissionSaved.Service, permissions)),
+          HttpRouter.provideRequest(Layer.succeed(Project.Service, project)),
           Layer.provide(HttpServer.layerServices),
         ),
         { disableLogger: true, memoMap },
