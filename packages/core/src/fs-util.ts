@@ -90,8 +90,8 @@ export namespace FSUtil {
         })
       })
 
-      const resolve = Effect.fn("FileSystem.resolve")(function* (path: string) {
-        const resolved = pathResolve(windowsPath(path))
+      const resolve = Effect.fn("FileSystem.resolve")(function* (input: string) {
+        const resolved = path.resolve(windowsPath(input))
         return yield* fs.realPath(resolved).pipe(
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
           Effect.orDie,
