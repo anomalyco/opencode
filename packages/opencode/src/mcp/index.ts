@@ -159,6 +159,12 @@ export interface Interface {
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
+  /**
+   * Raw MCP tool definitions keyed identically to {@link tools} (`toolName(client, name)`).
+   * Unlike {@link tools}, these retain the original `inputSchema`/`outputSchema`, which code
+   * mode uses to render tool signatures (including return types) to the model.
+   */
+  readonly defs: () => Effect.Effect<Record<string, MCPToolDef>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly resourceTemplates: (
@@ -680,6 +686,18 @@ const layer = Layer.effect(
       return result
     })
 
+    const defs = Effect.fn("MCP.defs")(function* () {
+      const result: Record<string, MCPToolDef> = {}
+      const s = yield* InstanceState.get(state)
+      for (const [clientName, listed] of Object.entries(s.defs)) {
+        if (s.status[clientName]?.status !== "connected") continue
+        for (const mcpTool of listed) {
+          result[McpCatalog.toolName(clientName, mcpTool.name)] = mcpTool
+        }
+      }
+      return result
+    })
+
     function collectFromConnected<T extends { name: string }>(
       s: State,
       listFn: (c: Client, timeout?: number) => Promise<T[]>,
@@ -982,6 +1000,7 @@ const layer = Layer.effect(
       clients,
       instructions,
       tools,
+      defs,
       prompts,
       resources,
       resourceTemplates,

@@ -213,6 +213,18 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
   )
 }
 
+/**
+ * The shared tool-visibility predicate: drop every tool a hard deny hides
+ * ({@link disabled} semantics — a matching `deny` rule with pattern `"*"`).
+ * Ask-level rules leave a tool fully visible and callable (it prompts at call
+ * time). Used both when preparing the LLM tool list (request prep) and when
+ * building/dispatching the code-mode MCP catalog, so the two cannot drift.
+ */
+export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.Ruleset): Record<string, T> {
+  const hidden = disabled(Object.keys(tools), ruleset)
+  return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
+}
+
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
 
 export * as Permission from "."

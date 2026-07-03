@@ -3,6 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
+import { McpInvoke } from "@/mcp/invoke"
 import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
@@ -21,6 +22,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -52,6 +54,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const flags = yield* RuntimeFlags.Service
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -86,11 +89,20 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         .pipe(Effect.orDie),
   })
 
-  for (const item of yield* registry.tools({
+  const mcpTools = yield* mcp.tools()
+  // When code mode is enabled and MCP tools are present, the registry exposes them
+  // through the single code-mode `execute` tool (ToolRegistry.tools), so raw per-MCP
+  // registration is suppressed via the early return below. Code mode is experimental
+  // and off by default.
+  const codeMode = flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
+  const registryTools = yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
-  })) {
+    permission: input.session.permission,
+  })
+
+  for (const item of registryTools) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
       description: item.description,
@@ -381,7 +393,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  for (const [key, item] of Object.entries(yield* mcp.tools())) {
+  if (codeMode) return tools
+
+  for (const [key, item] of Object.entries(mcpTools)) {
     const execute = item.execute
     if (!execute) continue
 
@@ -392,29 +406,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
-          yield* plugin.trigger(
-            "tool.execute.before",
-            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-            { args },
-          )
-          const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
-            yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
-          }).pipe(
-            Effect.withSpan("Tool.execute", {
-              attributes: {
-                "tool.name": key,
-                "tool.call_id": opts.toolCallId,
-                "session.id": ctx.sessionID,
-                "message.id": input.processor.message.id,
-              },
-            }),
-          )
-          yield* plugin.trigger(
-            "tool.execute.after",
-            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-            result,
-          )
+          // Shared MCP middle (before hook → permission ask → Tool.execute span →
+          // dispatch → after hook); this caller keeps the model-facing shaping edge below.
+          const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* McpInvoke.invoke({
+            plugin,
+            key,
+            execute,
+            args,
+            callID: opts.toolCallId,
+            options: opts,
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+            ask: ctx.ask,
+          })
 
           const textParts: string[] = []
           const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []

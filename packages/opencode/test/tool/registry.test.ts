@@ -17,6 +17,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { MCP } from "@/mcp"
+import { McpCatalog } from "@/mcp/catalog"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -56,6 +58,45 @@ const replacements = [
 
 const it = testEffect(LayerNode.compile(root, replacements))
 const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
+
+// Fake MCP.Service serving two tools on one server, built through the same
+// `convertTool` path the real service uses so the code-mode catalog renders
+// genuine signatures.
+function fakeMcpLayer(tools: Record<string, { description: string }>) {
+  const client = { callTool: async () => ({ content: [] }) }
+  const converted = Object.fromEntries(
+    Object.entries(tools).map(([key, def]) => [
+      key,
+      McpCatalog.convertTool(
+        {
+          name: key,
+          description: def.description,
+          inputSchema: { type: "object", properties: {} },
+        } as any,
+        client as any,
+      ),
+    ]),
+  )
+  return Layer.mock(MCP.Service, {
+    tools: () => Effect.succeed(converted),
+    defs: () => Effect.succeed({}),
+    clients: () => Effect.succeed(Object.keys(tools).length > 0 ? ({ github: {} } as any) : {}),
+  })
+}
+
+const mcpToolsLayer = fakeMcpLayer({
+  github_create_issue: { description: "Create an issue" },
+  github_list_issues: { description: "List issues" },
+})
+
+const codeModeFlags = [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })] as const
+const withCodeMode = testEffect(
+  LayerNode.compile(root, [[Config.node, configLayer], codeModeFlags, [MCP.node, mcpToolsLayer]]),
+)
+const withCodeModeNoMcp = testEffect(
+  LayerNode.compile(root, [[Config.node, configLayer], codeModeFlags, [MCP.node, fakeMcpLayer({})]]),
+)
+const withFlagOff = testEffect(LayerNode.compile(root, [...replacements, [MCP.node, mcpToolsLayer]]))
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -488,6 +529,85 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+})
+
+describe("tool.registry code mode", () => {
+  const model = { providerID: ProviderV2.ID.opencode, modelID: ModelV2.ID.make("test") }
+
+  withCodeMode.instance("registers the code-mode execute tool when the flag is on and MCP tools exist", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({ ...model, agent: yield* agents.defaultInfo() })
+      const execute = tools.find((tool) => tool.id === "execute")
+      if (!execute) throw new Error("code-mode execute tool was not registered")
+      // The registry appends the grouped catalog to the static base description.
+      expect(execute.description).toContain("confined runtime")
+      expect(execute.description).toContain("## Available tools")
+      expect(execute.description).toContain("tools.github.create_issue(")
+      expect(execute.description).toContain("tools.github.list_issues(")
+    }),
+  )
+
+  withCodeModeNoMcp.instance("does not register code mode when no MCP tools are connected", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({ ...model, agent: yield* agents.defaultInfo() })
+      expect(tools.map((tool) => tool.id)).not.toContain("execute")
+    }),
+  )
+
+  withFlagOff.instance("does not register code mode when the flag is off, even with MCP tools", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({ ...model, agent: yield* agents.defaultInfo() })
+      expect(tools.map((tool) => tool.id)).not.toContain("execute")
+    }),
+  )
+
+  withCodeMode.instance("hard-denied MCP tools are dropped from the catalog; ask-level ones stay", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const base = yield* agents.defaultInfo()
+      const agent = {
+        ...base,
+        permission: [
+          ...base.permission,
+          { permission: "github_create_issue", pattern: "*" as const, action: "deny" as const },
+          { permission: "github_list_issues", pattern: "*" as const, action: "ask" as const },
+        ],
+      }
+      const tools = yield* registry.tools({ ...model, agent })
+      const execute = tools.find((tool) => tool.id === "execute")
+      if (!execute) throw new Error("code-mode execute tool was not registered")
+      expect(execute.description).not.toContain("create_issue")
+      expect(execute.description).toContain("tools.github.list_issues(")
+      expect(execute.description).toContain("- github (1 tool)")
+    }),
+  )
+
+  withCodeMode.instance("session-level hard-denied MCP tools are dropped from the code-mode catalog", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({
+        ...model,
+        agent: yield* agents.defaultInfo(),
+        permission: [
+          { permission: "github_create_issue", pattern: "*" as const, action: "deny" as const },
+          { permission: "github_list_issues", pattern: "*" as const, action: "ask" as const },
+        ],
+      })
+      const execute = tools.find((tool) => tool.id === "execute")
+      if (!execute) throw new Error("code-mode execute tool was not registered")
+      expect(execute.description).not.toContain("create_issue")
+      expect(execute.description).toContain("tools.github.list_issues(")
+      expect(execute.description).toContain("- github (1 tool)")
     }),
   )
 })
