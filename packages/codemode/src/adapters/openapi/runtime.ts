@@ -69,10 +69,15 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
     const parsed = text === "" ? null : Option.getOrElse(decodeJson(text), () => text)
     if (response.status < 200 || response.status >= 300) {
+      const rendered = typeof parsed === "string" ? parsed : (JSON.stringify(parsed) ?? "")
+      const summary =
+        rendered === "" || rendered === "null"
+          ? "no response body"
+          : rendered.length > maxErrorBodyChars
+            ? `${rendered.slice(0, maxErrorBodyChars)}...`
+            : rendered
       return yield* Effect.fail(
-        toolError(
-          `${plan.operation.method} ${plan.operation.path} failed with HTTP ${response.status}: ${summarizeBody(parsed)}`,
-        ),
+        toolError(`${plan.operation.method} ${plan.operation.path} failed with HTTP ${response.status}: ${summary}`),
       )
     }
     return parsed
@@ -148,12 +153,6 @@ const applyCredentials = (credentials: ReadonlyArray<readonly [SecurityScheme, C
     if (scheme.in === "cookie") cookies[name] = credential.value
   }
   return { headers, query, cookies }
-}
-
-const summarizeBody = (body: unknown): string => {
-  const rendered = typeof body === "string" ? body : (JSON.stringify(body) ?? "")
-  if (rendered === "" || rendered === "null") return "no response body"
-  return rendered.length > maxErrorBodyChars ? `${rendered.slice(0, maxErrorBodyChars)}...` : rendered
 }
 
 const renderPrimitive = (value: unknown): string =>
