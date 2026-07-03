@@ -195,6 +195,64 @@ describe("ProjectV2.resolve", () => {
     }),
   )
 
+  const itHg = Bun.which("hg") ? it : { live: it.live.skip }
+
+  itHg.live("detects mercurial repositories from nested directories", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await $`hg init`.cwd(tmp.path).quiet()
+        await Bun.write(path.join(tmp.path, "file.txt"), "one\n")
+        await $`hg addremove -q`.cwd(tmp.path).env({ ...process.env, HGPLAIN: "1" }).quiet()
+        await $`hg commit -q -m initial -u test`.cwd(tmp.path).env({ ...process.env, HGPLAIN: "1" }).quiet()
+        await fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true })
+      })
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(path.join(tmp.path, "a", "b")))
+
+      expect(result.vcs?.type).toBe("hg")
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.id).not.toBe(ProjectV2.ID.make("global"))
+      expect(result.previous).toBeUndefined()
+    }),
+  )
+
+  it.live("prefers git when both git and mercurial metadata exist", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, ".hg")))
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("returns global id for unreadable mercurial metadata", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, ".hg")))
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.vcs?.type).toBe("hg")
+      expect(result.id).toBe(ProjectV2.ID.make("global"))
+    }),
+  )
+
   it.live("linked worktree returns opened worktree directory and previous from common dir", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(

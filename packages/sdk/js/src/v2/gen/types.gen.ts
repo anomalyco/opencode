@@ -3194,6 +3194,13 @@ export type ProjectCopyError = {
   }
 }
 
+export type VcsFileStatus2 = {
+  file: string
+  additions: number
+  deletions: number
+  status: "added" | "deleted" | "modified"
+}
+
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
 }
@@ -3533,7 +3540,7 @@ export type FormAnswer = {
   [key: string]: FormValue
 }
 
-export type ProjectVcs = "git"
+export type ProjectVcs = "git" | "hg"
 
 export type ProjectIcon = {
   url?: string
@@ -6992,6 +6999,8 @@ export type ReferenceInfo = {
 export type ProjectCopyCopy = {
   directory: string
 }
+
+export type VcsMode = "working" | "branch"
 
 export type EventModelsDevRefreshed = {
   id: string
@@ -11912,6 +11921,15 @@ export type ProjectCopyErrorV2 = {
     forceRequired?: boolean | null
   }
 }
+
+export type VcsFileStatusV2 = {
+  file: string
+  additions: number
+  deletions: number
+  status: "added" | "deleted" | "modified"
+}
+
+export type VcsMode2 = "working" | "branch"
 
 export type AuthRemoveData = {
   body?: never
@@ -19511,6 +19529,82 @@ export type V2ProjectCopyRefreshResponses = {
 }
 
 export type V2ProjectCopyRefreshResponse = V2ProjectCopyRefreshResponses[keyof V2ProjectCopyRefreshResponses]
+
+export type V2VcsStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/vcs/status"
+}
+
+export type V2VcsStatusErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+}
+
+export type V2VcsStatusError = V2VcsStatusErrors[keyof V2VcsStatusErrors]
+
+export type V2VcsStatusResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo2
+    data: Array<VcsFileStatusV2>
+  }
+}
+
+export type V2VcsStatusResponse = V2VcsStatusResponses[keyof V2VcsStatusResponses]
+
+export type V2VcsDiffData = {
+  body?: never
+  path?: never
+  query: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+    mode: VcsMode2
+    context?: string | null
+  }
+  url: "/api/vcs/diff"
+}
+
+export type V2VcsDiffErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+}
+
+export type V2VcsDiffError = V2VcsDiffErrors[keyof V2VcsDiffErrors]
+
+export type V2VcsDiffResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo2
+    data: Array<SnapshotFileDiffV2>
+  }
+}
+
+export type V2VcsDiffResponse = V2VcsDiffResponses[keyof V2VcsDiffResponses]
 
 export type PtyConnectData = {
   body?: never

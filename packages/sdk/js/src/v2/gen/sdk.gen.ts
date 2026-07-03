@@ -444,6 +444,10 @@ import type {
   V2ShellRemoveResponses,
   V2SkillListErrors,
   V2SkillListResponses,
+  V2VcsDiffErrors,
+  V2VcsDiffResponses,
+  V2VcsStatusErrors,
+  V2VcsStatusResponses,
   VcsApplyErrors,
   VcsApplyResponses,
   VcsDiffErrors,
@@ -452,6 +456,7 @@ import type {
   VcsDiffResponses,
   VcsGetErrors,
   VcsGetResponses,
+  VcsMode2,
   VcsStatusErrors,
   VcsStatusResponses,
   WorktreeCreateErrors,
@@ -7933,6 +7938,65 @@ export class ProjectCopy2 extends HeyApiClient {
   }
 }
 
+export class Vcs2 extends HeyApiClient {
+  /**
+   * VCS status
+   *
+   * List uncommitted working-copy changes relative to the requested location.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2VcsStatusResponses, V2VcsStatusErrors, ThrowOnError>({
+      url: "/api/vcs/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * VCS diff
+   *
+   * Diff the working copy against HEAD (mode git) or the default-branch merge base (mode branch) for the requested location.
+   */
+  public diff<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      mode: VcsMode2
+      context?: string | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "mode" },
+            { in: "query", key: "context" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2VcsDiffResponses, V2VcsDiffErrors, ThrowOnError>({
+      url: "/api/vcs/diff",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -8047,6 +8111,11 @@ export class V2 extends HeyApiClient {
   private _projectCopy?: ProjectCopy2
   get projectCopy(): ProjectCopy2 {
     return (this._projectCopy ??= new ProjectCopy2({ client: this.client }))
+  }
+
+  private _vcs?: Vcs2
+  get vcs(): Vcs2 {
+    return (this._vcs ??= new Vcs2({ client: this.client }))
   }
 }
 

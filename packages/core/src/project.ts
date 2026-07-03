@@ -2,10 +2,12 @@ export * as ProjectV2 from "./project"
 export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
+import { ChildProcess } from "effect/unstable/process"
 import path from "path"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { Git } from "./git"
+import { AppProcess } from "./process"
 import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectories } from "./project/directories"
@@ -45,7 +47,7 @@ export const root = Effect.fn("Project.root")(function* (
   fs: FSUtil.Interface,
   input: AbsolutePath,
 ) {
-  return yield* fs.up({ targets: [".git"], start: input }).pipe(
+  return yield* fs.up({ targets: [".git", ".hg"], start: input }).pipe(
     Effect.map((matches) => matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined),
     Effect.catch(() => Effect.succeed(undefined)),
   )
@@ -73,6 +75,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
+    const proc = yield* AppProcess.Service
     const projectDirectories = yield* ProjectDirectories.Service
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
@@ -124,18 +127,63 @@ const layer = Layer.effect(
       return root ? ID.make(root) : undefined
     })
 
-    const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
-      const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+    // Mercurial identity uses the cached ID or the first root changeset; remote-derived
+    // identity (the git `remote()` path) is a follow-up.
+    const hgRoot = Effect.fnUntraced(function* (worktree: AbsolutePath) {
+      const result = yield* proc
+        .run(
+          ChildProcess.make("hg", ["log", "-r", "roots(all())", "-T", "{node}\n"], {
+            cwd: worktree,
+            env: { HGPLAIN: "1" },
+            extendEnv: true,
+            stdin: "ignore",
+          }),
+        )
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!result || result.exitCode !== 0) return undefined
+      const node = result.stdout
+        .toString("utf8")
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .toSorted()[0]
+      return node ? ID.make(node) : undefined
+    })
 
-      const previous = yield* cached(repo.commonDirectory)
-      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
+    const hgDiscover = Effect.fnUntraced(function* (input: AbsolutePath) {
+      const dotHg = yield* fs.up({ targets: [".hg"], start: input }).pipe(
+        Effect.map((matches) => matches[0]),
+        Effect.catch(() => Effect.succeed(undefined)),
+      )
+      if (!dotHg) return undefined
+      const worktree = AbsolutePath.make(path.dirname(dotHg))
+      const store = AbsolutePath.make(dotHg)
+      const previous = yield* cached(store)
+      const id = previous ?? (yield* hgRoot(worktree))
       return {
         previous,
         id: id ?? ID.global,
-        directory: repo.worktree,
-        vcs: { type: "git" as const, store: repo.commonDirectory },
+        directory: worktree,
+        vcs: { type: "hg" as const, store },
       }
+    })
+
+    const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
+      const repo = yield* git.repo.discover(input)
+      if (repo) {
+        const previous = yield* cached(repo.commonDirectory)
+        const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
+        return {
+          previous,
+          id: id ?? ID.global,
+          directory: repo.worktree,
+          vcs: { type: "git" as const, store: repo.commonDirectory },
+        }
+      }
+
+      const hg = yield* hgDiscover(input)
+      if (hg) return hg
+      return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
@@ -149,5 +197,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Git.node, ProjectDirectories.node],
+  deps: [FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
 })

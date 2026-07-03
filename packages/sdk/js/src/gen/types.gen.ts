@@ -744,7 +744,7 @@ export type Project = {
   id: string
   worktree: string
   vcsDir?: string
-  vcs?: "git"
+  vcs?: "git" | "hg"
   time: {
     created: number
     initialized?: number

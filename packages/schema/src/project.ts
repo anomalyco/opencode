@@ -8,7 +8,7 @@ import { ProjectID } from "./project-id.js"
 export const ID = ProjectID
 export type ID = typeof ID.Type
 
-export const Vcs = Schema.Literal("git").annotate({ identifier: "Project.Vcs" })
+export const Vcs = Schema.Literals(["git", "hg"]).annotate({ identifier: "Project.Vcs" })
 export const Current = Schema.Struct({
   id: ID,
   directory: AbsolutePath,

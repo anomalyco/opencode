@@ -24,5 +24,9 @@ export const Vcs = Schema.Union([
     type: Schema.Literal("git"),
     store: AbsolutePath,
   }),
+  Schema.Struct({
+    type: Schema.Literal("hg"),
+    store: AbsolutePath,
+  }),
 ])
 export type Vcs = typeof Vcs.Type
