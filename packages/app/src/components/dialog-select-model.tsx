@@ -29,6 +29,7 @@ import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
 import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
 import { createEventListener } from "@solid-primitives/event-listener"
+import { matchesModelSearch } from "./dialog-select-model-search"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -254,14 +255,9 @@ export function ModelSelectorPopoverV2(props: {
       .filter((item) => (props.provider ? item.provider.id === props.provider : true)),
   )
   const models = createMemo(() => {
-    const search = store.search.trim().toLowerCase()
+    const search = store.search.trim()
     const filtered = search
-      ? allModels().filter(
-          (item) =>
-            item.name.toLowerCase().includes(search) ||
-            item.id.toLowerCase().includes(search) ||
-            item.provider.name.toLowerCase().includes(search),
-        )
+      ? allModels().filter((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
       : allModels()
 
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
@@ -345,16 +341,10 @@ export function ModelSelectorPopoverV2(props: {
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
   const setSearch = (value: string) => {
-    const search = value.trim().toLowerCase()
+    const search = value.trim()
     const first = [...allModels()]
       .sort((a, b) => a.name.localeCompare(b.name))
-      .find(
-        (item) =>
-          !search ||
-          item.name.toLowerCase().includes(search) ||
-          item.id.toLowerCase().includes(search) ||
-          item.provider.name.toLowerCase().includes(search),
-      )
+      .find((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
   }
 
