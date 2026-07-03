@@ -22,8 +22,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { McpCatalog } from "@/mcp/catalog"
-import { SessionCodeMode } from "./code-mode"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -91,28 +89,18 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   })
 
   const mcpTools = yield* mcp.tools()
-  // When code mode is enabled and MCP tools are present, expose them through the
-  // single code-mode `execute` tool instead of registering each MCP tool directly
-  // (see the early return below). Code mode is experimental and off by default.
-  // Namespaces are sanitized client names; tool keys are `sanitize(server)_sanitize(tool)`,
-  // so the names match the catalog key prefixes.
-  const codeModeTool =
-    flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
-      ? yield* Tool.init(
-          yield* SessionCodeMode.define(
-            mcpTools,
-            yield* mcp.defs(),
-            Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize),
-          ),
-        )
-      : undefined
+  // When code mode is enabled and MCP tools are present, the registry exposes them
+  // through the single code-mode `execute` tool (ToolRegistry.tools), so raw per-MCP
+  // registration is suppressed via the early return below. Code mode is experimental
+  // and off by default.
+  const codeMode = flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
   const registryTools = yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
   })
 
-  for (const item of codeModeTool ? [...registryTools, codeModeTool] : registryTools) {
+  for (const item of registryTools) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
       description: item.description,
@@ -403,7 +391,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  if (codeModeTool) return tools
+  if (codeMode) return tools
 
   for (const [key, item] of Object.entries(mcpTools)) {
     const execute = item.execute

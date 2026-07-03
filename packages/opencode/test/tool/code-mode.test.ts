@@ -1,15 +1,21 @@
 import { describe, expect, test } from "bun:test"
 import {
+  CODE_MODE_TOOL,
+  CodeModeTool,
   Parameters,
-  define,
+  catalogInstructions,
   formatValue,
   groupByServer,
   toSandboxResult,
   withLogs,
   type Attachment,
-} from "@/session/code-mode"
+} from "@/tool/code-mode"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
+import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
+import { MCP } from "@/mcp"
+import { Permission } from "@/permission"
+import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
 import { McpCatalog } from "@/mcp/catalog"
@@ -42,19 +48,63 @@ function mcpTool(
 }
 
 // Truncate echoes its input so assertions read the exact program output. Agent.get is
-// only consulted by the shared wrapper during truncation.
-const layer = Layer.mergeAll(
-  Layer.mock(Truncate.Service, {
-    output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
-  }),
-  Layer.succeed(Agent.Service, Agent.Service.of({ get: () => Effect.succeed({ name: "build" } as any) } as any)),
-)
+// consulted by the shared wrapper during truncation AND at execute time for the
+// permission ruleset that filters the dispatchable tool tree; Session.get supplies the
+// (empty) session-level ruleset half of that merge.
+function harness(input: {
+  mcpTools: Record<string, AITool>
+  defs?: Record<string, MCPToolDef>
+  servers: string[]
+  permission?: PermissionV1.Rule[]
+}) {
+  return Layer.mergeAll(
+    Layer.mock(Truncate.Service, {
+      output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
+    }),
+    Layer.mock(Agent.Service, {
+      get: () => Effect.succeed({ name: "build", permission: input.permission ?? [] } as any),
+    }),
+    Layer.mock(Session.Service, {
+      get: () => Effect.succeed({ permission: [] } as any),
+    }),
+    Layer.mock(MCP.Service, {
+      tools: () => Effect.succeed(input.mcpTools),
+      defs: () => Effect.succeed(input.defs ?? {}),
+      clients: () => Effect.succeed(Object.fromEntries(input.servers.map((name) => [name, {} as any]))),
+    }),
+  )
+}
 
-// Derive sanitized server namespaces from the catalog keys, mirroring how
-// session/tools.ts passes `Object.keys(mcp.clients()).map(sanitize)`.
-function build(mcpTools: Record<string, AITool>, defs: Record<string, MCPToolDef> = {}, servers?: string[]) {
-  const names = servers ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))]
-  return Effect.runPromise(define(mcpTools, defs, names).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
+// Derive sanitized server namespaces from the catalog keys, mirroring how the registry
+// passes `Object.keys(mcp.clients()).map(sanitize)`.
+function serverNames(mcpTools: Record<string, AITool>, servers?: string[]) {
+  return servers ?? [...new Set(Object.keys(mcpTools).map((key) => key.split("_")[0]!))]
+}
+
+function build(
+  mcpTools: Record<string, AITool>,
+  defs: Record<string, MCPToolDef> = {},
+  servers?: string[],
+  permission?: PermissionV1.Rule[],
+) {
+  const names = serverNames(mcpTools, servers)
+  return Effect.runPromise(
+    CodeModeTool.pipe(
+      Effect.flatMap(Tool.init),
+      Effect.provide(harness({ mcpTools, defs, servers: names, permission })),
+    ),
+  )
+}
+
+// The agent-facing description, as the registry composes it (`describeCodeMode`):
+// permission-filtered tool set → grouped catalog → CodeMode instructions.
+function describeFor(
+  mcpTools: Record<string, AITool>,
+  defs: Record<string, MCPToolDef> = {},
+  servers?: string[],
+  permission: PermissionV1.Rule[] = [],
+) {
+  return catalogInstructions(Permission.visibleTools(mcpTools, permission), defs, serverNames(mcpTools, servers))
 }
 
 describe("code mode execute", () => {
@@ -99,8 +149,16 @@ describe("code mode execute", () => {
     expect(entry.outputSchema).toEqual(defs.weather_current!.outputSchema as any)
   })
 
-  test("small catalogs inline every full signature in the tool description", async () => {
-    const tool = await build({
+  test("the static base description carries no catalog; the registry appends it", async () => {
+    const tool = await build({ github_list_issues: mcpTool("list_issues", () => "") })
+    expect(tool.id).toBe(CODE_MODE_TOOL)
+    expect(tool.description).toContain("confined runtime")
+    expect(tool.description).not.toContain("Available tools")
+    expect(tool.description).not.toContain("list_issues")
+  })
+
+  test("small catalogs inline every full signature in the appended catalog", () => {
+    const description = describeFor({
       github_create_issue: mcpTool("create_issue", () => "", {
         type: "object",
         properties: { title: { type: "string" }, body: { type: "string" } },
@@ -110,29 +168,29 @@ describe("code mode execute", () => {
       linear_search: mcpTool("search", () => ""),
     })
 
-    expect(tool.description).toContain("Available tools (COMPLETE list")
-    expect(tool.description).toContain("- github (2 tools)")
-    expect(tool.description).toContain("- linear (1 tool)")
-    expect(tool.description).toContain(
+    expect(description).toContain("Available tools (COMPLETE list")
+    expect(description).toContain("- github (2 tools)")
+    expect(description).toContain("- linear (1 tool)")
+    expect(description).toContain(
       "tools.github.create_issue(input: { title: string; body?: string }): Promise<unknown>",
     )
-    expect(tool.description).toContain("tools.github.list_issues(")
-    expect(tool.description).toContain("tools.linear.search(")
+    expect(description).toContain("tools.github.list_issues(")
+    expect(description).toContain("tools.linear.search(")
     // A schema with no properties renders as an empty object, not `{  }`.
-    expect(tool.description).toContain("tools.linear.search(input: {}): Promise<unknown>")
+    expect(description).toContain("tools.linear.search(input: {}): Promise<unknown>")
     // Fully inlined catalog: no discovery round-trip is needed or advertised.
-    expect(tool.description).not.toContain("$codemode")
-    expect(tool.description).not.toContain("Browse one namespace")
+    expect(description).not.toContain("$codemode")
+    expect(description).not.toContain("Browse one namespace")
     // The workflow/rules sections use placeholder call forms only — the example machinery
     // never cherry-picks a catalog tool or fabricates result fields.
-    expect(tool.description).toContain("## Workflow")
-    expect(tool.description).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(tool.description).toContain('`const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string')
-    expect(tool.description).toContain("Return only the fields you need")
-    expect(tool.description).not.toContain("total_count")
+    expect(description).toContain("## Workflow")
+    expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
+    expect(description).toContain('`const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string')
+    expect(description).toContain("Return only the fields you need")
+    expect(description).not.toContain("total_count")
   })
 
-  test("signatures render the declared outputSchema as the return type", async () => {
+  test("signatures render the declared outputSchema as the return type", () => {
     const defs: Record<string, MCPToolDef> = {
       weather_current: {
         name: "current",
@@ -144,8 +202,8 @@ describe("code mode execute", () => {
         },
       } as any,
     }
-    const tool = await build({ weather_current: mcpTool("current", () => "") }, defs)
-    expect(tool.description).toContain(
+    const description = describeFor({ weather_current: mcpTool("current", () => "") }, defs)
+    expect(description).toContain(
       "tools.weather.current(input: { city: string }): Promise<{ tempC: number; summary?: string }>",
     )
   })
@@ -169,29 +227,30 @@ describe("code mode execute", () => {
       properties: { topic: { type: "string", description: "Subject to look up" } },
       required: ["topic"],
     })
-    const tool = await build(tools, {}, ["alpha", "zeta"])
+    const description = describeFor(tools, {}, ["alpha", "zeta"])
 
     // Every namespace is listed with counts; signatures inline round-robin across
     // namespaces (cheapest-first within each) until the budget runs out, and the
     // description states exactly how comprehensive the list is. Round-robin fairness:
     // the small zeta namespace is fully shown even though alpha alone could exhaust
     // the whole budget.
-    expect(tool.description).toContain("Available tools (PARTIAL — ")
-    expect(tool.description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
-    expect(tool.description).toContain("- zeta (1 tool)\n")
-    expect(tool.description).toContain("tools.zeta.only_tool(input: { topic: string }): Promise<unknown>")
-    expect(tool.description).toContain("tools.$codemode.search(")
+    expect(description).toContain("Available tools (PARTIAL — ")
+    expect(description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
+    expect(description).toContain("- zeta (1 tool)\n")
+    expect(description).toContain("tools.zeta.only_tool(input: { topic: string }): Promise<unknown>")
+    expect(description).toContain("tools.$codemode.search(")
     // PARTIAL catalogs put search first in the workflow and advertise namespace browsing.
-    expect(tool.description).toContain("1. Find a tool (skip when it is already listed below)")
-    expect(tool.description).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
-    expect(tool.description).not.toContain("total_count")
+    expect(description).toContain("1. Find a tool (skip when it is already listed below)")
+    expect(description).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
+    expect(description).not.toContain("total_count")
     // All op lines cost the same estimated tokens (chars/4 rounds away the 1- vs 3-digit
     // name difference), so the path tiebreak decides: the lexicographically-first ops made
     // the cut and the lexicographic tail (op_99 is maximal) did not.
-    expect(tool.description).toContain("tools.alpha.op_0(")
-    expect(tool.description).not.toContain("tools.alpha.op_99(")
+    expect(description).toContain("tools.alpha.op_0(")
+    expect(description).not.toContain("tools.alpha.op_99(")
 
     // The runtime search tool works in-program and returns complete signatures.
+    const tool = await build(tools, {}, ["alpha", "zeta"])
     const out = await Effect.runPromise(
       tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3 })" }, ctx),
     )
@@ -204,7 +263,7 @@ describe("code mode execute", () => {
     const signature = result.items.find((i: any) => i.path === "tools.zeta.only_tool").signature
     expect(signature).toContain("tools.zeta.only_tool(input: {\n")
     expect(signature).toContain("  /** Subject to look up */\n  topic: string")
-    expect(tool.description).not.toContain("/**")
+    expect(description).not.toContain("/**")
     expect(out.metadata.toolCalls).toEqual([
       { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3 } },
     ])
@@ -492,6 +551,92 @@ describe("code mode execute", () => {
     expect(err.metadata.error).toBe(true)
     expect(err.output).toContain("Uncaught: boom")
     expect(err.output).toContain("Logs:\nbefore the throw")
+  })
+})
+
+describe("code mode permission visibility", () => {
+  const deny = (permission: string): PermissionV1.Rule => ({ permission, pattern: "*", action: "deny" })
+  const askRule = (permission: string): PermissionV1.Rule => ({ permission, pattern: "*", action: "ask" })
+  const ok = () => ({ content: [{ type: "text", text: "ok" }] })
+
+  test("a hard-denied tool never enters the catalog or its search index", () => {
+    const mcpTools = {
+      github_create_issue: mcpTool("create_issue", ok),
+      github_list_issues: mcpTool("list_issues", ok),
+    }
+    const description = describeFor(mcpTools, {}, ["github"], [deny("github_create_issue")])
+    expect(description).toContain("tools.github.list_issues(")
+    expect(description).not.toContain("create_issue")
+    expect(description).toContain("- github (1 tool)")
+  })
+
+  test("an ask-level tool stays fully visible in the catalog", () => {
+    const mcpTools = {
+      github_create_issue: mcpTool("create_issue", ok),
+      github_list_issues: mcpTool("list_issues", ok),
+    }
+    const description = describeFor(mcpTools, {}, ["github"], [askRule("github_create_issue")])
+    expect(description).toContain("tools.github.create_issue(")
+    expect(description).toContain("tools.github.list_issues(")
+    expect(description).toContain("- github (2 tools)")
+  })
+
+  test("a hard-denied tool is not dispatchable: the program gets the unknown-tool diagnostic", async () => {
+    const called: string[] = []
+    const tool = await build(
+      {
+        github_create_issue: mcpTool("create_issue", () => {
+          called.push("create_issue")
+          return ok()
+        }),
+        github_list_issues: mcpTool("list_issues", ok),
+      },
+      {},
+      ["github"],
+      [deny("github_create_issue")],
+    )
+
+    const denied = await Effect.runPromise(
+      tool.execute({ code: "return await tools.github.create_issue({ title: 'x' })" }, ctx),
+    )
+    expect(denied.metadata.error).toBe(true)
+    expect(denied.output).toContain("Unknown tool 'github.create_issue'")
+    expect(denied.output).not.toContain("permission")
+    expect(called).toEqual([])
+
+    // The rest of the namespace still works.
+    const allowed = await Effect.runPromise(
+      tool.execute({ code: "return await tools.github.list_issues({})" }, ctx),
+    )
+    expect(allowed.metadata.error).toBeUndefined()
+    expect(allowed.output).toBe("ok")
+  })
+
+  test("an ask-level tool remains callable and still prompts via ctx.ask", async () => {
+    const asked: string[] = []
+    const askCtx: Tool.Context = { ...ctx, ask: (req) => Effect.sync(() => void asked.push(req.permission)) }
+    const tool = await build(
+      { github_list_issues: mcpTool("list_issues", ok) },
+      {},
+      ["github"],
+      [askRule("github_list_issues")],
+    )
+    const out = await Effect.runPromise(
+      tool.execute({ code: "return await tools.github.list_issues({})" }, askCtx),
+    )
+    expect(out.output).toBe("ok")
+    expect(asked).toEqual(["github_list_issues"])
+  })
+
+  test("Permission.visibleTools hides only hard denies, matching Permission.disabled", () => {
+    const tools = { a_tool: 1, b_tool: 2, c_tool: 3 }
+    const visible = Permission.visibleTools(tools, [
+      deny("a_tool"),
+      askRule("b_tool"),
+      // A scoped (non-"*") deny does not hide the tool from the catalog.
+      { permission: "c_tool", pattern: "something", action: "deny" },
+    ])
+    expect(Object.keys(visible)).toEqual(["b_tool", "c_tool"])
   })
 })
 

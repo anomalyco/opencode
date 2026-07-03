@@ -26,6 +26,9 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { CodeModeTool, catalogInstructions } from "./code-mode"
+import { MCP } from "@/mcp"
+import { McpCatalog } from "@/mcp/catalog"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -88,6 +91,7 @@ export const layer = Layer.effect(
     const agents = yield* Agent.Service
     const truncate = yield* Truncate.Service
     const flags = yield* RuntimeFlags.Service
+    const mcp = yield* MCP.Service
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -105,6 +109,7 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const codemode = yield* CodeModeTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -212,6 +217,7 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          codemode: Tool.init(codemode),
         })
 
         return {
@@ -233,6 +239,7 @@ export const layer = Layer.effect(
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...(flags.experimentalCodeMode ? [tool.codemode] : []),
           ],
           task: tool.task,
           read: tool.read,
@@ -264,11 +271,25 @@ export const layer = Layer.effect(
       return ["Available agent types and the tools they have access to:", description].join("\n")
     })
 
+    // The grouped MCP-tool catalog appended to the code-mode base description, built
+    // fresh per turn so it tracks live tool-list changes. Hard-denied tools (the shared
+    // Permission.visibleTools predicate over the agent's ruleset) never enter the
+    // catalog, its inlined signatures, or the in-program search index.
+    const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (agent: Agent.Info) {
+      const visible = Permission.visibleTools(yield* mcp.tools(), agent.permission)
+      const servers = Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)
+      return catalogInstructions(visible, yield* mcp.defs(), servers)
+    })
+
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      // Consulted once before the synchronous filter: code mode registers only when the
+      // experimental flag is on AND at least one MCP tool is connected.
+      const mcpToolCount = flags.experimentalCodeMode ? Object.keys(yield* mcp.tools()).length : 0
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
+        if (tool.id === CodeModeTool.id) return flags.experimentalCodeMode && mcpToolCount > 0
 
         const usePatch =
           input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
@@ -293,7 +314,11 @@ export const layer = Layer.effect(
               : undefined
           return {
             id: tool.id,
-            description: [output.description, tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined]
+            description: [
+              output.description,
+              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              tool.id === CodeModeTool.id ? yield* describeCodeMode(input.agent) : undefined,
+            ]
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
@@ -330,6 +355,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(FSUtil.defaultLayer),
+      Layer.provide(MCP.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
@@ -431,6 +457,7 @@ export const node = LayerNode.make({
     LSP.node,
     Instruction.node,
     FSUtil.node,
+    MCP.node,
     EventV2Bridge.node,
     httpClient,
     CrossSpawnSpawner.node,

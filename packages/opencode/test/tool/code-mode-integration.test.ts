@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, test } from "bun:test"
-import { define } from "@/session/code-mode"
+import { CodeModeTool, catalogInstructions } from "@/tool/code-mode"
 import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
+import { MCP } from "@/mcp"
+import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
 import { MessageID, SessionID } from "@/session/schema"
@@ -32,14 +34,6 @@ const ctx: Tool.Context = {
   metadata: () => Effect.void,
   ask: () => Effect.void,
 }
-
-// Truncate echoes its input so assertions read the exact program output.
-const layer = Layer.mergeAll(
-  Layer.mock(Truncate.Service, {
-    output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
-  }),
-  Layer.succeed(Agent.Service, Agent.Service.of({ get: () => Effect.succeed({ name: "build" } as any) } as any)),
-)
 
 // A real MCP server, exposed over an in-memory transport, with a representative mix
 // of tools: plain text, structured data (with an outputSchema), an image, and a
@@ -85,7 +79,8 @@ function handleCall(name: string, args: Record<string, unknown>) {
   }
 }
 
-let tool: Awaited<ReturnType<typeof buildTool>>
+let tool: Awaited<ReturnType<typeof buildTool>>["tool"]
+let description: string
 
 async function buildTool() {
   const server = new Server({ name: SERVER, version: "1.0.0" }, { capabilities: { tools: {} } })
@@ -107,30 +102,52 @@ async function buildTool() {
     mcpDefs[key] = def
     mcpTools[key] = McpCatalog.convertTool(def, client)
   }
-  return Effect.runPromise(define(mcpTools, mcpDefs, [SERVER]).pipe(Effect.flatMap(Tool.init), Effect.provide(layer)))
+
+  // Truncate echoes its input so assertions read the exact program output; Agent/Session
+  // supply the (empty) permission rulesets the execute path merges; MCP serves the tools
+  // this real in-memory server listed — the same snapshot shape the live service returns.
+  const layer = Layer.mergeAll(
+    Layer.mock(Truncate.Service, {
+      output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
+    }),
+    Layer.mock(Agent.Service, { get: () => Effect.succeed({ name: "build", permission: [] } as any) }),
+    Layer.mock(Session.Service, { get: () => Effect.succeed({ permission: [] } as any) }),
+    Layer.mock(MCP.Service, {
+      tools: () => Effect.succeed(mcpTools),
+      defs: () => Effect.succeed(mcpDefs),
+      clients: () => Effect.succeed({ [SERVER]: {} as any }),
+    }),
+  )
+  return {
+    tool: await Effect.runPromise(CodeModeTool.pipe(Effect.flatMap(Tool.init), Effect.provide(layer))),
+    // The catalog section the registry appends to the base description (describeCodeMode).
+    description: catalogInstructions(mcpTools, mcpDefs, [SERVER]),
+  }
 }
 
 const run = (code: string) => Effect.runPromise(tool.execute({ code }, ctx))
 
 beforeAll(async () => {
-  tool = await buildTool()
+  const built = await buildTool()
+  tool = built.tool
+  description = built.description
 })
 
 describe("code mode integration (real MCP server)", () => {
-  test("the tool description inlines full signatures with real MCP schemas", () => {
-    expect(tool.description).toContain("Available tools (COMPLETE list")
-    expect(tool.description).toContain("- fixtures (4 tools)")
-    expect(tool.description).toContain(
+  test("the appended catalog inlines full signatures with real MCP schemas", () => {
+    expect(description).toContain("Available tools (COMPLETE list")
+    expect(description).toContain("- fixtures (4 tools)")
+    expect(description).toContain(
       "tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>",
     )
-    expect(tool.description).toContain("tools.fixtures.get_text(input: { name: string }): Promise<unknown>")
-    expect(tool.description).toContain("// Add two numbers and return the structured sum")
+    expect(description).toContain("tools.fixtures.get_text(input: { name: string }): Promise<unknown>")
+    expect(description).toContain("// Add two numbers and return the structured sum")
     // Small catalog: everything is inline, so no discovery tool is advertised.
-    expect(tool.description).not.toContain("$codemode")
+    expect(description).not.toContain("$codemode")
     // The workflow section is present with placeholder-only call forms.
-    expect(tool.description).toContain("## Workflow")
-    expect(tool.description).toContain("`const res = await tools.<namespace>.<tool>(input)`")
-    expect(tool.description).not.toContain("total_count")
+    expect(description).toContain("## Workflow")
+    expect(description).toContain("`const res = await tools.<namespace>.<tool>(input)`")
+    expect(description).not.toContain("total_count")
   })
 
   test("calls a text tool and receives its text as the native result", async () => {

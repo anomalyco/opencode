@@ -1,15 +1,20 @@
-import { Tool } from "@/tool/tool"
+import * as Tool from "./tool"
 import type { Tool as AITool } from "ai"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
 import {
   CodeMode,
-  Tool as CodeModeTool,
+  Tool as SandboxTool,
   toolError,
   type ExecuteResult,
   type JsonSchema,
   type ToolDefinition,
 } from "@opencode-ai/codemode"
+import { MCP } from "@/mcp"
+import { McpCatalog } from "@/mcp/catalog"
+import { Agent } from "@/agent/agent"
+import { Session } from "@/session/session"
+import { Permission } from "@/permission"
 
 export const CODE_MODE_TOOL = "execute"
 
@@ -21,10 +26,22 @@ export const CODE_MODE_TOOL = "execute"
 // which applies to `execute` like any other tool and dumps the full output to a file when
 // it triggers.
 
+// The static base description. The full usage guide and the grouped, permission-filtered
+// tool catalog are appended per agent by the registry (`describeCodeMode`, the same
+// composition point `describeTask` uses), so `plugin.trigger("tool.definition")` sees this
+// base first, exactly like the task tool.
+const DESCRIPTION = [
+  "Execute a JavaScript/TypeScript program that orchestrates the connected MCP tools inside a confined runtime.",
+  "The full usage guide and the catalog of available tools follow below.",
+].join("\n")
+
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
-    description:
-      "JavaScript source to execute. Call the available tools with `await tools.<server>.<tool>(input)`, compose the results, and `return` the final value.",
+    description: [
+      "JavaScript source to execute.",
+      "Inside CodeMode, `tools` contains only the MCP/CodeMode tools listed in this execute tool's description; top-level opencode tools like bash, read, or lsp are not available unless listed there.",
+      "Call available tools using the exact signatures shown in this execute tool's description, compose the results, and `return` the final value.",
+    ].join(" "),
   }),
 })
 
@@ -101,6 +118,34 @@ export function groupByServer(
     groups.set(server, [...(groups.get(server) ?? []), entry])
   }
   return groups
+}
+
+/** The executable catalog for a (already permission-filtered) MCP tool set: grouped
+ *  entries, minus any without an ai-sdk execute function. */
+export function buildCatalog(
+  mcpTools: Record<string, AITool>,
+  mcpDefs: Record<string, MCPToolDef>,
+  servers: readonly string[],
+): CatalogEntry[] {
+  return [...groupByServer(mcpTools, servers, mcpDefs).values()].flat().filter((entry) => entry.tool.execute !== undefined)
+}
+
+/**
+ * The model-facing usage guide plus grouped catalog for the given MCP tool set: the
+ * CodeMode instructions for this tool tree (syntax guide + tool signatures, or the
+ * namespace overview + search for large catalogs). Callers pass an already
+ * permission-filtered tool set — hard-denied tools never enter the catalog. The preview
+ * tree's runs are placeholders — rendering never invokes them.
+ */
+export function catalogInstructions(
+  mcpTools: Record<string, AITool>,
+  mcpDefs: Record<string, MCPToolDef>,
+  servers: readonly string[],
+): string {
+  const catalog = buildCatalog(mcpTools, mcpDefs, servers)
+  return CodeMode.make({
+    tools: toolTree(catalog, () => () => Effect.fail(toolError("Tool preview is not executable."))),
+  }).instructions()
 }
 
 function displayInput(input: unknown): Record<string, unknown> | undefined {
@@ -224,7 +269,7 @@ function toolTree(catalog: readonly CatalogEntry[], run: (entry: CatalogEntry) =
   const tree: Record<string, Record<string, ToolDefinition>> = {}
   for (const entry of catalog) {
     const namespace = (tree[entry.server] ??= {})
-    namespace[entry.local] = CodeModeTool.make({
+    namespace[entry.local] = SandboxTool.make({
       description: entry.description,
       input: entry.inputSchema,
       output: entry.outputSchema,
@@ -246,24 +291,15 @@ const askPermission = (ctx: Tool.Context, entry: CatalogEntry) =>
     }),
   )
 
-export function define(
-  mcpTools: Record<string, AITool>,
-  mcpDefs: Record<string, MCPToolDef>,
-  servers: readonly string[],
-) {
-  const groups = groupByServer(mcpTools, servers, mcpDefs)
-  const catalog = [...groups.values()].flat().filter((entry) => entry.tool.execute !== undefined)
-  // The agent-facing description is the CodeMode instructions for this tool tree
-  // (syntax guide + tool signatures, or the namespace overview + search for large
-  // catalogs). The preview tree's runs are placeholders — rendering never invokes them.
-  const description = CodeMode.make({
-    tools: toolTree(catalog, () => () => Effect.fail(toolError("Tool preview is not executable."))),
-  }).instructions()
+export const CodeModeTool = Tool.define(
+  CODE_MODE_TOOL,
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
+    const agents = yield* Agent.Service
+    const sessions = yield* Session.Service
 
-  return Tool.define(
-    CODE_MODE_TOOL,
-    Effect.succeed<Tool.DefWithoutID<typeof Parameters, Metadata>>({
-      description,
+    const init: Tool.DefWithoutID<typeof Parameters, Metadata> = {
+      description: DESCRIPTION,
       parameters: Parameters,
       execute: Effect.fn("CodeMode.execute")(function* (params, ctx) {
         // Already cancelled: don't start the program at all. (The mid-flight case is the
@@ -275,6 +311,18 @@ export function define(
             output: "Execution cancelled.",
           } satisfies Tool.ExecuteResult<Metadata>
         }
+        // A fresh MCP snapshot per execution, so the runtime tracks live tool-list
+        // changes, filtered with the same merged agent+session ruleset that gates
+        // `ctx.ask` (see SessionTools.context). A hard-denied tool never enters the
+        // tree, so it is not dispatchable even if the model guesses its name — the
+        // program gets the normal unknown-tool diagnostic, not a permission error.
+        const agent = yield* agents.get(ctx.agent)
+        const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
+        const ruleset = Permission.merge(agent.permission, session.permission ?? [])
+        const mcpTools = Permission.visibleTools(yield* mcp.tools(), ruleset)
+        const servers = Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)
+        const catalog = buildCatalog(mcpTools, yield* mcp.defs(), servers)
+
         const calls: CallEntry[] = []
         // Media stripped from child tool results accumulates here for the life of the
         // call; the bytes never enter the sandbox (see toSandboxResult).
@@ -362,8 +410,7 @@ export function define(
           ...attached,
         } satisfies Tool.ExecuteResult<Metadata>
       }),
-    }),
-  )
-}
-
-export * as SessionCodeMode from "./code-mode"
+    }
+    return init
+  }),
+)

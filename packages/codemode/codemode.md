@@ -70,10 +70,12 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   `@maxItems`) ride along as field comments. The original spec's separate `input`/`output`
   raw-schema fields are deliberately NOT added: shapes are already fully expressed in the
   TypeScript signature and schema annotations now arrive as JSDoc — intent satisfied, letter
-  deviated. Result `path`s carry the `tools.` prefix (post-wave fix) so each is directly
+  deviated. Result `path`s render a JavaScript expression rooted at `tools` (for example
+  `tools.github.list_issues` or `tools.context7["resolve-library-id"]`) so each is directly
   usable as the call site; the internal `ToolDescription.path` stays unprefixed.
 - Default limit: **10** (done). Exact-path lookup goes through search too: a query equal to a
-  tool path (with or without the `tools.` prefix) returns that tool alone (done).
+  canonical tool path, `tools.`-prefixed path, or rendered JavaScript expression returns that
+  tool alone (done).
 - Signatures render **native payloads**: `Promise<Issue>`, NOT `Promise<Result<Issue>>`.
   There is no result envelope; attachments never appear in return types (they are collected
   host-side, see below).
@@ -138,10 +140,12 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 Everything below is committed and pushed on `codemode-v2` (six commits, in pairs of
 generic-package + OpenCode-integration: waves 0–5, Fixes 4–9, then the DSL-expansion pass /
 real-JS error names / truncation layering). Verification: from `packages/codemode`,
-`bun test` (210 pass / 0 fail across `codemode/parity/stdlib/promise/enumeration/signature`)
+`bun test` (211 pass / 0 fail across `codemode/parity/stdlib/promise/enumeration/signature`)
 and `bun run typecheck`; from `packages/opencode`, `bun run typecheck` and
-`bun test test/session/` (all green — the adapter suites are `code-mode.test.ts`, 34 tests,
-and `code-mode-integration.test.ts`, 16 tests).
+`bun test test/tool/` (all green — the adapter suites are `test/tool/code-mode.test.ts`,
+43 tests, and `test/tool/code-mode-integration.test.ts`, 16 tests, moved from
+`test/session/` by the registry promotion; registry coverage in
+`test/tool/registry.test.ts`).
 
 ### Wave 0 — scaffold (done)
 - `packages/codemode` created from the experiments implementation: `src/{index,codemode,tool,
@@ -467,9 +471,11 @@ adapter needed **no changes**.
     `namespace` (validated as a string when provided) filters `SearchEntry`s to one top-level
     namespace before ranking; `{ query: "", namespace: "github" }` lists that namespace
     alphabetically. `searchSignature` updated.
-  - **Prefixed result paths**: search-result `path`s are `tools.github.list_issues` style,
-    directly usable as the call site. Internal `ToolDescription.path` stays unprefixed; only
-    the search RESULT items are prefixed. Exact-path queries accept both forms, as before.
+  - **Callable result paths**: search-result `path`s are rendered as JavaScript expressions
+    rooted at `tools` (`tools.github.list_issues`, or bracket notation for non-identifier
+    segments), directly usable as the call site. Internal `ToolDescription.path` stays
+    unprefixed; only the search RESULT items are rendered this way. Exact-path queries accept
+    canonical paths and rendered expressions.
   - **Instructions** (`discoveryPlan`): an explicit calling-convention line and a browse
     hint on the search advertisement (both since absorbed into the `## Rules` section by
     the instructions restructure below).
@@ -829,6 +835,54 @@ parity items, done as one focused pass; no public API or limit changes):
 and the README's incorrect "`effect` as a peer dependency" line corrected (`effect` is a
 regular dependency; hosts depend on it themselves because the API surface is Effect-typed).
 
+**Registry promotion + permission-aware catalog** (the "promote to a proper tool service"
+restructure; fixes the §4 permission-advertising bug):
+  - **The adapter moved** `src/session/code-mode.ts` → `src/tool/code-mode.ts` and is now a
+    registry-resident tool service on the TaskTool precedent: `CodeModeTool =
+    Tool.define(CODE_MODE_TOOL, ...)` whose init depends on `MCP.Service`, `Agent.Service`,
+    and `Session.Service`. It is yielded in `ToolRegistry.layer`, gated into `builtin` by
+    `flags.experimentalCodeMode` (like the lsp/plan experiments), and `MCP.node` joined the
+    registry's `node.deps` (`MCP.node` has no ToolRegistry dependency, so no cycle). The
+    session-level special-casing in `session/tools.ts` (ad-hoc `SessionCodeMode.define` +
+    append) is deleted; the early return that suppresses raw per-MCP registration when the
+    flag is on stays session-side, keyed on the same flag+tool-count condition.
+  - **Enablement** lives in `ToolRegistry.tools()` next to the WebSearchTool check: the MCP
+    tool count is consulted once (an Effect) before the synchronous filter, and code mode
+    passes the predicate iff `flags.experimentalCodeMode` && count > 0.
+  - **Description split on the `describeTask` precedent**: the tool's static base
+    description is a two-line summary; `describeCodeMode(agent)` in `registry.tools()`
+    appends the full CodeMode instructions (workflow/rules/syntax + grouped catalog,
+    `catalogInstructions` in the adapter) at the same composition point as task — so
+    `plugin.trigger("tool.definition")` sees the base description first.
+  - **Permission-aware catalog + dispatch** (the bug fix): the visibility predicate from
+    `llm/request.ts` `resolveTools` is hoisted to `Permission.visibleTools(tools, ruleset)`
+    (a record filter over `Permission.disabled` — only a hard `deny` with pattern `"*"`
+    hides a tool; ask-level rules stay fully visible and prompt at call time) and
+    `resolveTools` now uses it, so the two paths cannot drift. `describeCodeMode` filters
+    with the agent's ruleset before building the catalog/search index; `execute` rebuilds
+    the runtime per execution from a fresh, filtered `mcp.tools()` snapshot using the merged
+    agent+session ruleset (`Agent.get(ctx.agent)` + `Session.get(ctx.sessionID)`, the same
+    merge `SessionTools.context` wires into `ctx.ask`) — a denied tool is not dispatchable
+    even if the model guesses its name and yields the normal unknown-tool diagnostic.
+    Documented gap (out of scope by design): per-message `user.tools[key] === false` arrives
+    at request-prep after descriptions are built and has no child-call equivalent.
+  - **Preserved behavior**: cancellation race + pre-aborted-signal guard, `toSandboxResult`
+    unwrap order, attachment accumulation, `CODE_MODE_TOOL` at all title sites, no execution
+    limits (native truncation only), `displayInput`, per-child `ctx.ask` gating (now wired
+    through `Tool.Context` exactly like every registry tool).
+  - **Explicit non-goal**: memoizing the catalog builder keyed on (ToolsChanged generation,
+    permission ruleset) was considered and deliberately skipped — the per-turn rebuild is
+    cheap (grouping + string rendering); revisit only if profiling shows it matters.
+  - **Tests**: the two adapter suites moved to `test/tool/{code-mode,code-mode-integration}
+    .test.ts` (mocked `MCP.Service`/`Agent.Service`/`Session.Service` replacing the direct
+    `define(...)` construction; description assertions target `catalogInstructions`, the
+    registry's composition input) and gained permission coverage: deny excluded from
+    catalog/search, ask-level stays visible and callable, denied tool undispatchable
+    (unknown-tool diagnostic), `Permission.visibleTools` semantics. `test/tool/
+    registry.test.ts` gained four registry-level tests: registered with flag+MCP tools,
+    excluded without MCP tools, excluded with flag off, and deny/ask catalog filtering
+    through `registry.tools()`. Suites: 43 + 16 adapter tests, 16 registry tests, all green.
+
 ---
 
 ## 4. Remaining work (detailed TODO)
@@ -884,12 +938,19 @@ Pre-PR fixes (user-approved cut):
       interruption broke; pre-aborted signal runs nothing). Adapter suite 34 → 36.
       (Wiring abort→interrupt into the shared `tools.ts` runner for ALL tools remains a
       worthwhile separate change.)
-- [ ] **Permission-denied/disabled MCP tools are still advertised in the catalog** — the
+- [x] **Permission-denied/disabled MCP tools are still advertised in the catalog** — the
       non-code-mode path filters them from the model's view (`llm/request.ts:208-213`);
       code mode builds the catalog from all of `mcp.tools()`, so the model is invited to
       call tools that can only fail at permission time, and per-message `tools[key]=false`
       disabling has no child-call equivalent. Fix: filter the catalog with the same
       ruleset.
+      DONE (see the "Registry promotion + permission-aware catalog" entry in §3): the
+      shared `Permission.visibleTools` predicate filters both the appended
+      catalog/description (`describeCodeMode`, agent ruleset) and the execute-time tool
+      tree (merged agent+session ruleset) — hard-denied tools are neither advertised nor
+      dispatchable. Ask-level tools stay visible/callable. Per-message
+      `tools[key] === false` remains a documented gap by design (it arrives at
+      request-prep, after descriptions are built).
 - [x] Style: `code-mode.ts` is the only `src/session` sibling without the
       `export * as ... from "./..."` self-reexport footer, forcing a star import at
       `tools.ts:26` (AGENTS.md violation). Add footer + import the projection.
@@ -907,10 +968,13 @@ Post-MVP (logged, not blocking an experimental flag):
       registration fires them per tool (`tools.ts:419-441`); under code mode only the
       outer `execute` fires them, so auditing/intercepting plugins silently lose MCP
       coverage when the flag flips.
-- [ ] Description/preview rebuilt every assistant turn — `resolve()` re-runs
+- [x] Description/preview rebuilt every assistant turn — `registry.tools()` re-runs
       `groupByServer` + a throwaway `CodeMode.make(...).instructions()` per turn
-      (`code-mode.ts:252-259`); memoizable on a defs snapshot key. A second
-      `CodeMode.make` per execution is inherent (description precedes execution).
+      (`describeCodeMode`). DECIDED as an explicit non-goal: memoizing the catalog
+      builder keyed on (ToolsChanged generation, permission ruleset) was considered and
+      deliberately skipped — the per-turn rebuild is cheap (grouping + string
+      rendering); revisit only if profiling shows it matters. A second `CodeMode.make`
+      per execution is inherent (description precedes execution).
 - [ ] Child permission rejection round-trips through the defect channel — `ctx.ask`
       defect (`tools.ts:90` orDie) recovered via `catchCause` + `Cause.squash`
       (`code-mode.ts:238-245`). Works, interrupts preserved, but fragile coupling;
@@ -994,9 +1058,14 @@ Post-MVP (logged, not blocking an experimental flag):
   `src/tool-runtime.ts` — tool tree, `copyIn`/`copyOut`, search/discovery, invoke path;
   `src/tool.ts` — `Tool.make` + JSON-Schema→TS rendering; `src/values.ts` — sandbox value
   types; `src/tool-error.ts` — `ToolError`; tests in `test/{codemode,parity,stdlib}.test.ts`.
-- OpenCode file map (integration points): `src/session/code-mode.ts` (adapter, rewritten in
-  Wave 3); `src/session/tools.ts:93-115,406` (gating/registration); `src/mcp/index.ts`
-  (`MCP.tools()`/`MCP.defs()`); `src/mcp/catalog.ts` (`convertTool`, `server_tool` naming);
-  `src/tool/tool.ts` (`ExecuteResult.attachments`, truncation wrapper);
-  `src/session/message-v2.ts` (attachments → vision); `packages/tui/src/routes/session/index.tsx`
-  (`Execute` progress component); `src/effect/runtime-flags.ts` (feature flag).
+- OpenCode file map (integration points): `src/tool/code-mode.ts` (the adapter, now a
+  registry tool service — `CodeModeTool` + `catalogInstructions`; formerly
+  `src/session/code-mode.ts`); `src/tool/registry.ts` (`describeCodeMode`, enablement in
+  `tools()`, `MCP.node` dep); `src/session/tools.ts` (raw-MCP-registration suppression
+  when the flag is on); `src/permission/index.ts` (`Permission.visibleTools`, the shared
+  visibility predicate, also used by `src/session/llm/request.ts` `resolveTools`);
+  `src/mcp/index.ts` (`MCP.tools()`/`MCP.defs()`); `src/mcp/catalog.ts` (`convertTool`,
+  `server_tool` naming); `src/tool/tool.ts` (`ExecuteResult.attachments`, truncation
+  wrapper); `src/session/message-v2.ts` (attachments → vision);
+  `packages/tui/src/routes/session/index.tsx` (`Execute` progress component);
+  `src/effect/runtime-flags.ts` (feature flag).
