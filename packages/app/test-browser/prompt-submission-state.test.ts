@@ -38,6 +38,23 @@ describe("prompt submission state", () => {
     expect(session.context.items()[0]).toMatchObject({ type: "file", path: "src/index.ts" })
   })
 
+  test("clears the original first-submit prompt after retargeting", () => {
+    const workspace = createPromptState()
+    const session = createPromptState()
+    workspace.set([{ type: "text", content: "first prompt", start: 0, end: 12 }])
+    const submission = createPromptSubmissionState({
+      target: workspace,
+      prompt: workspace.current(),
+      context: [],
+    })
+
+    submission.retarget(session)
+    submission.clear()
+
+    expect(workspace.current()[0]).toMatchObject({ type: "text", content: "" })
+    expect(session.current()[0]).toMatchObject({ type: "text", content: "" })
+  })
+
   test("does not restore over a prompt edited after submission", () => {
     const target = createPromptState()
     target.set([{ type: "text", content: "submitted", start: 0, end: 9 }])

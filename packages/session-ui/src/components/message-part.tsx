@@ -62,6 +62,7 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -370,6 +371,44 @@ const agentTones: Record<string, string> = {
   plan: "var(--icon-agent-plan-base)",
 }
 
+const v2AgentTones: Record<string, { color: string; border: string; background: string }> = {
+  build: {
+    color: "var(--v2-agent-build-solid)",
+    border: "var(--v2-agent-build-border)",
+    background: "var(--v2-agent-build-background)",
+  },
+  explore: {
+    color: "var(--v2-agent-explore-solid)",
+    border: "var(--v2-agent-explore-border)",
+    background: "var(--v2-agent-explore-background)",
+  },
+  plan: {
+    color: "var(--v2-agent-plan-solid)",
+    border: "var(--v2-agent-plan-border)",
+    background: "var(--v2-agent-plan-background)",
+  },
+}
+
+const agentThemeColors: Record<string, string> = {
+  primary: "var(--text-interactive-base)",
+  secondary: "var(--text-base)",
+  accent: "var(--icon-info-base)",
+  success: "var(--icon-success-base)",
+  warning: "var(--icon-warning-base)",
+  error: "var(--icon-critical-base)",
+  info: "var(--icon-info-base)",
+}
+
+const v2AgentThemeColors: Record<string, string> = {
+  primary: "var(--v2-text-text-accent)",
+  secondary: "var(--v2-text-text-muted)",
+  accent: "var(--v2-icon-icon-accent)",
+  success: "var(--v2-state-fg-success)",
+  warning: "var(--v2-state-fg-warning)",
+  error: "var(--v2-state-fg-danger)",
+  info: "var(--v2-state-fg-info)",
+}
+
 const agentPalette = [
   "var(--icon-agent-ask-base)",
   "var(--icon-agent-build-base)",
@@ -394,14 +433,29 @@ function tone(name: string) {
 function taskAgent(
   raw: unknown,
   list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string } {
+): { name?: string; color?: string; v2Color?: string; border?: string; background?: string } {
   if (typeof raw !== "string" || !raw) return {}
   const key = raw.toLowerCase()
   const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
+  const v2Tone = item?.color ? undefined : v2AgentTones[key]
+  const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
+  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone?.color ?? color
   return {
     name: item?.name ?? `${raw[0]!.toUpperCase()}${raw.slice(1)}`,
-    color: item?.color ?? agentTones[key] ?? tone(key),
+    color,
+    v2Color,
+    border: v2Tone?.border ?? `color-mix(in srgb, ${v2Color} 48%, transparent)`,
+    background: v2Tone?.background ?? `color-mix(in srgb, ${v2Color} 12%, transparent)`,
   }
+}
+
+function agentColor(value: string | undefined, themeColors: Record<string, string>) {
+  if (!value) return
+  return themeColors[value] ?? value
+}
+
+function newLayout() {
+  return typeof document !== "undefined" && document.body.hasAttribute("data-new-layout")
 }
 
 function webSearchProviderLabel(provider: unknown) {
@@ -1000,16 +1054,24 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onSizeChange?: () => void }) {
+export function ContextToolGroup(props: {
+  parts: ToolPart[]
+  busy?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onSizeChange?: () => void
+}) {
   const i18n = useI18n()
-  const [open, setOpen] = createSignal(false)
+  const [localOpen, setLocalOpen] = createSignal(false)
+  const open = () => props.open ?? localOpen()
   const pending = createMemo(
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
   const handleOpenChange = (value: boolean) => {
-    setOpen(value)
+    if (props.open === undefined) setLocalOpen(value)
+    props.onOpenChange?.(value)
     props.onSizeChange?.()
   }
 
@@ -1710,7 +1772,13 @@ ToolRegistry.register({
         trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1734,7 +1802,13 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1761,7 +1835,13 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1856,6 +1936,9 @@ ToolRegistry.register({
     const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
+    const v2Tone = createMemo(() => agent().v2Color)
+    const border = createMemo(() => agent().border)
+    const background = createMemo(() => agent().background)
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
@@ -1887,19 +1970,35 @@ ToolRegistry.register({
       event.preventDefault()
       open()
     }
+    const navigateKey = (event: KeyboardEvent) => {
+      if (!clickable() || href()) return
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      open()
+    }
 
     const trigger = () => (
-      <div data-component="task-tool-card">
+      <div
+        data-component="task-tool-card"
+        style={{
+          "--task-agent-color": v2Tone(),
+          "--task-agent-legacy-color": tone(),
+          "--task-agent-border": border(),
+          "--task-agent-background": background(),
+        }}
+      >
         <div data-slot="basic-tool-tool-info-structured">
           <div data-slot="basic-tool-tool-info-main">
             <Show when={running()}>
               <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                <Spinner />
+                <Show when={newLayout()} fallback={<Spinner />}>
+                  <SessionProgressIndicatorV2
+                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                  />
+                </Show>
               </span>
             </Show>
-            <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
-              {title()}
-            </span>
+            <span data-component="task-tool-title">{title()}</span>
             <Show when={subtitle()}>
               <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
             </Show>
@@ -1919,9 +2018,11 @@ ToolRegistry.register({
         status={props.status}
         trigger={trigger()}
         hideDetails
+        triggerAsLink
         triggerHref={href()}
         clickable={clickable()}
         onTriggerClick={navigate}
+        onTriggerKeyDown={navigateKey}
       />
     )
   },
@@ -1979,7 +2080,13 @@ ToolRegistry.register({
               />
             </TooltipV2>
           </div>
-          <div data-slot="bash-scroll" data-scrollable>
+          <div
+            data-slot="bash-scroll"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <pre data-slot="bash-pre">
               <code>{text()}</code>
             </pre>

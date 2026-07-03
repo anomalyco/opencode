@@ -27,6 +27,7 @@ import {
   findModelCatalogEntry,
   formatCatalogLabName,
   getModelCatalog,
+  type ModelCatalog,
   type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
@@ -174,7 +175,12 @@ export default function StatsModel() {
           <Show when={catalogEntry() || stats() !== undefined} fallback={<ModelLoading />}>
             <Show when={catalogEntry() || stats()} fallback={<ModelNotFound lab={labParam()} model={modelParam()} />}>
               <>
-                <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
+                <ModelHero
+                  data={stats() ?? null}
+                  catalog={catalogEntry() ?? null}
+                  catalogData={catalog() ?? null}
+                  labName={labName()}
+                />
                 <ModelOverview data={stats() ?? null} />
                 <ModelUsageSection data={stats()?.usage ?? []} />
                 <ModelUsersSection data={stats()?.usage ?? []} />
@@ -249,116 +255,171 @@ function ModelNotFound(props: { lab: string; model: string }) {
   )
 }
 
-function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null; labName: string }) {
+function ModelHero(props: {
+  data: StatsModelData | null
+  catalog: ModelCatalogEntry | null
+  catalogData: ModelCatalog | null
+  labName: string
+}) {
   const i18n = useI18n()
   const language = useLanguage()
   const labId = () => props.catalog?.lab ?? props.data?.provider ?? props.labName
-  const modelId = () => props.catalog?.id ?? props.data?.model ?? i18n.t("model.fallback")
+  const modelName = () => props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")
   const weights = () => props.catalog?.weights[0]
+  const labs = () => props.catalogData?.labs ?? []
+  const labModels = () =>
+    props.catalogData?.labs.find((lab) => lab.id === providerSlug(labId()))?.models ??
+    (props.catalog ? [props.catalog] : [])
   return (
     <section id="overview" data-section="model-hero">
-      <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
-        {i18n.t("footer.modelData")}
-      </a>
-      <div data-slot="model-hero-grid">
-        <div data-slot="model-hero-copy">
-          <div data-slot="model-hero-tags">
-            <a data-slot="hero-meta" href={language.route(`${import.meta.env.BASE_URL}${providerSlug(labId())}`)}>
-              <ProviderIcon aria-hidden="true" id={getProviderIconId(labId())} />
+      <nav data-component="model-hero-breadcrumb" aria-label="Data breadcrumb">
+        <a data-slot="model-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
+          Data
+        </a>
+        <span data-slot="model-hero-separator">/</span>
+        <Show
+          when={labs().length > 0}
+          fallback={
+            <span data-slot="model-hero-crumb" data-current="true">
               <span>{props.labName}</span>
-            </a>
-            <span data-slot="model-id-tag">{modelId()}</span>
-          </div>
-          <h1>
-            <a data-slot="heading-link" href="#overview">
-              {props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")}
-            </a>
-          </h1>
-          <Show when={props.data} fallback={<p>{i18n.t("model.catalogFallback")}</p>}>
-            {(data) => (
-              <p>
-                {data().rank === null ? i18n.t("model.unranked") : i18n.t("model.ranked", { rank: data().rank ?? "" })}{" "}
-                {i18n.t("model.observedVolume", { share: formatPercent(data().tokenShare) })}
-              </p>
-            )}
-          </Show>
+              <ChevronDownIcon />
+            </span>
+          }
+        >
+          <details data-component="model-hero-menu">
+            <summary data-slot="model-hero-crumb" data-current="true">
+              <span>{props.labName}</span>
+              <ChevronDownIcon />
+            </summary>
+            <div data-slot="model-hero-options">
+              <For each={labs()}>
+                {(lab) => (
+                  <a
+                    data-slot="model-hero-option"
+                    data-current={lab.id === providerSlug(labId()) ? "true" : undefined}
+                    href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
+                  >
+                    {lab.name}
+                  </a>
+                )}
+              </For>
+            </div>
+          </details>
+        </Show>
+        <span data-slot="model-hero-separator">/</span>
+        <Show
+          when={labModels().length > 0}
+          fallback={
+            <span data-slot="model-hero-crumb" data-current="true" aria-current="page">
+              <span>{modelName()}</span>
+              <ChevronDownIcon />
+            </span>
+          }
+        >
+          <details data-component="model-hero-menu">
+            <summary data-slot="model-hero-crumb" data-current="true" aria-current="page">
+              <span>{modelName()}</span>
+              <ChevronDownIcon />
+            </summary>
+            <div data-slot="model-hero-options">
+              <For each={labModels()}>
+                {(model) => (
+                  <a
+                    data-slot="model-hero-option"
+                    data-current={model.id === props.catalog?.id ? "true" : undefined}
+                    href={language.route(`${import.meta.env.BASE_URL}${model.id}`)}
+                  >
+                    {model.name}
+                  </a>
+                )}
+              </For>
+            </div>
+          </details>
+        </Show>
+      </nav>
+      <div data-slot="model-hero-title-row">
+        <span data-slot="model-hero-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(labId())} />
+        </span>
+        <h1>{modelName()}</h1>
+        <div data-slot="model-hero-actions">
           <Show when={props.catalog?.openWeights && weights()}>
             {(weight) => (
-              <a data-slot="model-weight-link" href={weight().url} target="_blank" rel="noopener noreferrer">
-                {i18n.t("model.weights", { label: weight().label })}
+              <a data-slot="model-hero-action" href={weight().url} target="_blank" rel="noopener noreferrer">
+                <ModelHeroActionIcon kind="weights" />
+                <span>Model weights</span>
               </a>
             )}
           </Show>
         </div>
-        <Show when={props.data} fallback={<ModelCatalogCallout catalog={props.catalog} />}>
-          {(data) => (
-            <div data-component="model-rank-panel">
-              <span>{i18n.t("model.rank")}</span>
-              <strong>{data().rank === null ? "—" : `#${data().rank}`}</strong>
-              <p>{formatModelRankMoveLabel(data(), i18n)}</p>
-            </div>
-          )}
-        </Show>
       </div>
       <div data-slot="model-hero-pattern" aria-hidden="true" />
-      <Show when={props.catalog}>{(catalog) => <ModelCatalogPanel data={catalog()} />}</Show>
+      <Show
+        when={props.data}
+        fallback={
+          <p data-slot="model-hero-state">
+            <span>Listed</span>
+            <span>across the shared model catalog.</span>
+          </p>
+        }
+      >
+        {(data) => (
+          <p data-slot="model-hero-rankline">
+            <span>Ranked</span>
+            <span data-slot="model-hero-rank-group">
+              <span data-slot="model-hero-pill">{formatHeroRank(data().rank)}</span>
+              <ModelHeroSparkline data={data()} />
+            </span>
+            <span>across last week's</span>
+            <span data-slot="model-hero-pill">OpenCode Go</span>
+            <span>usage with</span>
+            <span data-slot="model-hero-pill">{formatPercent(data().tokenShare)}</span>
+            <span>of observed</span>
+            <span data-slot="model-hero-pill">2M</span>
+            <span>volume.</span>
+          </p>
+        )}
+      </Show>
     </section>
   )
 }
 
-function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
-  const i18n = useI18n()
-  const language = useLanguage()
+function ModelHeroActionIcon(props: { kind: "weights" | "compare" }) {
+  if (props.kind === "weights")
+    return (
+      <svg data-slot="model-hero-action-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+        <path d="M5.5 4.5H4.5V11.5H11.5V10.5" stroke="currentColor" stroke-linecap="square" />
+        <path d="M8.5 4.5H11.5V7.5" stroke="currentColor" stroke-linecap="square" />
+        <path d="M11.25 4.75L7.25 8.75" stroke="currentColor" stroke-linecap="square" />
+      </svg>
+    )
   return (
-    <div data-component="model-rank-panel">
-      <span>{i18n.t("model.profile")}</span>
-      <strong>
-        {props.catalog?.releaseDate
-          ? formatCatalogDate(props.catalog.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))
-          : i18n.t("model.listed")}
-      </strong>
-      <p>{i18n.t("model.noCurrentUsage")}</p>
-    </div>
+    <svg data-slot="model-hero-action-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <rect x="3.5" y="3.5" width="3" height="3" stroke="currentColor" />
+      <rect x="9.5" y="3.5" width="3" height="3" stroke="currentColor" />
+      <rect x="3.5" y="9.5" width="3" height="3" stroke="currentColor" />
+      <rect x="9.5" y="9.5" width="3" height="3" stroke="currentColor" />
+    </svg>
   )
 }
 
-function ModelCatalogPanel(props: { data: ModelCatalogEntry }) {
-  const i18n = useI18n()
-  const language = useLanguage()
+function ModelHeroSparkline(props: { data: StatsModelData }) {
+  const values = () => props.data.usage.slice(-14).map((point) => point.tokens)
   return (
-    <aside data-component="model-catalog" aria-label={i18n.t("model.facts")}>
-      <div data-slot="model-catalog-grid">
-        <CatalogDatum
-          label={i18n.t("model.context")}
-          value={formatCatalogLimit(props.data.limit?.context, i18n.t("home.unknown"))}
-        />
-        <CatalogDatum
-          label={i18n.t("model.output")}
-          value={formatCatalogLimit(props.data.limit?.output, i18n.t("home.unknown"))}
-        />
-        <CatalogDatum
-          label={i18n.t("model.knowledge")}
-          value={formatCatalogDate(props.data.knowledge, language.tag(language.locale()), i18n.t("home.unknown"))}
-        />
-        <CatalogDatum
-          label={i18n.t("model.release")}
-          value={formatCatalogDate(props.data.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))}
-        />
-        <CatalogDatum
-          label={i18n.t("model.inputs")}
-          value={formatCatalogModalities(props.data.modalities.input, i18n)}
-        />
-      </div>
-    </aside>
+    <span data-slot="model-hero-sparkline" aria-hidden="true">
+      <svg viewBox="0 0 36 24" fill="none">
+        <path d={sparklineAreaPath(values())} fill="currentColor" opacity="0.14" />
+        <path d={sparklineLinePath(values())} stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+      </svg>
+    </span>
   )
 }
 
-function CatalogDatum(props: { label: string; value: string }) {
+function ChevronDownIcon() {
   return (
-    <article data-component="model-catalog-datum">
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </article>
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path d="M4.75 6.25L8 9.5L11.25 6.25" stroke="currentColor" stroke-width="1.5" />
+    </svg>
   )
 }
 
@@ -938,6 +999,40 @@ function formatRankMove(change: number) {
   return `${change}`
 }
 
+function formatHeroRank(rank: number | null) {
+  if (rank === null) return "--"
+  return String(rank).padStart(2, "0")
+}
+
+function sparklineLinePath(values: number[]) {
+  return sparklinePoints(values)
+    .map(
+      (point, index) => `${index === 0 ? "M" : "L"}${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`,
+    )
+    .join(" ")
+}
+
+function sparklineAreaPath(values: number[]) {
+  const points = sparklinePoints(values)
+  return `M${formatSparklinePoint(points[0].x)} 18 ${points
+    .map((point) => `L${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`)
+    .join(" ")} L${formatSparklinePoint(points[points.length - 1].x)} 18 Z`
+}
+
+function sparklinePoints(values: number[]) {
+  const normalized = values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0]
+  const min = Math.min(...normalized)
+  const max = Math.max(...normalized)
+  return normalized.map((value, index) => ({
+    x: 8 + (index / Math.max(1, normalized.length - 1)) * 20,
+    y: min === max ? 12 : 18 - ((value - min) / (max - min)) * 12,
+  }))
+}
+
+function formatSparklinePoint(value: number) {
+  return Number(value.toFixed(2)).toString()
+}
+
 function formatModelRankMoveLabel(data: StatsModelData, i18n: ReturnType<typeof useI18n>) {
   if (data.rank === null) return i18n.t("model.noUsageLastWeek")
   if (data.previousRank === null) return i18n.t("model.newThisWeek")
@@ -991,35 +1086,6 @@ function formatSessionCost(value: number) {
 function formatChange(value: number) {
   if (value > 0) return `+${value}%`
   return `${value}%`
-}
-
-function formatCatalogLimit(value: number | undefined, unknown: string) {
-  return value === undefined ? unknown : formatTokens(value)
-}
-
-function formatCatalogModalities(value: string[], i18n: ReturnType<typeof useI18n>) {
-  if (value.length === 0) return i18n.t("home.unknown")
-  return value.map((item) => formatCatalogModality(item, i18n)).join(", ")
-}
-
-function formatCatalogModality(value: string, i18n: ReturnType<typeof useI18n>) {
-  if (value === "pdf") return i18n.t("model.pdf")
-  return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-function formatCatalogDate(value: string | undefined, locale: string, unknown: string) {
-  if (!value) return unknown
-  const match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(value)
-  if (!match) return value
-  const year = Number(match[1])
-  const month = match[2] ? Number(match[2]) - 1 : 0
-  const day = match[3] ? Number(match[3]) : 1
-  return new Intl.DateTimeFormat(locale, {
-    month: match[2] ? "short" : undefined,
-    day: match[3] ? "numeric" : undefined,
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month, day)))
 }
 
 function trimNumber(value: number, digits: number) {

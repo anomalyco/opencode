@@ -270,6 +270,10 @@ export function NewHome() {
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
+  const recentlyClosed = createMemo(
+    () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
+  )
+  const homedir = createMemo(() => focusedSync().data.path.home ?? "")
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
   const newSessionProject = createMemo(
     () =>
@@ -518,10 +522,13 @@ export function NewHome() {
       <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
         <HomeProjectColumn
           projects={projects()}
+          recentlyClosed={recentlyClosed()}
+          homedir={homedir()}
           selected={selection()}
           focusServer={focusServer}
           selectProject={selectProject}
           openNewSession={openProjectNewSession}
+          openRecentProject={(conn, directory) => addProjects(conn, [directory])}
           chooseProject={(conn) => void chooseProject(conn)}
           editProject={editProject}
           closeProject={(conn, directory) => {
@@ -552,7 +559,6 @@ export function NewHome() {
             results={searchResults()}
             showProjectName={!selectedProject()}
             server={selection().server}
-            activeServer={selection().server === server.key}
             noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
             bindFocus={(focus) => {
               focusSessionSearch = focus
@@ -612,7 +618,6 @@ export function NewHome() {
                                 record={record}
                                 showProjectName={!selectedProject()}
                                 server={selection().server}
-                                activeServer={selection().server === server.key}
                                 openSession={openSession}
                                 archiveSession={archiveSession}
                               />
@@ -640,10 +645,13 @@ export function NewHome() {
 
 function HomeProjectColumn(props: {
   projects: LocalProject[]
+  recentlyClosed: LocalProject[]
+  homedir: string
   selected: HomeProjectSelection
   focusServer: (server: ServerConnection.Any) => void
   selectProject: (server: ServerConnection.Any, directory: string) => void
   openNewSession: (server: ServerConnection.Any, directory: string) => void
+  openRecentProject: (server: ServerConnection.Any, directory: string) => void
   chooseProject: (server: ServerConnection.Any) => void
   editProject: (server: ServerConnection.Any, project: LocalProject) => void
   closeProject: (server: ServerConnection.Any, directory: string) => void
@@ -672,8 +680,10 @@ function HomeProjectColumn(props: {
       aria-label={props.language.t("home.projects")}
     >
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
-        <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
-        <Show when={global.servers.list().length === 1}>
+        <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
+        <Show
+          when={global.servers.list().length === 1 && !(props.projects.length === 0 && props.recentlyClosed.length > 0)}
+        >
           <TooltipV2 placement="bottom" value={props.language.t("home.project.add")}>
             <IconButtonV2
               data-action="home-add-project"
@@ -693,7 +703,21 @@ function HomeProjectColumn(props: {
           when={global.servers.list().length > 1}
           fallback={
             <div class="pr-3">
-              <HomeProjectList {...props} server={global.servers.list()[0]!} />
+              <Show
+                when={props.projects.length > 0}
+                fallback={
+                  <HomeProjectEmpty
+                    server={global.servers.list()[0]!}
+                    recentlyClosed={props.recentlyClosed}
+                    homedir={props.homedir}
+                    chooseProject={props.chooseProject}
+                    openRecentProject={props.openRecentProject}
+                    language={props.language}
+                  />
+                }
+              >
+                <HomeProjectList {...props} server={global.servers.list()[0]!} />
+              </Show>
             </div>
           }
         >
@@ -899,6 +923,79 @@ function HomeProjectList(props: {
   )
 }
 
+function HomeProjectEmpty(props: {
+  server: ServerConnection.Any
+  recentlyClosed: LocalProject[]
+  homedir: string
+  chooseProject: (server: ServerConnection.Any) => void
+  openRecentProject: (server: ServerConnection.Any, directory: string) => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  const global = useGlobal()
+  const unreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
+  return (
+    <div class="flex min-w-0 flex-col gap-1">
+      <button
+        type="button"
+        data-action="home-add-project-row"
+        class={`${HOME_PROJECT_NAV_ROW} disabled:opacity-60 [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        disabled={unreachable()}
+        onClick={() => props.chooseProject(props.server)}
+      >
+        <IconV2 name="folder-add-left" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
+      </button>
+      <Show when={props.recentlyClosed.length > 0}>
+        <div class="mt-3 flex h-7 min-w-0 shrink-0 items-center pl-1.5 pr-3">
+          <div class="text-v2-text-text-faint [font-weight:530]">{props.language.t("home.recentlyClosed")}</div>
+        </div>
+        <For each={props.recentlyClosed}>
+          {(project) => (
+            <HomeRecentlyClosedRow
+              project={project}
+              server={props.server}
+              homedir={props.homedir}
+              openRecentProject={props.openRecentProject}
+              language={props.language}
+            />
+          )}
+        </For>
+      </Show>
+    </div>
+  )
+}
+
+function HomeRecentlyClosedRow(props: {
+  project: LocalProject
+  server: ServerConnection.Any
+  homedir: string
+  openRecentProject: (server: ServerConnection.Any, directory: string) => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  const global = useGlobal()
+  const unreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
+  const path = () => {
+    const home = props.homedir
+    const worktree = props.project.worktree
+    if (home && (worktree === home || worktree.startsWith(`${home}/`))) return `~${worktree.slice(home.length)}`
+    return worktree
+  }
+  return (
+    <TooltipV2 placement="right" value={path()}>
+      <button
+        type="button"
+        data-component="home-recently-closed-row"
+        class={`${HOME_PROJECT_NAV_ROW} disabled:opacity-60`}
+        disabled={unreachable()}
+        onClick={() => props.openRecentProject(props.server, props.project.worktree)}
+      >
+        <HomeProjectAvatar project={props.project} outline />
+        <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
+      </button>
+    </TooltipV2>
+  )
+}
+
 function HomeProjectRow(props: {
   project: LocalProject
   server: ServerConnection.Any
@@ -981,13 +1078,13 @@ function HomeProjectRow(props: {
   )
 }
 
-function HomeProjectAvatar(props: { project: LocalProject }) {
+function HomeProjectAvatar(props: { project: LocalProject; outline?: boolean }) {
   const name = createMemo(() => displayName(props.project))
   return (
     <ProjectAvatar
       fallback={name()}
-      src={getProjectAvatarSource(props.project.id, props.project.icon)}
-      variant={getProjectAvatarVariant(props.project.icon?.color)}
+      src={props.outline ? undefined : getProjectAvatarSource(props.project.id, props.project.icon)}
+      variant={props.outline ? "outline" : getProjectAvatarVariant(props.project.icon?.color)}
     />
   )
 }
@@ -996,7 +1093,6 @@ function HomeSessionLeading(props: {
   project: LocalProject
   session: Session
   server: ServerConnection.Key
-  activeServer: boolean
   revealProjectOnHover: boolean
 }) {
   const tabs = useTabs()
@@ -1014,7 +1110,7 @@ function HomeSessionLeading(props: {
         project={props.project}
         directory={props.session.directory}
         sessionId={props.session.id}
-        activeServer={props.activeServer}
+        server={props.server}
         revealProjectOnHover={props.revealProjectOnHover}
       />
     </div>
@@ -1029,7 +1125,6 @@ function HomeSessionSearch(props: {
   results: HomeSessionRecord[]
   showProjectName: boolean
   server: ServerConnection.Key
-  activeServer: boolean
   noResultsLabel: string
   bindFocus: (focus: () => void) => void
   onInput: (value: string) => void
@@ -1147,7 +1242,6 @@ function HomeSessionSearch(props: {
                                 record={record}
                                 showProjectName={props.showProjectName}
                                 server={props.server}
-                                activeServer={props.activeServer}
                                 selected={store.active === homeSessionSearchKey(record)}
                                 onHighlight={() => setStore("active", homeSessionSearchKey(record))}
                                 onSelect={(session) => props.onSelect(session)}
@@ -1228,7 +1322,6 @@ function HomeSessionSearchResultRow(props: {
   record: HomeSessionRecord
   showProjectName: boolean
   server: ServerConnection.Key
-  activeServer: boolean
   selected: boolean
   onHighlight: () => void
   onSelect: (session: Session) => void
@@ -1258,7 +1351,6 @@ function HomeSessionSearchResultRow(props: {
         project={props.record.project}
         session={props.record.session}
         server={props.server}
-        activeServer={props.activeServer}
         revealProjectOnHover={!!showProjectName()}
       />
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
@@ -1297,7 +1389,6 @@ function HomeSessionRow(props: {
   record: HomeSessionRecord
   showProjectName: boolean
   server: ServerConnection.Key
-  activeServer: boolean
   openSession: (session: Session) => void
   archiveSession: (session: Session) => Promise<void>
 }) {
@@ -1320,7 +1411,6 @@ function HomeSessionRow(props: {
           project={props.record.project}
           session={props.record.session}
           server={props.server}
-          activeServer={props.activeServer}
           revealProjectOnHover={!!showProjectName()}
         />
         <span
