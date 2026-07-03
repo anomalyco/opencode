@@ -42,6 +42,7 @@ import { SkillV2 } from "./skill"
 import { Job } from "./job"
 import { CommandV2 } from "./command"
 import { Shell } from "./shell"
+import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 
 export const RevertState = Revert.State
@@ -550,25 +551,20 @@ const layer = Layer.effect(
             )
             const completed = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
-              const info = yield* shell.wait(started.id)
-              const output = yield* shell.output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-              return { shell: info, output }
+              const terminal = yield* shell.wait(started.id).pipe(
+                Effect.map((info) => ({ info, retained: true as const })),
+                Effect.catchTag("Shell.NotFoundError", () =>
+                  Effect.succeed({ info: synthesizeTerminalShellInfo(started), retained: false as const }),
+                ),
+              )
+              const output = terminal.retained
+                ? yield* shell
+                    .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+                    .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
+                : missingShellOutput()
+              return { shell: terminal.info, output }
             })
               .pipe(Effect.provide(locations.get(session.location)))
-              .pipe(
-                Effect.catchTag("Shell.NotFoundError", () => {
-                  const output = "Shell command output is no longer available."
-                  return Effect.succeed({
-                    shell: started,
-                    output: {
-                      output,
-                      cursor: Buffer.byteLength(output),
-                      size: Buffer.byteLength(output),
-                      truncated: false,
-                    },
-                  })
-                }),
-              )
             yield* events.publish(SessionEvent.Shell.Ended, {
               sessionID: input.sessionID,
               shell: completed.shell,
@@ -711,6 +707,26 @@ const layer = Layer.effect(
     return result
   }),
 )
+
+function missingShellOutput() {
+  const output = "Shell command output is no longer available."
+  return {
+    output,
+    cursor: Buffer.byteLength(output),
+    size: Buffer.byteLength(output),
+    truncated: false,
+  }
+}
+
+function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Info {
+  return {
+    ...started,
+    // The Shell record was removed before waiters could observe it; publish a terminal
+    // boundary instead of leaving the Session shell message permanently running.
+    status: "killed",
+    time: { ...started.time, completed: Date.now() },
+  }
+}
 
 const resolvePrompt = (input: PromptInput.Prompt) =>
   Prompt.make({
