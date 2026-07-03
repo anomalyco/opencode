@@ -30,7 +30,11 @@ function isQuestionField(value: unknown): value is QuestionField {
 export function questionAnswer(fields: ReadonlyArray<QuestionField>, answers: ReadonlyArray<QuestionAnswer>): FormAnswer {
   const entries = fields.flatMap((field, index): ReadonlyArray<readonly [string, FormAnswer[string]]> => {
     const answer = answers[index] ?? []
-    if (answer.length === 0) return []
+    if (answer.length === 0) {
+      if (field.default === undefined) return []
+      if (field.type === "multiselect") return [[field.key, [...field.default]]]
+      return [[field.key, field.default]]
+    }
     if (field.type === "multiselect") return [[field.key, answer]]
     if (field.type === "boolean") return [[field.key, answer[0] === "true"]]
     if (field.type === "number" || field.type === "integer") return [[field.key, Number(answer[0])]]
