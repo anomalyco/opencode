@@ -71,8 +71,8 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(EventManifest.Durable.has("step.ended.1")).toBe(false)
-    expect(EventManifest.Durable.get("step.ended.2")).toBe(SessionEvent.Step.Ended)
+    expect(EventManifest.Durable.get("step.ended.1")).toBe(SessionEvent.Step.Ended)
+    expect(EventManifest.Durable.has("step.ended.2")).toBe(false)
   })
 
   test("derives durable definitions from explicit definition durability", () => {
@@ -98,8 +98,8 @@ describe("public event manifest", () => {
         "shell.started.1",
         "shell.ended.1",
         "step.started.1",
-        "step.ended.2",
-        "step.failed.2",
+        "step.ended.1",
+        "step.failed.1",
         "text.started.1",
         "text.ended.1",
         "tool.input.started.1",

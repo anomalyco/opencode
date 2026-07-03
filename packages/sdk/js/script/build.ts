@@ -59,7 +59,13 @@ if (schemas) {
   }
   visit({ ...document, components: { ...document.components, schemas: undefined } })
   for (const name of Object.keys(schemas)) {
-    if (/^SessionNext\w+1$/.test(name) && !reachable.has(name)) delete schemas[name]
+    if (
+      /^(AgentSelected|ModelSelected|SessionMoved|Renamed|Forked|PromptPromoted|PromptAdmitted|ExecutionSettled|ContextUpdated|Synthetic|SkillActivated|ShellStarted|ShellEnded|StepStarted|StepEnded|StepFailed|TextStarted|TextDelta|TextEnded|ReasoningStarted|ReasoningDelta|ReasoningEnded|ToolInputStarted|ToolInputDelta|ToolInputEnded|ToolCalled|ToolProgress|ToolSuccess|ToolFailed|Retried|CompactionStarted|CompactionDelta|CompactionEnded|RevertStaged|RevertCleared|RevertCommitted)1$/.test(
+        name,
+      ) &&
+      !reachable.has(name)
+    )
+      delete schemas[name]
   }
   await Bun.write("./openapi.json", JSON.stringify(document))
 }
@@ -93,7 +99,11 @@ await createClient({
 
 const generatedTypesPath = "./src/v2/gen/types.gen.ts"
 const generatedTypes = await Bun.file(generatedTypesPath).text()
-if (/export type SessionNext\w+1 =/.test(generatedTypes)) {
+if (
+  /export type (AgentSelected|ModelSelected|SessionMoved|Renamed|Forked|PromptPromoted|PromptAdmitted|ExecutionSettled|ContextUpdated|Synthetic|SkillActivated|ShellStarted|ShellEnded|StepStarted|StepEnded|StepFailed|TextStarted|TextDelta|TextEnded|ReasoningStarted|ReasoningDelta|ReasoningEnded|ToolInputStarted|ToolInputDelta|ToolInputEnded|ToolCalled|ToolProgress|ToolSuccess|ToolFailed|Retried|CompactionStarted|CompactionDelta|CompactionEnded|RevertStaged|RevertCleared|RevertCommitted)1 =/.test(
+    generatedTypes,
+  )
+) {
   throw new Error("Session history generated duplicate Session event variants")
 }
 const logTypesPatched = generatedTypes.replace(

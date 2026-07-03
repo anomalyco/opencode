@@ -151,7 +151,7 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
     baseUrl: "http://localhost:3000",
     fetch: async () =>
       new Response(
-        `: heartbeat\n\ndata: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n` +
+        `: heartbeat\n\ndata: ${JSON.stringify({ id: "evt_connected", created: 0, type: "server.connected", data: {} })}\n\n` +
           `data: ${JSON.stringify(modelSwitchedEvent)}\n\n`,
         { headers: { "content-type": "text/event-stream" } },
       ),
@@ -159,8 +159,8 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
   const events = []
   for await (const event of client.event.subscribe()) events.push(event)
 
-  expect(events).toEqual([{ id: "evt_connected", type: "server.connected", data: {} }, modelSwitchedEvent])
-  expect(events[1]?.type === "model.selected" && events[1].data.timestamp).toBe(1_717_171_717_000)
+  expect(events).toEqual([{ id: "evt_connected", created: 0, type: "server.connected", data: {} }, modelSwitchedEvent])
+  expect(events[1]?.type === "model.selected" && events[1].created).toBe(1_717_171_717_000)
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
@@ -328,12 +328,11 @@ const synced = { type: "log.synced", aggregateID: "ses_test", seq: 1 }
 
 const modelSwitchedEvent = {
   id: "evt_model",
+  created: 1_717_171_717_000,
   type: "model.selected",
   durable: { aggregateID: "ses_test", seq: 1, version: 1 },
   data: {
-    timestamp: 1_717_171_717_000,
     sessionID: "ses_test",
-    messageID: "msg_model",
     model: { id: "claude", providerID: "anthropic" },
   },
 }
