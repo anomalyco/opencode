@@ -76,6 +76,8 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
+  FormCreatePayload2,
+  FormReply2,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -278,6 +280,8 @@ import type {
   V2EventChangesResponses,
   V2EventSubscribeErrors,
   V2EventSubscribeResponses,
+  V2FormRequestListErrors,
+  V2FormRequestListResponses,
   V2FsFindErrors,
   V2FsFindResponses,
   V2FsListErrors,
@@ -370,6 +374,18 @@ import type {
   V2SessionCreateResponses,
   V2SessionForkErrors,
   V2SessionForkResponses,
+  V2SessionFormCancelErrors,
+  V2SessionFormCancelResponses,
+  V2SessionFormCreateErrors,
+  V2SessionFormCreateResponses,
+  V2SessionFormGetErrors,
+  V2SessionFormGetResponses,
+  V2SessionFormListErrors,
+  V2SessionFormListResponses,
+  V2SessionFormReplyErrors,
+  V2SessionFormReplyResponses,
+  V2SessionFormStateErrors,
+  V2SessionFormStateResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
   V2SessionInterruptErrors,
@@ -5342,6 +5358,193 @@ export class Context extends HeyApiClient {
   }
 }
 
+export class Form extends HeyApiClient {
+  /**
+   * List session forms
+   *
+   * Retrieve pending forms for a session.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionFormListResponses, V2SessionFormListErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/form",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create session form
+   *
+   * Create a form for a session.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      formCreatePayload: FormCreatePayload2
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { key: "formCreatePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionFormCreateResponses, V2SessionFormCreateErrors, ThrowOnError>(
+      {
+        url: "/api/session/{sessionID}/form",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Get session form
+   *
+   * Retrieve a form for a session.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      formID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "formID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionFormGetResponses, V2SessionFormGetErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/form/{formID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get form state
+   *
+   * Retrieve the current state for a form.
+   */
+  public state<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      formID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "formID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionFormStateResponses, V2SessionFormStateErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/form/{formID}/state",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to form
+   *
+   * Submit an answer to a pending form.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      formID: string
+      formReply: FormReply2
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "formID" },
+            { key: "formReply", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionFormReplyResponses, V2SessionFormReplyErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/form/{formID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel form
+   *
+   * Cancel a pending form.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      formID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "formID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionFormCancelResponses, V2SessionFormCancelErrors, ThrowOnError>(
+      {
+        url: "/api/session/{sessionID}/form/{formID}/cancel",
+        ...options,
+        ...params,
+      },
+    )
+  }
+}
+
 export class Permission2 extends HeyApiClient {
   /**
    * List session permission requests
@@ -6235,6 +6438,11 @@ export class Session3 extends HeyApiClient {
     return (this._context ??= new Context({ client: this.client }))
   }
 
+  private _form?: Form
+  get form(): Form {
+    return (this._form ??= new Form({ client: this.client }))
+  }
+
   private _permission?: Permission2
   get permission(): Permission2 {
     return (this._permission ??= new Permission2({ client: this.client }))
@@ -6840,6 +7048,37 @@ export class Project2 extends HeyApiClient {
 
 export class Request extends HeyApiClient {
   /**
+   * List pending form requests
+   *
+   * Retrieve pending forms for a location.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2FormRequestListResponses, V2FormRequestListErrors, ThrowOnError>({
+      url: "/api/form/request",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Form2 extends HeyApiClient {
+  private _request?: Request
+  get request(): Request {
+    return (this._request ??= new Request({ client: this.client }))
+  }
+}
+
+export class Request2 extends HeyApiClient {
+  /**
    * List pending permission requests
    *
    * Retrieve pending permission requests for a location.
@@ -6915,9 +7154,9 @@ export class Saved extends HeyApiClient {
 }
 
 export class Permission3 extends HeyApiClient {
-  private _request?: Request
-  get request(): Request {
-    return (this._request ??= new Request({ client: this.client }))
+  private _request?: Request2
+  get request(): Request2 {
+    return (this._request ??= new Request2({ client: this.client }))
   }
 
   private _saved?: Saved
@@ -7519,7 +7758,7 @@ export class Shell extends HeyApiClient {
   }
 }
 
-export class Request2 extends HeyApiClient {
+export class Request3 extends HeyApiClient {
   /**
    * List pending question requests
    *
@@ -7548,9 +7787,9 @@ export class Request2 extends HeyApiClient {
 }
 
 export class Question3 extends HeyApiClient {
-  private _request?: Request2
-  get request(): Request2 {
-    return (this._request ??= new Request2({ client: this.client }))
+  private _request?: Request3
+  get request(): Request3 {
+    return (this._request ??= new Request3({ client: this.client }))
   }
 }
 
@@ -7753,6 +7992,11 @@ export class V2 extends HeyApiClient {
   private _project?: Project2
   get project(): Project2 {
     return (this._project ??= new Project2({ client: this.client }))
+  }
+
+  private _form?: Form2
+  get form(): Form2 {
+    return (this._form ??= new Form2({ client: this.client }))
   }
 
   private _permission?: Permission3

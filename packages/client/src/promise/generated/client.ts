@@ -91,6 +91,20 @@ import type {
   ProjectCurrentOutput,
   ProjectDirectoriesInput,
   ProjectDirectoriesOutput,
+  FormListRequestsInput,
+  FormListRequestsOutput,
+  FormListInput,
+  FormListOutput,
+  FormCreateInput,
+  FormCreateOutput,
+  FormGetInput,
+  FormGetOutput,
+  FormStateInput,
+  FormStateOutput,
+  FormReplyInput,
+  FormReplyOutput,
+  FormCancelInput,
+  FormCancelOutput,
   PermissionListRequestsInput,
   PermissionListRequestsOutput,
   PermissionListSavedInput,
@@ -887,6 +901,95 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    form: {
+      listRequests: (input?: FormListRequestsInput, requestOptions?: RequestOptions) =>
+        request<FormListRequestsOutput>(
+          {
+            method: "GET",
+            path: `/api/form/request`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      list: (input: FormListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormListOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: FormCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+            body: {
+              id: input["id"],
+              title: input["title"],
+              metadata: input["metadata"],
+              mode: input["mode"],
+              fields: input["fields"],
+              url: input["url"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 409, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: FormGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      state: (input: FormStateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: FormStateOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/state`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      reply: (input: FormReplyInput, requestOptions?: RequestOptions) =>
+        request<FormReplyOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
+            body: { answer: input["answer"] },
+            successStatus: 204,
+            declaredStatuses: [404, 409, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      cancel: (input: FormCancelInput, requestOptions?: RequestOptions) =>
+        request<FormCancelOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/cancel`,
+            successStatus: 204,
+            declaredStatuses: [404, 409, 400, 401],
+            empty: true,
           },
           requestOptions,
         ),

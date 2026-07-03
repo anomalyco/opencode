@@ -816,6 +816,78 @@ const scenarios: Scenario[] = [
     object(body.location)
     array(body.data)
   }),
+  http.protected.get("/api/form/request", "v2.form.request.list").json(200, (body) => {
+    object(body)
+    object(body.location)
+    array(body.data)
+  }),
+  http.protected
+    .get("/api/session/{sessionID}/form", "v2.session.form.list")
+    .seeded((ctx) => ctx.session({ title: "Form list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/form", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, data(array)),
+  http.protected
+    .post("/api/session/{sessionID}/form", "v2.session.form.create")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Form create owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/form", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { mode: "url", url: "https://example.com/form" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.data)
+      check(typeof body.data.id === "string", "form create should return an ID")
+      check(body.data.mode === "url", "form create should preserve URL mode")
+    }),
+  http.protected
+    .get("/api/session/{sessionID}/form/{formID}", "v2.session.form.get")
+    .seeded((ctx) => ctx.session({ title: "Form get owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/form/{formID}", { sessionID: ctx.state.id, formID: "frm_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/form/{formID}/state", "v2.session.form.state")
+    .seeded((ctx) => ctx.session({ title: "Form state owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/form/{formID}/state", {
+        sessionID: ctx.state.id,
+        formID: "frm_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/form/{formID}/reply", "v2.session.form.reply")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Form reply owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/form/{formID}/reply", {
+        sessionID: ctx.state.id,
+        formID: "frm_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+      body: { answer: {} },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/form/{formID}/cancel", "v2.session.form.cancel")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Form cancel owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/form/{formID}/cancel", {
+        sessionID: ctx.state.id,
+        formID: "frm_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
   http.protected
     .post("/api/session/{sessionID}/permission", "v2.session.permission.create")
     .seeded((ctx) => ctx.session({ title: "Permission create owner" }))

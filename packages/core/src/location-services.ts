@@ -10,6 +10,7 @@ import { FileMutation } from "./file-mutation"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
 import { Generate } from "./generate"
+import { Form } from "./form"
 import { Watcher } from "./filesystem/watcher"
 import { Image } from "./image"
 import { Integration } from "./integration"
@@ -83,6 +84,7 @@ export const locationServices = LayerNode.group([
   ReferenceGuidance.node,
   SessionTodo.node,
   SessionContextEntry.node,
+  Form.node,
   QuestionV2.node,
   Generate.node,
   ReadToolFileSystem.node,

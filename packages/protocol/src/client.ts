@@ -39,6 +39,7 @@ export const groupNames = {
   "server.provider": "provider",
   "server.integration": "integration",
   "server.credential": "credential",
+  "server.form": "form",
   "server.permission": "permission",
   "server.fs": "file",
   "server.command": "command",
@@ -68,6 +69,7 @@ export const endpointNames = {
   "permission.request.list": "listRequests",
   "permission.saved.list": "listSaved",
   "permission.saved.remove": "removeSaved",
+  "form.request.list": "listRequests",
   "question.request.list": "listRequests",
 } as const
 

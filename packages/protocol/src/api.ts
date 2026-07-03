@@ -8,6 +8,7 @@ import { ProviderGroup } from "./groups/provider.js"
 import { makeSessionGroup } from "./groups/session.js"
 import { makePermissionGroup } from "./groups/permission.js"
 import { FileSystemGroup } from "./groups/fs.js"
+import { makeFormGroup } from "./groups/form.js"
 import { CommandGroup } from "./groups/command.js"
 import { SkillGroup } from "./groups/skill.js"
 import { EventGroup, makeEventGroup } from "./groups/event.js"
@@ -59,6 +60,7 @@ type MixedMiddlewareGroups<
   | ReturnType<
       typeof makePermissionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>
     >
+  | ReturnType<typeof makeFormGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
   | ReturnType<typeof makeQuestionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
 
 type ApiGroups<
@@ -119,6 +121,7 @@ const makeApiFromGroup = <
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup.middleware(locationMiddleware))
     .add(ProjectGroup.middleware(locationMiddleware))
+    .add(makeFormGroup(locationMiddleware, sessionLocationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))

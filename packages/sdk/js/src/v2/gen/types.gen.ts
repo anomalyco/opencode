@@ -77,6 +77,9 @@ export type Event =
   | EventQuestionV2Asked
   | EventQuestionV2Replied
   | EventQuestionV2Rejected
+  | EventFormCreated
+  | EventFormReplied
+  | EventFormCancelled
   | EventTodoUpdated
   | EventLspUpdated
   | EventPermissionAsked
@@ -1473,6 +1476,30 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           requestID: string
+        }
+      }
+    | {
+        id: string
+        type: "form.created"
+        properties: {
+          form: FormFormInfo | FormUrlInfo
+        }
+      }
+    | {
+        id: string
+        type: "form.replied"
+        properties: {
+          id: string
+          sessionID: string
+          answer: FormAnswer
+        }
+      }
+    | {
+        id: string
+        type: "form.cancelled"
+        properties: {
+          id: string
+          sessionID: string
         }
       }
     | {
@@ -2941,6 +2968,24 @@ export type ProviderNotFoundError = {
   message: string
 }
 
+export type FormNotFoundError = {
+  _tag: "FormNotFoundError"
+  id: string
+  message: string
+}
+
+export type FormAlreadySettledError = {
+  _tag: "FormAlreadySettledError"
+  id: string
+  message: string
+}
+
+export type FormInvalidAnswerError = {
+  _tag: "FormInvalidAnswerError"
+  id: string
+  message: string
+}
+
 export type OutputFormat1 =
   | {
       type: "text"
@@ -3097,6 +3142,9 @@ export type V2Event =
   | QuestionV2Asked
   | QuestionV2Replied
   | QuestionV2Rejected
+  | FormCreated
+  | FormReplied
+  | FormCancelled
   | TodoUpdated
   | LspUpdated
   | PermissionAsked
@@ -3369,6 +3417,121 @@ export type QuestionV2Tool = {
 }
 
 export type QuestionV2Answer = Array<string>
+
+export type FormMetadata = {
+  [key: string]: unknown
+}
+
+export type FormWhen = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
+
+export type FormOption = {
+  value: string
+  label: string
+  description?: string
+}
+
+export type FormStringField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "string"
+  format?: "email" | "uri" | "date" | "date-time"
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  placeholder?: string
+  default?: string
+  options?: Array<FormOption>
+  custom?: boolean
+}
+
+export type FormNumberField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "number"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormIntegerField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "integer"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormBooleanField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "boolean"
+  default?: boolean
+}
+
+export type FormMultiselectField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "multiselect"
+  options: Array<FormOption>
+  minItems?: number
+  maxItems?: number
+  custom?: boolean
+  default?: Array<string>
+}
+
+export type FormFormInfo = {
+  id: string
+  sessionID: string
+  title?: string
+  metadata?: FormMetadata
+  mode: "form"
+  fields: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
+}
+
+export type FormUrlInfo = {
+  id: string
+  sessionID: string
+  title?: string
+  metadata?: FormMetadata
+  mode: "url"
+  url: string
+}
+
+export type FormValue =
+  | string
+  | number
+  | "NaN"
+  | "Infinity"
+  | "-Infinity"
+  | "Infinity"
+  | "-Infinity"
+  | "NaN"
+  | boolean
+  | Array<string>
+
+export type FormAnswer = {
+  [key: string]: FormValue
+}
 
 export type ProjectVcs = "git"
 
@@ -5391,6 +5554,31 @@ export type ProjectCurrent = {
   directory: string
 }
 
+export type FormCreatePayload = {
+  id?: string
+  title?: string
+  metadata?: FormMetadata
+  mode: "form" | "url"
+  fields?: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
+  url?: string
+}
+
+export type FormState =
+  | {
+      status: "pending"
+    }
+  | {
+      status: "answered"
+      answer: FormAnswer
+    }
+  | {
+      status: "cancelled"
+    }
+
+export type FormReply = {
+  answer: FormAnswer
+}
+
 export type PermissionV2Request = {
   id: string
   sessionID: string
@@ -6191,6 +6379,86 @@ export type QuestionV2Rejected = {
   data: {
     sessionID: string
     requestID: string
+  }
+}
+
+export type FormNumberField1 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "number"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity"
+  default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type FormIntegerField1 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "integer"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity"
+  default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type FormCreated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "form.created"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    form: FormFormInfo | FormUrlInfo
+  }
+}
+
+export type FormValue1 = string | number | "NaN" | "Infinity" | "-Infinity" | boolean | Array<string>
+
+export type FormReplied = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "form.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
+    answer: FormAnswer
+  }
+}
+
+export type FormCancelled = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "form.cancelled"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
   }
 }
 
@@ -7502,6 +7770,57 @@ export type EventQuestionV2Rejected = {
   properties: {
     sessionID: string
     requestID: string
+  }
+}
+
+export type FormNumberField2 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "number"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity"
+  default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type FormIntegerField2 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen
+  type: "integer"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity"
+  default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type EventFormCreated = {
+  id: string
+  type: "form.created"
+  properties: {
+    form: FormFormInfo | FormUrlInfo
+  }
+}
+
+export type EventFormReplied = {
+  id: string
+  type: "form.replied"
+  properties: {
+    id: string
+    sessionID: string
+    answer: FormAnswer
+  }
+}
+
+export type EventFormCancelled = {
+  id: string
+  type: "form.cancelled"
+  properties: {
+    id: string
+    sessionID: string
   }
 }
 
@@ -9333,6 +9652,166 @@ export type ProjectDirectory2 = {
 
 export type ProjectDirectories2 = Array<ProjectDirectory2>
 
+export type FormMetadata2 = {
+  [key: string]: unknown
+}
+
+export type FormWhen2 = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
+
+export type FormOption2 = {
+  value: string
+  label: string
+  description?: string
+}
+
+export type FormStringField2 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "string"
+  format?: "email" | "uri" | "date" | "date-time"
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  placeholder?: string
+  default?: string
+  options?: Array<FormOption2>
+  custom?: boolean
+}
+
+export type FormNumberField3 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "number"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormIntegerField3 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "integer"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormBooleanField2 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "boolean"
+  default?: boolean
+}
+
+export type FormMultiselectField2 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "multiselect"
+  options: Array<FormOption2>
+  minItems?: number
+  maxItems?: number
+  custom?: boolean
+  default?: Array<string>
+}
+
+export type FormFormInfo2 = {
+  id: string
+  sessionID: string
+  title?: string
+  metadata?: FormMetadata2
+  mode: "form"
+  fields: Array<FormStringField2 | FormNumberField3 | FormIntegerField3 | FormBooleanField2 | FormMultiselectField2>
+}
+
+export type FormUrlInfo2 = {
+  id: string
+  sessionID: string
+  title?: string
+  metadata?: FormMetadata2
+  mode: "url"
+  url: string
+}
+
+export type FormCreatePayload2 = {
+  id?: string | null
+  title?: string
+  metadata?: FormMetadata2
+  mode: "form" | "url"
+  fields?: Array<
+    FormStringField2 | FormNumberField3 | FormIntegerField3 | FormBooleanField2 | FormMultiselectField2
+  > | null
+  url?: string | null
+}
+
+export type FormNotFoundErrorV2 = {
+  _tag: "FormNotFoundError"
+  id: string
+  message: string
+}
+
+export type FormValue2 =
+  | string
+  | number
+  | "NaN"
+  | "Infinity"
+  | "-Infinity"
+  | "Infinity"
+  | "-Infinity"
+  | "NaN"
+  | boolean
+  | Array<string>
+
+export type FormAnswer2 = {
+  [key: string]: FormValue2
+}
+
+export type FormState2 =
+  | {
+      status: "pending"
+    }
+  | {
+      status: "answered"
+      answer: FormAnswer2
+    }
+  | {
+      status: "cancelled"
+    }
+
+export type FormReply2 = {
+  answer: FormAnswer2
+}
+
+export type FormAlreadySettledErrorV2 = {
+  _tag: "FormAlreadySettledError"
+  id: string
+  message: string
+}
+
+export type FormInvalidAnswerErrorV2 = {
+  _tag: "FormInvalidAnswerError"
+  id: string
+  message: string
+}
+
 export type PermissionV2Source2 = {
   type: "tool"
   messageID: string
@@ -10619,6 +11098,112 @@ export type QuestionV2Rejected2 = {
   }
 }
 
+export type FormMetadata1 = {
+  [key: string]: unknown
+}
+
+export type FormNumberField12 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "number"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity"
+  default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type FormIntegerField12 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: FormWhen2
+  type: "integer"
+  minimum?: number | "NaN" | "Infinity" | "-Infinity"
+  maximum?: number | "NaN" | "Infinity" | "-Infinity"
+  default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type FormFormInfo1 = {
+  id: string
+  sessionID: string
+  title?: string
+  metadata?: FormMetadata1
+  mode: "form"
+  fields: Array<FormStringField2 | FormNumberField12 | FormIntegerField12 | FormBooleanField2 | FormMultiselectField2>
+}
+
+export type FormUrlInfo1 = {
+  id: string
+  sessionID: string
+  title?: string
+  metadata?: FormMetadata1
+  mode: "url"
+  url: string
+}
+
+export type FormCreated2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "form.created"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    form: FormFormInfo1 | FormUrlInfo1
+  }
+}
+
+export type FormValue12 = string | number | "NaN" | "Infinity" | "-Infinity" | boolean | Array<string>
+
+export type FormAnswer1 = {
+  [key: string]: FormValue12
+}
+
+export type FormReplied2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "form.replied"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    id: string
+    sessionID: string
+    answer: FormAnswer1
+  }
+}
+
+export type FormCancelled2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "form.cancelled"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    id: string
+    sessionID: string
+  }
+}
+
 export type TodoV2 = {
   /**
    * Brief description of the task
@@ -11131,6 +11716,9 @@ export type V2EventV2 =
   | QuestionV2Asked2
   | QuestionV2Replied2
   | QuestionV2Rejected2
+  | FormCreated2
+  | FormReplied2
+  | FormCancelled2
   | TodoUpdated2
   | SessionStatusV22
   | SessionIdle2
@@ -17267,6 +17855,277 @@ export type V2ProjectDirectoriesResponses = {
 }
 
 export type V2ProjectDirectoriesResponse = V2ProjectDirectoriesResponses[keyof V2ProjectDirectoriesResponses]
+
+export type V2FormRequestListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/form/request"
+}
+
+export type V2FormRequestListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+}
+
+export type V2FormRequestListError = V2FormRequestListErrors[keyof V2FormRequestListErrors]
+
+export type V2FormRequestListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo2
+    data: Array<FormFormInfo2 | FormUrlInfo2>
+  }
+}
+
+export type V2FormRequestListResponse = V2FormRequestListResponses[keyof V2FormRequestListResponses]
+
+export type V2SessionFormListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/form"
+}
+
+export type V2SessionFormListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundErrorV2
+}
+
+export type V2SessionFormListError = V2SessionFormListErrors[keyof V2SessionFormListErrors]
+
+export type V2SessionFormListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<FormFormInfo2 | FormUrlInfo2>
+  }
+}
+
+export type V2SessionFormListResponse = V2SessionFormListResponses[keyof V2SessionFormListResponses]
+
+export type V2SessionFormCreateData = {
+  body: FormCreatePayload2
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/form"
+}
+
+export type V2SessionFormCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError1 | InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundErrorV2
+  /**
+   * ConflictError
+   */
+  409: ConflictErrorV2
+}
+
+export type V2SessionFormCreateError = V2SessionFormCreateErrors[keyof V2SessionFormCreateErrors]
+
+export type V2SessionFormCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: FormFormInfo2 | FormUrlInfo2
+  }
+}
+
+export type V2SessionFormCreateResponse = V2SessionFormCreateResponses[keyof V2SessionFormCreateResponses]
+
+export type V2SessionFormGetData = {
+  body?: never
+  path: {
+    sessionID: string
+    formID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/form/{formID}"
+}
+
+export type V2SessionFormGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+  /**
+   * SessionNotFoundError | FormNotFoundError
+   */
+  404: FormNotFoundErrorV2 | SessionNotFoundErrorV2
+}
+
+export type V2SessionFormGetError = V2SessionFormGetErrors[keyof V2SessionFormGetErrors]
+
+export type V2SessionFormGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: FormFormInfo2 | FormUrlInfo2
+  }
+}
+
+export type V2SessionFormGetResponse = V2SessionFormGetResponses[keyof V2SessionFormGetResponses]
+
+export type V2SessionFormStateData = {
+  body?: never
+  path: {
+    sessionID: string
+    formID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/form/{formID}/state"
+}
+
+export type V2SessionFormStateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+  /**
+   * SessionNotFoundError | FormNotFoundError
+   */
+  404: FormNotFoundErrorV2 | SessionNotFoundErrorV2
+}
+
+export type V2SessionFormStateError = V2SessionFormStateErrors[keyof V2SessionFormStateErrors]
+
+export type V2SessionFormStateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: FormState2
+  }
+}
+
+export type V2SessionFormStateResponse = V2SessionFormStateResponses[keyof V2SessionFormStateResponses]
+
+export type V2SessionFormReplyData = {
+  body: FormReply2
+  path: {
+    sessionID: string
+    formID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/form/{formID}/reply"
+}
+
+export type V2SessionFormReplyErrors = {
+  /**
+   * FormInvalidAnswerError | InvalidRequestError
+   */
+  400: FormInvalidAnswerErrorV2 | InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+  /**
+   * SessionNotFoundError | FormNotFoundError
+   */
+  404: FormNotFoundErrorV2 | SessionNotFoundErrorV2
+  /**
+   * FormAlreadySettledError
+   */
+  409: FormAlreadySettledErrorV2
+}
+
+export type V2SessionFormReplyError = V2SessionFormReplyErrors[keyof V2SessionFormReplyErrors]
+
+export type V2SessionFormReplyResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionFormReplyResponse = V2SessionFormReplyResponses[keyof V2SessionFormReplyResponses]
+
+export type V2SessionFormCancelData = {
+  body?: never
+  path: {
+    sessionID: string
+    formID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/form/{formID}/cancel"
+}
+
+export type V2SessionFormCancelErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+  /**
+   * SessionNotFoundError | FormNotFoundError
+   */
+  404: FormNotFoundErrorV2 | SessionNotFoundErrorV2
+  /**
+   * FormAlreadySettledError
+   */
+  409: FormAlreadySettledErrorV2
+}
+
+export type V2SessionFormCancelError = V2SessionFormCancelErrors[keyof V2SessionFormCancelErrors]
+
+export type V2SessionFormCancelResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionFormCancelResponse = V2SessionFormCancelResponses[keyof V2SessionFormCancelResponses]
 
 export type V2PermissionRequestListData = {
   body?: never
