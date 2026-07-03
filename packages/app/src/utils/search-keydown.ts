@@ -42,13 +42,15 @@ export function handleDocumentSearchKeydown(
   }
 
   if (action.type === "deleteBackward") {
-    if (start !== end) return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end), start, setInputValue)
+    if (start !== end)
+      return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end), start, setInputValue)
     if (start === 0) return true
     return updateValue(input, inputValue.slice(0, start - 1) + inputValue.slice(end), start - 1, setInputValue)
   }
 
   if (action.type === "deleteForward") {
-    if (start !== end) return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end), start, setInputValue)
+    if (start !== end)
+      return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end), start, setInputValue)
     if (end === inputValue.length) return true
     return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end + 1), start, setInputValue)
   }

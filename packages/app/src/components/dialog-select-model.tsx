@@ -1,5 +1,15 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createEffect, createMemo, For, JSX, onCleanup, Show, ValidComponent } from "solid-js"
+import {
+  Component,
+  ComponentProps,
+  createEffect,
+  createMemo,
+  For,
+  JSX,
+  onCleanup,
+  Show,
+  ValidComponent,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -18,6 +28,7 @@ import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
 import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
+import { createEventListener } from "@solid-primitives/event-listener"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -349,9 +360,12 @@ export function ModelSelectorPopoverV2(props: {
 
   createEffect(() => {
     if (!store.open) return
-    const handler = (event: KeyboardEvent) => handleDocumentSearchKeydown(searchRef, event, store.search, setSearch)
-    document.addEventListener("keydown", handler, true)
-    onCleanup(() => document.removeEventListener("keydown", handler, true))
+    createEventListener(
+      document,
+      "keydown",
+      (event: KeyboardEvent) => handleDocumentSearchKeydown(searchRef, event, store.search, setSearch),
+      true,
+    )
   })
 
   return (
