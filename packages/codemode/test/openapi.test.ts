@@ -348,6 +348,62 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests[1]!.headers["cookie"]).toBe("session=secret")
   })
 
+  test("declared non-JSON responses advertise unknown instead of null", () => {
+    const plain = {
+      openapi: "3.1.0",
+      info: { title: "Plain", version: "1.0.0" },
+      servers: [{ url: "https://plain.example" }],
+      paths: {
+        "/text": {
+          get: {
+            operationId: "getText",
+            responses: { "200": { description: "ok", content: { "text/plain": { schema: { type: "string" } } } } },
+          },
+        },
+      },
+    }
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: plain }).tools } })
+    expect(runtime.instructions()).toContain("tools.api.getText(input: {}): Promise<unknown>")
+  })
+
+  test("two credentials colliding on one query parameter fail clearly", async () => {
+    const colliding = {
+      openapi: "3.1.0",
+      info: { title: "Collide", version: "1.0.0" },
+      servers: [{ url: "https://collide.example" }],
+      paths: {
+        "/x": {
+          get: {
+            operationId: "x",
+            security: [{ KeyA: [], KeyB: [] }],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+      components: {
+        securitySchemes: {
+          KeyA: { type: "apiKey", in: "query", name: "api_key" },
+          KeyB: { type: "apiKey", in: "query", name: "api_key" },
+        },
+      },
+    }
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({
+      tools: {
+        api: OpenAPI.fromSpec({
+          spec: colliding,
+          auth: { resolve: () => Effect.succeed({ type: "apiKey", value: "secret" } as const) },
+        }).tools,
+      },
+    })
+
+    const result = await Effect.runPromise(runtime.execute("return await tools.api.x({})").pipe(Effect.provide(layer)))
+
+    expect(result).toMatchObject({ ok: false })
+    expect(JSON.stringify(result)).toContain("two credentials on the 'api_key' query parameter")
+    expect(requests).toHaveLength(0)
+  })
+
   test("spec server variables substitute defaults and explicit values", () => {
     const templated = {
       openapi: "3.1.0",

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/unstable/http"
 import { toolError } from "./tool-error.js"
 import { Tool, type Definition, type JsonSchema } from "./tool.js"
 
@@ -60,7 +60,11 @@ export type Options = {
   readonly serverVariables?: Readonly<Record<string, string>> | undefined
   /** Host credential resolution, keyed by security scheme name. */
   readonly auth?: { readonly resolve: AuthResolver } | undefined
-  /** Static headers applied to every request. Never model-visible. */
+  /**
+   * Static headers applied to every request. Not model-visible, but a
+   * spec-declared header parameter with the same name may override the value;
+   * auth headers always win over both.
+   */
   readonly headers?: Readonly<Record<string, string>> | undefined
   /** Curate which operations become tools. Defaults to all. */
   readonly operations?: ((operation: Operation) => boolean) | undefined
@@ -72,6 +76,9 @@ export type Skipped = {
   readonly path: string
   readonly reason: string
 }
+
+/** Internal marker for "this operation/URL cannot be represented; report in `skipped`". */
+type Skip = { readonly reason: string }
 
 export type Tools = { readonly [name: string]: Definition<HttpClient.HttpClient> }
 
@@ -217,6 +224,8 @@ const projectSchema = (value: unknown, depth = 0): JsonSchema => {
   const type = Array.isArray(value.type)
     ? value.type.filter((item): item is string => typeof item === "string")
     : asString(value.type)
+  const description = asString(value.description)
+  const format = asString(value.format)
   const projected: JsonSchema = {
     ...(type === undefined ? {} : { type }),
     ...(Array.isArray(value.enum) ? { enum: value.enum } : {}),
@@ -240,9 +249,9 @@ const projectSchema = (value: unknown, depth = 0): JsonSchema => {
       : isRecord(value.additionalProperties)
         ? { additionalProperties: projectSchema(value.additionalProperties, depth + 1) }
         : {}),
-    ...(asString(value.description) === undefined ? {} : { description: asString(value.description) }),
+    ...(description === undefined ? {} : { description }),
     ...(value.default === undefined ? {} : { default: value.default }),
-    ...(asString(value.format) === undefined ? {} : { format: asString(value.format) }),
+    ...(format === undefined ? {} : { format }),
     ...(value.deprecated === true ? { deprecated: true } : {}),
     ...(typeof value.minItems === "number" ? { minItems: value.minItems } : {}),
     ...(typeof value.maxItems === "number" ? { maxItems: value.maxItems } : {}),
@@ -303,10 +312,7 @@ const operationParameters = (
 
 type Body = { readonly required: boolean; readonly schema: JsonSchema }
 
-const requestBody = (
-  document: Document,
-  operation: Record<string, unknown>,
-): Body | { readonly reason: string } | undefined => {
+const requestBody = (document: Document, operation: Record<string, unknown>): Body | Skip | undefined => {
   const resolved = resolve(document, operation.requestBody)
   if (!isRecord(resolved)) return undefined
   const content = isRecord(resolved.content) ? resolved.content : {}
@@ -332,34 +338,29 @@ const inputSchema = (
   body: Body | undefined,
   definitions: Readonly<Record<string, JsonSchema>>,
 ): JsonSchema => {
-  const groups: ReadonlyArray<readonly [string, ParameterLocation]> = [
-    ["path", "path"],
-    ["query", "query"],
-    ["headers", "header"],
-    ["cookies", "cookie"],
+  const groups: ReadonlyArray<{ readonly name: string; readonly location: ParameterLocation }> = [
+    { name: "path", location: "path" },
+    { name: "query", location: "query" },
+    { name: "headers", location: "header" },
+    { name: "cookies", location: "cookie" },
   ]
-  const grouped = groups.flatMap(([name, location]) => {
-    const items = parameters.filter((parameter) => parameter.location === location)
+  const grouped = groups.flatMap((group) => {
+    const items = parameters.filter((parameter) => parameter.location === group.location)
     if (items.length === 0) return []
     const required = items.filter((item) => item.required).map((item) => item.name)
-    return [
-      [
-        name,
-        {
-          type: "object",
-          properties: Object.fromEntries(items.map((item) => [item.name, item.schema])),
-          ...(required.length === 0 ? {} : { required }),
-        } satisfies JsonSchema,
-        required.length > 0,
-      ] as const,
-    ]
+    const schema: JsonSchema = {
+      type: "object",
+      properties: Object.fromEntries(items.map((item) => [item.name, item.schema])),
+      ...(required.length === 0 ? {} : { required }),
+    }
+    return [{ name: group.name, schema, required: required.length > 0 }]
   })
   const properties = Object.fromEntries([
-    ...grouped.map(([name, schema]) => [name, schema] as const),
+    ...grouped.map((group) => [group.name, group.schema] as const),
     ...(body === undefined ? [] : [["body", body.schema] as const]),
   ])
   const required = [
-    ...grouped.filter(([, , isRequired]) => isRequired).map(([name]) => name),
+    ...grouped.filter((group) => group.required).map((group) => group.name),
     ...(body?.required === true ? ["body"] : []),
   ]
   return withDefinitions(
@@ -387,8 +388,11 @@ const outputSchema = (
     if (json !== undefined && isRecord(json[1]) && json[1].schema !== undefined) {
       return withDefinitions(projectSchema(json[1].schema), definitions)
     }
+    // Declared content without a usable JSON schema (e.g. text/plain): the tool
+    // returns the raw body, so advertise unknown rather than a wrong null.
+    if (Object.keys(content).length > 0) return undefined
   }
-  // 2xx with no JSON content (e.g. 204): the tool resolves to null.
+  // 2xx with no content at all (e.g. 204): the tool resolves to null.
   return { type: "null" }
 }
 
@@ -413,16 +417,13 @@ const operationName = (
   return next(2)
 }
 
-const resolveUrl = (document: Document, options: Options, path: string): string | { readonly reason: string } => {
+const resolveUrl = (document: Document, options: Options, path: string): string | Skip => {
   const base = options.baseUrl ?? specServerUrl(document, options.serverVariables ?? {})
   if (typeof base !== "string") return base
   return `${base.replace(/\/+$/, "")}${path}`
 }
 
-const specServerUrl = (
-  document: Document,
-  variables: Readonly<Record<string, string>>,
-): string | { readonly reason: string } => {
+const specServerUrl = (document: Document, variables: Readonly<Record<string, string>>): string | Skip => {
   const server = asArray(document.servers).find(isRecord)
   const url = server === undefined ? undefined : asString(server.url)
   if (url === undefined) return { reason: "spec declares no servers; pass baseUrl" }
@@ -517,7 +518,7 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     const auth = yield* resolveAuth(plan)
     const url = yield* buildUrl(plan, path)
 
-    let request = HttpClientRequest.make(plan.operation.method as "GET")(url)
+    let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
     for (const parameter of plan.parameters) {
       if (parameter.location !== "query") continue
       const item = query[parameter.name]
@@ -668,18 +669,19 @@ const applyCredentials = (
     const headers: Record<string, string> = {}
     const query: Record<string, string> = {}
     const cookies: Record<string, string> = {}
-    const setHeader = (name: string, value: string) =>
-      Effect.gen(function* () {
-        const key = name.toLowerCase()
-        if (headers[key] !== undefined) {
-          return yield* Effect.fail(
-            toolError(
-              `${operation.method} ${operation.path} security requires two credentials on the '${name}' header; this cannot be satisfied.`,
-            ),
-          )
-        }
-        headers[key] = value
-      })
+    // Two credentials landing on the same carrier cannot both be sent.
+    const write = (target: Record<string, string>, name: string, value: string, carrier: string) => {
+      if (target[name] !== undefined) {
+        return Effect.fail(
+          toolError(
+            `${operation.method} ${operation.path} security requires two credentials on the '${name}' ${carrier}; this cannot be satisfied.`,
+          ),
+        )
+      }
+      target[name] = value
+      return Effect.void
+    }
+    const setHeader = (name: string, value: string) => write(headers, name.toLowerCase(), value, "header")
 
     for (const [scheme, credential] of credentials) {
       if (credential.type === "bearer") {
@@ -687,7 +689,9 @@ const applyCredentials = (
         continue
       }
       if (credential.type === "basic") {
-        yield* setHeader("Authorization", `Basic ${btoa(`${credential.username}:${credential.password}`)}`)
+        // Buffer instead of btoa: btoa throws on non-Latin-1 credentials.
+        const encoded = Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")
+        yield* setHeader("Authorization", `Basic ${encoded}`)
         continue
       }
       if (credential.type === "header") {
@@ -704,8 +708,8 @@ const applyCredentials = (
         )
       }
       if (scheme.in === "header") yield* setHeader(name, credential.value)
-      if (scheme.in === "query") query[name] = credential.value
-      if (scheme.in === "cookie") cookies[name] = credential.value
+      if (scheme.in === "query") yield* write(query, name, credential.value, "query parameter")
+      if (scheme.in === "cookie") yield* write(cookies, name, credential.value, "cookie")
     }
     return { headers, query, cookies }
   })
