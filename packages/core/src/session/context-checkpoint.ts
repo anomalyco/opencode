@@ -112,7 +112,7 @@ const rewrite = Effect.fnUntraced(function* (
     .returning({ sessionID: SessionContextCheckpointTable.session_id })
     .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die("Context checkpoint not found")
+  if (!updated) return yield* Effect.die(new Error("Context checkpoint not found"))
 })
 
 const advance = Effect.fnUntraced(function* (
@@ -127,5 +127,5 @@ const advance = Effect.fnUntraced(function* (
     .returning({ sessionID: SessionContextCheckpointTable.session_id })
     .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die("Context checkpoint not found")
+  if (!updated) return yield* Effect.die(new Error("Context checkpoint not found"))
 })

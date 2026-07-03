@@ -22,7 +22,7 @@ export function apply(db: Database) {
         sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
       )
       if (tables.some((table) => table.name === "session")) return yield* applyOnly(db, migrations)
-      if (tables.length > 0) return yield* Effect.die("Database is not empty and has no session table")
+      if (tables.length > 0) return yield* Effect.die(new Error("Database is not empty and has no session table"))
       yield* db.transaction((tx) =>
         Effect.gen(function* () {
           yield* schema.up(tx)

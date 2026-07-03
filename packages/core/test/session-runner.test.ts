@@ -3424,9 +3424,10 @@ describe("SessionRunnerLLM", () => {
       streamStarted = undefined
       response = [LLMEvent.textStart({ id: "text-1" }), LLMEvent.textStart({ id: "text-1" })]
 
-      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(
-        "Duplicate text start: text-1",
-      )
+      const defect = yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))
+      expect(defect).toBeInstanceOf(Error)
+      if (!(defect instanceof Error)) return
+      expect(defect.message).toBe("Duplicate text start: text-1")
     }),
   )
 
@@ -3468,9 +3469,10 @@ describe("SessionRunnerLLM", () => {
       streamStarted = undefined
       response = [LLMEvent.toolInputDelta({ id: "call-1", name: "read", text: "{}" })]
 
-      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(
-        "Tool input delta before start: call-1",
-      )
+      const defect = yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))
+      expect(defect).toBeInstanceOf(Error)
+      if (!(defect instanceof Error)) return
+      expect(defect.message).toBe("Tool input delta before start: call-1")
     }),
   )
 })

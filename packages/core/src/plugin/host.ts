@@ -1,6 +1,6 @@
 export * as PluginHost from "./host"
 
-import type { PluginContext as Interface } from "@opencode-ai/plugin/v2/effect"
+import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
@@ -40,7 +40,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       workspaceID: location.workspaceID,
       project: location.project,
     })
-  const locationRef = (input?: Parameters<Interface["agent"]["list"]>[0]) =>
+  const locationRef = (input?: Parameters<PluginContext["agent"]["list"]>[0]) =>
     input?.location === undefined
       ? undefined
       : Location.Ref.make({
@@ -305,5 +305,5 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       command: runtime.session.command,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
     },
-  } satisfies Interface
+  } satisfies PluginContext
 })

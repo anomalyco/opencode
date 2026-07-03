@@ -62,7 +62,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
     .pipe(
       Effect.flatMap((event) =>
         event.durable === undefined
-          ? Effect.die("Prompt admission event is missing aggregate sequence")
+          ? Effect.die(new Error("Prompt admission event is missing aggregate sequence"))
           : Effect.succeed(
               Admitted.make({
                 admittedSeq: event.durable.seq,

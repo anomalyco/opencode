@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
+import path, { dirname, isAbsolute, join, relative, sep } from "path"
 import { realpathSync } from "fs"
-import * as NFS from "fs/promises"
+import { readdir } from "fs/promises"
 import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
@@ -77,7 +77,7 @@ export namespace FSUtil {
       const readDirectoryEntries = Effect.fn("FileSystem.readDirectoryEntries")(function* (dirPath: string) {
         return yield* Effect.tryPromise({
           try: async () => {
-            const entries = await NFS.readdir(dirPath, { withFileTypes: true })
+            const entries = await readdir(dirPath, { withFileTypes: true })
             return entries.map(
               (e): DirEntry => ({
                 name: e.name,
@@ -209,7 +209,7 @@ export namespace FSUtil {
 
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
-    const resolved = pathResolve(windowsPath(p))
+    const resolved = path.resolve(windowsPath(p))
     try {
       return realpathSync.native(resolved)
     } catch {
@@ -227,7 +227,7 @@ export namespace FSUtil {
   }
 
   export function resolve(p: string): string {
-    const resolved = pathResolve(windowsPath(p))
+    const resolved = path.resolve(windowsPath(p))
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e: any) {

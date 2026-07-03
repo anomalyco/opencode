@@ -1,7 +1,7 @@
 export * as AccountV2 from "./account"
 
 import { Schema } from "effect"
-import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+import type { HttpClientError } from "effect/unstable/http"
 
 export const ID = Schema.String.pipe(Schema.brand("AccountID"))
 export type ID = Schema.Schema.Type<typeof ID>

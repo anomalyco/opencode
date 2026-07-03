@@ -1,11 +1,11 @@
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
-import * as DatabasePath from "../database/path"
+import { absoluteArrayColumn, absoluteColumn } from "../database/path"
 import { Timestamps } from "../database/schema.sql"
 import { ProjectSchema } from "./schema"
 
 export const ProjectTable = sqliteTable("project", {
   id: text().$type<ProjectSchema.ID>().primaryKey(),
-  worktree: DatabasePath.absoluteColumn().notNull(),
+  worktree: absoluteColumn().notNull(),
   vcs: text(),
   name: text(),
   icon_url: text(),
@@ -13,7 +13,7 @@ export const ProjectTable = sqliteTable("project", {
   icon_color: text(),
   ...Timestamps,
   time_initialized: integer(),
-  sandboxes: DatabasePath.absoluteArrayColumn().notNull(),
+  sandboxes: absoluteArrayColumn().notNull(),
   commands: text({ mode: "json" }).$type<{ start?: string }>(),
 })
 
@@ -24,7 +24,7 @@ export const ProjectDirectoryTable = sqliteTable(
       .$type<ProjectSchema.ID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
-    directory: DatabasePath.absoluteColumn().notNull(),
+    directory: absoluteColumn().notNull(),
     type: text().$type<"main" | "root" | "git_worktree">(),
     strategy: text(),
     time_created: integer()
