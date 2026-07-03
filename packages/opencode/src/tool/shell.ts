@@ -478,7 +478,20 @@ export const ShellTool = Tool.define(
         },
       })
 
-      const code: number | null = yield* Effect.scoped(
+      const waitForAbort = Effect.callback<void>((resume) => {
+        if (ctx.abort.aborted) {
+          aborted = true
+          return resume(Effect.void)
+        }
+        const handler = () => {
+          aborted = true
+          resume(Effect.void)
+        }
+        ctx.abort.addEventListener("abort", handler, { once: true })
+        return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
+      })
+
+      const runCommand = Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
@@ -530,33 +543,20 @@ export const ShellTool = Tool.define(
             }),
           )
 
-          const abort = Effect.callback<void>((resume) => {
-            if (ctx.abort.aborted) return resume(Effect.void)
-            const handler = () => resume(Effect.void)
-            ctx.abort.addEventListener("abort", handler, { once: true })
-            return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
-          })
-
-          const timeout = Effect.sleep(`${input.timeout + 100} millis`)
-
-          const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
-            abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-            timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
-          ])
-
-          if (exit.kind === "abort") {
-            aborted = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-          if (exit.kind === "timeout") {
-            expired = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-
-          return exit.kind === "exit" ? exit.code : null
+          return yield* handle.exitCode
         }),
-      ).pipe(Effect.orDie)
+      )
+
+      const timed = Effect.timeoutOrElse(runCommand, {
+        duration: `${input.timeout + 100} millis`,
+        orElse: () => {
+          expired = true
+          return Effect.succeed(null)
+        },
+      })
+
+      const raced: number | null | void = yield* timed.pipe(Effect.raceFirst(waitForAbort)).pipe(Effect.orDie)
+      const code: number | null = raced ?? null
 
       const meta: string[] = []
       if (expired) {

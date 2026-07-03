@@ -1197,3 +1197,47 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+describe("tool.shell hangs", () => {
+  if (process.platform === "win32") return
+
+  it.live(
+    "returns when spawned process forks a grandchild that inherits stdio",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          const scriptPath = path.join(tmp, "hang.mjs")
+          const grandchild = `${bin} -e ${evalarg("setInterval(()=>{},60000)")}`
+          const body = `const { spawn } = require("child_process"); const g = spawn(${JSON.stringify(grandchild)}, { stdio: "inherit" }); g.unref(); process.exit(0);`
+          yield* Effect.promise(() => Bun.write(scriptPath, body))
+          yield* Effect.sync(() => require("node:fs").chmodSync(scriptPath, 0o755))
+
+          const started = Date.now()
+          const result = yield* run({ command: `${bin} ${scriptPath}`, timeout: 1500 })
+          const elapsed = Date.now() - started
+          const exitCode = (result.metadata as { exit: number | null }).exit
+
+          expect(elapsed).toBeLessThan(5000)
+          expect([null, 0]).toContain(exitCode)
+        }),
+      ),
+    10_000,
+  )
+
+  it.live(
+    "propagates signal-kill errors instead of failing open",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(run({ command: "kill -TERM $$", timeout: 5000 }))
+          if (Exit.isSuccess(exit)) {
+            return yield* Effect.fail(new Error("expected failure"))
+          }
+        }),
+      ),
+    15_000,
+  )
+})
