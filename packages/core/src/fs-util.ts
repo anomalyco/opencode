@@ -38,6 +38,7 @@ export namespace FSUtil {
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
+    readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
@@ -87,6 +88,14 @@ export namespace FSUtil {
           },
           catch: (cause) => new FileSystemError({ method: "readDirectoryEntries", cause }),
         })
+      })
+
+      const resolve = Effect.fn("FileSystem.resolve")(function* (path: string) {
+        const resolved = pathResolve(windowsPath(path))
+        return yield* fs.realPath(resolved).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
+          Effect.orDie,
+        )
       })
 
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
@@ -187,6 +196,7 @@ export namespace FSUtil {
         isDir,
         isFile,
         readDirectoryEntries,
+        resolve,
         readJson,
         writeJson,
         ensureDir,
