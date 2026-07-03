@@ -17,7 +17,7 @@ import {
   ListToolsRequestSchema,
   type Tool as MCPToolDef,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
@@ -160,6 +160,12 @@ async function buildTool() {
 }
 
 const run = (code: string) => Effect.runPromise(tool.execute({ code }, ctx))
+// Program failures die at the tool boundary; recover the defect for message assertions.
+const runFailed = async (code: string) => {
+  const exit = await Effect.runPromise(tool.execute({ code }, ctx).pipe(Effect.exit))
+  if (Exit.isSuccess(exit)) throw new Error("expected the tool to fail")
+  return Cause.squash(exit.cause) as Error
+}
 
 beforeAll(async () => {
   const built = await buildTool()
@@ -248,9 +254,8 @@ describe("code mode integration (real MCP server)", () => {
   })
 
   test("an uncaught MCP error surfaces as a failed execution", async () => {
-    const out = await run("await tools.fixtures.boom({}); return 'unreachable'")
-    expect(out.metadata.error).toBe(true)
-    expect(out.output).toContain("kaboom")
+    const error = await runFailed("await tools.fixtures.boom({}); return 'unreachable'")
+    expect(error.message).toContain("kaboom")
   })
 
   test("console output is captured and appended as a Logs section after the result", async () => {
@@ -265,14 +270,13 @@ describe("code mode integration (real MCP server)", () => {
   })
 
   test("console output is preserved on the error path", async () => {
-    const out = await run(`
+    const error = await runFailed(`
       console.log("before the throw")
       await tools.fixtures.boom({})
       return "unreachable"
     `)
-    expect(out.metadata.error).toBe(true)
-    expect(out.output).toContain("kaboom")
-    expect(out.output).toContain("Logs:\nbefore the throw")
+    expect(error.message).toContain("kaboom")
+    expect(error.message).toContain("Logs:\nbefore the throw")
   })
 
   test("a program that logs nothing gets no Logs section", async () => {

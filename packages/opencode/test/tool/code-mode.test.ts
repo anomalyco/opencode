@@ -10,7 +10,7 @@ import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
 import { MessageID, SessionID } from "@/session/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Cause, Effect, Exit, Layer, Schema } from "effect"
 
 const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_code-mode"),
@@ -84,6 +84,13 @@ function build(
 
 function describeFor(mcpTools: Record<string, MCP.McpTool>, servers?: string[], permission: PermissionV1.Rule[] = []) {
   return describeCatalog(Permission.visibleTools(mcpTools, permission), serverNames(mcpTools, servers))
+}
+
+// Program failures die at the tool boundary; recover the defect for message assertions.
+async function failure(effect: Effect.Effect<unknown>) {
+  const exit = await Effect.runPromise(effect.pipe(Effect.exit))
+  if (Exit.isSuccess(exit)) throw new Error("expected the tool to fail")
+  return Cause.squash(exit.cause) as Error
 }
 
 describe("code mode execute", () => {
@@ -313,18 +320,16 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls.every((c) => c.status === "completed")).toBe(true)
   })
 
-  test("returns a readable error when the program throws", async () => {
+  test("a program failure fails the tool with a readable error", async () => {
     const tool = await build({})
-    const output = await Effect.runPromise(tool.execute({ code: "throw new Error('boom')" }, ctx))
-    expect(output.output).toBe("Uncaught: boom")
-    expect(output.metadata.error).toBe(true)
+    const error = await failure(tool.execute({ code: "throw new Error('boom')" }, ctx))
+    expect(error.message).toBe("Uncaught: boom")
   })
 
   test("reports an unknown tool as a failed execution", async () => {
     const tool = await build({ known_tool: mcpTool("tool", () => "ok") })
-    const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
-    expect(output.metadata.error).toBe(true)
-    expect(output.output).toContain("Unknown tool 'known.missing'")
+    const error = await failure(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
+    expect(error.message).toContain("Unknown tool 'known.missing'")
   })
 
   test("propagates an MCP tool error into the program as a catchable failure", async () => {
@@ -576,8 +581,8 @@ describe("code mode execute", () => {
 
   test("isolates the sandbox from host globals", async () => {
     const tool = await build({})
-    const output = await Effect.runPromise(tool.execute({ code: "return process.env" }, ctx))
-    expect(output.metadata.error).toBe(true)
+    const error = await failure(tool.execute({ code: "return process.env" }, ctx))
+    expect(error.message).toContain("process")
   })
 
   test("cancelling via ctx.abort interrupts the running program", async () => {
@@ -627,12 +632,9 @@ describe("code mode execute", () => {
     )
     expect(ok.output).toBe("done\n\nLogs:\nstep one\n[warn] careful")
 
-    const err = await Effect.runPromise(
-      tool.execute({ code: "console.log('before the throw'); throw new Error('boom')" }, ctx),
-    )
-    expect(err.metadata.error).toBe(true)
-    expect(err.output).toContain("Uncaught: boom")
-    expect(err.output).toContain("Logs:\nbefore the throw")
+    const error = await failure(tool.execute({ code: "console.log('before the throw'); throw new Error('boom')" }, ctx))
+    expect(error.message).toContain("Uncaught: boom")
+    expect(error.message).toContain("Logs:\nbefore the throw")
   })
 })
 
@@ -677,12 +679,9 @@ describe("code mode permission visibility", () => {
       [deny("github_create_issue")],
     )
 
-    const denied = await Effect.runPromise(
-      tool.execute({ code: "return await tools.github.create_issue({ title: 'x' })" }, ctx),
-    )
-    expect(denied.metadata.error).toBe(true)
-    expect(denied.output).toContain("Unknown tool 'github.create_issue'")
-    expect(denied.output).not.toContain("permission")
+    const denied = await failure(tool.execute({ code: "return await tools.github.create_issue({ title: 'x' })" }, ctx))
+    expect(denied.message).toContain("Unknown tool 'github.create_issue'")
+    expect(denied.message).not.toContain("permission")
     expect(called).toEqual([])
 
     const allowed = await Effect.runPromise(tool.execute({ code: "return await tools.github.list_issues({})" }, ctx))
