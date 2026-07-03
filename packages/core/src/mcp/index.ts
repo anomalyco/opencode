@@ -338,12 +338,15 @@ export const layer = Layer.effect(
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
                 Effect.ensuring(Effect.sync(() => urlElicitations.delete(key))),
-                Effect.map(toElicitationResult),
+                Effect.map((state) => toElicitationResult(input.params, state)),
               )
           }
           return yield* forms
             .ask(toElicitationForm(input.server, input.params))
-            .pipe(Effect.raceFirst(waitForAbort(input.signal)), Effect.map(toElicitationResult))
+            .pipe(
+              Effect.raceFirst(waitForAbort(input.signal)),
+              Effect.map((state) => toElicitationResult(input.params, state)),
+            )
         }),
       complete: (input: { readonly server: string; readonly elicitationID: string }) =>
         completeUrlElicitation(input.server, input.elicitationID),
@@ -615,8 +618,9 @@ function isUrlElicitation(
   return params.mode === "url"
 }
 
-function toElicitationResult(state: Form.State): MCPClient.ElicitationResult {
+function toElicitationResult(params: MCPClient.ElicitationParams, state: Form.State): MCPClient.ElicitationResult {
   if (state.status !== "answered") return { action: "cancel" }
+  if (isUrlElicitation(params)) return { action: "accept" }
   return { action: "accept", content: toElicitationContent(state.answer) }
 }
 
@@ -703,8 +707,8 @@ function toElicitationField(key: string, property: ElicitationProperty, required
 }
 
 function elicitationFieldTitle(key: string, property: ElicitationProperty) {
-  if (property.description) return property.description
   if (property.title && !isSchemaTypeTitle(property.title)) return property.title
+  if (property.description) return property.description
   return key
 }
 
