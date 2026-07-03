@@ -10,9 +10,10 @@ import * as Truncate from "@/tool/truncate"
 import { MessageID, SessionID } from "@/session/schema"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import {
   CallToolRequestSchema,
+  LATEST_PROTOCOL_VERSION,
   ListToolsRequestSchema,
   type Tool as MCPToolDef,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -34,6 +35,59 @@ const ctx: Tool.Context = {
   messages: [],
   metadata: () => Effect.void,
   ask: () => Effect.void,
+}
+
+/**
+ * A minimal JSON-RPC MCP client speaking the real protocol over the in-memory transport.
+ * Deliberately NOT the SDK `Client`: `test/mcp/lifecycle.test.ts` (and friends) replace
+ * `@modelcontextprotocol/sdk/client/index.js` via bun's `mock.module`, which is
+ * process-global and irreversible — in a full `bun test` run (CI) any later import of the
+ * SDK Client gets the mock, whose `listTools` returns a canned `test_tool`. Speaking raw
+ * JSON-RPC keeps this suite's "real server, real transport, real protocol" property while
+ * being immune to that contamination. Only the surface `convertTool`/this file use is
+ * implemented: connect handshake, tools/list, tools/call.
+ */
+class RawJsonRpcClient {
+  private nextId = 1
+  private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>()
+
+  constructor(private transport: InMemoryTransport) {}
+
+  async connect() {
+    this.transport.onmessage = (message) => {
+      const msg = message as { id?: number; result?: unknown; error?: { message: string } }
+      if (msg.id === undefined) return // notifications/requests from the server are not needed here
+      const entry = this.pending.get(msg.id)
+      if (!entry) return
+      this.pending.delete(msg.id)
+      if (msg.error) entry.reject(new Error(msg.error.message))
+      else entry.resolve(msg.result)
+    }
+    await this.transport.start()
+    await this.request("initialize", {
+      protocolVersion: LATEST_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: "test-client", version: "1.0.0" },
+    })
+    await this.transport.send({ jsonrpc: "2.0", method: "notifications/initialized" })
+  }
+
+  private request(method: string, params: unknown): Promise<any> {
+    const id = this.nextId++
+    const result = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }))
+    void this.transport.send({ jsonrpc: "2.0", id, method, params } as never)
+    return result
+  }
+
+  listTools() {
+    return this.request("tools/list", {})
+  }
+
+  /** The `convertTool` surface: schema/options (timeouts, progress) are SDK-client
+   *  concerns and are ignored here — the server never sees them. */
+  callTool(params: { name: string; arguments?: Record<string, unknown> }, _schema?: unknown, _options?: unknown) {
+    return this.request("tools/call", params)
+  }
 }
 
 // A real MCP server, exposed over an in-memory transport, with a representative mix
@@ -92,8 +146,8 @@ async function buildTool() {
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
-  const client = new Client({ name: "test-client", version: "1.0.0" })
-  await client.connect(clientTransport)
+  const client = new RawJsonRpcClient(clientTransport)
+  await client.connect()
 
   const listed = (await client.listTools()).tools as MCPToolDef[]
   const mcpTools: Record<string, AITool> = {}
@@ -101,7 +155,7 @@ async function buildTool() {
   for (const def of listed) {
     const key = McpCatalog.toolName(SERVER, def.name)
     mcpDefs[key] = def
-    mcpTools[key] = McpCatalog.convertTool(def, client)
+    mcpTools[key] = McpCatalog.convertTool(def, client as unknown as Client)
   }
 
   // Truncate echoes its input so assertions read the exact program output; Agent/Session
