@@ -11,7 +11,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-const provide = (directory: string, git?: boolean) =>
+const provide = (directory: string, input: { git?: boolean } = {}) =>
   Effect.provide(
     LayerNode.compile(Vcs.node, [
       [
@@ -21,7 +21,7 @@ const provide = (directory: string, git?: boolean) =>
           Location.Service.of(
             location(
               { directory: AbsolutePath.make(directory) },
-              git ? { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } } : {},
+              input.git ? { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } } : {},
             ),
           ),
         ),
@@ -72,13 +72,14 @@ describe("Vcs", () => {
           await fs.rm(path.join(directory, "gone.txt"))
           await fs.writeFile(path.join(directory, "new.txt"), "hello\nworld\n")
         })
-        const status = yield* (yield* Vcs.Service).status()
+        const vcs = yield* Vcs.Service
+        const status = yield* vcs.status()
         expect(status).toEqual([
           { file: "gone.txt", additions: 0, deletions: 1, status: "deleted" },
           { file: "keep.txt", additions: 1, deletions: 1, status: "modified" },
           { file: "new.txt", additions: 2, deletions: 0, status: "added" },
         ])
-      }).pipe(provide(directory, true)),
+      }).pipe(provide(directory, { git: true })),
     ),
   )
 
@@ -92,7 +93,8 @@ describe("Vcs", () => {
           await fs.writeFile(path.join(directory, "keep.txt"), "one\nthree\n")
           await fs.writeFile(path.join(directory, "spaced name.txt"), "hello\n")
         })
-        const diff = yield* (yield* Vcs.Service).diff("working")
+        const vcs = yield* Vcs.Service
+        const diff = yield* vcs.diff("working")
         expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
           { file: "keep.txt", status: "modified" },
           { file: "spaced name.txt", status: "added" },
@@ -103,7 +105,7 @@ describe("Vcs", () => {
         expect(diff[0].deletions).toBe(1)
         expect(diff[1].patch).toContain("+hello")
         expect(diff[1].additions).toBe(1)
-      }).pipe(provide(directory, true)),
+      }).pipe(provide(directory, { git: true })),
     ),
   )
 
@@ -124,7 +126,7 @@ describe("Vcs", () => {
         const tight = yield* vcs.diff("working", { context: 1 })
         expect(tight[0].patch).toContain("line-9")
         expect(tight[0].patch).not.toContain("line-0")
-      }).pipe(provide(directory, true)),
+      }).pipe(provide(directory, { git: true })),
     ),
   )
 
@@ -140,7 +142,7 @@ describe("Vcs", () => {
         const diff = yield* vcs.diff("working")
         expect(diff).toHaveLength(1)
         expect(diff[0].patch).toContain("+hello")
-      }).pipe(provide(directory, true)),
+      }).pipe(provide(directory, { git: true })),
     ),
   )
 
@@ -165,7 +167,7 @@ describe("Vcs", () => {
           { file: "file.txt", status: "modified" },
         ])
         expect(diff[0].patch).toContain("+two")
-      }).pipe(provide(directory, true)),
+      }).pipe(provide(directory, { git: true })),
     ),
   )
 })
