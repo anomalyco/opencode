@@ -408,10 +408,21 @@ describe("OpenAPI.fromSpec", () => {
           get: { operationId: "dup", responses: { "200": { description: "ok" } } },
           post: { responses: { "200": { description: "ok" } } },
         },
+        "/c": {
+          get: { operationId: "constructor", responses: { "200": { description: "ok" } } },
+          post: { operationId: "prototype", responses: { "200": { description: "ok" } } },
+        },
       },
     }
     const result = OpenAPI.fromSpec({ spec: messy })
-    expect(Object.keys(result.tools).sort()).toStrictEqual(["dup", "dup_2", "get_widgets", "post__b"])
+    expect(Object.keys(result.tools).sort()).toStrictEqual([
+      "constructor_2",
+      "dup",
+      "dup_2",
+      "get_widgets",
+      "post__b",
+      "prototype_2",
+    ])
   })
 
   test("the operations filter curates tools without reporting them as skipped", () => {
@@ -477,36 +488,55 @@ describe("OpenAPI.fromSpec", () => {
     expect(runtime.instructions()).toContain("tools.api.l(input: { query?: { v?: string; shared?: string } })")
   })
 
-  test("allOf schemas render as intersections with parenthesized unions", () => {
-    const composed = {
+  test("missing required query and header parameters fail before auth and network", async () => {
+    const required = {
       openapi: "3.1.0",
-      info: { title: "Composed", version: "1.0.0" },
-      servers: [{ url: "https://composed.example" }],
+      info: { title: "Required", version: "1.0.0" },
+      servers: [{ url: "https://required.example" }],
+      security: [{ ApiKeyAuth: [] }],
       paths: {
-        "/c": {
+        "/r": {
           get: {
-            operationId: "c",
-            responses: {
-              "200": {
-                description: "ok",
-                content: {
-                  "application/json": {
-                    schema: {
-                      allOf: [
-                        { type: "object", properties: { id: { type: "string" } } },
-                        { type: ["string", "null"] },
-                      ],
-                    },
-                  },
-                },
-              },
-            },
+            operationId: "r",
+            parameters: [
+              { name: "q", in: "query", required: true, schema: { type: "string" } },
+              { name: "X-Trace", in: "header", required: true, schema: { type: "string" } },
+            ],
+            responses: { "200": { description: "ok" } },
           },
         },
       },
+      components: { securitySchemes: { ApiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" } } },
     }
-    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: composed }).tools } })
-    expect(runtime.instructions()).toContain("Promise<{ id?: string } & (string | null)>")
+    const calls: Array<string> = []
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({
+      tools: {
+        api: OpenAPI.fromSpec({
+          spec: required,
+          auth: {
+            resolve: () => {
+              calls.push("auth")
+              return Effect.succeed({ type: "apiKey", value: "secret" } as const)
+            },
+          },
+        }).tools,
+      },
+    })
+
+    const queryResult = await Effect.runPromise(
+      runtime.execute("return await tools.api.r({})").pipe(Effect.provide(layer)),
+    )
+    const headerResult = await Effect.runPromise(
+      runtime.execute('return await tools.api.r({ query: { q: "ok" } })').pipe(Effect.provide(layer)),
+    )
+
+    expect(queryResult).toMatchObject({ ok: false })
+    expect(JSON.stringify(queryResult)).toContain("Missing required query parameter 'q'")
+    expect(headerResult).toMatchObject({ ok: false })
+    expect(JSON.stringify(headerResult)).toContain("Missing required header parameter 'X-Trace'")
+    expect(calls).toHaveLength(0)
+    expect(requests).toHaveLength(0)
   })
 
   test("path parameter values that would retarget the URL are rejected", async () => {

@@ -84,6 +84,7 @@ const parameterLocations = new Set(["path", "query", "header"])
 // OpenAPI: header parameters with these names SHALL be ignored.
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
+const blockedOperationNames = new Set(["__proto__", "constructor", "prototype"])
 const maxErrorBodyChars = 1_024
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -114,7 +115,7 @@ export const fromSpec = (options: Options): Result => {
   const base = options.baseUrl ?? specServerUrl(document)
   const used = new Set<string>()
   const skipped: Array<Skipped> = []
-  const tools: Record<string, Definition<HttpClient.HttpClient>> = {}
+  const tools = Object.create(null) as Record<string, Definition<HttpClient.HttpClient>>
 
   for (const [path, pathValue] of Object.entries(paths)) {
     if (!isRecord(pathValue)) continue
@@ -394,8 +395,11 @@ const operationName = (
       .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .replace(/^([0-9])/, "_$1") || "operation"
-  if (!used.has(base)) return base
-  const next = (index: number): string => (used.has(`${base}_${index}`) ? next(index + 1) : `${base}_${index}`)
+  if (!used.has(base) && !blockedOperationNames.has(base)) return base
+  const next = (index: number): string => {
+    const candidate = `${base}_${index}`
+    return used.has(candidate) || blockedOperationNames.has(candidate) ? next(index + 1) : candidate
+  }
   return next(2)
 }
 
@@ -487,6 +491,14 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     if (url instanceof ToolError) return yield* Effect.fail(url)
     if (plan.body?.required === true && value.body === undefined) {
       return yield* Effect.fail(toolError("Missing required request body."))
+    }
+    for (const parameter of plan.parameters) {
+      if (!parameter.required || parameter.location === "path") continue
+      const source = parameter.location === "query" ? query : headers
+      const item = own(source, parameter.name)
+      if (item === undefined || item === null) {
+        return yield* Effect.fail(toolError(`Missing required ${parameter.location} parameter '${parameter.name}'.`))
+      }
     }
 
     const auth = yield* resolveAuth(plan)

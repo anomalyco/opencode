@@ -154,7 +154,7 @@ interface ExecuteFailure {
 
 ### OpenAPI tools
 
-`OpenAPI.fromSpec` (from `@opencode-ai/codemode/openapi`) turns an OpenAPI 3.x document into a tool subtree - one tool per operation, named from `operationId`. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+`OpenAPI.fromSpec` (from `@opencode-ai/codemode/openapi`) turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Tool names use `operationId` when present, otherwise a method/path fallback; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
 
 ```ts
 import { CodeMode } from "@opencode-ai/codemode"

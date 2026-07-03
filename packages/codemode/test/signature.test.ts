@@ -268,6 +268,16 @@ describe("union schemas render every alternative", () => {
     expect(inputTypeScript(tool)).toBe("{ value?: string | number }")
     expect(outputTypeScript(tool)).toBe("number | boolean")
   })
+
+  test("allOf renders intersections with parenthesized union members", () => {
+    const schema = {
+      allOf: [
+        { type: "object", properties: { id: { type: "string" } } },
+        { type: ["string", "null"] },
+      ],
+    } as const
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
+  })
 })
 
 describe("pretty signatures in search results", () => {
