@@ -6,19 +6,26 @@ import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 export interface Coordinator<Key, E> {
   /** Snapshots keys with an execution owned by this coordinator. */
   readonly active: Effect.Effect<ReadonlySet<Key>>
-  /** Starts execution while idle or joins the active execution. */
+  /** Starts an execution while idle or joins the active execution. */
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Registers one coalesced follow-up after newly recorded work. */
   readonly wake: (key: Key) => Effect.Effect<void>
-  /** Stops active execution and waits for its cleanup. */
+  /** Stops the active execution and waits for its cleanup. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
 
-type Entry<E> = {
+/**
+ * One execution is a busy period for one key: one fiber that drains from the first wake
+ * until the key would stay idle. `pendingWake` is the doorbell: work recorded during the
+ * execution rings it, and the execution loop drains again instead of ending. The doorbell
+ * closes the gap between a drain's last eligibility check and the idle transition, since
+ * those cannot be one atomic step. `done` resolves joiners with this execution's exit.
+ */
+type Execution<E> = {
   readonly done: Deferred.Deferred<void, E>
-  owner?: Fiber.Fiber<void, never>
+  owner?: Fiber.Fiber<void>
   pendingWake: boolean
   stopping: boolean
 }
@@ -27,90 +34,85 @@ export const make = <Key, E>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
 }): Effect.Effect<Coordinator<Key, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const active = new Map<Key, Entry<E>>()
+    const executions = new Map<Key, Execution<E>>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
-    const makeEntry = (): Entry<E> => ({
-      done: Deferred.makeUnsafe<void, E>(),
-      pendingWake: false,
-      stopping: false,
-    })
+    const loop = (key: Key, execution: Execution<E>, force: boolean): Effect.Effect<void, E> =>
+      Effect.suspend(() => options.drain(key, force)).pipe(
+        Effect.flatMap(() =>
+          Effect.suspend(() => {
+            if (execution.stopping || !execution.pendingWake) return Effect.void
+            execution.pendingWake = false
+            // Trampoline so drains that complete synchronously cannot grow the stack.
+            return Effect.yieldNow.pipe(Effect.andThen(loop(key, execution, false)))
+          }),
+        ),
+      )
 
-    const start = (key: Key, entry: Entry<E>, force: boolean, successor = false) => {
+    const start = (key: Key, force: boolean, defer = false) => {
+      const execution: Execution<E> = { done: Deferred.makeUnsafe<void, E>(), pendingWake: false, stopping: false }
+      executions.set(key, execution)
       const ready = Deferred.makeUnsafe<void>()
-      const owner = fork(
-        (successor ? Effect.yieldNow : Deferred.await(ready)).pipe(
-          Effect.andThen(Effect.suspend(() => options.drain(key, force))),
-          Effect.onExit((exit) => Effect.sync(() => settle(key, entry, exit))),
+      execution.owner = fork(
+        (defer ? Effect.yieldNow : Deferred.await(ready)).pipe(
+          Effect.andThen(loop(key, execution, force)),
+          Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
           Effect.exit,
           Effect.asVoid,
         ),
       )
-      entry.owner = owner
-      if (!successor) Deferred.doneUnsafe(ready, Effect.void)
+      // Releasing after `owner` is assigned starts the drain synchronously (a prompt's wake
+      // reaches the provider in the same tick) without racing ownership. Successor starts
+      // defer one tick instead so failing self-waking executions cannot grow the stack.
+      if (!defer) Deferred.doneUnsafe(ready, Effect.void)
+      return execution
     }
 
-    const settle = (key: Key, entry: Entry<E>, exit: Exit.Exit<void, E>) => {
-      if (Exit.isSuccess(exit) && !entry.stopping && entry.pendingWake) {
-        entry.pendingWake = false
-        start(key, entry, false, true)
-        return
-      }
-
-      const successor = entry.pendingWake ? makeEntry() : undefined
-      if (successor === undefined) active.delete(key)
-      else {
-        active.set(key, successor)
-        start(key, successor, false, true)
-      }
-      Deferred.doneUnsafe(entry.done, exit)
+    // A doorbell that survives the execution loop (rung after the loop decided to end, or
+    // during failure or interruption cleanup) starts a fresh execution for the remaining work.
+    const settle = (key: Key, execution: Execution<E>, exit: Exit.Exit<void, E>) => {
+      if (execution.pendingWake) start(key, false, true)
+      else executions.delete(key)
+      Deferred.doneUnsafe(execution.done, exit)
     }
 
     const run = (key: Key): Effect.Effect<void, E> =>
       Effect.uninterruptibleMask((restore) => {
-        const entry = active.get(key)
-        if (entry !== undefined) {
-          if (entry.stopping) return restore(Deferred.await(entry.done).pipe(Effect.andThen(run(key))))
-          return restore(Deferred.await(entry.done))
+        const execution = executions.get(key)
+        if (execution !== undefined) {
+          if (execution.stopping) return restore(Deferred.await(execution.done).pipe(Effect.andThen(run(key))))
+          return restore(Deferred.await(execution.done))
         }
-
-        const next = makeEntry()
-        active.set(key, next)
-        start(key, next, true)
-        return restore(Deferred.await(next.done))
+        return restore(Deferred.await(start(key, true).done))
       })
 
     const wake = (key: Key) =>
       Effect.sync(() => {
-        const entry = active.get(key)
-        if (entry !== undefined) {
-          entry.pendingWake = true
+        const execution = executions.get(key)
+        if (execution !== undefined) {
+          execution.pendingWake = true
           return
         }
-
-        const next = makeEntry()
-        active.set(key, next)
-        start(key, next, false)
+        start(key, false)
       })
 
     const interrupt = (key: Key): Effect.Effect<void> =>
       Effect.suspend(() => {
-        const entry = active.get(key)
-        if (entry?.owner === undefined) return Effect.void
-        entry.stopping = true
-        entry.pendingWake = false
-        return Fiber.interrupt(entry.owner)
+        const execution = executions.get(key)
+        if (execution?.owner === undefined) return Effect.void
+        execution.stopping = true
+        execution.pendingWake = false
+        return Fiber.interrupt(execution.owner)
       })
 
-    // Each successful drain reuses its entry.done across coalesced wakes, so one await
-    // already spans steered and queued continuation. Re-check after it settles to cover a
-    // fresh wake (or a failure/stopping successor) that installs a new entry.
+    // One execution's `done` already spans coalesced continuations; re-check after it
+    // settles to cover a successor execution started by a late doorbell.
     const awaitIdle = (key: Key): Effect.Effect<void> =>
       Effect.suspend(() => {
-        const entry = active.get(key)
-        if (entry === undefined) return Effect.void
-        return Deferred.await(entry.done).pipe(Effect.exit, Effect.andThen(awaitIdle(key)))
+        const execution = executions.get(key)
+        if (execution === undefined) return Effect.void
+        return Deferred.await(execution.done).pipe(Effect.exit, Effect.andThen(awaitIdle(key)))
       })
 
-    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt, awaitIdle }
+    return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }
   })
