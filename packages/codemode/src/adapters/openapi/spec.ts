@@ -49,13 +49,16 @@ const projectSchema = (value: unknown, depth = 0): JsonSchema => {
     : nonEmptyString(value.type)
   const description = nonEmptyString(value.description)
   const format = nonEmptyString(value.format)
+  const allOf = Array.isArray(value.allOf)
+    ? value.allOf.map((item) => projectSchema(item, depth + 1)).filter((item) => Object.keys(item).length > 0)
+    : []
   const projected: JsonSchema = {
     ...(type === undefined ? {} : { type }),
     ...(Array.isArray(value.enum) ? { enum: value.enum } : {}),
     ...(value.const === undefined ? {} : { const: value.const }),
     ...(Array.isArray(value.anyOf) ? { anyOf: value.anyOf.map((item) => projectSchema(item, depth + 1)) } : {}),
     ...(Array.isArray(value.oneOf) ? { oneOf: value.oneOf.map((item) => projectSchema(item, depth + 1)) } : {}),
-    ...(Array.isArray(value.allOf) ? { allOf: value.allOf.map((item) => projectSchema(item, depth + 1)) } : {}),
+    ...(allOf.length === 0 ? {} : { allOf }),
     ...(isRecord(value.properties)
       ? {
           properties: Object.fromEntries(

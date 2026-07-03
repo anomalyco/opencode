@@ -3,6 +3,7 @@ import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { CodeMode } from "../src/index.js"
 import { OpenAPI, type Document } from "../src/adapters/openapi/index.js"
+import { inputTypeScript, outputTypeScript, Tool } from "../src/tool.js"
 
 const baseUrl = "http://localhost:4096"
 const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
@@ -97,6 +98,13 @@ describe("OpenAPI.fromSpec", () => {
     expect(toolAt(result.tools, "v2.health.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.create")).not.toBeUndefined()
+
+    const sessionGet = toolAt(result.tools, "v2.session.get")
+    expect(Tool.isDefinition(sessionGet)).toBe(true)
+    if (!Tool.isDefinition(sessionGet)) throw new Error("v2.session.get was not generated")
+    expect(inputTypeScript(sessionGet)).toBe("{ path: { sessionID: string } }")
+    expect(outputTypeScript(sessionGet)).toContain("id: string")
+    expect(outputTypeScript(sessionGet)).toContain("additions: number")
 
     for (const item of entries) {
       const tool = toolAt(result.tools, item.name)
