@@ -339,3 +339,43 @@ describe("pretty signatures in search results", () => {
     expect(instructions).not.toContain("/**")
   })
 })
+
+describe("non-identifier tool paths", () => {
+  const resolveLibrary = Tool.make({
+    description: "Resolve a Context7 library ID",
+    input: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        libraryName: { type: "string" },
+      },
+      required: ["query", "libraryName"],
+    } as const,
+    run: () => Effect.succeed("/reactjs/react.dev"),
+  })
+  const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
+
+  test("inline catalog uses bracket notation for dashed tool names", () => {
+    const instructions = runtime.instructions()
+
+    expect(instructions).toContain(
+      'tools.context7["resolve-library-id"](input: { query: string; libraryName: string }): Promise<unknown>',
+    )
+    expect(instructions).toContain("Do not infer or normalize tool names")
+    expect(instructions).toContain("bracket notation and quotes are part of the path")
+    expect(instructions).not.toContain("tools.context7.resolve-library-id")
+    expect(instructions).not.toContain("tools.context7.resolve_library_id")
+  })
+
+  test("search results return callable bracket-notation paths and signatures", async () => {
+    const result = await Effect.runPromise(
+      runtime.execute(`return await tools.$codemode.search({ query: "resolve library" })`),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("search failed")
+
+    const value = result.value as { items: Array<{ path: string; signature: string }> }
+    expect(value.items[0]?.path).toBe('tools.context7["resolve-library-id"]')
+    expect(value.items[0]?.signature).toContain('tools.context7["resolve-library-id"](input: {')
+  })
+})
