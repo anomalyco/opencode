@@ -306,8 +306,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               id: messageIDFromEvent(event.id),
               type: "shell",
               callID: event.data.callID,
-              command: event.data.command,
-              output: "",
+              shell: event.data.shell,
               time: { created: event.created },
             })
           })
@@ -317,6 +316,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.activeShell(draft, event.data.callID)
             if (!match) return
+            match.shell = event.data.shell
             match.output = event.data.output
             match.time.completed = event.created
           })

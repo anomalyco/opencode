@@ -733,7 +733,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    const shell = claimShell(data, event.properties.callID, "shell", event.properties.command)
+    const shell = claimShell(data, event.properties.callID, "shell", event.properties.shell.command)
     if (shell.source !== "shell") {
       return out(data, commits)
     }
@@ -744,7 +744,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     }
 
     data.tools.add(partID)
-    commits.push(startShell(event.properties.callID, shell.command ?? event.properties.command))
+    commits.push(startShell(event.properties.callID, shell.command ?? event.properties.shell.command))
     return out(data, commits, patch({ status: "running shell" }))
   }
 
@@ -771,7 +771,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     }
 
     data.ids.add(partID)
-    commits.push(doneShell(event.properties.callID, command, event.properties.output))
+    commits.push(doneShell(event.properties.callID, command, event.properties.output.output))
     return out(data, commits)
   }
 

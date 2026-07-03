@@ -1346,7 +1346,7 @@ function RevertMessage(props: {
 
 function ShellMessage(props: { message: Extract<SessionMessage, { type: "shell" }> }) {
   const { theme } = useTheme()
-  const output = createMemo(() => stripAnsi(props.message.output.trim()))
+  const output = createMemo(() => stripAnsi(props.message.output?.output.trim() ?? ""))
 
   return (
     <box
@@ -1359,7 +1359,7 @@ function ShellMessage(props: { message: Extract<SessionMessage, { type: "shell" 
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background}
     >
-      <text fg={theme.text}>$ {props.message.command}</text>
+      <text fg={theme.text}>$ {props.message.shell.command}</text>
       <Show when={output()}>
         <text fg={theme.textMuted}>{output()}</text>
       </Show>
@@ -1408,13 +1408,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
         >
           <text fg={theme.text}>{props.message.text}</text>
           <Show when={files().length}>
-            <box
-              flexDirection="row"
-              paddingBottom={metadataVisible() ? 1 : 0}
-              paddingTop={1}
-              gap={1}
-              flexWrap="wrap"
-            >
+            <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>
                 {(file) => {
                   const directory = file.mime === "application/x-directory"
@@ -1744,7 +1738,8 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
       return Boolean(shellID && data.shell.get(shellID))
     }
     if (display() === "subagent") {
-      const sessionID = stringValue(props.part.state.structured.sessionID) ?? stringValue(props.part.state.structured.sessionId)
+      const sessionID =
+        stringValue(props.part.state.structured.sessionID) ?? stringValue(props.part.state.structured.sessionId)
       return Boolean(sessionID && data.session.status(sessionID) === "running")
     }
     return false
@@ -2660,7 +2655,8 @@ function formatSessionTranscript(
 ) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
-    if (message.type === "shell") return [`## Shell\n\n\`\`\`\n$ ${message.command}\n${message.output}\n\`\`\``]
+    if (message.type === "shell")
+      return [`## Shell\n\n\`\`\`\n$ ${message.shell.command}\n${message.output?.output ?? ""}\n\`\`\``]
     if (message.type !== "assistant") return []
     const content = message.content.flatMap((item) => {
       if (item.type === "text") return [item.text]
