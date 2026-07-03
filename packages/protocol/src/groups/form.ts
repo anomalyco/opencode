@@ -1,6 +1,5 @@
 import { Form } from "@opencode-ai/schema/form"
 import { Location } from "@opencode-ai/schema/location"
-import { Session } from "@opencode-ai/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
@@ -24,14 +23,18 @@ const CreatePayload = Schema.Struct({
 
 export type CreatePayload = typeof CreatePayload.Type
 
+// Form routes intentionally look session-scoped, but use a form-specific middleware instead of
+// SessionLocationMiddleware. The middleware treats real session IDs normally and has an
+// undocumented `global` sentinel branch for MCP elicitation forms that are still Location-scoped
+// but not session-owned. This is temporary and should disappear once elicitations are attributable.
 export const makeFormGroup = <
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
-  SessionLocationId extends HttpApiMiddleware.AnyId,
-  SessionLocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
 >(
   locationMiddleware: Context.Key<LocationId, LocationService>,
-  sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>,
+  formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>,
 ) =>
   HttpApiGroup.make("server.form")
     .add(
@@ -51,11 +54,11 @@ export const makeFormGroup = <
     .middleware(locationMiddleware)
     .add(
       HttpApiEndpoint.get("session.form.list", "/api/session/:sessionID/form", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Schema.String },
         success: Schema.Struct({ data: Schema.Array(Form.Info) }),
         error: SessionNotFoundError,
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.form.list",
@@ -66,12 +69,12 @@ export const makeFormGroup = <
     )
     .add(
       HttpApiEndpoint.post("session.form.create", "/api/session/:sessionID/form", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Schema.String },
         payload: CreatePayload,
         success: Schema.Struct({ data: Form.Info }),
         error: [SessionNotFoundError, ConflictError, InvalidRequestError],
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.form.create",
@@ -82,11 +85,11 @@ export const makeFormGroup = <
     )
     .add(
       HttpApiEndpoint.get("session.form.get", "/api/session/:sessionID/form/:formID", {
-        params: { sessionID: Session.ID, formID: Form.ID },
+        params: { sessionID: Schema.String, formID: Form.ID },
         success: Schema.Struct({ data: Form.Info }),
         error: [SessionNotFoundError, FormNotFoundError],
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.form.get",
@@ -97,11 +100,11 @@ export const makeFormGroup = <
     )
     .add(
       HttpApiEndpoint.get("session.form.state", "/api/session/:sessionID/form/:formID/state", {
-        params: { sessionID: Session.ID, formID: Form.ID },
+        params: { sessionID: Schema.String, formID: Form.ID },
         success: Schema.Struct({ data: Form.State }),
         error: [SessionNotFoundError, FormNotFoundError],
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.form.state",
@@ -112,12 +115,12 @@ export const makeFormGroup = <
     )
     .add(
       HttpApiEndpoint.post("session.form.reply", "/api/session/:sessionID/form/:formID/reply", {
-        params: { sessionID: Session.ID, formID: Form.ID },
+        params: { sessionID: Schema.String, formID: Form.ID },
         payload: Form.Reply,
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormInvalidAnswerError, FormNotFoundError],
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.form.reply",
@@ -128,11 +131,11 @@ export const makeFormGroup = <
     )
     .add(
       HttpApiEndpoint.post("session.form.cancel", "/api/session/:sessionID/form/:formID/cancel", {
-        params: { sessionID: Session.ID, formID: Form.ID },
+        params: { sessionID: Schema.String, formID: Form.ID },
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.form.cancel",
