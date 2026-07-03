@@ -79,7 +79,7 @@ export const layer = Layer.effectDiscard(
         const used = new Set<string>()
         const record: Record<string, Tool.AnyTool> = {}
         const mcpTools = yield* mcp.tools()
-        if (Flag.OPENCODE_EXPERIMENTAL_CODE_MODE) {
+        if (Flag.OPENCODE_CODE_MODE) {
           if (mcpTools.length > 0)
             record.execute = ExecuteTool.make(mcpTools, mcp.callTool, ({ tool, context }) =>
               permissions.assert({
