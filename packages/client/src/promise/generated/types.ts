@@ -977,8 +977,27 @@ export type SessionContextOutput = {
         readonly time: { readonly created: number; readonly completed?: number }
         readonly type: "shell"
         readonly callID: string
-        readonly command: string
-        readonly output: string
+        readonly shell: {
+          readonly id: string
+          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly command: string
+          readonly cwd: string
+          readonly shell: string
+          readonly file: string
+          readonly pid?: number
+          readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
+          readonly metadata: { readonly [x: string]: JsonValue }
+          readonly time: {
+            readonly started: number | "Infinity" | "-Infinity" | "NaN"
+            readonly completed?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+        readonly output?: {
+          readonly output: string
+          readonly cursor: number
+          readonly size: number
+          readonly truncated: boolean
+        }
       }
     | {
         readonly id: string
@@ -1232,7 +1251,22 @@ export type SessionLogOutput =
           readonly type: "shell.started"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly callID: string; readonly command: string }
+          readonly data: {
+            readonly sessionID: string
+            readonly callID: string
+            readonly shell: {
+              readonly id: string
+              readonly status: "running" | "exited" | "timeout" | "killed"
+              readonly command: string
+              readonly cwd: string
+              readonly shell: string
+              readonly file: string
+              readonly pid?: number
+              readonly exit?: number
+              readonly metadata: { readonly [x: string]: unknown }
+              readonly time: { readonly started: number; readonly completed?: number }
+            }
+          }
         }
       | {
           readonly id: string
@@ -1241,7 +1275,28 @@ export type SessionLogOutput =
           readonly type: "shell.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly callID: string; readonly output: string }
+          readonly data: {
+            readonly sessionID: string
+            readonly callID: string
+            readonly shell: {
+              readonly id: string
+              readonly status: "running" | "exited" | "timeout" | "killed"
+              readonly command: string
+              readonly cwd: string
+              readonly shell: string
+              readonly file: string
+              readonly pid?: number
+              readonly exit?: number
+              readonly metadata: { readonly [x: string]: unknown }
+              readonly time: { readonly started: number; readonly completed?: number }
+            }
+            readonly output: {
+              readonly output: string
+              readonly cursor: number
+              readonly size: number
+              readonly truncated: boolean
+            }
+          }
         }
       | {
           readonly id: string
@@ -1618,8 +1673,27 @@ export type SessionMessageOutput = {
         readonly time: { readonly created: number; readonly completed?: number }
         readonly type: "shell"
         readonly callID: string
-        readonly command: string
-        readonly output: string
+        readonly shell: {
+          readonly id: string
+          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly command: string
+          readonly cwd: string
+          readonly shell: string
+          readonly file: string
+          readonly pid?: number
+          readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
+          readonly metadata: { readonly [x: string]: JsonValue }
+          readonly time: {
+            readonly started: number | "Infinity" | "-Infinity" | "NaN"
+            readonly completed?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+        readonly output?: {
+          readonly output: string
+          readonly cursor: number
+          readonly size: number
+          readonly truncated: boolean
+        }
       }
     | {
         readonly id: string
@@ -1799,8 +1873,27 @@ export type MessageListOutput = {
         readonly time: { readonly created: number; readonly completed?: number }
         readonly type: "shell"
         readonly callID: string
-        readonly command: string
-        readonly output: string
+        readonly shell: {
+          readonly id: string
+          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly command: string
+          readonly cwd: string
+          readonly shell: string
+          readonly file: string
+          readonly pid?: number
+          readonly exit?: number | "Infinity" | "-Infinity" | "NaN"
+          readonly metadata: { readonly [x: string]: JsonValue }
+          readonly time: {
+            readonly started: number | "Infinity" | "-Infinity" | "NaN"
+            readonly completed?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+        readonly output?: {
+          readonly output: string
+          readonly cursor: number
+          readonly size: number
+          readonly truncated: boolean
+        }
       }
     | {
         readonly id: string
@@ -4444,7 +4537,22 @@ export type EventSubscribeOutput =
       readonly type: "shell.started"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly callID: string; readonly command: string }
+      readonly data: {
+        readonly sessionID: string
+        readonly callID: string
+        readonly shell: {
+          readonly id: string
+          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly command: string
+          readonly cwd: string
+          readonly shell: string
+          readonly file: string
+          readonly pid?: number
+          readonly exit?: number
+          readonly metadata: { readonly [x: string]: unknown }
+          readonly time: { readonly started: number; readonly completed?: number }
+        }
+      }
     }
   | {
       readonly id: string
@@ -4453,7 +4561,28 @@ export type EventSubscribeOutput =
       readonly type: "shell.ended"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly callID: string; readonly output: string }
+      readonly data: {
+        readonly sessionID: string
+        readonly callID: string
+        readonly shell: {
+          readonly id: string
+          readonly status: "running" | "exited" | "timeout" | "killed"
+          readonly command: string
+          readonly cwd: string
+          readonly shell: string
+          readonly file: string
+          readonly pid?: number
+          readonly exit?: number
+          readonly metadata: { readonly [x: string]: unknown }
+          readonly time: { readonly started: number; readonly completed?: number }
+        }
+        readonly output: {
+          readonly output: string
+          readonly cursor: number
+          readonly size: number
+          readonly truncated: boolean
+        }
+      }
     }
   | {
       readonly id: string
