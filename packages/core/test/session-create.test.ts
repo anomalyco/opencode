@@ -130,6 +130,53 @@ describe("SessionV2.create", () => {
     }),
   )
 
+  it.effect("filters root sessions before applying the page limit", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const staleRoot = yield* session.create({ location, title: "stale root" })
+      const root = yield* session.create({ location, title: "root" })
+      const children = yield* Effect.forEach(Array.from({ length: 60 }), (_, index) =>
+        session.create({ parentID: root.id, title: `child ${index}` }),
+      )
+
+      yield* Effect.forEach(children, (item, index) =>
+        db
+          .update(SessionTable)
+          .set({ time_created: index + 100, time_updated: index + 20_000 })
+          .where(eq(SessionTable.id, item.id))
+          .run(),
+      )
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: 2, time_updated: 5_000 })
+        .where(eq(SessionTable.id, staleRoot.id))
+        .run()
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: 1, time_updated: 10_000 })
+        .where(eq(SessionTable.id, root.id))
+        .run()
+
+      const page = yield* session.list({ directory: location.directory, parentID: null, limit: 1, order: "desc" })
+
+      expect(page.data.map((item) => item.id)).toEqual([root.id])
+    }),
+  )
+
+  it.effect("filters direct child sessions by parent ID", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const parent = yield* session.create({ location, title: "parent" })
+      const child = yield* session.create({ parentID: parent.id, title: "child" })
+      yield* session.create({ location, title: "other root" })
+
+      const page = yield* session.list({ parentID: parent.id })
+
+      expect(page.data.map((item) => item.id)).toEqual([child.id])
+    }),
+  )
+
   it.effect("forks a session by replaying a durable fork event into copied projected rows", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service

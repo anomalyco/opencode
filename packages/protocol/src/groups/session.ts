@@ -29,6 +29,18 @@ import { Revert } from "@opencode-ai/schema/revert"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { EventLog } from "@opencode-ai/schema/event-log"
 
+const ParentIDFilter = Schema.Union([
+  Session.ID,
+  Schema.Null.pipe(
+    Schema.encodeTo(Schema.Literal("null"), {
+      decode: SchemaGetter.transform(() => null),
+      encode: SchemaGetter.transform(() => "null" as const),
+    }),
+  ),
+]).annotate({
+  description: "Filter by parent session. Use null to return only root sessions.",
+})
+
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
@@ -38,6 +50,7 @@ const SessionsQueryFields = {
     description: "Session order for the first page. Use desc for newest first or asc for oldest first.",
   }),
   search: Schema.optional(Schema.String),
+  parentID: ParentIDFilter.pipe(Schema.optional),
 }
 
 const SessionsDirectoryQuery = Schema.Struct({

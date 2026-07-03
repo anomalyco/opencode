@@ -104,6 +104,19 @@ if (logTypesPatched === generatedTypes) {
 }
 await Bun.write("./src/v2/gen/types.gen.ts", logTypesPatched)
 
+const querySerializerPath = "./src/v2/gen/client/utils.gen.ts"
+const querySerializerSource = await Bun.file(querySerializerPath).text()
+const querySerializerPatched = querySerializerSource.replace(
+  /if \(value === undefined \|\| value === null\) \{\s*continue;?\s*\}/,
+  "if (value === undefined) {\n          continue;\n        }\n\n        if (value === null) {\n          search.push(`${name}=null`);\n          continue;\n        }",
+)
+if (querySerializerPatched === querySerializerSource) {
+  throw new Error(
+    `Query serializer null patch did not apply; @hey-api/openapi-ts output may have changed (${querySerializerPath})`,
+  )
+}
+await Bun.write(querySerializerPath, querySerializerPatched)
+
 const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
 const logSdkPatched = generatedSdk.replace(
   /(Read the session log[\s\S]*?parameters: \{[\s\S]*?after\?: )string(\s*\|\s*null)?/,
@@ -196,5 +209,7 @@ function inlineTypedAllOfConstraints(value: unknown): void {
 
 function isConstraintSchema(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false
-  return !Object.keys(value).some((key) => key === "$ref" || key === "type" || key === "allOf" || key === "anyOf" || key === "oneOf")
+  return !Object.keys(value).some(
+    (key) => key === "$ref" || key === "type" || key === "allOf" || key === "anyOf" || key === "oneOf",
+  )
 }

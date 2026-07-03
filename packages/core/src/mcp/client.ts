@@ -267,7 +267,7 @@ export const connect = Effect.fnUntraced(function* (
             client.request(
               { method: "prompts/get", params: { name: input.name, arguments: input.args ?? {} } },
               GetPromptResultSchema,
-              { signal, timeout: requestTimeout, resetTimeoutOnProgress: true, onprogress: () => {} },
+              { signal },
             ),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(
@@ -281,8 +281,8 @@ export const connect = Effect.fnUntraced(function* (
             client.callTool(
               { name: input.name, arguments: input.args ?? {} },
               CallToolResultSchema,
-              // The SDK only sends a progress token when onprogress is present, which enables timeout resets.
-              { signal, timeout: requestTimeout, resetTimeoutOnProgress: true, onprogress: () => {} },
+              // Keep progress tokens available without imposing a client timeout on tool execution.
+              { signal, resetTimeoutOnProgress: true, onprogress: () => {} },
             ),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(

@@ -51,7 +51,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     ...query,
                     anchor: {
                       id: first.id,
-                      time: DateTime.toEpochMillis(first.time.created),
+                      time: DateTime.toEpochMillis(first.time.updated),
                       direction: "previous",
                     },
                   })
@@ -61,7 +61,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     ...query,
                     anchor: {
                       id: last.id,
-                      time: DateTime.toEpochMillis(last.time.created),
+                      time: DateTime.toEpochMillis(last.time.updated),
                       direction: "next",
                     },
                   })

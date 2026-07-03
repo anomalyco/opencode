@@ -5742,6 +5742,7 @@ export class Session3 extends HeyApiClient {
       limit?: string | null
       order?: "asc" | "desc" | null
       search?: string | null
+      parentID?: string | "null" | null
       directory?: string | null
       project?: string | null
       subpath?: string | null
@@ -5758,6 +5759,7 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "limit" },
             { in: "query", key: "order" },
             { in: "query", key: "search" },
+            { in: "query", key: "parentID" },
             { in: "query", key: "directory" },
             { in: "query", key: "project" },
             { in: "query", key: "subpath" },

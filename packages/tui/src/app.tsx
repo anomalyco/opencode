@@ -531,23 +531,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
   let continued = false
   createEffect(() => {
-    // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
     if (continued || sync.status === "loading" || !args.continue) return
-    const match = data.session.list().find((session) => !session.parentID)?.id
-    if (match) {
-      continued = true
-      if (args.fork) {
+    continued = true
+    const location = data.location.default()
+    void sdk.api.session
+      .list({
+        limit: 1,
+        order: "desc",
+        parentID: null,
+        directory: location.directory,
+        workspace: location.workspaceID,
+      })
+      .then((response) => {
+        const match = response.data[0]?.id
+        if (!match) return
+        if (!args.fork) {
+          route.navigate({ type: "session", sessionID: match })
+          return
+        }
         void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            return
           }
+          toast.show({ message: "Failed to fork session", variant: "error" })
         })
-      } else {
-        route.navigate({ type: "session", sessionID: match })
-      }
-    }
+      })
+      .catch(toast.error)
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking

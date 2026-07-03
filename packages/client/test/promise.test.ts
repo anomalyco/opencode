@@ -247,7 +247,7 @@ test("session methods use the public HTTP contract", async () => {
     },
   })
 
-  const page = await client.session.list({ limit: 10, order: "desc" })
+  const page = await client.session.list({ limit: 10, order: "desc", parentID: null })
   const active = await client.session.active()
   const created = await client.session.create({ location: { directory: "/tmp/project" } })
   await client.session.switchAgent({ sessionID: "ses_test", agent: "build" })
@@ -276,7 +276,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(log).toEqual([modelSwitchedEvent, caughtUp])
   expect(message).toEqual(modelSwitchedMessage)
   expect(requests.map((request) => [request.init?.method, request.url])).toEqual([
-    ["GET", "http://localhost:3000/api/session?limit=10&order=desc"],
+    ["GET", "http://localhost:3000/api/session?limit=10&order=desc&parentID=null"],
     ["GET", "http://localhost:3000/api/session/active"],
     ["POST", "http://localhost:3000/api/session"],
     ["POST", "http://localhost:3000/api/session/ses_test/agent"],
