@@ -319,7 +319,8 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
   }
 
   const [entries] = createResource(query, loadItems, { initialValue: [] as Entry[] })
-  const visibleEntries = createMemo(() => uniqueEntries(entries() ?? []))
+  // Render stale results while a new query loads to avoid flashing "Loading" per keystroke.
+  const visibleEntries = createMemo(() => uniqueEntries(entries.latest ?? []))
   const groupedEntries = createMemo(() => groups(visibleEntries()))
   const activeEntry = createMemo(() => visibleEntries()[active()])
 
@@ -425,34 +426,33 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
         <ScrollView class="command-palette-v2-scroll" viewportRef={(el) => (resultsRef = el)}>
           <div class="command-palette-v2-results" role="listbox">
             <Show
-              when={!entries.loading}
-              fallback={<div class="command-palette-v2-state">{language.t("common.loading")}</div>}
+              when={visibleEntries().length > 0}
+              fallback={
+                <div class="command-palette-v2-state">
+                  {entries.loading ? language.t("common.loading") : language.t("palette.empty")}
+                </div>
+              }
             >
-              <Show
-                when={visibleEntries().length > 0}
-                fallback={<div class="command-palette-v2-state">{language.t("palette.empty")}</div>}
-              >
-                <For each={groupedEntries()}>
-                  {(group) => (
-                    <div class="command-palette-v2-group">
-                      <Show when={group.category}>
-                        <div class="command-palette-v2-group-title">{group.category}</div>
-                      </Show>
-                      <For each={group.entries}>
-                        {(item) => (
-                          <PaletteRow
-                            item={item}
-                            active={activeEntry()?.id === item.id}
-                            language={language}
-                            onActive={() => setActive(visibleEntries().findIndex((entry) => entry.id === item.id))}
-                            onSelect={() => select(item)}
-                          />
-                        )}
-                      </For>
-                    </div>
-                  )}
-                </For>
-              </Show>
+              <For each={groupedEntries()}>
+                {(group) => (
+                  <div class="command-palette-v2-group">
+                    <Show when={group.category}>
+                      <div class="command-palette-v2-group-title">{group.category}</div>
+                    </Show>
+                    <For each={group.entries}>
+                      {(item) => (
+                        <PaletteRow
+                          item={item}
+                          active={activeEntry()?.id === item.id}
+                          language={language}
+                          onActive={() => setActive(visibleEntries().findIndex((entry) => entry.id === item.id))}
+                          onSelect={() => select(item)}
+                        />
+                      )}
+                    </For>
+                  </div>
+                )}
+              </For>
             </Show>
           </div>
         </ScrollView>
@@ -485,15 +485,13 @@ function PaletteRow(props: {
     >
       <Switch
         fallback={
-          <>
-            <div class="command-palette-v2-row-main">
-              <FileIcon node={{ path: props.item.path ?? "", type: "file" }} class="command-palette-v2-row-icon size-4" />
-              <div class="command-palette-v2-file-path">
-                <span class="command-palette-v2-file-dir">{getDirectory(props.item.path ?? "")}</span>
-                <span class="command-palette-v2-file-name">{getFilename(props.item.path ?? "")}</span>
-              </div>
+          <div class="command-palette-v2-row-main">
+            <FileIcon node={{ path: props.item.path ?? "", type: "file" }} class="command-palette-v2-row-icon size-4" />
+            <div class="command-palette-v2-file-path">
+              <span class="command-palette-v2-file-dir">{getDirectory(props.item.path ?? "")}</span>
+              <span class="command-palette-v2-file-name">{getFilename(props.item.path ?? "")}</span>
             </div>
-          </>
+          </div>
         }
       >
         <Match when={props.item.type === "command"}>
