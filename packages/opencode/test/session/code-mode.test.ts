@@ -423,12 +423,14 @@ describe("code mode execute", () => {
     expect(output.metadata.error).toBe(true)
   })
 
-  test("truncates an oversized result via the CodeMode output limit", async () => {
+  test("leaves oversized results to OpenCode's native tool-output truncation", async () => {
+    // No CodeMode output limit is set, so the full result reaches the shared Tool.define
+    // wrapper intact (the harness Truncate fake passes it through un-truncated).
     const tool = await build({})
     const output = await Effect.runPromise(tool.execute({ code: "return 'x'.repeat(40000)" }, ctx))
     expect(output.metadata.error).toBeUndefined()
-    expect(output.output).toContain("[result truncated:")
-    expect(output.output.length).toBeLessThan(40_000)
+    expect(output.output).not.toContain("[result truncated:")
+    expect(output.output.length).toBeGreaterThanOrEqual(40_000)
   })
 
   test("appends logs after the result on success and after the message on error", async () => {

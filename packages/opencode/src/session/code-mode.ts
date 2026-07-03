@@ -12,10 +12,12 @@ import {
 
 export const CODE_MODE_TOOL = "execute"
 
-// OpenCode sets NO execution limits: no timeout and no tool-call cap. Cancelling the tool
-// call interrupts the execution fiber, and structured concurrency takes the program and its
-// in-flight child calls down with it; every child call is permission-gated anyway. The only
-// active bound is CodeMode's default 32KB output truncation.
+// OpenCode sets NO execution limits: no timeout, no tool-call cap, and no CodeMode output
+// truncation. Cancelling the tool call interrupts the execution fiber, and structured
+// concurrency takes the program and its in-flight child calls down with it; every child call
+// is permission-gated anyway. Output bounding is OpenCode's native tool-output truncation
+// (Tool.define's shared wrapper), which applies to `execute` like any other tool and dumps
+// the full output to a file when it triggers.
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
