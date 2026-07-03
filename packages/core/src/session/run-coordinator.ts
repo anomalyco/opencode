@@ -49,29 +49,27 @@ export const make = <Key, E>(options: {
         ),
       )
 
-    const start = (key: Key, force: boolean, defer = false) => {
+    const start = (key: Key, force: boolean) => {
       const execution: Execution<E> = { done: Deferred.makeUnsafe<void, E>(), pendingWake: false, stopping: false }
       executions.set(key, execution)
-      const ready = Deferred.makeUnsafe<void>()
+      // The leading yield lets `owner` be assigned before the drain can settle, and keeps
+      // failing self-waking executions from growing the stack across successor starts.
+      // Drains start one tick after wake; callers observe progress through events or run.
       execution.owner = fork(
-        (defer ? Effect.yieldNow : Deferred.await(ready)).pipe(
+        Effect.yieldNow.pipe(
           Effect.andThen(loop(key, execution, force)),
           Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
           Effect.exit,
           Effect.asVoid,
         ),
       )
-      // Releasing after `owner` is assigned starts the drain synchronously (a prompt's wake
-      // reaches the provider in the same tick) without racing ownership. Successor starts
-      // defer one tick instead so failing self-waking executions cannot grow the stack.
-      if (!defer) Deferred.doneUnsafe(ready, Effect.void)
       return execution
     }
 
     // A doorbell that survives the execution loop (rung after the loop decided to end, or
     // during failure or interruption cleanup) starts a fresh execution for the remaining work.
     const settle = (key: Key, execution: Execution<E>, exit: Exit.Exit<void, E>) => {
-      if (execution.pendingWake) start(key, false, true)
+      if (execution.pendingWake) start(key, false)
       else executions.delete(key)
       Deferred.doneUnsafe(execution.done, exit)
     }
