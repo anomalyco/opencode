@@ -7,8 +7,6 @@ import { IntegrationID } from "./integration-id.js"
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",
 })
-// A server that is configured but has not yet finished its first connection attempt. A live
-// connection that later drops becomes "failed", so this is only ever the pre-connection state.
 const Pending = Schema.Struct({ status: Schema.Literal("pending") }).annotate({
   identifier: "Mcp.Status.Pending",
 })

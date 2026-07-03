@@ -9,7 +9,7 @@ import { TextAttributes } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/sdk/v2"
 
 // Sort by how much attention a server needs: auth prompts first, then failures,
-// then healthy servers, in-flight connections, and intentionally-off servers last.
+// then healthy servers, and intentionally-off servers last.
 function statusMeta(status: McpServer["status"], theme: Theme) {
   switch (status.status) {
     case "needs_auth":
