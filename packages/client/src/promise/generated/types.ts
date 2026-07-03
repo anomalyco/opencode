@@ -4022,6 +4022,121 @@ export type EventSubscribeOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "form.created"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly form:
+          | {
+              readonly id: string
+              readonly sessionID: string
+              readonly title?: string
+              readonly metadata?: { readonly [x: string]: unknown }
+              readonly mode: "form"
+              readonly fields: ReadonlyArray<
+                | {
+                    readonly key: string
+                    readonly title?: string
+                    readonly description?: string
+                    readonly required?: boolean
+                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly type: "string"
+                    readonly format?: "email" | "uri" | "date" | "date-time"
+                    readonly minLength?: number
+                    readonly maxLength?: number
+                    readonly pattern?: string
+                    readonly placeholder?: string
+                    readonly default?: string
+                    readonly options?: ReadonlyArray<{
+                      readonly value: string
+                      readonly label: string
+                      readonly description?: string
+                    }>
+                    readonly custom?: boolean
+                  }
+                | {
+                    readonly key: string
+                    readonly title?: string
+                    readonly description?: string
+                    readonly required?: boolean
+                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly type: "number"
+                    readonly minimum?: number
+                    readonly maximum?: number
+                    readonly default?: number
+                  }
+                | {
+                    readonly key: string
+                    readonly title?: string
+                    readonly description?: string
+                    readonly required?: boolean
+                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly type: "integer"
+                    readonly minimum?: number
+                    readonly maximum?: number
+                    readonly default?: number
+                  }
+                | {
+                    readonly key: string
+                    readonly title?: string
+                    readonly description?: string
+                    readonly required?: boolean
+                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly type: "boolean"
+                    readonly default?: boolean
+                  }
+                | {
+                    readonly key: string
+                    readonly title?: string
+                    readonly description?: string
+                    readonly required?: boolean
+                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly type: "multiselect"
+                    readonly options: ReadonlyArray<{
+                      readonly value: string
+                      readonly label: string
+                      readonly description?: string
+                    }>
+                    readonly minItems?: number
+                    readonly maxItems?: number
+                    readonly custom?: boolean
+                    readonly default?: ReadonlyArray<string>
+                  }
+              >
+            }
+          | {
+              readonly id: string
+              readonly sessionID: string
+              readonly title?: string
+              readonly metadata?: { readonly [x: string]: unknown }
+              readonly mode: "url"
+              readonly url: string
+            }
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "form.replied"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly id: string
+        readonly sessionID: string
+        readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "form.cancelled"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: { readonly id: string; readonly sessionID: string }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "todo.updated"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
