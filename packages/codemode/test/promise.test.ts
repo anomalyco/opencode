@@ -273,7 +273,7 @@ describe("Promise.allSettled", () => {
       ])
     `)).toEqual([
       { status: "fulfilled", value: 5 },
-      { status: "rejected", reason: { message: "Lookup refused" } },
+      { status: "rejected", reason: { name: "Error", message: "Lookup refused" } },
       { status: "fulfilled", value: "plain" },
       { status: "rejected", reason: { name: "Error", message: "boom" } },
     ])

@@ -91,6 +91,33 @@ describe("CodeMode host failure boundary", () => {
     expect(JSON.stringify(result)).not.toMatch(/host-output-secret/)
   })
 
+  test("caught tool failures are Error values in-program", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: {
+          host: {
+            call: Tool.make({
+              description: "Refuse",
+              input: Schema.Struct({}),
+              output: Schema.String,
+              run: () => Effect.fail(toolError("Refused")),
+            }),
+          },
+        },
+      }).execute(`
+        try {
+          await tools.host.call({})
+          return "no"
+        } catch (e) {
+          return { isError: e instanceof Error, message: e.message }
+        }
+      `),
+    )
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value).toStrictEqual({ isError: true, message: "Refused" })
+  })
+
   test("propagates host interruption instead of returning a diagnostic", async () => {
     const exit = await Effect.runPromiseExit(
       CodeMode.make({
@@ -212,6 +239,66 @@ describe("CodeMode console capture", () => {
     expect(result.ok ? undefined : result.error.message).toBe("Uncaught: boom")
   })
 
+  test("prints NaN and Infinity literally instead of the JSON null", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({
+      code: `
+        console.log(NaN)
+        console.log(Infinity, -Infinity)
+        console.log({ ratio: NaN, bounds: [Infinity] })
+        return null
+      `,
+    }))
+
+    expect(result.ok).toBe(true)
+    expect(result.logs).toStrictEqual(["NaN", "Infinity -Infinity", '{"ratio":NaN,"bounds":[Infinity]}'])
+  })
+
+  test("renders sandbox values nested inside logged containers", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({
+      code: `
+        console.log({ m: new Map([["a", 1]]), when: new Date(0), r: /ab/g, s: new Set([1, 2]) })
+        console.log([new Date(0)])
+        return null
+      `,
+    }))
+
+    expect(result.ok).toBe(true)
+    expect(result.logs).toStrictEqual([
+      '{"m":Map(1) [["a",1]],"when":1970-01-01T00:00:00.000Z,"r":/ab/g,"s":Set(2) [1,2]}',
+      "[1970-01-01T00:00:00.000Z]",
+    ])
+  })
+
+  test("console formatting is total: cycles and opaque references render as markers", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({
+      code: `
+        const m = new Map()
+        m.set("self", m)
+        console.log({ box: m })
+        console.log({ fn: (x) => x, ok: 1 })
+        return null
+      `,
+    }))
+
+    expect(result.ok).toBe(true)
+    expect(result.logs).toStrictEqual([
+      '{"box":Map(1) [["self",[Circular]]]}',
+      '{"fn":[CodeMode reference],"ok":1}',
+    ])
+  })
+
+  test("console.table renders sandbox value cells", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({
+      code: `
+        console.table([{ when: new Date(0), n: NaN }])
+        return null
+      `,
+    }))
+
+    expect(result.ok).toBe(true)
+    expect(result.logs).toStrictEqual(["(index)\twhen\tn\n0\t1970-01-01T00:00:00.000Z\tNaN"])
+  })
+
   test("captures console.dir and console.table output", async () => {
     const result = await Effect.runPromise(CodeMode.execute({
       code: `
@@ -237,6 +324,18 @@ describe("CodeMode console capture", () => {
 })
 
 describe("CodeMode output budget", () => {
+  test("absent maxOutputBytes means no truncation at all", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({
+      code: `console.log("z".repeat(50_000)); return "x".repeat(100_000)`,
+    }))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.truncated).toBeUndefined()
+    expect(result.value).toBe("x".repeat(100_000))
+    expect(result.logs).toStrictEqual(["z".repeat(50_000)])
+  })
+
   test("truncates an oversized result value with a marker instead of failing", async () => {
     const limits: ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(CodeMode.execute({
@@ -456,9 +555,12 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("TypeScript type annotations are allowed and stripped before execution")
     // The not-supported list is derived from (and verified against) the interpreter.
     expect(instructions).toContain("Not supported")
-    for (const missing of ["classes", "generators", "for await...of", ".then/.catch/.finally", "`x instanceof Error`", "splice"]) {
+    for (const missing of ["classes", "generators", "for await...of", ".then/.catch/.finally"]) {
       expect(instructions).toContain(missing)
     }
+    // Implemented by the DSL-expansion pass, so no longer listed as missing.
+    expect(instructions).not.toContain("instanceof Error")
+    expect(instructions).not.toContain("splice")
     // The data-boundary note survives.
     expect(instructions).toContain("Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.")
   })

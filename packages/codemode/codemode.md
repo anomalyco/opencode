@@ -99,13 +99,14 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 
 ### Runtime behavior
 - Limits are EXACTLY the three public knobs: `{ timeoutMs, maxToolCalls, maxOutputBytes }` —
-  matching the original locked spec exactly. `timeoutMs` and `maxToolCalls` have NO defaults
-  (absent = no timeout / unlimited calls — budgets are host policy; user direction, Fix 6);
-  `maxOutputBytes` defaults to 32,000 because truncation never breaks correctness and its
-  absence silently floods model context. OpenCode's adapter policy (user direction): NO
-  limits at all — no timeout, unlimited tool calls (each child call is permission-gated;
-  user cancel interrupts the execution fiber and its children), default output truncation
-  only.
+  matching the original locked spec exactly. NO limit has a default (user direction, Fix 6
+  for the first two; extended to `maxOutputBytes` in the truncation-layering fix below):
+  absent = no timeout / unlimited calls / no output truncation — budgets are host policy.
+  A host without its own output bounding should set `maxOutputBytes` explicitly, or
+  oversized results silently flood model context. OpenCode's adapter policy (user
+  direction): NO limits at all — no timeout, unlimited tool calls (each child call is
+  permission-gated; user cancel interrupts the execution fiber and its children), and no
+  CodeMode truncation (output bounding is OpenCode's native tool-output truncation).
   The internal limit system that Wave 2 kept behind
   an `@internal` `InternalExecutionLimits` type (maxOperations, maxDataBytes, maxValueDepth,
   maxCollectionLength, maxSourceBytes, maxAuditBytes, maxConcurrency) was deleted outright in
@@ -113,9 +114,12 @@ From issue #34787 and design discussion. Do not relitigate these casually.
   `TOOL_CALL_CONCURRENCY = 8` (the fork semaphore) and `MAX_VALUE_DEPTH = 32` (the `copyIn`
   boundary depth check, kept only because it beats a native stack-overflow RangeError as an
   error message; still reports `InvalidDataValue`).
-- CodeMode owns truncation of its own returned output (`maxOutputBytes`). OpenCode's native
-  tool-output truncation (50KB / 2000 lines in `tool.ts` + `truncate.ts`) stays on as the
-  outer safety net for now; we may remove that layering later.
+- Truncation layering RESOLVED (user direction): CodeMode truncation is off in OpenCode.
+  `execute` is a normal `Tool.define` tool, so OpenCode's native tool-output truncation
+  (50KB / 2000 lines in `tool.ts` + `truncate.ts`, full output dumped to a file) applies to
+  it with no special-casing — verified by tracing `wrap()` in `tool.ts:130-144` (the
+  `metadata.truncated` exemption never fires for `execute`). One truncation layer, the
+  host's. `maxOutputBytes` remains available for hosts without their own bounding.
 - Pure-JS built-ins only. **No ambient authority**: no fs, child processes, network/fetch,
   process/env, or timers in v1. The agent has the bash tool for that.
 - Forgiving JS semantics are locked (see §3, Wave 1a/1b-i) — missing props read `undefined`,
@@ -131,9 +135,10 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 
 ## 3. Current status (what is already done on `codemode-v2`)
 
-Waves 0–5 and the post-wave fixes below are committed on `codemode-v2` (two commits: the
-generic package, then the OpenCode integration); Fixes 4–8 are uncommitted working-tree
-changes. Verification: from `packages/codemode`, `bun test` (169 pass / 0 fail across
+Waves 0–5 and the post-wave fixes below are committed on `codemode-v2` (four commits: the
+generic package, the OpenCode integration, then one follow-up pair for Fixes 4–9); the
+DSL-expansion pass is uncommitted working-tree changes. Verification: from
+`packages/codemode`, `bun test` (207 pass / 0 fail across
 `codemode/parity/stdlib/promise/enumeration/signature`) and `bun run typecheck`; from
 `packages/opencode`, `bun run typecheck` and `bun test test/session/` (all green — the
 adapter suites are `code-mode.test.ts`, 34 tests, and `code-mode-integration.test.ts`,
@@ -174,7 +179,9 @@ spec. The seeded interpreter was deliberately strict; these behaviors replaced t
   carve-out died with that machinery in Fix 5).
 - **JSON semantics at every boundary and checkpoint**: Date → ISO string (invalid → null),
   RegExp/Map/Set → `{}`. `copyIn` also converts host `Date`/`RegExp`/`Map`/`Set` instances the
-  same way (a host tool may legitimately return them).
+  same way (a host tool may legitimately return them). (Narrowed by the DSL-expansion pass:
+  intra-sandbox checkpoints now preserve the instances; JSON forms apply at the host
+  boundary only.)
 - Date: `Date.now/parse/UTC`, `new Date(epoch|string|components)`, getters + UTC variants,
   `end - start`, `a < b`, `+date`; `toString` is ISO for cross-host determinism.
 - RegExp: literals + `new RegExp`, `test`/`exec` (stateful `lastIndex` for `g`), string
@@ -263,8 +270,9 @@ per-MCP registration; MCP resource tools unaffected) is unchanged.
   error — logs are plain pre-formatted lines now), attachments: accumulated }` through the
   existing `Tool.ExecuteResult.attachments` → `message-v2.ts` vision plumbing; attachments
   ride on both success and error results. Diagnostic `suggestions` not already contained in
-  the message are appended to error output. Native outer truncation stays on (adapter never
-  sets `metadata.truncated`); CodeMode's own `maxOutputBytes` (32 KB default) cuts first.
+  the   message are appended to error output. Native outer truncation stays on (adapter never
+  sets `metadata.truncated`); CodeMode's own `maxOutputBytes` (32 KB default at the time)
+  cut first — since the truncation-layering fix, native truncation is the only layer.
   Limits: `{ timeoutMs: 30_000 }` at the time (matched the default MCP request timeout);
   killed in Fix 6 — the adapter now passes no limits at all.
 - **Progress**: `onToolCallStart`/`onToolCallEnd` → `ctx.metadata({ toolCalls })` with
@@ -710,26 +718,135 @@ instructions and directed further cuts):
     boundary ("could get weird" — type flips, program-sees vs tool-sent divergence). Logged
     as a next-iteration follow-up below.
 
+**DSL-expansion pass — interpreter-surface batch from §4** (the deferred medium-tier JS
+parity items, done as one focused pass; no public API or limit changes):
+  - **`instanceof` + real Error values**: the `errorConstructors` names (`Error`,
+    `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`) are
+    bound globals (`ErrorConstructorReference`, callable with or without `new`; `typeof` →
+    `"function"`). Error values stay the same plain `{ name, message }` null-prototype
+    objects as before — the constructor name additionally rides on a NON-ENUMERABLE symbol
+    key (`ErrorBrand`), which every `Object.entries`-based walk (copyIn/copyOut, spread,
+    JSON.stringify) is blind to, so serialization is byte-identical to the old shape and the
+    brand is lost on spread/boundary copies exactly like JS loses the prototype.
+    `caughtErrorValue` produces `{ name, message }` wrappers via `createErrorValue`, so
+    caught interpreter AND tool failures are `instanceof Error` and carry the `name` the
+    equivalent real-JS failure would have (follow-up fix, user-directed — "closest to real
+    JS"): `InterpreterRuntimeError` gained an `errorName` field ("Error" default) set
+    fluently at throw sites via `.as(name)` — `JSON.parse` failures are `"SyntaxError"` (and
+    now include the engine's position detail in the message; safe — derived from the
+    program-supplied string), invalid regex patterns/flags `"SyntaxError"`, unknown
+    identifiers and TDZ access `"ReferenceError"`, assignment to a constant `"TypeError"`,
+    a bad `normalize` form `"RangeError"`; a host Error reaching the catch path directly
+    keeps its own name when it is one of the standard seven. Tool failures and everything
+    without a specific analogue stay `"Error"` — internal class names never leak. Specific
+    names satisfy the specific `instanceof` (`e instanceof SyntaxError`), matching JS.
+    The operator is handled in `evaluateBinaryExpression`
+    BEFORE the data-only operand check (like `typeof`, it observes any lhs — promises and
+    functions included); recognized rhs: the error constructors (a specific type matches its
+    own brand or `Error`, never a sibling), `Date`/`RegExp`/`Map`/`Set` (sandbox classes),
+    `Array`, `Object` (any object/function-ish value), `Promise` (`SandboxPromise`), and
+    `Number`/`String`/`Boolean` (always false — no boxed values exist); anything else is a
+    catchable error naming the recognized constructors.
+  - **Array methods**: `splice` (mutating, returns the removed elements; insertions run
+    `rejectCircularInsertion` like push/unshift; one-arg form removes to the end, undefined
+    delete count removes nothing), `fill` (circular-checked value) and `copyWithin`
+    (host-delegated), and `keys`/`values`/`entries` returning **arrays** (the Map/Set
+    convention — for...of and spread work either way). The `retryableArrayMethods`
+    "rewrite using map/filter" hint set emptied out and was deleted with its branch; unknown
+    array properties still read `undefined`.
+  - **String methods**: `localeCompare(that)` (locale/options arguments ignored — host
+    default locale; the dominant use is a sort comparator), `normalize(form?)` (invalid form
+    → catchable error naming the four valid forms), `trimLeft`/`trimRight` as
+    trimStart/trimEnd aliases.
+  - **Actionable regex failures**: `toHostRegex` and `constructRegExp` now show the
+    offending pattern (or flags) plus the engine reason (deduped "Invalid regular
+    expression:" prefix via `regexFailureReason`) and a shared escaping hint
+    (`escapeRegexHint`); flags failures list the valid flag letters; the
+    replaceAll/matchAll missing-`g` errors spell out the exact `/pattern/g` to write and
+    the single-match alternative.
+  - **copyIn split (the important one)**: `copyIn(value, label, preserveSandboxValues =
+    false)` — recursion moved to a private `copyBounded`; `boundedData` (every intra-sandbox
+    checkpoint: `Object.*` helpers, coercion/Array.from/join inputs, template
+    interpolation, expression-result checkpoints) is now `copyIn(value, label, true)`,
+    which passes `SandboxDate`/`SandboxRegExp`/`SandboxMap`/`SandboxSet` through **by
+    reference as leaves** (contents not walked — Map/Set members are validated at their
+    mutation sites) while keeping the depth (`MAX_VALUE_DEPTH`), circularity,
+    plain-objects-only, blocked-property, and data-only checks; un-awaited promises keep
+    the await-hinting rejection in BOTH modes (deliberate — JS-parity pass-through was
+    considered and skipped to preserve the nudge). The HOST boundary (final result,
+    tool-call arguments, `JSON.stringify`, tool-result intake) uses the default mode and
+    still serializes JSON forms (Date → ISO, RegExp/Map/Set → `{}`); host instances met on
+    the preserving path are defensively wrapped into sandbox equivalents. Ripple: the
+    `Object.*` helpers treat sandbox values as empty objects (`Object.keys(map)` → `[]`,
+    assign sources contribute nothing, hasOwn → false — JS has no own enumerable props
+    there), so interpreter internals (`.map`/`.time`/`.regex`) can never leak; the
+    template-literal sandbox carve-out collapsed into `boundedData`. Object/array spread
+    already preserved instances (reference copies, no checkpoint) — now tested.
+  - **Console formatting**: `formatConsoleArgument` is total and deep
+    (`formatConsoleValue`): numbers render via `String` (`NaN`/`Infinity`/`-Infinity`
+    literally — never the JSON `null`; finite numbers match their JSON form), nested
+    strings are JSON-quoted, sandbox values keep their friendly forms at ANY depth (ISO
+    date, `/regex/flags`, `Map(n) [...]`, `Set(n) [...]`), opaque references become
+    in-place `[CodeMode reference]` markers instead of collapsing the whole argument,
+    cycles render `[Circular]` (reachable via Map/Set members, which mutation never
+    checkpoints), and depth beyond `MAX_CONSOLE_DEPTH = 32` (fixed constant, not a knob)
+    degrades to `…` — console can no longer fail a program. `console.table` guards with
+    `containsOpaqueReference` (sandbox cells render, e.g. ISO dates) and its row/cell
+    walkers treat sandbox values as scalar cells.
+  - **Prose**: the instructions Syntax not-supported line dropped its `instanceof
+    Error`/splice mentions (nothing else reworded); README updated (checkpoint
+    preservation vs boundary serialization, error values/`instanceof`, new array/string
+    methods, regex-failure behavior); `supportedSyntaxMessage` left untouched (it lists
+    supported syntax, was already non-exhaustive, and stays accurate).
+  - **Tests**: package suite 169 → 209 (parity: Error/instanceof + real-JS error-name
+    coverage, splice/fill/copyWithin/keys/values/entries, localeCompare/normalize/trim-alias
+    describes; stdlib: checkpoint survival incl. tool-arg boundary pinning, stdlib
+    `instanceof`, regex-message assertions; codemode: NaN/Infinity + nested/cyclic console
+    rendering, table cells, caught-tool-failure `instanceof`); adapter suites unchanged
+    (34 + 16, green); both packages `tsgo --noEmit` clean.
+
+**Truncation layering — CodeMode truncation off in OpenCode** (user direction; resolves the
+§4 outer-truncation item the OPPOSITE way from "kill the outer one"):
+  - `maxOutputBytes` lost its 32,000 default and now behaves exactly like the other two
+    limits: absent = no truncation. All three limits are uniformly no-default — budgets are
+    host policy. `ResolvedExecutionLimits.maxOutputBytes` is `number | undefined`;
+    `boundOutput` only runs when the host set the limit. Explicit values validate as before
+    (safe integer ≥ 0).
+  - OpenCode continues to pass NO limits, which now also means no CodeMode truncation.
+    `execute` is a normal `Tool.define` tool, so OpenCode's native tool-output truncation
+    applies with no special-casing — verified by tracing `wrap()` (`tool.ts:130-144`,
+    50KB/2000-line thresholds in `truncate.ts`, full output dumped to a file under
+    `tool-output/`): the `metadata.truncated` self-truncation exemption never fires for
+    `execute` (its metadata never sets that key). One truncation layer, the host's — and it
+    is the richer one (file dump + explore/grep hint vs an inline marker).
+  - Hosts without their own output bounding set `maxOutputBytes` explicitly; README table
+    and prose updated, adapter comment rewritten. Tests: codemode +1 (absent limit → 100KB
+    value + 50KB log line pass through unbounded, `truncated` undefined); the adapter test
+    that relied on the old default now asserts the oversized result reaches the shared
+    wrapper un-truncated. Suites: 210 + 50, tsgo clean both.
+
 ---
 
 ## 4. Remaining work (detailed TODO)
 
-### Next DSL-expansion pass
+### Next DSL-expansion pass (done — see the DSL-expansion pass entry in §3)
 Batch these together — per user direction: important, but deliberately deferred to one
 focused interpreter-surface pass rather than picked off piecemeal.
-- [ ] Medium-tier JS parity items deferred from the original audit: caught errors are plain
+- [x] Medium-tier JS parity items deferred from the original audit: caught errors are plain
       `{ name, message }` objects, not `instanceof Error` (and `Error` isn't a value —
       `x instanceof Error` is unsupported syntax); `splice` (still a
       "rewrite using map/filter" hint) and array `entries()/keys()/values()`;
       `localeCompare`/`normalize`/`trimLeft`/`trimRight`; friendlier regex-y error messages.
-- [ ] `Date`/`Map`/`Set`/`RegExp` values passing through `Object.*` helpers and coercion
+      (`fill`/`copyWithin` — which the hint set also covered — were implemented too since
+      they are trivial host delegations, so the hint set is gone entirely.)
+- [x] `Date`/`Map`/`Set`/`RegExp` values passing through `Object.*` helpers and coercion
       checkpoints take their JSON forms (e.g. `Object.values({ d: date })` yields the ISO
       string, not the Date — calling `.getTime()` on it then fails). Currently deliberate
       (documented in README) but flagged as important: fix in this pass by letting sandbox
       values survive `Object.*`/spread checkpoints instead of JSON-serializing them.
-- [ ] `console.log(NaN)` prints `"null"` (goes through the boundary chokepoint) — could
+- [x] `console.log(NaN)` prints `"null"` (goes through the boundary chokepoint) — could
       special-case number formatting in `formatConsoleArgument`.
-- [ ] Sandbox values nested inside logged containers print `[CodeMode reference]`
+- [x] Sandbox values nested inside logged containers print `[CodeMode reference]`
       (`console.log({ m: map })`) — could deep-format instead.
 
 ### Next iteration: text-result handling (deliberate follow-up, user-directed)
@@ -748,9 +865,11 @@ focused interpreter-surface pass rather than picked off piecemeal.
       blocks carry no filename (mime + data only) so the generic
       `[N images attached to the result]` stays, but `resource`/`resource_link` blocks have
       URIs/names we could surface, e.g. `[2 files attached: chart.png, data.csv]`. Minor.
-- [ ] Decide whether OpenCode's outer native truncation gets disabled for `execute` once
-      `maxOutputBytes` exists (issue says CodeMode reimplements it; "maybe we kill \[the outer
-      one\] later").
+- [x] Truncation layering decided (user direction): the OPPOSITE of killing the outer layer —
+      CodeMode truncation off in OpenCode (`maxOutputBytes` lost its default; absent = no
+      truncation, uniform with the other two limits), native tool-output truncation is the
+      single active layer (verified: `execute` flows through `tool.ts` `wrap()` like any
+      normal tool, no exemption). See the §3 entry.
 - [x] Flaky wall-clock assertion removed from `test/promise.test.ts`: the parallelism test
       now relies solely on the deterministic `trace.maxActive > 1` counter (which proves
       true temporal overlap). The timeout tests were never flaky — 100ms timeout vs 60s
@@ -777,11 +896,16 @@ focused interpreter-surface pass rather than picked off piecemeal.
   Wave 4 prompting stops the payload dumping. Both are needed.
 - Realistically **all MCP tools render `Promise<unknown>`** (no outputSchema), so the
   instructions prose is the only lever for result-shape behavior in the dominant case.
-- **`copyIn` has two roles**: host↔sandbox boundary AND intra-sandbox data checkpoint
-  (`boundedData` is now just a `copyIn` alias). Sandbox value types are converted to JSON
-  forms wherever it runs — that's the documented model. If you add a new value type, follow
-  the Wave 1b-i pattern: class in `values.ts`, opaque-by-default via `isRuntimeReference`,
-  explicit carve-outs, JSON form in `copyIn`, console formatting, tests.
+- **`copyIn` has two roles, split by a mode flag** (DSL-expansion pass): host↔sandbox
+  boundary (default mode — final result, tool arguments, `JSON.stringify`, tool-result
+  intake; sandbox value types serialize to JSON forms) AND intra-sandbox data checkpoint
+  (`boundedData` = `copyIn(value, label, true)` — sandbox value instances pass through by
+  reference as leaves, everything else keeps the same plain-data validation). If you add a
+  new value type, follow the Wave 1b-i pattern: class in `values.ts`, opaque-by-default via
+  `isRuntimeReference`, explicit carve-outs, JSON form in `copyIn`'s boundary mode plus
+  pass-through in its preserving mode, console formatting (`formatConsoleValue`), tests —
+  and make sure the `Object.*` helpers treat it as an empty object so class fields never
+  leak.
 - The interpreter throws synchronously inside `Effect.gen`/`Effect.sync` freely; everything is
   normalized by `catchCause` → `normalizeError` into `Diagnostic` data. Program failures are
   **data, never Effect failures**; only interruption propagates.

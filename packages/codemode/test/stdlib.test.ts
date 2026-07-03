@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "../src/index.js"
+import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
-// at every data boundary (final result, tool arguments, JSON.stringify) they serialize exactly
-// as JSON.stringify would: Date -> ISO string (invalid -> null), RegExp/Map/Set -> {}.
+// intra-sandbox checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
+// values, while at the host boundary (final result, tool arguments, JSON.stringify) they
+// serialize exactly as JSON.stringify would: Date -> ISO string (invalid -> null),
+// RegExp/Map/Set -> {}.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 const value = async (code: string) => {
   const result = await run(code)
@@ -144,7 +146,32 @@ describe("RegExp", () => {
   test("new RegExp constructs from strings; invalid patterns are catchable", async () => {
     expect(await value(`return new RegExp("a+", "i").test("AAA")`)).toBe(true)
     expect(await value(`try { new RegExp("("); return "no" } catch { return "caught" }`)).toBe("caught")
-    expect(await value(`try { /a/ instanceof RegExp } catch { }; return /a/.source`)).toBe("a")
+    expect(await value(`return [/a/ instanceof RegExp, /a/.source]`)).toEqual([true, "a"])
+  })
+
+  test("invalid patterns fail with actionable messages", async () => {
+    const fromString = await error(`return "abc".match("(")`)
+    expect(fromString.message).toContain('String.match received the string "("')
+    expect(fromString.message).toContain("escape them with a backslash")
+
+    const fromConstructor = await error(`return new RegExp("(")`)
+    expect(fromConstructor.message).toContain('new RegExp(...) received "("')
+    expect(fromConstructor.message).toContain("escape them with a backslash")
+
+    const fromFlags = await error(`return new RegExp("a", "xz")`)
+    expect(fromFlags.message).toContain('invalid flags "xz"')
+    expect(fromFlags.message).toContain("Valid flags are")
+  })
+
+  test("missing g-flag errors say how to fix the call", async () => {
+    expect((await error(`return "aa".replaceAll(/a/, "b")`)).message).toContain("write /a/g, or use String.replace")
+    expect((await error(`return "aa".matchAll(/a/)`)).message).toContain("write /a/g, or use String.match")
+  })
+
+  test("a non-pattern argument names the expected shapes", async () => {
+    const err = await error(`return "abc".match(42)`)
+    expect(err.message).toContain("expects a regular expression")
+    expect(err.message).toContain("not number")
   })
 
   test("source and flags properties read through", async () => {
@@ -317,6 +344,13 @@ describe("stdlib integration", () => {
     `)).toBe(1000)
   })
 
+  test("instanceof recognizes the stdlib value types", async () => {
+    expect(await value(`return [new Date(0) instanceof Date, /a/ instanceof RegExp, new Map() instanceof Map, new Set() instanceof Set]`)).toEqual([true, true, true, true])
+    expect(await value(`return [[1] instanceof Array, [1] instanceof Object, ({}) instanceof Object, 5 instanceof Object]`)).toEqual([true, true, true, false])
+    expect(await value(`return [new Map() instanceof Set, "s" instanceof Date]`)).toEqual([false, false])
+    expect(await value(`const p = Promise.resolve(1); const isPromise = p instanceof Promise; await p; return isPromise`)).toBe(true)
+  })
+
   test("realistic pipeline: parse, extract with regex, dedupe, count by day", async () => {
     expect(await value(`
       const raw = '[{"at":"2024-01-01T05:00:00Z","tag":"a b"},{"at":"2024-01-01T09:00:00Z","tag":"b c"},{"at":"2024-01-02T01:00:00Z","tag":"a"}]'
@@ -330,5 +364,64 @@ describe("stdlib integration", () => {
       }
       return { tags: [...tags].sort((a, b) => (a < b ? -1 : 1)), byDay: Object.fromEntries(byDay) }
     `)).toEqual({ tags: ["a", "b", "c"], byDay: { "2024-01-01": 2, "2024-01-02": 1 } })
+  })
+})
+
+describe("sandbox values at intra-sandbox checkpoints", () => {
+  test("Object.values/entries keep Dates usable", async () => {
+    expect(await value(`return Object.values({ d: new Date(0) })[0].getTime()`)).toBe(0)
+    expect(await value(`const [key, d] = Object.entries({ d: new Date(0) })[0]; return key + ":" + d.getTime()`)).toBe("d:0")
+  })
+
+  test("Object.assign keeps Maps usable", async () => {
+    expect(await value(`const merged = Object.assign({}, { m: new Map([["a", 1]]) }); return merged.m.get("a")`)).toBe(1)
+  })
+
+  test("object and array spread keep sandbox values usable", async () => {
+    expect(await value(`
+      const src = { m: new Map([["a", 1]]) }
+      const copy = { ...src }
+      copy.m.set("b", 2)
+      return [copy.m.get("a"), src.m.get("b")]
+    `)).toEqual([1, 2])
+    expect(await value(`const list = [new Date(1000)]; const copy = [...list]; return copy[0].getTime()`)).toBe(1000)
+  })
+
+  test("Array.from over arrays keeps nested sandbox values usable", async () => {
+    expect(await value(`return Array.from([new Date(5)])[0].getTime()`)).toBe(5)
+  })
+
+  test("regexes stay callable through Object.values", async () => {
+    expect(await value(`return Object.values({ r: /ab+/ })[0].test("abb")`)).toBe(true)
+  })
+
+  test("Object.* helpers see sandbox values as empty objects, never internals", async () => {
+    expect(await value(`return Object.keys(new Map([["a", 1]]))`)).toEqual([])
+    expect(await value(`return Object.values(new Date(0))`)).toEqual([])
+    expect(await value(`return Object.entries(new Set([1]))`)).toEqual([])
+    expect(await value(`return Object.assign({}, new Map([["a", 1]]))`)).toEqual({})
+    expect(await value(`return Object.hasOwn(new Date(0), "time")`)).toBe(false)
+  })
+
+  test("the host boundary still serializes JSON forms: results, JSON.stringify, and tool arguments", async () => {
+    expect(await value(`return { d: new Date(0), m: new Map([["a", 1]]) }`)).toEqual({ d: "1970-01-01T00:00:00.000Z", m: {} })
+    expect(await value(`return JSON.stringify({ d: new Date(0) })`)).toBe('{"d":"1970-01-01T00:00:00.000Z"}')
+
+    const observed: Array<unknown> = []
+    const capture = Tool.make({
+      description: "Capture the exact input the host receives",
+      input: { type: "object" },
+      run: (input) =>
+        Effect.sync(() => {
+          observed.push(input)
+          return "ok"
+        }),
+    })
+    const result = await Effect.runPromise(CodeMode.execute({
+      tools: { host: { capture } },
+      code: `return await tools.host.capture({ when: new Date(0), tags: new Map([["a", 1]]) })`,
+    }))
+    expect(result.ok).toBe(true)
+    expect(observed).toStrictEqual([{ when: "1970-01-01T00:00:00.000Z", tags: {} }])
   })
 })

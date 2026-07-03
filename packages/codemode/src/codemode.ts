@@ -30,8 +30,8 @@ export type ExecutionLimits = {
   readonly maxToolCalls?: number
   /**
    * Maximum UTF-8 bytes of model-facing output: the serialized result value plus captured
-   * logs (default 32,000). Excess output is truncated with an explanatory marker instead of
-   * failing.
+   * logs. Excess output is truncated with an explanatory marker instead of failing. No
+   * default: absent means no truncation (for hosts with their own output bounding).
    */
   readonly maxOutputBytes?: number
 }
@@ -57,7 +57,8 @@ type ResolvedExecutionLimits = {
   readonly timeoutMs: number | undefined
   /** Undefined means unlimited tool calls. */
   readonly maxToolCalls: number | undefined
-  readonly maxOutputBytes: number
+  /** Undefined means no output truncation. */
+  readonly maxOutputBytes: number | undefined
 }
 
 /** Options for one CodeMode execution. */
@@ -258,6 +259,32 @@ class ProgramThrow {
   constructor(readonly value: unknown) {}
 }
 
+// A bound error constructor global (`Error`, `TypeError`, ...): callable with or without
+// `new`, and the recognized right-hand side of `x instanceof Error`.
+class ErrorConstructorReference {
+  constructor(readonly name: string) {}
+}
+
+// Error values stay plain `{ name, message }` data objects — they stringify/serialize exactly
+// as before — but carry their constructor name on a non-enumerable symbol key so `instanceof
+// Error` can recognize them. Object.entries/JSON walks (copyIn/copyOut, spread, stringify)
+// never see the brand, and losing it on spread/boundary copies matches JS, where a spread
+// error loses its prototype too.
+const ErrorBrand: unique symbol = Symbol("codemode.error")
+
+const brandError = (errorValue: SafeObject, name: string): SafeObject => {
+  Object.defineProperty(errorValue, ErrorBrand, { value: name })
+  return errorValue
+}
+
+const createErrorValue = (name: string, message: string): SafeObject =>
+  brandError(Object.assign(Object.create(null) as SafeObject, { name, message }), name)
+
+const errorBrandName = (value: unknown): string | undefined =>
+  value !== null && typeof value === "object"
+    ? ((value as Record<PropertyKey, unknown>)[ErrorBrand] as string | undefined)
+    : undefined
+
 /** Stable categories produced by program, schema, tool, and limit failures. */
 export type DiagnosticKind =
   | "ParseError"
@@ -275,18 +302,18 @@ const arrayMethods = new Set([
   "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "some", "every", "includes", "join",
   "reduce", "reduceRight", "flatMap", "forEach", "sort", "toSorted", "slice", "concat", "indexOf", "lastIndexOf",
   "at", "flat", "reverse", "toReversed", "with", "push", "pop", "shift", "unshift",
+  "splice", "fill", "copyWithin", "keys", "values", "entries",
 ])
-const retryableArrayMethods = new Set(["splice", "fill", "copyWithin", "keys", "values", "entries"])
 
 const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQRT2", "SQRT1_2"])
 
 const numberMethods = new Set(["toFixed", "toPrecision", "toExponential", "toString"])
 
 const stringMethods = new Set([
-  "toLowerCase", "toUpperCase", "trim", "trimStart", "trimEnd", "split", "slice", "substring", "substr",
-  "includes", "startsWith", "endsWith", "indexOf", "lastIndexOf", "replace", "replaceAll",
+  "toLowerCase", "toUpperCase", "trim", "trimStart", "trimEnd", "trimLeft", "trimRight", "split", "slice",
+  "substring", "substr", "includes", "startsWith", "endsWith", "indexOf", "lastIndexOf", "replace", "replaceAll",
   "repeat", "padStart", "padEnd", "charAt", "charCodeAt", "codePointAt", "at", "concat", "toString",
-  "match", "matchAll", "search",
+  "match", "matchAll", "search", "localeCompare", "normalize",
 ])
 
 const numberConstants = new Set(["MAX_SAFE_INTEGER", "MIN_SAFE_INTEGER", "MAX_VALUE", "MIN_VALUE", "EPSILON"])
@@ -329,6 +356,9 @@ const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError
 /** How many eagerly forked tool calls may run at once. Fixed; not a configurable knob. */
 const TOOL_CALL_CONCURRENCY = 8
 
+/** Console formatting recursion ceiling; deeper values render as "…". Fixed; not a knob. */
+const MAX_CONSOLE_DEPTH = 32
+
 const validateLimit = <Value extends number | undefined>(name: keyof ExecutionLimits, value: Value, minimum: number): Value => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
@@ -336,17 +366,25 @@ const validateLimit = <Value extends number | undefined>(name: keyof ExecutionLi
   return value
 }
 
-// timeoutMs and maxToolCalls have NO defaults: absent means no timeout / unlimited calls —
-// budgets are host policy, not library policy. maxOutputBytes keeps a default because
-// truncation never breaks correctness and its absence silently floods model context.
+// No limit has a default: absent means no timeout / unlimited calls / no output truncation —
+// budgets are host policy, not library policy. A host without its own output bounding should
+// pass maxOutputBytes explicitly, or oversized results flood model context.
 const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimits => ({
   timeoutMs: validateLimit("timeoutMs", limits?.timeoutMs, 1),
   maxToolCalls: validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
-  maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0) ?? 32_000,
+  maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
 })
 
 class InterpreterRuntimeError extends Error {
   readonly node?: AstNode
+  /**
+   * The constructor name a program observes when it catches this failure (`caught.name`, and
+   * the brand behind `caught instanceof SyntaxError` etc.). "Error" unless the failing
+   * operation names a standard type in real JS — e.g. JSON.parse and invalid regex patterns
+   * throw SyntaxError, an unknown identifier is a ReferenceError, a bad normalize form is a
+   * RangeError.
+   */
+  errorName: string = "Error"
 
   constructor(message: string, node?: AstNode, readonly kind: DiagnosticKind = "ExecutionFailure", readonly suggestions?: ReadonlyArray<string>) {
     super(message)
@@ -355,6 +393,11 @@ class InterpreterRuntimeError extends Error {
     if (node) {
       this.node = node
     }
+  }
+
+  as(errorName: string): this {
+    this.errorName = errorName
+    return this
   }
 }
 
@@ -530,32 +573,43 @@ const normalizeError = (error: unknown): Diagnostic => {
 // The plain value a program observes for a settled failure — shared by `catch` bindings,
 // `Promise.allSettled` rejection reasons, and race-loser diagnostics. A thrown program value
 // passes through as-is (so `throw new Error(m)` yields its `{ name, message }` object); every
-// other failure becomes a plain `{ message }` object. Interpreter errors use their raw message
-// so the program never sees the transpiled-source "(line N, col N)" coordinates that
-// normalizeError appends — without disturbing a host/tool message that legitimately ends that
-// way. Other error kinds carry no appended location, so normalizeError is used as-is.
-const caughtErrorValue = (thrown: unknown): unknown =>
-  thrown instanceof ProgramThrow
-    ? thrown.value
-    : Object.assign(Object.create(null) as SafeObject, {
-        message: thrown instanceof InterpreterRuntimeError ? thrown.message : normalizeError(thrown).message,
-      })
+// other failure becomes a plain `{ name, message }` object, error-branded so `caught
+// instanceof Error` is true for interpreter and tool failures too. When a host failure is a
+// real Error whose constructor name is one of the standard seven (e.g. JSON.parse throwing a
+// SyntaxError), that name is carried through — both as `caught.name` and as the brand, so
+// `caught instanceof SyntaxError` matches real JS. Interpreter diagnostics carry the name the
+// equivalent real-JS failure would have (`errorName`, "Error" unless the throw site says
+// otherwise); tool failures and internal error classes are plain "Error" — internal class
+// names never leak.
+// Interpreter errors use their raw message so the program never sees the transpiled-source
+// "(line N, col N)" coordinates that normalizeError appends — without disturbing a host/tool
+// message that legitimately ends that way. Other error kinds carry no appended location, so
+// normalizeError is used as-is.
+const caughtErrorValue = (thrown: unknown): unknown => {
+  if (thrown instanceof ProgramThrow) return thrown.value
+  if (thrown instanceof InterpreterRuntimeError) return createErrorValue(thrown.errorName, thrown.message)
+  const name = thrown instanceof Error && errorConstructors.has(thrown.name) ? thrown.name : "Error"
+  return createErrorValue(name, normalizeError(thrown).message)
+}
 
 // ── Built-in method/global implementations ───────────────────────────────────
 // These mirror the corresponding JavaScript operations over Data Values. They are
 // pure (string/Object/Math/JSON/coercion) and so live as free functions; array
 // Methods that run CodeMode callbacks live on the interpreter (they need invokeFunction).
 
-// The intra-sandbox data checkpoint: copies a value through `copyIn`, which validates the
-// plain-data contract (depth, circularity, plain objects only, blocked properties) and
-// serializes sandbox value types to their JSON forms.
-const boundedData = (value: unknown, label: string): unknown => copyIn(value, label)
+// The intra-sandbox data checkpoint: copies a value through `copyIn` in preserving mode,
+// which validates the plain-data contract (depth, circularity, plain objects only, blocked
+// properties) while keeping sandbox value instances (Date/RegExp/Map/Set) alive — so values
+// flowing through `Object.*` helpers, coercion inputs, and other in-sandbox checkpoints stay
+// fully usable. Only the HOST boundary (final result, tool-call arguments, JSON.stringify)
+// serializes them to JSON forms via the default `copyIn` mode.
+const boundedData = (value: unknown, label: string): unknown => copyIn(value, label, true)
 
 const isRuntimeReference = (value: unknown): boolean =>
     value instanceof CodeModeFunction || value instanceof ToolReference || value instanceof IntrinsicReference ||
     value instanceof GlobalNamespace || value instanceof GlobalMethodReference || value instanceof PromiseNamespace ||
     value instanceof PromiseMethodReference || value instanceof SandboxPromise || value instanceof CoercionFunction ||
-    isSandboxValue(value)
+    value instanceof ErrorConstructorReference || isSandboxValue(value)
 
 const containsRuntimeReference = (value: unknown, seen = new Set<object>()): boolean => {
   if (isRuntimeReference(value)) return true
@@ -591,7 +645,8 @@ const containsOpaqueReference = (value: unknown, seen = new Set<object>()): bool
 const typeofValue = (value: unknown): string => {
   if (
     value instanceof CodeModeFunction || value instanceof CoercionFunction || value instanceof IntrinsicReference ||
-    value instanceof GlobalMethodReference || value instanceof PromiseMethodReference || value instanceof PromiseNamespace
+    value instanceof GlobalMethodReference || value instanceof PromiseMethodReference || value instanceof PromiseNamespace ||
+    value instanceof ErrorConstructorReference
   ) return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   if (value instanceof GlobalNamespace) {
@@ -600,20 +655,66 @@ const typeofValue = (value: unknown): string => {
   return typeof value
 }
 
+// `x instanceof C` against the constructors CodeMode knows. Like `typeof`, it observes any
+// left-hand value (opaque references included) without coercing it. Error checks use the
+// error brand: `instanceof Error` accepts every branded error; a specific error type matches
+// its own brand only (as in JS, where TypeError instances are also Error instances).
+const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
+  if (rhs instanceof ErrorConstructorReference) {
+    const brand = errorBrandName(lhs)
+    return brand !== undefined && (rhs.name === "Error" || brand === rhs.name)
+  }
+  if (rhs instanceof GlobalNamespace) {
+    switch (rhs.name) {
+      case "Date": return lhs instanceof SandboxDate
+      case "RegExp": return lhs instanceof SandboxRegExp
+      case "Map": return lhs instanceof SandboxMap
+      case "Set": return lhs instanceof SandboxSet
+      case "Array": return Array.isArray(lhs)
+      case "Object": return lhs !== null && (typeof lhs === "object" || typeofValue(lhs) === "function")
+    }
+  }
+  if (rhs instanceof PromiseNamespace) return lhs instanceof SandboxPromise
+  // Number/String/Boolean wrap primitives in JS; no boxed values exist in CodeMode, so
+  // `x instanceof Number` is always false — exactly what it is for primitives in JS.
+  if (rhs instanceof CoercionFunction && (rhs.name === "Number" || rhs.name === "String" || rhs.name === "Boolean")) {
+    return false
+  }
+  throw new InterpreterRuntimeError(
+    "The right-hand side of 'instanceof' must be a constructor CodeMode knows: Error (or a specific error type like TypeError), Date, RegExp, Map, Set, Array, Object, or Promise.",
+    node,
+  )
+}
+
+// A regex engine failure message without the engine's own "Invalid regular expression:"
+// prefix, so composed diagnostics read as one sentence instead of stuttering the phrase.
+const regexFailureReason = (error: unknown): string =>
+  (error instanceof Error ? error.message : String(error)).replace(/^Invalid regular expression:\s*/i, "")
+
+const escapeRegexHint =
+  'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
+
 // A string method's pattern argument as a host regex: a sandbox regex passes its own host
 // instance through (so `g` lastIndex semantics follow the spec across calls); a string becomes
 // a pattern, exactly as String.prototype.match/matchAll/search do (`extraFlags` adds matchAll's
-// implicit `g`). Invalid patterns fail as catchable program errors.
+// implicit `g`). Invalid patterns fail as catchable program errors that say what was wrong
+// with the pattern and how to fix it.
 const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFlags = ""): RegExp => {
   if (arg instanceof SandboxRegExp) return arg.regex
   if (typeof arg === "string") {
     try {
       return new RegExp(arg, extraFlags)
     } catch (error) {
-      throw new InterpreterRuntimeError(`Invalid regular expression in String.${method}: ${error instanceof Error ? error.message : String(error)}`, node)
+      throw new InterpreterRuntimeError(
+        `String.${method} received the string ${JSON.stringify(arg)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
+        node,
+      ).as("SyntaxError")
     }
   }
-  throw new InterpreterRuntimeError(`String.${method} expects a regular expression or string pattern.`, node)
+  throw new InterpreterRuntimeError(
+    `String.${method} expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string pattern, not ${arg === null ? "null" : typeof arg}.`,
+    node,
+  )
 }
 
 // A host match result as a sandbox value: a plain array of the full match and captures, with
@@ -652,8 +753,24 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "toLowerCase": result = value.toLowerCase(); break
     case "toUpperCase": result = value.toUpperCase(); break
     case "trim": result = value.trim(); break
-    case "trimStart": result = value.trimStart(); break
-    case "trimEnd": result = value.trimEnd(); break
+    // trimLeft/trimRight are the legacy aliases of trimStart/trimEnd, kept because models write them.
+    case "trimStart": case "trimLeft": result = value.trimStart(); break
+    case "trimEnd": case "trimRight": result = value.trimEnd(); break
+    // Locale/options arguments are ignored: comparison runs with the host default locale, and
+    // the common use is a sort comparator where any consistent order works.
+    case "localeCompare": result = value.localeCompare(str(0)); break
+    case "normalize": {
+      const form = optStr(0)
+      try {
+        result = value.normalize(form)
+      } catch {
+        throw new InterpreterRuntimeError(
+          `String.normalize expects the form "NFC", "NFD", "NFKC", or "NFKD" (got ${JSON.stringify(form)}).`,
+          node,
+        ).as("RangeError")
+      }
+      break
+    }
     case "split": {
       if (args.length === 0) {
         result = [value]
@@ -682,7 +799,10 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
         const pattern = (args[0] as SandboxRegExp).regex
         const replacement = str(1)
         if (name === "replaceAll" && !pattern.global) {
-          throw new InterpreterRuntimeError("String.replaceAll requires a regular expression with the global (g) flag.", node)
+          throw new InterpreterRuntimeError(
+            `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.replace to replace only the first match.`,
+            node,
+          )
         }
         result = name === "replace" ? value.replace(pattern, replacement) : value.replaceAll(pattern, replacement)
         break
@@ -706,7 +826,10 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "matchAll": {
       const pattern = toHostRegex(args[0], name, node, "g")
       if (!pattern.global) {
-        throw new InterpreterRuntimeError("String.matchAll requires a regular expression with the global (g) flag.", node)
+        throw new InterpreterRuntimeError(
+          `String.matchAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.match for a single match.`,
+          node,
+        )
       }
       // Materialized as an array (not an iterator); each entry is a match array with
       // index/groups own properties. Match count is bounded by the subject length.
@@ -821,6 +944,9 @@ const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNo
 const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   const requireObject = (): Record<string, unknown> => {
     const value = boundedData(args[0], `Object.${name} input`)
+    // Sandbox values (Date/RegExp/Map/Set) have no own enumerable properties in JS, so the
+    // Object.* helpers see them as empty objects — never their interpreter internals.
+    if (isSandboxValue(value)) return {}
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       throw new InterpreterRuntimeError(`Object.${name} expects a data object.`, node)
     }
@@ -836,6 +962,7 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): 
       // yield their own enumerable keys. (Tool references never reach here — the interpreter
       // resolves them against the host tool tree first.)
       const value = boundedData(args[0], "Object.keys input")
+      if (isSandboxValue(value)) return []
       if (Array.isArray(value)) return Object.keys(value)
       if (value === null || typeof value !== "object") {
         throw new InterpreterRuntimeError("Object.keys expects a data object or array.", node)
@@ -850,6 +977,8 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): 
       for (const source of args) {
         if (source === null || source === undefined) continue
         const value = boundedData(source, "Object.assign input")
+        // A sandbox value source contributes nothing (no own enumerable properties in JS).
+        if (isSandboxValue(value)) continue
         if (value === null || typeof value !== "object" || Array.isArray(value)) throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         for (const [key, item] of Object.entries(value)) guardedSet(out, key, item)
       }
@@ -921,8 +1050,13 @@ const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): un
       let parsed: unknown
       try {
         parsed = JSON.parse(text)
-      } catch {
-        throw new InterpreterRuntimeError("JSON.parse received invalid JSON.", node)
+      } catch (error) {
+        // The engine reason is derived from the program-supplied string (token/position), so
+        // it is safe to surface — and the position is exactly what a model needs to fix it.
+        throw new InterpreterRuntimeError(
+          `JSON.parse received invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+          node,
+        ).as("SyntaxError")
       }
       return copyIn(parsed, "JSON.parse result")
     }
@@ -1147,6 +1281,11 @@ class Interpreter<R> {
     globalScope.set("RegExp", { mutable: false, value: new GlobalNamespace("RegExp") })
     globalScope.set("Map", { mutable: false, value: new GlobalNamespace("Map") })
     globalScope.set("Set", { mutable: false, value: new GlobalNamespace("Set") })
+    // Error constructors are real values, so `x instanceof Error` works and `Error("msg")`
+    // (with or without `new`) constructs a branded { name, message } error object.
+    for (const name of errorConstructors) {
+      globalScope.set(name, { mutable: false, value: new ErrorConstructorReference(name) })
+    }
     // NaN/Infinity flow as ordinary in-sandbox values (normalized to null only at the data
     // boundary — see copyOut), so their global bindings must exist too, e.g. `reduce(max, -Infinity)`.
     globalScope.set("NaN", { mutable: false, value: NaN })
@@ -1919,11 +2058,7 @@ class Interpreter<R> {
     if (errorConstructors.has(name)) {
       return Effect.gen(function*() {
         const arg = argNodes.length > 0 ? yield* self.evaluateExpression(asNode(argNodes[0], "arguments[0]")) : undefined
-        const message = arg === undefined ? "" : coerceToString(arg)
-        const errorValue: SafeObject = Object.create(null) as SafeObject
-        errorValue.name = name
-        errorValue.message = message
-        return errorValue
+        return createErrorValue(name, arg === undefined ? "" : coerceToString(arg))
       })
     }
     if (valueConstructors.has(name)) {
@@ -1959,13 +2094,25 @@ class Interpreter<R> {
     const pattern = first instanceof SandboxRegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
     const flagsArg = args[1]
     if (flagsArg !== undefined && typeof flagsArg !== "string") {
-      throw new InterpreterRuntimeError("RegExp flags must be a string.", node)
+      throw new InterpreterRuntimeError(
+        `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
+        node,
+      )
     }
     const flags = flagsArg ?? (first instanceof SandboxRegExp ? first.regex.flags : "")
     try {
       return new SandboxRegExp(pattern, flags)
     } catch (error) {
-      throw new InterpreterRuntimeError(`Invalid regular expression: ${error instanceof Error ? error.message : String(error)}`, node)
+      // Say which part was rejected and how to fix it, instead of passing the engine
+      // message through bare. A flags failure names the flags; a pattern failure gets the
+      // escaping hint (the usual cause is an unescaped metacharacter in a built-up string).
+      const reason = regexFailureReason(error)
+      throw new InterpreterRuntimeError(
+        /flag/i.test(reason)
+          ? `new RegExp(...) received invalid flags ${JSON.stringify(flags)} (${reason}). Valid flags are d, g, i, m, s, u, v, and y.`
+          : `new RegExp(...) received ${JSON.stringify(pattern)}, which is not a valid regular expression pattern (${reason}). ${escapeRegexHint}`,
+        node,
+      ).as("SyntaxError")
     }
   }
 
@@ -2014,6 +2161,10 @@ class Interpreter<R> {
     return Effect.gen(function*() {
       const lhs = (yield* self.evaluateExpression(getNode(node, "left"))) as any
       const rhs = (yield* self.evaluateExpression(getNode(node, "right"))) as any
+      // Like `typeof`, `instanceof` observes any value without coercing it (a promise or
+      // function operand is a legitimate question, not an error), so it is handled before
+      // the data-only operand check.
+      if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
       if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
         throw new InterpreterRuntimeError("Binary operators require data values in CodeMode.", node, "InvalidDataValue")
       }
@@ -2229,6 +2380,10 @@ class Interpreter<R> {
       if (callable instanceof CoercionFunction) {
         return boundedData(invokeCoercion(callable, args, node), `${callable.name} result`)
       }
+      // `Error("msg")` without `new` constructs an error exactly like `new Error("msg")`, as in JS.
+      if (callable instanceof ErrorConstructorReference) {
+        return createErrorValue(callable.name, args[0] === undefined ? "" : coerceToString(args[0]))
+      }
         throw new InterpreterRuntimeError("Only tools are callable in CodeMode.", callee)
     })
   }
@@ -2255,39 +2410,72 @@ class Interpreter<R> {
   }
 
   private formatConsoleMessage(name: string, args: Array<unknown>, node: AstNode): string {
-    if (name === "dir") return args.length === 0 ? "undefined" : this.formatConsoleArgument(args[0], node)
+    if (name === "dir") return args.length === 0 ? "undefined" : this.formatConsoleArgument(args[0])
     if (name === "table") return this.formatConsoleTable(args[0], args[1], node)
     const prefix = name === "warn" ? "[warn] " : name === "error" ? "[error] " : name === "debug" ? "[debug] " : ""
-    return `${prefix}${args.map((arg) => this.formatConsoleArgument(arg, node)).join(" ")}`
+    return `${prefix}${args.map((arg) => this.formatConsoleArgument(arg)).join(" ")}`
   }
 
-  private formatConsoleArgument(value: unknown, node: AstNode): string {
+  // Console arguments format deeply and totally: values render as a debugger would show them
+  // rather than as boundary JSON — numbers keep NaN/Infinity (JSON would say null), sandbox
+  // values keep their friendly forms at ANY depth (ISO date, /regex/flags, Map(n) [...],
+  // Set(n) [...]), opaque runtime references become "[CodeMode reference]" markers in place,
+  // and plain objects/arrays render JSON-style. Formatting never fails the program: cycles
+  // render "[Circular]" and extreme depth degrades to "…".
+  private formatConsoleArgument(value: unknown): string {
     if (value === undefined) return "undefined"
-    // Sandbox values print debugger-friendly forms (their boundary JSON would lose the content).
+    // A top-level string prints bare; nested strings are JSON-quoted (see formatConsoleValue).
+    if (typeof value === "string") return value
+    return this.formatConsoleValue(value, new Set(), 0)
+  }
+
+  private formatConsoleValue(value: unknown, seen: Set<object>, depth: number): string {
+    // Nested undefined renders as null, matching what JSON boundary output would show.
+    if (value === null || value === undefined) return "null"
+    if (typeof value === "string") return JSON.stringify(value)
+    // String(value) keeps NaN/Infinity/-Infinity readable; finite numbers match their JSON form.
+    if (typeof value === "number" || typeof value === "boolean") return String(value)
+    if (typeof value !== "object") return String(value)
     if (value instanceof SandboxPromise) return "[Promise (await it to get its value)]"
     if (value instanceof SandboxDate) return coerceToString(value)
     if (value instanceof SandboxRegExp) return coerceToString(value)
+    if (depth > MAX_CONSOLE_DEPTH) return "…"
+    if (seen.has(value)) return "[Circular]"
     if (value instanceof SandboxMap) {
-      return `Map(${value.map.size}) ${this.formatConsoleArgument(Array.from(value.map.entries(), ([key, item]): Array<unknown> => [key, item]), node)}`
+      seen.add(value)
+      try {
+        const entries = Array.from(value.map.entries(), ([key, item]): Array<unknown> => [key, item])
+        return `Map(${value.map.size}) ${this.formatConsoleValue(entries, seen, depth + 1)}`
+      } finally {
+        seen.delete(value)
+      }
     }
     if (value instanceof SandboxSet) {
-      return `Set(${value.set.size}) ${this.formatConsoleArgument(Array.from(value.set.values()), node)}`
+      seen.add(value)
+      try {
+        return `Set(${value.set.size}) ${this.formatConsoleValue(Array.from(value.set.values()), seen, depth + 1)}`
+      } finally {
+        seen.delete(value)
+      }
     }
-    if (containsRuntimeReference(value)) return "[CodeMode reference]"
-    const copied = copyOut(copyIn(value, "console argument"), true)
-    if (typeof copied === "string") return copied
-    if (copied === null || typeof copied === "number" || typeof copied === "boolean") return String(copied)
+    if (isRuntimeReference(value)) return "[CodeMode reference]"
+    seen.add(value)
     try {
-      return JSON.stringify(copied) ?? String(copied)
-    } catch {
-      throw new InterpreterRuntimeError("console argument must contain data only.", node, "InvalidDataValue")
+      if (Array.isArray(value)) {
+        return `[${value.map((item) => this.formatConsoleValue(item, seen, depth + 1)).join(",")}]`
+      }
+      return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}:${this.formatConsoleValue(item, seen, depth + 1)}`).join(",")}}`
+    } finally {
+      seen.delete(value)
     }
   }
 
   private formatConsoleTable(value: unknown, columnsArgument: unknown, node: AstNode): string {
     if (value === undefined) return "undefined"
-    if (containsRuntimeReference(value)) return "[CodeMode reference]"
-    const data = copyOut(copyIn(value, "console.table argument"), true)
+    // Sandbox values are legitimate table data (cells render their friendly forms); only
+    // truly opaque references (functions, tools, promises) collapse to the marker.
+    if (containsOpaqueReference(value)) return "[CodeMode reference]"
+    const data = boundedData(value, "console.table argument")
     const columns = this.consoleTableColumns(columnsArgument, node)
     const rows = this.consoleTableRows(data, columns)
     const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
@@ -2306,14 +2494,14 @@ class Interpreter<R> {
     if (Array.isArray(data)) {
       return data.map((item, index) => ({ index: String(index), values: this.consoleTableValues(item, columns) }))
     }
-    if (data !== null && typeof data === "object") {
+    if (data !== null && typeof data === "object" && !isSandboxValue(data)) {
       return Object.entries(data).map(([index, item]) => ({ index, values: this.consoleTableValues(item, columns) }))
     }
     return [{ index: "0", values: { Value: data } }]
   }
 
   private consoleTableValues(value: unknown, columns: ReadonlyArray<string> | undefined): Record<string, unknown> {
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value) && !isSandboxValue(value)) {
       const source = value as Record<string, unknown>
       if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, source[column]]))
       return Object.fromEntries(Object.entries(source))
@@ -2324,8 +2512,7 @@ class Interpreter<R> {
   private formatConsoleTableCell(value: unknown): string {
     if (value === undefined) return ""
     if (typeof value === "string") return value
-    if (value === null || typeof value === "number" || typeof value === "boolean") return String(value)
-    return JSON.stringify(value) ?? String(value)
+    return this.formatConsoleValue(value, new Set(), 0)
   }
 
   private evaluateCallArguments(argNodes: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> {
@@ -2621,6 +2808,31 @@ class Interpreter<R> {
         return Effect.succeed(target.pop())
       case "shift":
         return Effect.succeed(target.shift())
+      case "splice": {
+        // Mutates in place and returns the removed elements, exactly like JS: one argument
+        // removes to the end, an undefined delete count removes nothing.
+        if (args.length === 0) return Effect.succeed(target.splice(0, 0))
+        const start = optNumber(args[0], "start") ?? 0
+        if (args.length === 1) return Effect.succeed(target.splice(start))
+        const deleteCount = optNumber(args[1], "delete count") ?? 0
+        const inserted = args.slice(2)
+        for (const item of inserted) this.rejectCircularInsertion(target, item, "Array.splice result", node)
+        return Effect.succeed(target.splice(start, deleteCount, ...inserted))
+      }
+      case "fill": {
+        this.rejectCircularInsertion(target, args[0], "Array.fill result", node)
+        return Effect.succeed(target.fill(args[0], optNumber(args[1], "start"), optNumber(args[2], "end")))
+      }
+      case "copyWithin":
+        return Effect.succeed(target.copyWithin(optNumber(args[0], "target index") ?? 0, optNumber(args[1], "start") ?? 0, optNumber(args[2], "end")))
+      // keys/values/entries return arrays (not iterators), matching the Map/Set convention;
+      // they work with for...of and spread either way.
+      case "keys":
+        return Effect.succeed(Array.from(target.keys()))
+      case "values":
+        return Effect.succeed([...target])
+      case "entries":
+        return Effect.succeed(Array.from(target.entries(), ([index, item]): Array<unknown> => [index, item]))
     }
 
     const callback = args[0]
@@ -2872,10 +3084,9 @@ class Interpreter<R> {
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(asNode(expressions[index], "expressions"))
-          // Sandbox values stringify directly (ISO date, /regex/ form) — the data checkpoint
-          // would JSON-serialize them first (a regex would render "[object Object]" via {}).
-          const value = isSandboxValue(raw) ? raw : boundedData(raw, "Template interpolation")
-          output += coerceToString(value)
+          // The preserving checkpoint keeps sandbox values intact, so coerceToString renders
+          // them directly (ISO date, /regex/ literal form) instead of a JSON-serialized husk.
+          output += coerceToString(boundedData(raw, "Template interpolation"))
         }
       }
 
@@ -3060,17 +3271,8 @@ class Interpreter<R> {
           if (typeof key === "string" && Object.hasOwn(objectValue, key)) {
             return new ComputedValue((objectValue as Record<string, unknown> & Array<unknown>)[key])
           }
-          if (typeof key === "string" && retryableArrayMethods.has(key)) {
-            throw new InterpreterRuntimeError(
-              `Array.${key}(...) is not supported in CodeMode. Rewrite using map/filter/find/some/every/includes/join or a for...of loop.`,
-              propertyNode,
-              "UnsupportedSyntax",
-              [supportedSyntaxMessage],
-            )
-          }
           // Unknown property on an array reads as `undefined`, matching JS (`[1,2].foo === undefined`),
-          // instead of throwing — so defensive access under optional chaining behaves as expected. The
-          // retryable-method hint above still fires for real methods we don't support (e.g. splice).
+          // instead of throwing — so defensive access under optional chaining behaves as expected.
           return new ComputedValue(undefined)
         }
         return { target: objectValue, key }
@@ -3193,12 +3395,12 @@ class Interpreter<R> {
     const binding = this.resolveBinding(name)
 
     if (!binding) {
-      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node)
+      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
     }
 
     // A parameter default that forward-references a later (not-yet-bound) parameter — JS TDZ.
     if (binding.initialized === false) {
-      throw new InterpreterRuntimeError(`Cannot access '${name}' before initialization.`, node)
+      throw new InterpreterRuntimeError(`Cannot access '${name}' before initialization.`, node).as("ReferenceError")
     }
 
     return binding.value
@@ -3208,11 +3410,11 @@ class Interpreter<R> {
     const binding = this.resolveBinding(name)
 
     if (!binding) {
-      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node)
+      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
     }
 
     if (!binding.mutable) {
-      throw new InterpreterRuntimeError(`Cannot assign to constant '${name}'.`, node)
+      throw new InterpreterRuntimeError(`Cannot assign to constant '${name}'.`, node).as("TypeError")
     }
 
     binding.value = value
@@ -3324,7 +3526,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
             toolCalls: tools.calls,
           } satisfies ExecuteResult),
     ),
-    Effect.map((result) => boundOutput(result, limits.maxOutputBytes)),
+    Effect.map((result) => limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes)),
   )
 }
 
@@ -3343,7 +3545,8 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
  * Bounds the model-facing output (serialized result value plus logs) to `maxOutputBytes`.
  * Oversized values are replaced by their truncated serialized text with an explanatory marker,
  * and logs are kept from the start until the remaining budget is exhausted. Truncation never
- * fails the execution; `truncated: true` marks affected results.
+ * fails the execution; `truncated: true` marks affected results. Only runs when the host set
+ * `maxOutputBytes` — with the limit absent, output passes through unbounded.
  */
 const boundOutput = (result: ExecuteResult, maxOutputBytes: number): ExecuteResult => {
   let truncated = false

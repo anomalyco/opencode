@@ -59,10 +59,8 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
     expect(await value(`return [1,2,3]?.foo ?? "fb"`)).toBe("fb")
   })
 
-  test("real-but-unsupported array methods still give the rewrite hint", async () => {
-    const err = await error(`return [1,2,3].splice(0,1)`)
-    expect(err.kind).toBe("UnsupportedSyntax")
-    expect(err.message).toContain("splice")
+  test("unknown property reads stay undefined for methods CodeMode does not implement", async () => {
+    expect(await value(`return [1,2,3].toSpliced === undefined`)).toBe(true)
   })
 
   test("supported array methods and indexing still work", async () => {
@@ -140,6 +138,154 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
     expect(ToolRuntime.copyOut(-Infinity)).toBeNull()
     expect(ToolRuntime.copyOut(42)).toBe(42)
     expect(ToolRuntime.copyOut({ a: NaN, b: [Infinity, 1] })).toEqual({ a: null, b: [null, 1] })
+  })
+})
+
+describe("Error values and instanceof", () => {
+  test("new Error carries name/message and is instanceof Error", async () => {
+    expect(await value(`const e = new Error("boom"); return [e instanceof Error, e.name, e.message]`)).toEqual([true, "Error", "boom"])
+  })
+
+  test("Error without new behaves like new Error", async () => {
+    expect(await value(`const e = Error("plain"); return [e instanceof Error, e.name, e.message]`)).toEqual([true, "Error", "plain"])
+    expect(await value(`const e = new Error(); return [e.name, e.message, e instanceof Error]`)).toEqual(["Error", "", true])
+  })
+
+  test("specific error types are instanceof themselves and Error, not each other", async () => {
+    expect(await value(`const e = new TypeError("t"); return [e instanceof TypeError, e instanceof Error, e instanceof RangeError]`)).toEqual([true, true, false])
+    expect(await value(`return new Error("e") instanceof TypeError`)).toBe(false)
+  })
+
+  test("thrown errors keep instanceof through try/catch", async () => {
+    expect(await value(`try { throw new Error("x") } catch (e) { return [e instanceof Error, e.message] }`)).toEqual([true, "x"])
+  })
+
+  test("interpreter runtime failures are caught as Error values", async () => {
+    expect(await value(`try { JSON.parse("nope") } catch (e) { return e instanceof Error }`)).toBe(true)
+    expect(await value(`try { undeclared() } catch (e) { return e instanceof Error }`)).toBe(true)
+  })
+
+  test("caught failures carry the constructor name the real-JS failure would have", async () => {
+    // JSON.parse throws SyntaxError: name and specific-instanceof both carry through, and the
+    // message keeps the engine's position detail.
+    expect(await value(`
+      try { JSON.parse("{oops") } catch (e) {
+        return [e.name, e instanceof SyntaxError, e instanceof Error, e instanceof TypeError, e.message.includes("JSON")]
+      }
+    `)).toEqual(["SyntaxError", true, true, false, true])
+    expect(await value(`try { undeclared() } catch (e) { return [e.name, e instanceof ReferenceError] }`))
+      .toEqual(["ReferenceError", true])
+    expect(await value(`try { const c = 1; c = 2 } catch (e) { return [e.name, e instanceof TypeError] }`))
+      .toEqual(["TypeError", true])
+    expect(await value(`try { "a".normalize("NOPE") } catch (e) { return [e.name, e instanceof RangeError] }`))
+      .toEqual(["RangeError", true])
+    expect(await value(`try { "a".match("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`))
+      .toEqual(["SyntaxError", true])
+    expect(await value(`try { new RegExp("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`))
+      .toEqual(["SyntaxError", true])
+  })
+
+  test("diagnostics without a specific real-JS analogue are named plain Error", async () => {
+    expect(await value(`try { JSON.parse(5) } catch (e) { return [e.name, e instanceof Error] }`))
+      .toEqual(["Error", true])
+  })
+
+  test("Promise.allSettled rejection reasons are Error values", async () => {
+    expect(await value(`
+      const settled = await Promise.allSettled([Promise.reject(new Error("b"))])
+      return [settled[0].reason instanceof Error, settled[0].reason.message]
+    `)).toEqual([true, "b"])
+  })
+
+  test("non-error thrown values are not instanceof Error", async () => {
+    expect(await value(`try { throw "raw" } catch (e) { return e instanceof Error }`)).toBe(false)
+    expect(await value(`try { throw { message: "shaped" } } catch (e) { return e instanceof Error }`)).toBe(false)
+  })
+
+  test("plain data is never instanceof Error", async () => {
+    expect(await value(`return [({}) instanceof Error, "s" instanceof Error, null instanceof Error]`)).toEqual([false, false, false])
+  })
+
+  test("error values still serialize as plain { name, message } data", async () => {
+    expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
+    expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
+    expect(await value(`try { throw new Error("m") } catch (e) { return Object.keys(e) }`)).toEqual(["name", "message"])
+  })
+
+  test("spreading an error loses the brand, like losing the prototype in JS", async () => {
+    expect(await value(`const e = new Error("m"); return ({ ...e }) instanceof Error`)).toBe(false)
+    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({ name: "Error", message: "m" })
+  })
+
+  test("typeof Error is function; an unknown instanceof right-hand side is a catchable error", async () => {
+    expect(await value(`return typeof Error`)).toBe("function")
+    expect(await value(`try { return 1 instanceof 5 } catch (e) { return "caught" }`)).toBe("caught")
+    const err = await error(`return 1 instanceof 5`)
+    expect(err.message).toContain("right-hand side of 'instanceof'")
+  })
+})
+
+describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
+  test("splice removes in place and returns the removed elements", async () => {
+    expect(await value(`const a = [1,2,3,4]; const removed = a.splice(1, 2); return { removed, a }`)).toEqual({ removed: [2, 3], a: [1, 4] })
+  })
+
+  test("splice inserts new elements at the cut", async () => {
+    expect(await value(`const a = ["a","d"]; a.splice(1, 0, "b", "c"); return a`)).toEqual(["a", "b", "c", "d"])
+    expect(await value(`const a = [1,2,3]; const removed = a.splice(1, 1, "x"); return { removed, a }`)).toEqual({ removed: [2], a: [1, "x", 3] })
+  })
+
+  test("splice with one argument removes to the end; negative start counts back", async () => {
+    expect(await value(`const a = [1,2,3]; const removed = a.splice(1); return { removed, a }`)).toEqual({ removed: [2, 3], a: [1] })
+    expect(await value(`const a = [1,2,3]; const removed = a.splice(-1); return { removed, a }`)).toEqual({ removed: [3], a: [1, 2] })
+  })
+
+  test("splice rejects inserting a container into itself", async () => {
+    const err = await error(`const a = [1]; a.splice(0, 0, [a]); return a`)
+    expect(err.kind).toBe("InvalidDataValue")
+    expect(err.message).toContain("circular")
+  })
+
+  test("fill overwrites a range and returns the mutated array", async () => {
+    expect(await value(`const a = [1,2,3,4]; return a.fill(0, 1, 3)`)).toEqual([1, 0, 0, 4])
+    expect(await value(`return [1,2,3].fill("z")`)).toEqual(["z", "z", "z"])
+  })
+
+  test("copyWithin copies a range in place", async () => {
+    expect(await value(`return [1,2,3,4,5].copyWithin(0, 3)`)).toEqual([4, 5, 3, 4, 5])
+  })
+
+  test("keys/values/entries return arrays usable with for...of and spread", async () => {
+    expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
+    expect(await value(`return ["x","y"].values()`)).toEqual(["x", "y"])
+    expect(await value(`
+      const out = []
+      for (const [index, item] of ["a","b"].entries()) out.push(index + ":" + item)
+      return out
+    `)).toEqual(["0:a", "1:b"])
+    expect(await value(`return [...[7].entries()]`)).toEqual([[0, 7]])
+  })
+})
+
+describe("string methods: localeCompare, normalize, trim aliases", () => {
+  test("localeCompare orders strings for sorting", async () => {
+    expect(await value(`return ["b","a","c"].sort((x, y) => x.localeCompare(y))`)).toEqual(["a", "b", "c"])
+    expect(await value(`return "a".localeCompare("a")`)).toBe(0)
+  })
+
+  test("normalize applies unicode normalization forms", async () => {
+    expect(await value(`return "\\u0065\\u0301".normalize("NFC").length`)).toBe(1)
+    expect(await value(`return "\\u00e9".normalize("NFD").length`)).toBe(2)
+    expect(await value(`return "x".normalize() === "x"`)).toBe(true)
+  })
+
+  test("an invalid normalize form is a clear catchable error", async () => {
+    expect(await value(`try { "x".normalize("nope"); return "no" } catch (e) { return e.message }`)).toContain('"NFC"')
+  })
+
+  test("trimLeft/trimRight alias trimStart/trimEnd", async () => {
+    expect(await value(`return "  x ".trimLeft()`)).toBe("x ")
+    expect(await value(`return "  x ".trimRight()`)).toBe("  x")
   })
 })
 

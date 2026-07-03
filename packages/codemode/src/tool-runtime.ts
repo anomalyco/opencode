@@ -107,7 +107,25 @@ const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
 export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
 
-export const copyIn = (value: unknown, label: string, depth = 0, seen = new Set<object>()): unknown => {
+/**
+ * Validates and copies a value against the plain-data contract (depth, circularity, plain
+ * objects only, blocked properties, data-only leaves).
+ *
+ * Two modes share the walk:
+ * - **Boundary** (`preserveSandboxValues` false, the default): the host↔sandbox boundary —
+ *   final results, tool-call arguments, `JSON.stringify`. Sandbox value types serialize
+ *   exactly as JSON.stringify would: Date → ISO string (invalid → null), RegExp/Map/Set → {}.
+ * - **Intra-sandbox checkpoint** (`preserveSandboxValues` true; see `boundedData` in
+ *   codemode.ts): Date/RegExp/Map/Set instances pass through untouched (treated as leaves,
+ *   contents not walked), so values flowing through `Object.*` helpers, coercion inputs, and
+ *   other in-sandbox checkpoints stay fully usable (`.getTime()`, `.has()`, ...).
+ *
+ * Both modes reject un-awaited promises with an await-hinting diagnostic.
+ */
+export const copyIn = (value: unknown, label: string, preserveSandboxValues = false): unknown =>
+  copyBounded(value, label, 0, new Set(), preserveSandboxValues)
+
+const copyBounded = (value: unknown, label: string, depth: number, seen: Set<object>, preserveSandboxValues: boolean): unknown => {
   if (depth > MAX_VALUE_DEPTH) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
   }
@@ -129,7 +147,7 @@ export const copyIn = (value: unknown, label: string, depth = 0, seen = new Set<
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
   }
 
-  // An un-awaited promise never crosses a data boundary as `{}`; the diagnostic tells the
+  // An un-awaited promise never crosses a data checkpoint as `{}`; the diagnostic tells the
   // model exactly how to fix the program instead.
   if (value instanceof SandboxPromise) {
     throw new ToolRuntimeError(
@@ -138,8 +156,33 @@ export const copyIn = (value: unknown, label: string, depth = 0, seen = new Set<
     )
   }
 
+  if (preserveSandboxValues) {
+    // Intra-sandbox checkpoints keep sandbox value instances alive as leaves; their contents
+    // are never walked here (Map/Set members are validated where mutation happens, and the
+    // real boundary still serializes them below).
+    if (value instanceof SandboxDate || value instanceof SandboxRegExp || value instanceof SandboxMap || value instanceof SandboxSet) {
+      return value
+    }
+    // Host instances cannot normally reach an intra-sandbox checkpoint (tool results cross
+    // the boundary first), but wrap them defensively rather than degrading to JSON forms.
+    if (value instanceof Date) return new SandboxDate(value.getTime())
+    if (value instanceof RegExp) return new SandboxRegExp(value.source, value.flags)
+    if (value instanceof Map) {
+      const wrapped = new SandboxMap()
+      for (const [key, item] of value.entries()) {
+        wrapped.map.set(copyBounded(key, label, depth + 1, seen, true), copyBounded(item, label, depth + 1, seen, true))
+      }
+      return wrapped
+    }
+    if (value instanceof Set) {
+      const wrapped = new SandboxSet()
+      for (const item of value.values()) wrapped.set.add(copyBounded(item, label, depth + 1, seen, true))
+      return wrapped
+    }
+  }
+
   // Sandbox value types (and their host counterparts, which a host tool may legitimately
-  // return) serialize exactly as JSON.stringify would at every data checkpoint: a Date is its
+  // return) serialize exactly as JSON.stringify would at the data boundary: a Date is its
   // toJSON() ISO string (invalid -> null), and RegExp/Map/Set have no JSON form beyond {}.
   if (value instanceof SandboxDate) {
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
@@ -161,7 +204,7 @@ export const copyIn = (value: unknown, label: string, depth = 0, seen = new Set<
   seen.add(value)
 
   if (Array.isArray(value)) {
-    const copied = value.map((item) => copyIn(item, label, depth + 1, seen))
+    const copied = value.map((item) => copyBounded(item, label, depth + 1, seen, preserveSandboxValues))
     seen.delete(value)
     return copied
   }
@@ -176,7 +219,7 @@ export const copyIn = (value: unknown, label: string, depth = 0, seen = new Set<
     if (isBlockedMember(key)) {
       throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
     }
-    copied[key] = copyIn(item, label, depth + 1, seen)
+    copied[key] = copyBounded(item, label, depth + 1, seen, preserveSandboxValues)
   }
   seen.delete(value)
   return copied
@@ -427,7 +470,7 @@ export const discoveryPlan = <R>(
     "",
     "Standard modern JavaScript works: functions/closures, destructuring, template literals, loops, try/catch, spread, optional chaining, the usual Array/String/Object/Math/JSON methods, plus Date, RegExp, Map, Set, and Promise.all/allSettled/race/resolve/reject.",
     "TypeScript type annotations are allowed and stripped before execution (decorators are not supported).",
-    "Not supported (each fails with a message naming the alternative): classes, generators, for await...of, .then/.catch/.finally (use await with try/catch), `x instanceof Error` (caught errors are plain `{ name, message }` objects), splice.",
+    "Not supported (each fails with a message naming the alternative): classes, generators, for await...of, .then/.catch/.finally (use await with try/catch).",
     "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
   ]
 
