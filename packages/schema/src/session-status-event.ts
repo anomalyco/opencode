@@ -32,7 +32,7 @@ export const Info = Schema.Union([
 ]).annotate({ identifier: "SessionStatus" })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export const Status = Event.define({
+export const Status = Event.ephemeral({
   type: "session.status",
   schema: {
     sessionID: SessionID,
@@ -41,7 +41,7 @@ export const Status = Event.define({
 })
 
 // deprecated
-export const Idle = Event.define({
+export const Idle = Event.ephemeral({
   type: "session.idle",
   schema: {
     sessionID: SessionID,

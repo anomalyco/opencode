@@ -2,7 +2,7 @@ export * as Pty from "./pty.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, PositiveInt, statics } from "./schema.js"
 
@@ -31,10 +31,10 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Pty" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
-const Created = define({ type: "pty.created", schema: { info: Info } })
-const Updated = define({ type: "pty.updated", schema: { info: Info } })
-const Exited = define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegativeInt } })
-const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
+const Created = ephemeral({ type: "pty.created", schema: { info: Info } })
+const Updated = ephemeral({ type: "pty.updated", schema: { info: Info } })
+const Exited = ephemeral({ type: "pty.exited", schema: { id: ID, exitCode: NonNegativeInt } })
+const Deleted = ephemeral({ type: "pty.deleted", schema: { id: ID } })
 export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
 
 export const CreateInput = Schema.Struct({

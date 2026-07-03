@@ -1,9 +1,9 @@
 export * as FileSystemWatcher from "./filesystem-watcher.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 
-const Updated = define({
+const Updated = ephemeral({
   type: "file.watcher.updated",
   schema: {
     file: Schema.String,

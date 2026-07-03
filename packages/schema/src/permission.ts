@@ -2,7 +2,7 @@ export * as Permission from "./permission.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { SessionID } from "./session-id.js"
 import { statics } from "./schema.js"
@@ -40,8 +40,8 @@ export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
 export type Reply = typeof Reply.Type
 
-const Asked = define({ type: "permission.v2.asked", schema: Request.fields })
-const Replied = define({
+const Asked = ephemeral({ type: "permission.v2.asked", schema: Request.fields })
+const Replied = ephemeral({
   type: "permission.v2.replied",
   schema: {
     sessionID: SessionID,

@@ -1,9 +1,9 @@
 export * as ProjectDirectories from "./project-directories.js"
 
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { Project } from "./project.js"
 
-const Updated = define({
+const Updated = ephemeral({
   type: "project.directories.updated",
   schema: { projectID: Project.ID },
 })

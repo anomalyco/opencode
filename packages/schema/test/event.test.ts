@@ -6,17 +6,17 @@ import { EventLog } from "../src/event-log.js"
 describe("public event schemas", () => {
   test("definition is pure", () => {
     const definitions = Event.inventory()
-    Event.define({ type: "test.pure", schema: { value: Schema.String } })
+    Event.ephemeral({ type: "test.pure", schema: { value: Schema.String } })
     expect(definitions).toEqual([])
   })
 
   test("latest selection is independent of declaration order", () => {
-    const historical = Event.define({
+    const historical = Event.durable({
       type: "test.versioned",
       durable: { aggregate: "id", version: 1 },
       schema: { id: Schema.String },
     })
-    const current = Event.define({
+    const current = Event.durable({
       type: "test.versioned",
       durable: { aggregate: "id", version: 2 },
       schema: { id: Schema.String, value: Schema.String },
@@ -27,13 +27,13 @@ describe("public event schemas", () => {
   })
 
   test("durable definitions are indexed by type and version", () => {
-    const definition = Event.define({
+    const definition = Event.durable({
       type: "test.durable",
       durable: { aggregate: "id", version: 1 },
       schema: { id: Schema.String },
     })
 
-    expect(Event.durable([definition]).get("test.durable.1")).toBe(definition)
+    expect(Event.durableMap([definition]).get("test.durable.1")).toBe(definition)
   })
 
   test("synced marker encodes the captured watermark", () => {

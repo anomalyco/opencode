@@ -1,5 +1,15 @@
 # V2 Schema Changelog
 
+## 2026-07-03: Declare Event Durability At Definition Level
+
+- Add explicit `Event.durable(...)` and `Event.ephemeral(...)` definition constructors.
+- Preserve the existing durable and live-only event classifications while deriving durable inventories from definition metadata instead of hand-maintained lists.
+
+Compatibility:
+
+- No wire payload, stored event row, database, or behavior change.
+- Generated clients were regenerated from the unchanged public event schemas.
+
 ## 2026-07-02: Rename Session Log Replay Marker
 
 - Rename the replay boundary marker from `log.caught_up` / `EventLog.CaughtUp` to `log.synced` / `EventLog.Synced`.

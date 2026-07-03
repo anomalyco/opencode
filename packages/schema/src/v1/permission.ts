@@ -1,7 +1,7 @@
 export * as PermissionV1 from "./permission.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "../event.js"
+import { ephemeral, inventory } from "../event.js"
 import { ascending } from "../identifier.js"
 import { Project } from "../project.js"
 import { statics } from "../schema.js"
@@ -58,8 +58,8 @@ export const ReplyInput = Schema.Struct({ requestID: ID, ...ReplyBody.fields }).
 })
 export type ReplyInput = typeof ReplyInput.Type
 
-const Asked = define({ type: "permission.asked", schema: Request.fields })
-const Replied = define({
+const Asked = ephemeral({ type: "permission.asked", schema: Request.fields })
+const Replied = ephemeral({
   type: "permission.replied",
   schema: { sessionID: SessionID, requestID: ID, reply: Reply },
 })

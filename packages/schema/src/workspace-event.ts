@@ -10,21 +10,21 @@ export const ConnectionStatus = Schema.Struct({
 }).annotate({ identifier: "WorkspaceEvent.ConnectionStatus" })
 export interface ConnectionStatus extends Schema.Schema.Type<typeof ConnectionStatus> {}
 
-export const Ready = Event.define({
+export const Ready = Event.ephemeral({
   type: "workspace.ready",
   schema: {
     name: Schema.String,
   },
 })
 
-export const Failed = Event.define({
+export const Failed = Event.ephemeral({
   type: "workspace.failed",
   schema: {
     message: Schema.String,
   },
 })
 
-export const Status = Event.define({
+export const Status = Event.ephemeral({
   type: "workspace.status",
   schema: ConnectionStatus.fields,
 })

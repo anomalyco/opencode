@@ -1,11 +1,11 @@
 export * as LegacyEvent from "./legacy-event.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "../event.js"
+import { ephemeral, inventory } from "../event.js"
 import { SessionID } from "../session-id.js"
 import { SessionV1 } from "./session.js"
 
-export const CommandExecuted = define({
+export const CommandExecuted = ephemeral({
   type: "command.executed",
   schema: {
     name: Schema.String,

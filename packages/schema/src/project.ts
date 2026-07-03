@@ -1,7 +1,7 @@
 export * as Project from "./project.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { AbsolutePath, NonNegativeInt, optional } from "./schema.js"
 import { ProjectID } from "./project-id.js"
 
@@ -56,5 +56,5 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Project" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
-const Updated = define({ type: "project.updated", schema: Info.fields })
+const Updated = ephemeral({ type: "project.updated", schema: Info.fields })
 export const Event = { Updated, Definitions: inventory(Updated) }

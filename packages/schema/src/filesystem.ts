@@ -2,10 +2,10 @@ export * as FileSystem from "./filesystem.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 
-const Edited = define({
+const Edited = ephemeral({
   type: "file.edited",
   schema: { file: Schema.String },
 })

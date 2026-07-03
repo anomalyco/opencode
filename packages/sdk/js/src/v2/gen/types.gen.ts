@@ -2928,14 +2928,14 @@ export type SessionDurableEvent =
   | SessionNextStepFailed
   | SessionNextTextStarted
   | SessionNextTextEnded
+  | SessionNextReasoningStarted
+  | SessionNextReasoningEnded
   | SessionNextToolInputStarted
   | SessionNextToolInputEnded
   | SessionNextToolCalled
   | SessionNextToolProgress
   | SessionNextToolSuccess
   | SessionNextToolFailed
-  | SessionNextReasoningStarted
-  | SessionNextReasoningEnded
   | SessionNextRetried
   | SessionNextCompactionStarted
   | SessionNextCompactionEnded
@@ -4990,6 +4990,49 @@ export type SessionNextTextEnded = {
   }
 }
 
+export type SessionNextReasoningStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    providerMetadata?: LlmProviderMetadata
+  }
+}
+
+export type SessionNextReasoningEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    text: string
+    providerMetadata?: LlmProviderMetadata
+  }
+}
+
 export type SessionNextToolInputStarted = {
   id: string
   metadata?: {
@@ -5137,49 +5180,6 @@ export type SessionNextToolFailed = {
       executed: boolean
       metadata?: LlmProviderMetadata
     }
-  }
-}
-
-export type SessionNextReasoningStarted = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    providerMetadata?: LlmProviderMetadata
-  }
-}
-
-export type SessionNextReasoningEnded = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    text: string
-    providerMetadata?: LlmProviderMetadata
   }
 }
 
@@ -8983,6 +8983,61 @@ export type SessionNextTextEnded2 = {
   }
 }
 
+export type LlmProviderMetadata3 = {
+  [key: string]: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionNextReasoningStarted2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    providerMetadata?: LlmProviderMetadata3
+  }
+}
+
+export type LlmProviderMetadata4 = {
+  [key: string]: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionNextReasoningEnded2 = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    reasoningID: string
+    text: string
+    providerMetadata?: LlmProviderMetadata4
+  }
+}
+
 export type SessionNextToolInputStarted2 = {
   id: string
   metadata?: {
@@ -9025,7 +9080,7 @@ export type SessionNextToolInputEnded2 = {
   }
 }
 
-export type LlmProviderMetadata3 = {
+export type LlmProviderMetadata5 = {
   [key: string]: {
     [key: string]: unknown
   }
@@ -9054,7 +9109,7 @@ export type SessionNextToolCalled2 = {
     }
     provider: {
       executed: boolean
-      metadata?: LlmProviderMetadata3
+      metadata?: LlmProviderMetadata5
     }
   }
 }
@@ -9083,7 +9138,7 @@ export type SessionNextToolProgress2 = {
   }
 }
 
-export type LlmProviderMetadata4 = {
+export type LlmProviderMetadata6 = {
   [key: string]: {
     [key: string]: unknown
   }
@@ -9114,12 +9169,12 @@ export type SessionNextToolSuccess2 = {
     result?: unknown
     provider: {
       executed: boolean
-      metadata?: LlmProviderMetadata4
+      metadata?: LlmProviderMetadata6
     }
   }
 }
 
-export type LlmProviderMetadata5 = {
+export type LlmProviderMetadata7 = {
   [key: string]: {
     [key: string]: unknown
   }
@@ -9146,63 +9201,8 @@ export type SessionNextToolFailed2 = {
     result?: unknown
     provider: {
       executed: boolean
-      metadata?: LlmProviderMetadata5
+      metadata?: LlmProviderMetadata7
     }
-  }
-}
-
-export type LlmProviderMetadata6 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextReasoningStarted2 = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.started"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    providerMetadata?: LlmProviderMetadata6
-  }
-}
-
-export type LlmProviderMetadata7 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionNextReasoningEnded2 = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.next.reasoning.ended"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef2
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    reasoningID: string
-    text: string
-    providerMetadata?: LlmProviderMetadata7
   }
 }
 
@@ -9355,14 +9355,14 @@ export type SessionDurableEventV2 =
   | SessionNextStepFailed2
   | SessionNextTextStarted2
   | SessionNextTextEnded2
+  | SessionNextReasoningStarted2
+  | SessionNextReasoningEnded2
   | SessionNextToolInputStarted2
   | SessionNextToolInputEnded2
   | SessionNextToolCalled2
   | SessionNextToolProgress2
   | SessionNextToolSuccess2
   | SessionNextToolFailed2
-  | SessionNextReasoningStarted2
-  | SessionNextReasoningEnded2
   | SessionNextRetried2
   | SessionNextCompactionStarted2
   | SessionNextCompactionEnded2

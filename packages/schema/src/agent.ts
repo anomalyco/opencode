@@ -1,14 +1,14 @@
 export * as Agent from "./agent.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 import { Model } from "./model.js"
 import { Permission } from "./permission.js"
 import { Provider } from "./provider.js"
 import { PositiveInt, statics } from "./schema.js"
 
-const Updated = define({ type: "agent.updated", schema: {} })
+const Updated = ephemeral({ type: "agent.updated", schema: {} })
 
 export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
 export type ID = typeof ID.Type

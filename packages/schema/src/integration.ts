@@ -2,7 +2,7 @@ export * as Integration from "./integration.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { Connection } from "./connection.js"
 import { ascending } from "./identifier.js"
 import { statics } from "./schema.js"
@@ -76,11 +76,11 @@ export type Method = typeof Method.Type
 export const Inputs = Schema.Record(Schema.String, Schema.String).annotate({ identifier: "Integration.Inputs" })
 export type Inputs = typeof Inputs.Type
 
-const Updated = define({
+const Updated = ephemeral({
   type: "integration.updated",
   schema: {},
 })
-const ConnectionUpdated = define({
+const ConnectionUpdated = ephemeral({
   type: "integration.connection.updated",
   schema: { integrationID: ID },
 })

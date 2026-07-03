@@ -1,7 +1,7 @@
 export * as Plugin from "./plugin.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type
@@ -11,7 +11,7 @@ export const Info = Schema.Struct({
   id: ID,
 }).annotate({ identifier: "Plugin.Info" })
 
-const Added = define({
+const Added = ephemeral({
   type: "plugin.added",
   schema: { id: ID },
 })

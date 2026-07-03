@@ -1368,6 +1368,35 @@ export type SessionLogOutput =
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: unknown }
+          readonly type: "session.next.reasoning.started"
+          readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+          readonly location?: { readonly directory: string; readonly workspaceID?: string }
+          readonly data: {
+            readonly timestamp: number
+            readonly sessionID: string
+            readonly assistantMessageID: string
+            readonly reasoningID: string
+            readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
+          }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: unknown }
+          readonly type: "session.next.reasoning.ended"
+          readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+          readonly location?: { readonly directory: string; readonly workspaceID?: string }
+          readonly data: {
+            readonly timestamp: number
+            readonly sessionID: string
+            readonly assistantMessageID: string
+            readonly reasoningID: string
+            readonly text: string
+            readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
+          }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: unknown }
           readonly type: "session.next.tool.input.started"
           readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -1471,35 +1500,6 @@ export type SessionLogOutput =
               readonly executed: boolean
               readonly metadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
             }
-          }
-        }
-      | {
-          readonly id: string
-          readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.next.reasoning.started"
-          readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: {
-            readonly timestamp: number
-            readonly sessionID: string
-            readonly assistantMessageID: string
-            readonly reasoningID: string
-            readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
-          }
-        }
-      | {
-          readonly id: string
-          readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.next.reasoning.ended"
-          readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: {
-            readonly timestamp: number
-            readonly sessionID: string
-            readonly assistantMessageID: string
-            readonly reasoningID: string
-            readonly text: string
-            readonly providerMetadata?: { readonly [x: string]: { readonly [x: string]: unknown } }
           }
         }
       | {

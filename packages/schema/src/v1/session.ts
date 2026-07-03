@@ -1,7 +1,7 @@
 export * as SessionV1 from "./session.js"
 
 import { Effect, Schema, Types } from "effect"
-import { define, inventory } from "../event.js"
+import { durable, ephemeral, inventory } from "../event.js"
 import { FileDiff } from "../file-diff.js"
 import { Project } from "../project.js"
 import { Provider } from "../provider.js"
@@ -569,7 +569,7 @@ export const SessionInfo = Schema.Struct({
 export type SessionInfo = typeof SessionInfo.Type
 
 const events = {
-  Created: define({
+  Created: durable({
     type: "session.created",
     ...options,
     schema: {
@@ -577,7 +577,7 @@ const events = {
       info: SessionInfo,
     },
   }),
-  Updated: define({
+  Updated: durable({
     type: "session.updated",
     ...options,
     schema: {
@@ -585,7 +585,7 @@ const events = {
       info: SessionInfo,
     },
   }),
-  Deleted: define({
+  Deleted: durable({
     type: "session.deleted",
     ...options,
     schema: {
@@ -593,7 +593,7 @@ const events = {
       info: SessionInfo,
     },
   }),
-  MessageUpdated: define({
+  MessageUpdated: durable({
     type: "message.updated",
     ...options,
     schema: {
@@ -601,7 +601,7 @@ const events = {
       info: Info,
     },
   }),
-  MessageRemoved: define({
+  MessageRemoved: durable({
     type: "message.removed",
     ...options,
     schema: {
@@ -609,7 +609,7 @@ const events = {
       messageID: MessageID,
     },
   }),
-  PartUpdated: define({
+  PartUpdated: durable({
     type: "message.part.updated",
     ...options,
     schema: {
@@ -618,7 +618,7 @@ const events = {
       time: Schema.Finite,
     },
   }),
-  PartRemoved: define({
+  PartRemoved: durable({
     type: "message.part.removed",
     ...options,
     schema: {
@@ -629,7 +629,7 @@ const events = {
   }),
 }
 
-export const PartDelta = define({
+export const PartDelta = ephemeral({
   type: "message.part.delta",
   schema: {
     sessionID: SessionID,
@@ -640,7 +640,7 @@ export const PartDelta = define({
   },
 })
 
-export const Diff = define({
+export const Diff = ephemeral({
   type: "session.diff",
   schema: {
     sessionID: SessionID,
@@ -648,7 +648,7 @@ export const Diff = define({
   },
 })
 
-export const Error = define({
+export const Error = ephemeral({
   type: "session.error",
   schema: {
     sessionID: Schema.optional(SessionID),

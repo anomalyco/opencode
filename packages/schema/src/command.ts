@@ -1,11 +1,11 @@
 export * as Command from "./command.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 import { Model } from "./model.js"
 
-const Updated = define({ type: "command.updated", schema: {} })
+const Updated = ephemeral({ type: "command.updated", schema: {} })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({

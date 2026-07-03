@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
 
-export const Ready = Event.define({
+export const Ready = Event.ephemeral({
   type: "worktree.ready",
   schema: {
     name: Schema.String,
@@ -12,7 +12,7 @@ export const Ready = Event.define({
   },
 })
 
-export const Failed = Event.define({
+export const Failed = Event.ephemeral({
   type: "worktree.failed",
   schema: {
     message: Schema.String,

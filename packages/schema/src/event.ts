@@ -29,6 +29,7 @@ export type Definition<
   DataSchema extends Schema.Codec<unknown, unknown> = Schema.Codec<unknown, unknown>,
 > = Schema.Top & {
   readonly type: Type
+  readonly durability: "durable" | "ephemeral"
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
@@ -51,17 +52,26 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
 }
 
-export function define<
-  const Type extends string,
-  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
->(input: {
+type Input<Type extends string, Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>> = {
   readonly type: Type
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
   }
   readonly schema: Fields
-}) {
+}
+
+export function define<
+  const Type extends string,
+  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
+>(input: Input<Type, Fields>) {
+  return makeDefinition(input.durable === undefined ? "ephemeral" : "durable", input)
+}
+
+function makeDefinition<
+  const Type extends string,
+  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
+>(durability: "durable" | "ephemeral", input: Input<Type, Fields>) {
   const data = Schema.Struct(input.schema)
   return Schema.Struct({
     id: ID,
@@ -75,10 +85,25 @@ export function define<
     .pipe(
       statics(() => ({
         type: input.type,
+        durability,
         ...(input.durable === undefined ? {} : { durable: input.durable }),
         data,
       })),
     ) satisfies Definition<Type, typeof data>
+}
+
+export function durable<
+  const Type extends string,
+  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
+>(input: Input<Type, Fields> & { readonly durable: NonNullable<Input<Type, Fields>["durable"]> }) {
+  return makeDefinition("durable", input)
+}
+
+export function ephemeral<
+  const Type extends string,
+  const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
+>(input: Omit<Input<Type, Fields>, "durable">) {
+  return makeDefinition("ephemeral", input)
 }
 
 export function inventory<const Definitions extends ReadonlyArray<Definition>>(...definitions: Definitions) {
@@ -107,11 +132,12 @@ export function versionedType(type: string, version: number) {
   return `${type}.${version}`
 }
 
-export function durable<const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) {
+export function durableMap<const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) {
   return readonlyMap(
     definitions.reduce((result, definition) => {
-      if (!definition.durable) return result
-      const key = versionedType(definition.type, definition.durable.version)
+      const durable = definition.durable
+      if (definition.durability !== "durable" || !durable) return result
+      const key = versionedType(definition.type, durable.version)
       if (result.has(key)) throw new Error(`Duplicate durable event definition for ${key}`)
       result.set(key, definition)
       return result

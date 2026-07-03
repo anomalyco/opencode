@@ -2,7 +2,7 @@ export * as Shell from "./shell.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, statics } from "./schema.js"
 
@@ -49,9 +49,9 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Shell" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
-const Created = define({ type: "shell.created", schema: { info: Info } })
-const Exited = define({ type: "shell.exited", schema: { id: ID, exit: optional(Schema.Number), status: Status } })
-const Deleted = define({ type: "shell.deleted", schema: { id: ID } })
+const Created = ephemeral({ type: "shell.created", schema: { info: Info } })
+const Exited = ephemeral({ type: "shell.exited", schema: { id: ID, exit: optional(Schema.Number), status: Status } })
+const Deleted = ephemeral({ type: "shell.deleted", schema: { id: ID } })
 export const Event = { Created, Exited, Deleted, Definitions: inventory(Created, Exited, Deleted) }
 
 export const CreateInput = Schema.Struct({

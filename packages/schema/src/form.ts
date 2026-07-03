@@ -1,7 +1,7 @@
 export * as Form from "./form.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, optional, statics } from "./schema.js"
 
@@ -127,9 +127,11 @@ export interface UrlInfo extends Schema.Schema.Type<typeof UrlInfo> {}
 export const Info = Schema.Union([FormInfo, UrlInfo]).pipe(Schema.toTaggedUnion("mode"))
 export type Info = FormInfo | UrlInfo
 
-export const Value = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Array(Schema.String)]).annotate({
-  identifier: "Form.Value",
-})
+export const Value = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Array(Schema.String)]).annotate(
+  {
+    identifier: "Form.Value",
+  },
+)
 export type Value = typeof Value.Type
 
 export const Answer = Schema.Record(Schema.String, Value).annotate({ identifier: "Form.Answer" })
@@ -149,8 +151,8 @@ export const Reply = Schema.Struct({
 }).annotate({ identifier: "Form.Reply" })
 export interface Reply extends Schema.Schema.Type<typeof Reply> {}
 
-const Created = define({ type: "form.created", schema: { form: Info } })
-const Replied = define({ type: "form.replied", schema: { id: ID, sessionID: Schema.String, answer: Answer } })
-const Cancelled = define({ type: "form.cancelled", schema: { id: ID, sessionID: Schema.String } })
+const Created = ephemeral({ type: "form.created", schema: { form: Info } })
+const Replied = ephemeral({ type: "form.replied", schema: { id: ID, sessionID: Schema.String, answer: Answer } })
+const Cancelled = ephemeral({ type: "form.cancelled", schema: { id: ID, sessionID: Schema.String } })
 
 export const Event = { Created, Replied, Cancelled, Definitions: inventory(Created, Replied, Cancelled) }

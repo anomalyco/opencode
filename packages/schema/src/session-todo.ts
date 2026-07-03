@@ -1,7 +1,7 @@
 export * as SessionTodo from "./session-todo.js"
 
 import { Schema } from "effect"
-import { define, inventory } from "./event.js"
+import { ephemeral, inventory } from "./event.js"
 import { SessionID } from "./session-id.js"
 
 export const Info = Schema.Struct({
@@ -15,7 +15,7 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Todo" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
-const Updated = define({
+const Updated = ephemeral({
   type: "todo.updated",
   schema: {
     sessionID: SessionID,
