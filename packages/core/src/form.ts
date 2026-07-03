@@ -16,6 +16,9 @@ export type Info = typeof Info.Type
 export const Field = Form.Field
 export type Field = Form.Field
 
+export const When = Form.When
+export type When = Form.When
+
 export const State = Form.State
 export type State = typeof State.Type
 
@@ -56,6 +59,10 @@ export class InvalidAnswerError extends Schema.TaggedErrorClass<InvalidAnswerErr
   message: Schema.String,
 }) {}
 
+export class InvalidFormError extends Schema.TaggedErrorClass<InvalidFormError>()("Form.InvalidFormError", {
+  message: Schema.String,
+}) {}
+
 export type CreateInput =
   | (Omit<Form.FormInfo, "id"> & { readonly id?: ID })
   | (Omit<Form.UrlInfo, "id"> & { readonly id?: ID })
@@ -70,8 +77,8 @@ export interface ListInput {
 }
 
 export interface Interface {
-  readonly create: (input: CreateInput) => Effect.Effect<Info, AlreadyExistsError>
-  readonly ask: (input: CreateInput) => Effect.Effect<State, AlreadyExistsError>
+  readonly create: (input: CreateInput) => Effect.Effect<Info, AlreadyExistsError | InvalidFormError>
+  readonly ask: (input: CreateInput) => Effect.Effect<State, AlreadyExistsError | InvalidFormError>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly state: (id: ID) => Effect.Effect<State, NotFoundError>
@@ -113,6 +120,10 @@ export const layer = Layer.effect(
           const id = input.id ?? ID.create()
           const existing = yield* Cache.getSuccess(forms, id)
           if (Option.isSome(existing)) return yield* new AlreadyExistsError({ id })
+          if (input.mode === "form") {
+            const invalid = validateFields(input.fields)
+            if (invalid) return yield* new InvalidFormError({ message: invalid })
+          }
           const base = {
             id,
             sessionID: input.sessionID,
@@ -218,10 +229,12 @@ function validateAnswer(form: Info, answer: Answer) {
   }
   for (const field of form.fields) {
     const value = answer[field.key]
+    const active = isActive(field, answer)
     if (value === undefined) {
-      if (field.required && isActive(field, answer)) return `Missing required form field: ${field.key}`
+      if (field.required && active) return `Missing required form field: ${field.key}`
       continue
     }
+    if (!active) return `Form field is not active: ${field.key}`
     const invalid = validateField(field, value)
     if (invalid) return invalid
   }
@@ -229,9 +242,50 @@ function validateAnswer(form: Info, answer: Answer) {
 
 function isActive(field: Form.Field, answer: Answer) {
   if (!field.when) return true
-  const value = answer[field.when.key]
-  if (field.when.op === "eq") return value === field.when.value
-  return value !== field.when.value
+  return field.when.every((when) => matches(when, answer[when.key]))
+}
+
+// An unanswered referenced field makes the condition false for both ops. Combined with inactive
+// fields being unanswerable, this cascades: hiding a field falsifies every condition referencing it.
+function matches(when: Form.When, value: Form.Value | undefined) {
+  if (value === undefined) return false
+  const hit = Array.isArray(value) ? value.some((item) => item === when.value) : value === when.value
+  return when.op === "eq" ? hit : !hit
+}
+
+// Create-time validation of `when` references: each condition must point at an earlier field,
+// carry a value matching that field's type, and use a declared option when the field's options
+// are closed. Rejecting these at creation surfaces authoring mistakes to the caller instead of
+// silently never matching.
+function validateFields(fields: ReadonlyArray<Form.Field>) {
+  const earlier = new Map<string, Form.Field>()
+  for (const field of fields) {
+    if (earlier.has(field.key)) return `Duplicate form field key: ${field.key}`
+    for (const when of field.when ?? []) {
+      const target = earlier.get(when.key)
+      if (!target) return `Form field condition must reference an earlier field: ${field.key} -> ${when.key}`
+      const invalid = validateWhen(when, target)
+      if (invalid) return `${invalid}: ${field.key} -> ${when.key}`
+    }
+    earlier.set(field.key, field)
+  }
+}
+
+function validateWhen(when: Form.When, target: Form.Field) {
+  if (target.type === "boolean") {
+    if (typeof when.value !== "boolean") return "Form field condition value must be a boolean"
+    return
+  }
+  if (target.type === "number" || target.type === "integer") {
+    if (typeof when.value !== "number") return "Form field condition value must be a number"
+    return
+  }
+  // string and multiselect targets both compare against string values
+  if (typeof when.value !== "string") return "Form field condition value must be a string"
+  const closed = target.type === "multiselect" ? !target.custom : target.options !== undefined && !target.custom
+  if (closed && !target.options?.some((option) => option.value === when.value)) {
+    return "Form field condition value must be one of the field's options"
+  }
 }
 
 function validateField(field: Form.Field, value: Form.Value): string | undefined {

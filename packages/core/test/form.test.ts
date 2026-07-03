@@ -38,6 +38,124 @@ describe("Form", () => {
     }),
   )
 
+  it.effect("gates required fields and rejects inactive answers via when", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const created = yield* service.create({
+        sessionID: "global",
+        mode: "form",
+        fields: [
+          { key: "confirm", type: "boolean", required: true },
+          { key: "reason", type: "string", required: true, when: [{ key: "confirm", op: "eq", value: false }] },
+        ],
+      })
+
+      const inactive = yield* service.reply({ id: created.id, answer: { confirm: true, reason: "x" } }).pipe(Effect.flip)
+      expect(inactive).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: reason" }))
+
+      const missing = yield* service.reply({ id: created.id, answer: { confirm: false } }).pipe(Effect.flip)
+      expect(missing).toEqual(
+        new Form.InvalidAnswerError({ id: created.id, message: "Missing required form field: reason" }),
+      )
+
+      yield* service.reply({ id: created.id, answer: { confirm: false, reason: "not ready" } })
+      expect(yield* service.state(created.id)).toEqual({
+        status: "answered",
+        answer: { confirm: false, reason: "not ready" },
+      })
+    }),
+  )
+
+  it.effect("evaluates when against multiselect answers as inclusion", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const options = [
+        { value: "go", label: "Go" },
+        { value: "ts", label: "TypeScript" },
+      ]
+      const created = yield* service.create({
+        sessionID: "global",
+        mode: "form",
+        fields: [
+          { key: "langs", type: "multiselect", options },
+          { key: "goVersion", type: "string", required: true, when: [{ key: "langs", op: "eq", value: "go" }] },
+        ],
+      })
+
+      const missing = yield* service.reply({ id: created.id, answer: { langs: ["go", "ts"] } }).pipe(Effect.flip)
+      expect(missing).toEqual(
+        new Form.InvalidAnswerError({ id: created.id, message: "Missing required form field: goVersion" }),
+      )
+
+      yield* service.reply({ id: created.id, answer: { langs: ["ts"] } })
+      expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { langs: ["ts"] } })
+    }),
+  )
+
+  it.effect("treats unanswered when references as false and cascades inactivity", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const created = yield* service.create({
+        sessionID: "global",
+        mode: "form",
+        fields: [
+          { key: "a", type: "boolean" },
+          { key: "b", type: "string", when: [{ key: "a", op: "eq", value: true }] },
+          // neq also fails against an unanswered reference, and hiding b cascades here through
+          // the reject-inactive-answers rule: b can never be answered while a is false.
+          { key: "c", type: "string", required: true, when: [{ key: "b", op: "neq", value: "x" }] },
+        ],
+      })
+
+      const inactive = yield* service.reply({ id: created.id, answer: { a: false, b: "yes" } }).pipe(Effect.flip)
+      expect(inactive).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: b" }))
+
+      yield* service.reply({ id: created.id, answer: { a: false } })
+      expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { a: false } })
+    }),
+  )
+
+  it.effect("rejects invalid when definitions at creation", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const flipCreate = (fields: ReadonlyArray<Form.Field>) =>
+        service.create({ sessionID: "global", mode: "form", fields }).pipe(Effect.flip)
+
+      expect(
+        yield* flipCreate([
+          { key: "b", type: "string", when: [{ key: "missing", op: "eq", value: "x" }] },
+        ]),
+      ).toEqual(new Form.InvalidFormError({ message: "Form field condition must reference an earlier field: b -> missing" }))
+
+      expect(
+        yield* flipCreate([
+          { key: "a", type: "string" },
+          { key: "a", type: "string" },
+        ]),
+      ).toEqual(new Form.InvalidFormError({ message: "Duplicate form field key: a" }))
+
+      expect(
+        yield* flipCreate([
+          { key: "a", type: "boolean" },
+          { key: "b", type: "string", when: [{ key: "a", op: "eq", value: "yes" }] },
+        ]),
+      ).toEqual(
+        new Form.InvalidFormError({ message: "Form field condition value must be a boolean: b -> a" }),
+      )
+
+      expect(
+        yield* flipCreate([
+          { key: "a", type: "string", options: [{ value: "x", label: "X" }] },
+          { key: "b", type: "string", when: [{ key: "a", op: "eq", value: "y" }] },
+        ]),
+      ).toEqual(
+        new Form.InvalidFormError({
+          message: "Form field condition value must be one of the field's options: b -> a",
+        }),
+      )
+    }),
+  )
+
   it.effect("cleans up created forms when event publication fails", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

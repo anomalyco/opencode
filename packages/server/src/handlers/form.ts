@@ -61,14 +61,12 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
             return Effect.succeed({ ...common, mode: "url" as const, url: ctx.payload.url })
           })()
 
-          const created = yield* form
-            .create(input)
-            .pipe(
-              Effect.catchTag(
-                "Form.AlreadyExistsError",
-                (error) => new ConflictError({ resource: error.id, message: error.message }),
-              ),
-            )
+          const created = yield* form.create(input).pipe(
+            Effect.catchTags({
+              "Form.AlreadyExistsError": (error) => new ConflictError({ resource: error.id, message: error.message }),
+              "Form.InvalidFormError": (error) => new InvalidRequestError({ message: error.message, field: "fields" }),
+            }),
+          )
           return { data: created }
         }),
       )

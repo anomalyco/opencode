@@ -2453,7 +2453,11 @@ export type FormListRequestsOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "string"
               readonly format?: "email" | "uri" | "date" | "date-time"
               readonly minLength?: number
@@ -2473,7 +2477,11 @@ export type FormListRequestsOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "number"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2484,7 +2492,11 @@ export type FormListRequestsOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "integer"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2495,7 +2507,11 @@ export type FormListRequestsOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "boolean"
               readonly default?: boolean
             }
@@ -2504,7 +2520,11 @@ export type FormListRequestsOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "multiselect"
               readonly options: ReadonlyArray<{
                 readonly value: string
@@ -2545,7 +2565,11 @@ export type FormListOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "string"
               readonly format?: "email" | "uri" | "date" | "date-time"
               readonly minLength?: number
@@ -2565,7 +2589,11 @@ export type FormListOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "number"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2576,7 +2604,11 @@ export type FormListOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "integer"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2587,7 +2619,11 @@ export type FormListOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "boolean"
               readonly default?: boolean
             }
@@ -2596,7 +2632,11 @@ export type FormListOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "multiselect"
               readonly options: ReadonlyArray<{
                 readonly value: string
@@ -2634,7 +2674,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "string"
           readonly format?: "email" | "uri" | "date" | "date-time"
           readonly minLength?: number
@@ -2654,7 +2698,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "number"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2665,7 +2713,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "integer"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2676,7 +2728,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "boolean"
           readonly default?: boolean
         }
@@ -2685,7 +2741,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "multiselect"
           readonly options: ReadonlyArray<{
             readonly value: string
@@ -2711,7 +2771,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "string"
           readonly format?: "email" | "uri" | "date" | "date-time"
           readonly minLength?: number
@@ -2731,7 +2795,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "number"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2742,7 +2810,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "integer"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2753,7 +2825,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "boolean"
           readonly default?: boolean
         }
@@ -2762,7 +2838,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "multiselect"
           readonly options: ReadonlyArray<{
             readonly value: string
@@ -2788,7 +2868,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "string"
           readonly format?: "email" | "uri" | "date" | "date-time"
           readonly minLength?: number
@@ -2808,7 +2892,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "number"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2819,7 +2907,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "integer"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2830,7 +2922,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "boolean"
           readonly default?: boolean
         }
@@ -2839,7 +2935,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "multiselect"
           readonly options: ReadonlyArray<{
             readonly value: string
@@ -2865,7 +2965,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "string"
           readonly format?: "email" | "uri" | "date" | "date-time"
           readonly minLength?: number
@@ -2885,7 +2989,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "number"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2896,7 +3004,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "integer"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2907,7 +3019,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "boolean"
           readonly default?: boolean
         }
@@ -2916,7 +3032,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "multiselect"
           readonly options: ReadonlyArray<{
             readonly value: string
@@ -2942,7 +3062,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "string"
           readonly format?: "email" | "uri" | "date" | "date-time"
           readonly minLength?: number
@@ -2962,7 +3086,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "number"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2973,7 +3101,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "integer"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -2984,7 +3116,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "boolean"
           readonly default?: boolean
         }
@@ -2993,7 +3129,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "multiselect"
           readonly options: ReadonlyArray<{
             readonly value: string
@@ -3019,7 +3159,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "string"
           readonly format?: "email" | "uri" | "date" | "date-time"
           readonly minLength?: number
@@ -3039,7 +3183,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "number"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -3050,7 +3198,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "integer"
           readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
           readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -3061,7 +3213,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "boolean"
           readonly default?: boolean
         }
@@ -3070,7 +3226,11 @@ export type FormCreateInput = {
           readonly title?: string
           readonly description?: string
           readonly required?: boolean
-          readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+          readonly when?: ReadonlyArray<{
+            readonly key: string
+            readonly op: "eq" | "neq"
+            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+          }>
           readonly type: "multiselect"
           readonly options: ReadonlyArray<{
             readonly value: string
@@ -3101,7 +3261,11 @@ export type FormCreateOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "string"
               readonly format?: "email" | "uri" | "date" | "date-time"
               readonly minLength?: number
@@ -3121,7 +3285,11 @@ export type FormCreateOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "number"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -3132,7 +3300,11 @@ export type FormCreateOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "integer"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -3143,7 +3315,11 @@ export type FormCreateOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "boolean"
               readonly default?: boolean
             }
@@ -3152,7 +3328,11 @@ export type FormCreateOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "multiselect"
               readonly options: ReadonlyArray<{
                 readonly value: string
@@ -3195,7 +3375,11 @@ export type FormGetOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "string"
               readonly format?: "email" | "uri" | "date" | "date-time"
               readonly minLength?: number
@@ -3215,7 +3399,11 @@ export type FormGetOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "number"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -3226,7 +3414,11 @@ export type FormGetOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "integer"
               readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
               readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
@@ -3237,7 +3429,11 @@ export type FormGetOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "boolean"
               readonly default?: boolean
             }
@@ -3246,7 +3442,11 @@ export type FormGetOutput = {
               readonly title?: string
               readonly description?: string
               readonly required?: boolean
-              readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+              readonly when?: ReadonlyArray<{
+                readonly key: string
+                readonly op: "eq" | "neq"
+                readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+              }>
               readonly type: "multiselect"
               readonly options: ReadonlyArray<{
                 readonly value: string
@@ -4933,7 +5133,11 @@ export type EventSubscribeOutput =
                     readonly title?: string
                     readonly description?: string
                     readonly required?: boolean
-                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly when?: ReadonlyArray<{
+                      readonly key: string
+                      readonly op: "eq" | "neq"
+                      readonly value: string | number | boolean
+                    }>
                     readonly type: "string"
                     readonly format?: "email" | "uri" | "date" | "date-time"
                     readonly minLength?: number
@@ -4953,7 +5157,11 @@ export type EventSubscribeOutput =
                     readonly title?: string
                     readonly description?: string
                     readonly required?: boolean
-                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly when?: ReadonlyArray<{
+                      readonly key: string
+                      readonly op: "eq" | "neq"
+                      readonly value: string | number | boolean
+                    }>
                     readonly type: "number"
                     readonly minimum?: number
                     readonly maximum?: number
@@ -4964,7 +5172,11 @@ export type EventSubscribeOutput =
                     readonly title?: string
                     readonly description?: string
                     readonly required?: boolean
-                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly when?: ReadonlyArray<{
+                      readonly key: string
+                      readonly op: "eq" | "neq"
+                      readonly value: string | number | boolean
+                    }>
                     readonly type: "integer"
                     readonly minimum?: number
                     readonly maximum?: number
@@ -4975,7 +5187,11 @@ export type EventSubscribeOutput =
                     readonly title?: string
                     readonly description?: string
                     readonly required?: boolean
-                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly when?: ReadonlyArray<{
+                      readonly key: string
+                      readonly op: "eq" | "neq"
+                      readonly value: string | number | boolean
+                    }>
                     readonly type: "boolean"
                     readonly default?: boolean
                   }
@@ -4984,7 +5200,11 @@ export type EventSubscribeOutput =
                     readonly title?: string
                     readonly description?: string
                     readonly required?: boolean
-                    readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
+                    readonly when?: ReadonlyArray<{
+                      readonly key: string
+                      readonly op: "eq" | "neq"
+                      readonly value: string | number | boolean
+                    }>
                     readonly type: "multiselect"
                     readonly options: ReadonlyArray<{
                       readonly value: string

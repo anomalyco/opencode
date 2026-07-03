@@ -22,10 +22,17 @@ export const Option = Schema.Struct({
 }).annotate({ identifier: "Form.Option" })
 export interface Option extends Schema.Schema.Type<typeof Option> {}
 
+// One visibility condition on a field. A field's `when` is a list of conditions that must all
+// hold (AND) against the current answers for the field to be active. Semantics:
+// - `value` must match the referenced field's type; against a multiselect answer, `eq` means
+//   "selection includes value" and `neq` means "selection does not include value".
+// - An unanswered referenced field makes the condition false for both ops.
+// - `key` must reference a field defined earlier in the form's field list.
+// Inactive fields are neither required nor answerable.
 export const When = Schema.Struct({
   key: Schema.String,
   op: Schema.Literals(["eq", "neq"]),
-  value: Schema.String,
+  value: Schema.Union([Schema.String, Schema.Number, Schema.Boolean]),
 }).annotate({ identifier: "Form.When" })
 export interface When extends Schema.Schema.Type<typeof When> {}
 
@@ -34,7 +41,7 @@ const FieldBase = {
   title: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   required: Schema.Boolean.pipe(optional),
-  when: When.pipe(optional),
+  when: Schema.Array(When).pipe(optional),
 }
 
 export const StringField = Schema.Struct({

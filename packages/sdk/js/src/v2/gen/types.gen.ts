@@ -3425,7 +3425,7 @@ export type FormMetadata = {
 export type FormWhen = {
   key: string
   op: "eq" | "neq"
-  value: string
+  value: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
 }
 
 export type FormOption = {
@@ -3439,7 +3439,7 @@ export type FormStringField = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen>
   type: "string"
   format?: "email" | "uri" | "date" | "date-time"
   minLength?: number
@@ -3456,7 +3456,7 @@ export type FormNumberField = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen>
   type: "number"
   minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -3468,7 +3468,7 @@ export type FormIntegerField = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen>
   type: "integer"
   minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -3480,7 +3480,7 @@ export type FormBooleanField = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen>
   type: "boolean"
   default?: boolean
 }
@@ -3490,7 +3490,7 @@ export type FormMultiselectField = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen>
   type: "multiselect"
   options: Array<FormOption>
   minItems?: number
@@ -6382,12 +6382,18 @@ export type QuestionV2Rejected = {
   }
 }
 
+export type FormWhen1 = {
+  key: string
+  op: "eq" | "neq"
+  value: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+}
+
 export type FormNumberField1 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen1>
   type: "number"
   minimum?: number | "NaN" | "Infinity" | "-Infinity"
   maximum?: number | "NaN" | "Infinity" | "-Infinity"
@@ -6399,7 +6405,7 @@ export type FormIntegerField1 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen1>
   type: "integer"
   minimum?: number | "NaN" | "Infinity" | "-Infinity"
   maximum?: number | "NaN" | "Infinity" | "-Infinity"
@@ -7778,7 +7784,7 @@ export type FormNumberField2 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen1>
   type: "number"
   minimum?: number | "NaN" | "Infinity" | "-Infinity"
   maximum?: number | "NaN" | "Infinity" | "-Infinity"
@@ -7790,7 +7796,7 @@ export type FormIntegerField2 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen
+  when?: Array<FormWhen1>
   type: "integer"
   minimum?: number | "NaN" | "Infinity" | "-Infinity"
   maximum?: number | "NaN" | "Infinity" | "-Infinity"
@@ -9659,7 +9665,7 @@ export type FormMetadata2 = {
 export type FormWhen2 = {
   key: string
   op: "eq" | "neq"
-  value: string
+  value: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
 }
 
 export type FormOption2 = {
@@ -9673,7 +9679,7 @@ export type FormStringField2 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen2>
   type: "string"
   format?: "email" | "uri" | "date" | "date-time"
   minLength?: number
@@ -9690,7 +9696,7 @@ export type FormNumberField3 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen2>
   type: "number"
   minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -9702,7 +9708,7 @@ export type FormIntegerField3 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen2>
   type: "integer"
   minimum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   maximum?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -9714,7 +9720,7 @@ export type FormBooleanField2 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen2>
   type: "boolean"
   default?: boolean
 }
@@ -9724,7 +9730,7 @@ export type FormMultiselectField2 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen2>
   type: "multiselect"
   options: Array<FormOption2>
   minItems?: number
@@ -11102,12 +11108,35 @@ export type FormMetadata1 = {
   [key: string]: unknown
 }
 
+export type FormWhen12 = {
+  key: string
+  op: "eq" | "neq"
+  value: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+}
+
+export type FormStringField1 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen12>
+  type: "string"
+  format?: "email" | "uri" | "date" | "date-time"
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  placeholder?: string
+  default?: string
+  options?: Array<FormOption2>
+  custom?: boolean
+}
+
 export type FormNumberField12 = {
   key: string
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen12>
   type: "number"
   minimum?: number | "NaN" | "Infinity" | "-Infinity"
   maximum?: number | "NaN" | "Infinity" | "-Infinity"
@@ -11119,11 +11148,35 @@ export type FormIntegerField12 = {
   title?: string
   description?: string
   required?: boolean
-  when?: FormWhen2
+  when?: Array<FormWhen12>
   type: "integer"
   minimum?: number | "NaN" | "Infinity" | "-Infinity"
   maximum?: number | "NaN" | "Infinity" | "-Infinity"
   default?: number | "NaN" | "Infinity" | "-Infinity"
+}
+
+export type FormBooleanField1 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen12>
+  type: "boolean"
+  default?: boolean
+}
+
+export type FormMultiselectField1 = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen12>
+  type: "multiselect"
+  options: Array<FormOption2>
+  minItems?: number
+  maxItems?: number
+  custom?: boolean
+  default?: Array<string>
 }
 
 export type FormFormInfo1 = {
@@ -11132,7 +11185,7 @@ export type FormFormInfo1 = {
   title?: string
   metadata?: FormMetadata1
   mode: "form"
-  fields: Array<FormStringField2 | FormNumberField12 | FormIntegerField12 | FormBooleanField2 | FormMultiselectField2>
+  fields: Array<FormStringField1 | FormNumberField12 | FormIntegerField12 | FormBooleanField1 | FormMultiselectField1>
 }
 
 export type FormUrlInfo1 = {
