@@ -10,97 +10,200 @@ import {
   type ToolCallStarted,
   type ToolDefinition as CodeModeDefinition,
 } from "@opencode-ai/codemode"
-import { ToolFailure } from "@opencode-ai/llm"
-import { Effect, type JsonSchema } from "effect"
+import { Effect, Schema } from "effect"
 import { MCP } from "../mcp"
+import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 
-const inputSchema = {
-  type: "object",
-  properties: {
-    code: { type: "string" },
-  },
-  required: ["code"],
-  additionalProperties: false,
-} as const satisfies JsonSchema.JsonSchema
+const limits = { timeoutMs: 5 * 60_000, maxToolCalls: 100 } as const
 
-type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: unknown }
-type Authorize = (input: {
+export const Input = Schema.Struct({
+  code: Schema.String.annotate({ description: "Code to execute using the available MCP tools" }),
+})
+
+const Call = Schema.Struct({
+  tool: Schema.String,
+  status: Schema.Literals(["running", "completed", "error"]),
+  input: Schema.Unknown.pipe(Schema.optional),
+})
+
+const Attachment = Schema.Struct({
+  data: Schema.String,
+  mime: Schema.String,
+})
+
+export const Output = Schema.Struct({
+  output: Schema.String,
+  toolCalls: Schema.Array(Call),
+  error: Schema.Literal(true).pipe(Schema.optional),
+  attachments: Schema.Array(Attachment),
+})
+
+const Structured = Schema.Struct({
+  output: Output.fields.output,
+  toolCalls: Output.fields.toolCalls,
+  error: Output.fields.error,
+})
+
+type ExecuteCall = typeof Call.Type
+
+export interface Item {
+  readonly action: string
   readonly tool: MCP.Tool
-  readonly args: Record<string, unknown>
-  readonly context: Tool.Context
-}) => Effect.Effect<void, unknown>
+  readonly namespace?: string
+  readonly member?: string
+}
 
-export function make(items: ReadonlyArray<MCP.Tool>, callTool: MCP.Interface["callTool"], authorize?: Authorize) {
-  const createRuntime = (calls: ExecuteCall[], attachments: Tool.Content[], context?: Tool.Context) =>
-    CodeMode.make({
-      tools: items.reduce<Record<string, Record<string, CodeModeDefinition>>>((acc, item) => {
-        const server = item.server.toString()
-        acc[server] ??= {}
-        acc[server][item.name] = CodeModeTool.make({
-          description: item.description ?? item.name,
-          input: (item.inputSchema as CodeModeJsonSchema | undefined) ?? { type: "object", properties: {} },
-          run: (input) => {
-            const args = recordInput(input)
-            return (authorize && context ? authorize({ tool: item, args, context }) : Effect.void).pipe(
-              Effect.mapError((error) => toolError(permissionError(error))),
-              Effect.flatMap(() => callTool({ server: item.server, name: item.name, args })),
-              Effect.catchTags({
-                "MCP.NotFoundError": (error) => Effect.fail(toolError(`MCP server "${error.server}" is not available`)),
-                "MCP.ToolCallError": (error) => Effect.fail(toolError(error.message)),
-              }),
-              Effect.flatMap((result) => {
-                if (result.isError) return Effect.fail(toolError(errorText(result.content) || "MCP tool returned an error"))
-                for (const part of result.content) {
-                  if (part.type === "media") attachments.push({ type: "file", data: part.data, mime: part.mimeType })
-                }
-                return Effect.succeed(projectResult(result))
-              }),
-            )
-          },
-        })
-        return acc
-      }, {}),
+export const make = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Item>) {
+  const mcp = yield* MCP.Service
+  const permission = yield* PermissionV2.Service
+
+  const createRuntime = (calls: ExecuteCall[], attachments: Array<typeof Attachment.Type>, context?: Tool.Context) => {
+    const tools: Record<string, Record<string, CodeModeDefinition>> = Object.create(null)
+    const names = new Map<string, string>()
+    for (const item of items) {
+      const namespace = item.namespace ?? item.tool.server.toString()
+      const member = item.member ?? item.tool.name
+      tools[namespace] ??= Object.create(null)
+      tools[namespace][member] = CodeModeTool.make({
+        description: item.tool.description ?? item.tool.name,
+        input: codeModeJsonSchema(item.tool.inputSchema),
+        run: (input) => {
+          const args = recordInput(input)
+          return (context
+            ? permission.assert({
+                sessionID: context.sessionID,
+                agent: context.agent,
+                action: item.action,
+                resources: ["*"],
+                save: ["*"],
+                metadata: { server: item.tool.server, tool: item.tool.name, arguments: args },
+                source: {
+                  type: "tool",
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                },
+              })
+            : Effect.die("Execute tool context is unavailable")
+          ).pipe(
+            Effect.mapError((error) => toolError(permissionError(error))),
+            Effect.flatMap(() => mcp.callTool({ server: item.tool.server, name: item.tool.name, args })),
+            Effect.catchTags({
+              "MCP.NotFoundError": (error) => Effect.fail(toolError(`MCP server "${error.server}" is not available`)),
+              "MCP.ToolCallError": (error) => Effect.fail(toolError(error.message)),
+            }),
+            Effect.flatMap((result) => {
+              if (result.isError)
+                return Effect.fail(toolError(errorText(result.content) || "MCP tool returned an error"))
+              for (const part of result.content) {
+                if (part.type === "media") attachments.push({ data: part.data, mime: part.mimeType })
+              }
+              return Effect.succeed(projectResult(result))
+            }),
+          )
+        },
+      })
+      names.set(`${namespace}.${member}`, `${item.tool.server}.${item.tool.name}`)
+    }
+
+    return CodeMode.make({
+      limits,
+      tools,
       onToolCallStart: (call: ToolCallStarted) =>
         Effect.sync(() => {
-          calls[call.index] = { tool: call.name, status: "running", input: call.input }
+          calls[call.index] = { tool: names.get(call.name) ?? call.name, status: "running", input: call.input }
         }),
       onToolCallEnd: (call: ToolCallEnded) =>
         Effect.sync(() => {
           calls[call.index] = {
-            tool: call.name,
+            tool: names.get(call.name) ?? call.name,
             status: call.outcome === "failure" ? "error" : "completed",
             input: call.input,
           }
         }),
     })
+  }
 
   return Tool.make({
     description: createRuntime([], []).instructions(),
-    jsonSchema: inputSchema,
+    input: Input,
+    output: Output,
+    structured: Structured,
+    toStructuredOutput: ({ output }) => ({
+      output: output.output,
+      toolCalls: output.toolCalls,
+      ...(output.error ? { error: true as const } : {}),
+    }),
+    toModelOutput: ({ output }) => [
+      { type: "text", text: output.output },
+      ...output.attachments.map((attachment) => ({ type: "file" as const, ...attachment })),
+    ],
     execute: (input, context) =>
       Effect.gen(function* () {
-        const value = recordInput(input).code
-        if (typeof value !== "string") return yield* new ToolFailure({ message: "Invalid tool input: expected code string" })
         const calls: ExecuteCall[] = []
-        const attachments: Tool.Content[] = []
-        const result = yield* createRuntime(calls, attachments, context).execute(value)
-        const output = formatResult(result)
+        const attachments: Array<typeof Attachment.Type> = []
+        const result = yield* createRuntime(calls, attachments, context).execute(input.code)
         return {
-          structured: {
-            output,
-            toolCalls: calls,
-            ...(result.ok ? {} : { error: true }),
-          },
-          content: [{ type: "text" as const, text: output }, ...attachments],
+          output: formatResult(result),
+          toolCalls: calls,
+          ...(result.ok ? {} : { error: true as const }),
+          attachments,
         }
       }),
   })
-}
+})
 
 function recordInput(input: unknown): Record<string, unknown> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return {}
-  return input as Record<string, unknown>
+  return isRecord(input) ? input : {}
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
+function codeModeJsonSchema(input: unknown): CodeModeJsonSchema {
+  if (!isRecord(input)) return { type: "object", properties: {} }
+  const type =
+    typeof input.type === "string"
+      ? input.type
+      : Array.isArray(input.type) && input.type.every((item) => typeof item === "string")
+        ? input.type
+        : undefined
+  const properties = isRecord(input.properties)
+    ? Object.fromEntries(Object.entries(input.properties).map(([key, value]) => [key, codeModeJsonSchema(value)]))
+    : undefined
+  const schemas = (value: unknown) =>
+    Array.isArray(value) ? value.filter(isRecord).map(codeModeJsonSchema) : undefined
+  const definitions = (value: unknown) =>
+    isRecord(value)
+      ? Object.fromEntries(Object.entries(value).map(([key, schema]) => [key, codeModeJsonSchema(schema)]))
+      : undefined
+  return {
+    ...(type ? { type } : {}),
+    ...(Array.isArray(input.enum) ? { enum: input.enum } : {}),
+    ...(Object.hasOwn(input, "const") ? { const: input.const } : {}),
+    ...(schemas(input.anyOf) ? { anyOf: schemas(input.anyOf) } : {}),
+    ...(schemas(input.oneOf) ? { oneOf: schemas(input.oneOf) } : {}),
+    ...(properties ? { properties } : {}),
+    ...(Array.isArray(input.required) && input.required.every((item) => typeof item === "string")
+      ? { required: input.required }
+      : {}),
+    ...(isRecord(input.items) ? { items: codeModeJsonSchema(input.items) } : {}),
+    ...(typeof input.additionalProperties === "boolean"
+      ? { additionalProperties: input.additionalProperties }
+      : isRecord(input.additionalProperties)
+        ? { additionalProperties: codeModeJsonSchema(input.additionalProperties) }
+        : {}),
+    ...(typeof input.description === "string" ? { description: input.description } : {}),
+    ...(Object.hasOwn(input, "default") ? { default: input.default } : {}),
+    ...(typeof input.format === "string" ? { format: input.format } : {}),
+    ...(typeof input.deprecated === "boolean" ? { deprecated: input.deprecated } : {}),
+    ...(typeof input.minItems === "number" ? { minItems: input.minItems } : {}),
+    ...(typeof input.maxItems === "number" ? { maxItems: input.maxItems } : {}),
+    ...(typeof input.$ref === "string" ? { $ref: input.$ref } : {}),
+    ...(definitions(input.$defs) ? { $defs: definitions(input.$defs) } : {}),
+    ...(definitions(input.definitions) ? { definitions: definitions(input.definitions) } : {}),
+  }
 }
 
 function errorText(content: ReadonlyArray<MCP.ToolResultContent>) {
@@ -119,7 +222,9 @@ function projectResult(result: MCP.ToolResult) {
 }
 
 function permissionError(error: unknown) {
-  if (typeof error === "object" && error !== null && "_tag" in error) return `Permission denied: ${String(error._tag)}`
+  if (error instanceof PermissionV2.CorrectedError) return error.feedback
+  if (typeof error === "object" && error !== null && "_tag" in error)
+    return `Permission denied: ${String(error._tag)}`
   return "Permission denied"
 }
 

@@ -1,13 +1,14 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { MCP } from "@opencode-ai/core/mcp/index"
+import { PermissionV2 } from "@opencode-ai/core/permission"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { ExecuteTool } from "@opencode-ai/core/tool/execute"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { testEffect } from "./lib/effect"
-import { settleTool, testModel, toolIdentity, toolDefinitions } from "./lib/tool"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { settleTool, toolIdentity, toolDefinitions } from "./lib/tool"
 
 const outputStore = Layer.mock(ToolOutputStore.Service, {
   bound: (input) => Effect.succeed({ output: input.output, outputPaths: [] }),
@@ -16,26 +17,55 @@ const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [[ToolOutputStore.
 const it = testEffect(registryLayer)
 
 const sessionID = SessionV2.ID.make("ses_execute")
+const tool = new MCP.Tool({
+  server: MCP.ServerName.make("context7"),
+  name: "resolve-library-id",
+  description: "Resolve a library ID",
+  inputSchema: {
+    type: "object",
+    properties: { query: { type: "string" }, libraryName: { type: "string" } },
+    required: ["query", "libraryName"],
+  },
+})
+
+function make(
+  items: ReadonlyArray<ExecuteTool.Item>,
+  callTool: MCP.Interface["callTool"],
+  assert: PermissionV2.Interface["assert"] = () => Effect.void,
+) {
+  const mcp = MCP.Service.of({
+    servers: () => Effect.succeed([]),
+    tools: () => Effect.succeed(items.map((item) => item.tool)),
+    callTool,
+    instructions: () => Effect.succeed([]),
+    prompts: () => Effect.succeed([]),
+    prompt: () => Effect.succeed(undefined),
+    resourceCatalog: () => Effect.succeed(new MCP.ResourceCatalog({ resources: [], templates: [] })),
+    readResource: () => Effect.succeed(undefined),
+  })
+  const permission = PermissionV2.Service.of({
+    assert,
+    ask: () => Effect.die("unused permission.ask"),
+    reply: () => Effect.die("unused permission.reply"),
+    get: () => Effect.die("unused permission.get"),
+    forSession: () => Effect.die("unused permission.forSession"),
+    list: () => Effect.die("unused permission.list"),
+  })
+  return ExecuteTool.make(items).pipe(
+    Effect.provideService(MCP.Service, mcp),
+    Effect.provideService(PermissionV2.Service, permission),
+  )
+}
 
 describe("execute tool", () => {
-  it.effect("runs MCP tools through CodeMode and returns child call metadata", () =>
+  it.effect("runs permission-checked MCP tools and returns child call metadata", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const calls: Array<{ server: string; name: string; args: Record<string, unknown> | undefined }> = []
+      const assertions: PermissionV2.AssertInput[] = []
       yield* registry.register({
-        execute: ExecuteTool.make(
-          [
-            new MCP.Tool({
-              server: MCP.ServerName.make("context7"),
-              name: "resolve-library-id",
-              description: "Resolve a library ID",
-              inputSchema: {
-                type: "object",
-                properties: { query: { type: "string" }, libraryName: { type: "string" } },
-                required: ["query", "libraryName"],
-              },
-            }),
-          ],
+        execute: yield* make(
+          [{ action: "mcp:context7:resolve-library-id", tool }],
           (input) =>
             Effect.sync(() => {
               calls.push({ server: input.server.toString(), name: input.name, args: input.args })
@@ -44,9 +74,13 @@ describe("execute tool", () => {
                 tool: input.name,
                 isError: false,
                 structured: { id: "/reactjs/react.dev" },
-                content: [{ type: "text", text: "/reactjs/react.dev" }],
+                content: [
+                  { type: "text", text: "/reactjs/react.dev" },
+                  { type: "media", data: "aW1hZ2U=", mimeType: "image/png" },
+                ],
               })
             }),
+          (input) => Effect.sync(() => assertions.push(input)),
         ),
       })
 
@@ -54,6 +88,7 @@ describe("execute tool", () => {
       expect(definition.name).toBe("execute")
       expect(definition.description).toContain('tools.context7["resolve-library-id"]')
       expect(definition.description).toContain("Do not infer or normalize tool names")
+      expect(definition.outputSchema).toBeDefined()
 
       const settlement = yield* settleTool(registry, {
         sessionID,
@@ -68,6 +103,21 @@ describe("execute tool", () => {
         },
       })
 
+      expect(assertions).toEqual([
+        {
+          sessionID,
+          agent: toolIdentity.agent,
+          action: "mcp:context7:resolve-library-id",
+          resources: ["*"],
+          save: ["*"],
+          metadata: {
+            server: "context7",
+            tool: "resolve-library-id",
+            arguments: { query: "react", libraryName: "react" },
+          },
+          source: { type: "tool", messageID: toolIdentity.assistantMessageID, callID: "call_execute" },
+        },
+      ])
       expect(calls).toEqual([
         {
           server: "context7",
@@ -75,7 +125,6 @@ describe("execute tool", () => {
           args: { query: "react", libraryName: "react" },
         },
       ])
-      expect(settlement.result).toEqual({ type: "text", value: '{\n  "id": "/reactjs/react.dev"\n}' })
       expect(settlement.output?.structured).toEqual({
         output: '{\n  "id": "/reactjs/react.dev"\n}',
         toolCalls: [
@@ -86,13 +135,17 @@ describe("execute tool", () => {
           },
         ],
       })
+      expect(settlement.output?.content).toEqual([
+        { type: "text", text: '{\n  "id": "/reactjs/react.dev"\n}' },
+        { type: "file", uri: "data:image/png;base64,aW1hZ2U=", mime: "image/png" },
+      ])
     }),
   )
 
   it.effect("marks failed programs in structured metadata", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
-      yield* registry.register({ execute: ExecuteTool.make([], () => Effect.die("unused")) })
+      yield* registry.register({ execute: yield* make([], () => Effect.die("unused mcp.callTool")) })
       const settlement = yield* settleTool(registry, {
         sessionID,
         ...toolIdentity,
@@ -104,21 +157,75 @@ describe("execute tool", () => {
     }),
   )
 
-  it.effect("checks authorization before child MCP calls", () =>
+  it.effect("waits for child approval before calling MCP", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
+      const requested = yield* Deferred.make<void>()
+      const approved = yield* Deferred.make<void>()
+      let calls = 0
       yield* registry.register({
-        execute: ExecuteTool.make(
-          [
-            new MCP.Tool({
-              server: MCP.ServerName.make("github"),
-              name: "search_issues",
-              description: "Search issues",
-              inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute: yield* make(
+          [{ action: "mcp:context7:resolve-library-id", tool }],
+          (input) =>
+            Effect.sync(() => {
+              calls++
+              return new MCP.ToolResult({
+                server: MCP.ServerName.make(input.server.toString()),
+                tool: input.name,
+                isError: false,
+                content: [{ type: "text", text: "ok" }],
+              })
             }),
+          () => Deferred.succeed(requested, undefined).pipe(Effect.andThen(Deferred.await(approved))),
+        ),
+      })
+
+      const settlement = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call_execute_ask",
+          name: "execute",
+          input: {
+            code: 'return await tools.context7["resolve-library-id"]({ query: "react", libraryName: "react" })',
+          },
+        },
+      }).pipe(Effect.forkChild)
+      yield* Deferred.await(requested)
+      expect(calls).toBe(0)
+      yield* Deferred.succeed(approved, undefined)
+      yield* Fiber.join(settlement)
+      expect(calls).toBe(1)
+    }),
+  )
+
+  it.effect("does not call MCP when child permission is denied", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      let assertions = 0
+      yield* registry.register({
+        execute: yield* make(
+          [
+            {
+              action: "mcp:github:search_issues",
+              tool: new MCP.Tool({
+                server: MCP.ServerName.make("github"),
+                name: "search_issues",
+                description: "Search issues",
+                inputSchema: {
+                  type: "object",
+                  properties: { query: { type: "string" } },
+                  required: ["query"],
+                },
+              }),
+            },
           ],
-          () => Effect.die("callTool should not run when authorization fails"),
-          () => Effect.fail("denied"),
+          () => Effect.die("callTool should not run when permission fails"),
+          () =>
+            Effect.sync(() => assertions++).pipe(
+              Effect.andThen(Effect.fail(new PermissionV2.DeniedError({ rules: [] }))),
+            ),
         ),
       })
 
@@ -134,10 +241,48 @@ describe("execute tool", () => {
       })
 
       expect(settlement.result.type).toBe("text")
+      expect(assertions).toBe(1)
       expect(settlement.output?.structured).toMatchObject({
         error: true,
         toolCalls: [{ tool: "github.search_issues", status: "error", input: { query: "bug" } }],
       })
+    }),
+  )
+
+  it.effect("caps child calls per execution", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      let calls = 0
+      yield* registry.register({
+        execute: yield* make([{ action: "mcp:context7:resolve-library-id", tool }], (input) =>
+          Effect.sync(() => {
+            calls++
+            return new MCP.ToolResult({
+              server: MCP.ServerName.make(input.server.toString()),
+              tool: input.name,
+              isError: false,
+              content: [{ type: "text", text: "ok" }],
+            })
+          }),
+        ),
+      })
+
+      const settlement = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call_execute_limit",
+          name: "execute",
+          input: {
+            code: 'const out = []; for (let i = 0; i < 101; i++) out.push(await tools.context7["resolve-library-id"]({ query: "react", libraryName: "react" })); return out',
+          },
+        },
+      })
+
+      expect(calls).toBe(100)
+      expect(settlement.output?.structured).toMatchObject({ error: true })
+      expect(settlement.result).toMatchObject({ type: "text", value: expect.stringContaining("tool-call limit of 100") })
     }),
   )
 })

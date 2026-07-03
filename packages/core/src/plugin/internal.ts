@@ -24,6 +24,7 @@ import { Integration } from "../integration"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
+import { MCP } from "../mcp"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
 import { PluginRuntime } from "../plugin/runtime"
@@ -50,6 +51,7 @@ import { ApplyPatchTool } from "../tool/apply-patch"
 import { EditTool } from "../tool/edit"
 import { GlobTool } from "../tool/glob"
 import { GrepTool } from "../tool/grep"
+import { McpTool } from "../tool/mcp"
 import { QuestionTool } from "../tool/question"
 import { ReadTool } from "../tool/read"
 import { ReadToolFileSystem } from "../tool/read-filesystem"
@@ -77,6 +79,7 @@ export type Requirements =
   | Location.Service
   | LocationMutation.Service
   | ModelsDev.Service
+  | MCP.Service
   | Npm.Service
   | PermissionV2.Service
   | PluginRuntime.Service
@@ -112,6 +115,7 @@ const layer = Layer.effectDiscard(
       Context.make(Config.Service, yield* Config.Service),
       Context.make(Location.Service, yield* Location.Service),
       Context.make(ModelsDev.Service, yield* ModelsDev.Service),
+      Context.make(MCP.Service, yield* MCP.Service),
       Context.make(Npm.Service, yield* Npm.Service),
       Context.make(EventV2.Service, yield* EventV2.Service),
       Context.make(FSUtil.Service, yield* FSUtil.Service),
@@ -166,6 +170,7 @@ const layer = Layer.effectDiscard(
         for (const item of ProviderPlugins) yield* add(item)
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
+        yield* add(McpTool.Plugin)
         // Embedder-contributed plugins are added last so they layer over config.
         for (const plugin of sdkPlugins.all()) yield* add(plugin)
       }),
@@ -188,6 +193,7 @@ export const node = makeLocationNode({
     FileMutation.node,
     Image.node,
     ModelsDev.node,
+    MCP.node,
     Npm.node,
     EventV2.node,
     FSUtil.node,

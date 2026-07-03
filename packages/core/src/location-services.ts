@@ -40,7 +40,6 @@ import { InstructionContext } from "./instruction-context"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SessionContextEntry } from "./session/context-entry"
 import { SessionInstructions } from "./session/instructions"
-import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
@@ -86,7 +85,6 @@ const locationServiceNodes = [
   QuestionV2.node,
   Generate.node,
   ReadToolFileSystem.node,
-  McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,
   SessionCompaction.node,
