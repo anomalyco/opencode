@@ -6,7 +6,10 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Effect, Exit, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
+import { Flag } from "../flag/flag"
 import { MCP } from "../mcp"
+import { PermissionV2 } from "../permission"
+import { ExecuteTool } from "./execute"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 import { ToolRegistry } from "./registry"
@@ -46,6 +49,7 @@ export const layer = Layer.effectDiscard(
     const mcp = yield* MCP.Service
     const tools = yield* Tools.Service
     const events = yield* EventV2.Service
+    const permissions = yield* PermissionV2.Service
     const scope = yield* Scope.Scope
     const lock = Semaphore.makeUnsafe(1)
     let current: Scope.Closeable | undefined
@@ -74,11 +78,29 @@ export const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         const used = new Set<string>()
         const record: Record<string, Tool.AnyTool> = {}
-        for (const tool of yield* mcp.tools()) {
-          const initial = name(tool.server, tool.name)
-          const key = used.has(initial) ? fit(initial, `${tool.server}\u0000${tool.name}`) : initial
-          used.add(key)
-          record[key] = make(tool.server, tool)
+        const mcpTools = yield* mcp.tools()
+        if (Flag.OPENCODE_EXPERIMENTAL_CODE_MODE) {
+          if (mcpTools.length > 0)
+            record.execute = ExecuteTool.make(mcpTools, mcp.callTool, ({ tool, context }) =>
+              permissions.assert({
+                sessionID: context.sessionID,
+                agent: context.agent,
+                action: name(tool.server, tool.name),
+                resources: ["*"],
+                source: {
+                  type: "tool",
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                },
+              }),
+            )
+        } else {
+          for (const tool of mcpTools) {
+            const initial = name(tool.server, tool.name)
+            const key = used.has(initial) ? fit(initial, `${tool.server}\u0000${tool.name}`) : initial
+            used.add(key)
+            record[key] = make(tool.server, tool)
+          }
         }
         const next = yield* Scope.fork(scope)
         yield* tools.register(record).pipe(Scope.provide(next), Effect.orDie)
@@ -97,5 +119,5 @@ export const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "mcp-tools",
   layer,
-  deps: [ToolRegistry.toolsNode, MCP.node, EventV2.node],
+  deps: [ToolRegistry.toolsNode, MCP.node, EventV2.node, PermissionV2.node],
 })
