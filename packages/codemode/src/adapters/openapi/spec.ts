@@ -206,24 +206,44 @@ export const outputSchema = (
   return successes.length > 0 ? { type: "null" } : undefined
 }
 
-export const operationName = (
-  method: string,
-  path: string,
-  operation: Record<string, unknown>,
-  used: ReadonlySet<string>,
-): string => {
-  const raw = nonEmptyString(operation.operationId) ?? `${method}_${path.replaceAll(/[{}]/g, "")}`
+const sanitizeOperationSegment = (raw: string): string => {
   const base =
     raw
       .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .replace(/^([0-9])/, "_$1") || "operation"
-  if (!used.has(base) && !blockedOperationNames.has(base)) return base
+  return blockedOperationNames.has(base) ? `${base}_2` : base
+}
+
+export const operationPath = (
+  method: string,
+  path: string,
+  operation: Record<string, unknown>,
+  used: ReadonlySet<string>,
+  namespaces: ReadonlySet<string>,
+): ReadonlyArray<string> => {
+  const raw = nonEmptyString(operation.operationId)
+  const base = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split("."))
+    .map(sanitizeOperationSegment)
+    .filter((segment) => segment !== "")
+  const segments = base.length === 0 ? ["operation"] : base
+  if (isOperationPathAvailable(segments, used, namespaces)) return segments
+  const fallback = [segments.join("_")]
   const next = (index: number): string => {
-    const candidate = `${base}_${index}`
-    return used.has(candidate) || blockedOperationNames.has(candidate) ? next(index + 1) : candidate
+    const candidate = `${fallback[0]}_${index}`
+    return isOperationPathAvailable([candidate], used, namespaces) ? candidate : next(index + 1)
   }
-  return next(2)
+  return [next(2)]
+}
+
+const isOperationPathAvailable = (
+  segments: ReadonlyArray<string>,
+  used: ReadonlySet<string>,
+  namespaces: ReadonlySet<string>,
+): boolean => {
+  const key = segments.join(".")
+  if (used.has(key) || namespaces.has(key)) return false
+  return segments.slice(0, -1).every((_, index) => !used.has(segments.slice(0, index + 1).join(".")))
 }
 
 export const specServerUrl = (document: Document): string | Skip => {

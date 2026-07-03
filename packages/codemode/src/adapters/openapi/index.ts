@@ -7,7 +7,7 @@ import {
   isRecord,
   methods,
   nonEmptyString,
-  operationName,
+  operationPath,
   operationParameters,
   outputSchema,
   requestBody,
@@ -15,7 +15,7 @@ import {
   securitySchemes,
   specServerUrl,
 } from "./spec.js"
-import type { Operation, Options, Result, Skipped } from "./types.js"
+import type { Operation, Options, Result, Skipped, Tools } from "./types.js"
 
 export type {
   AuthResolver,
@@ -43,15 +43,17 @@ export const fromSpec = (options: Options): Result => {
   const paths = isRecord(document.paths) ? document.paths : {}
   const base = options.baseUrl ?? specServerUrl(document)
   const used = new Set<string>()
+  const namespaces = new Set<string>()
   const skipped: Array<Skipped> = []
-  const tools = Object.create(null) as Record<string, Definition<HttpClient.HttpClient>>
+  const tools = Object.create(null) as Tools
 
   for (const [path, pathValue] of Object.entries(paths)) {
     if (!isRecord(pathValue)) continue
     for (const [method, operationValue] of Object.entries(pathValue)) {
       if (!methods.has(method) || !isRecord(operationValue)) continue
+      const segments = operationPath(method, path, operationValue, used, namespaces)
       const operation: Operation = {
-        id: operationName(method, path, operationValue, used),
+        id: segments.join("."),
         method: method.toUpperCase(),
         path,
         summary: nonEmptyString(operationValue.summary),
@@ -82,16 +84,39 @@ export const fromSpec = (options: Options): Result => {
         headers: options.headers ?? {},
       }
       used.add(operation.id)
-      tools[operation.id] = Tool.make({
-        description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
-        input: inputSchema(plan.parameters, body, definitions),
-        output: outputSchema(document, operationValue, definitions),
-        run: (input) => invoke(plan, input),
-      })
+      for (const index of segments.slice(0, -1).keys()) namespaces.add(segments.slice(0, index + 1).join("."))
+      setTool(
+        tools,
+        segments,
+        Tool.make({
+          description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
+          input: inputSchema(plan.parameters, body, definitions),
+          output: outputSchema(document, operationValue, definitions),
+          run: (input) => invoke(plan, input),
+        }),
+      )
     }
   }
 
   return { tools, skipped }
+}
+
+const setTool = (
+  tools: Tools,
+  path: ReadonlyArray<string>,
+  definition: Definition<HttpClient.HttpClient>,
+): void => {
+  const [head, ...rest] = path
+  if (head === undefined) return
+  if (rest.length === 0) {
+    tools[head] = definition
+    return
+  }
+  const child = tools[head]
+  if (child === undefined || !isRecord(child) || child._tag === "CodeModeTool") {
+    tools[head] = Object.create(null) as Tools
+  }
+  setTool(tools[head] as Tools, rest, definition)
 }
 
 export const OpenAPI = { fromSpec }

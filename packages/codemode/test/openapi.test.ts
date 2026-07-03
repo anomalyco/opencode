@@ -33,17 +33,26 @@ const operations = (spec: Document) =>
 const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined
 
-const toolNameEntries = (spec: Document) => {
+const toolPathEntries = (spec: Document) => {
   const used = new Set<string>()
+  const namespaces = new Set<string>()
   return operations(spec).map((item) => {
     const { path, method, operation } = item
-    const raw = nonEmptyString(operation.operationId) ?? `${method}_${path.replaceAll(/[{}]/g, "")}`
-    const base = raw.replaceAll(/[^A-Za-z0-9_$]+/g, "_").replace(/^_+|_+$/g, "").replace(/^([0-9])/, "_$1") || "operation"
-    const name = used.has(base) ? `${base}_2` : base
+    const raw = nonEmptyString(operation.operationId)
+    const segments = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split("."))
+      .map((segment) => segment.replaceAll(/[^A-Za-z0-9_$]+/g, "_").replace(/^_+|_+$/g, "").replace(/^([0-9])/, "_$1") || "operation")
+      .map((segment) => (["__proto__", "constructor", "prototype"].includes(segment) ? `${segment}_2` : segment))
+    const key = segments.join(".")
+    const prefixUsed = segments.slice(0, -1).some((_, index) => used.has(segments.slice(0, index + 1).join(".")))
+    const name = used.has(key) || namespaces.has(key) || prefixUsed ? `${segments.join("_")}_2` : key
     used.add(name)
+    for (const index of name.split(".").slice(0, -1).keys()) namespaces.add(name.split(".").slice(0, index + 1).join("."))
     return { ...item, name }
   })
 }
+
+const toolAt = (tools: unknown, name: string) =>
+  name.split(".").reduce<unknown>((current, segment) => (isRecord(current) ? current[segment] : undefined), tools)
 
 const jsonContentSchema = (content: unknown) =>
   isRecord(content)
@@ -82,22 +91,23 @@ describe("OpenAPI.fromSpec", () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    const entries = toolNameEntries(spec)
-    expect(Object.keys(result.tools).sort()).toStrictEqual(entries.map((entry) => entry.name).sort())
+    const entries = toolPathEntries(spec)
+    expect(entries.every((entry) => toolAt(result.tools, entry.name) !== undefined)).toBe(true)
     expect(result.skipped).toStrictEqual([])
-    expect(Object.keys(result.tools)).toContain("global_health")
-    expect(Object.keys(result.tools)).toContain("file_read")
-    expect(Object.keys(result.tools)).toContain("session_create")
+    expect(toolAt(result.tools, "global.health")).not.toBeUndefined()
+    expect(toolAt(result.tools, "file.read")).not.toBeUndefined()
+    expect(toolAt(result.tools, "session.create")).not.toBeUndefined()
 
     for (const item of entries) {
-      const tool = result.tools[item.name]
+      const tool = toolAt(result.tools, item.name)
       expect(tool).toMatchObject({
         _tag: "CodeModeTool",
         description:
           nonEmptyString(item.operation.description) ?? nonEmptyString(item.operation.summary) ?? `${item.method.toUpperCase()} ${item.path}`,
       })
 
-      const input = isRecord(tool?.input) ? tool.input : {}
+      const toolRecord = isRecord(tool) ? tool : {}
+      const input = isRecord(toolRecord.input) ? toolRecord.input : {}
       expect(input.type).toBe("object")
       const properties = isRecord(input.properties) ? input.properties : {}
       const parameters = Array.isArray(item.operation.parameters) ? item.operation.parameters.filter(isRecord) : []
@@ -112,9 +122,8 @@ describe("OpenAPI.fromSpec", () => {
           .filter((name): name is string => typeof name === "string")
         if (names.length === 0) continue
         const groupSchema = isRecord(properties[group.name]) ? properties[group.name] : {}
-        expect(Object.keys(isRecord(groupSchema.properties) ? groupSchema.properties : {}).sort()).toStrictEqual(
-          names.sort(),
-        )
+        const groupProperties = isRecord(groupSchema) && isRecord(groupSchema.properties) ? groupSchema.properties : {}
+        expect(Object.keys(groupProperties).sort()).toStrictEqual(names.sort())
       }
 
       const requestBody = isRecord(item.operation.requestBody) ? item.operation.requestBody : undefined
@@ -126,7 +135,7 @@ describe("OpenAPI.fromSpec", () => {
         .filter(([status]) => /^2\d\d$/.test(status) || status.toUpperCase() === "2XX")
         .map(([, response]) => (isRecord(response) ? response : {}))
       if (successes.some((response) => jsonContentSchema(response.content) !== undefined)) {
-        expect(tool?.output).not.toBeUndefined()
+        expect(toolRecord.output).not.toBeUndefined()
       }
     }
   })
@@ -138,8 +147,10 @@ describe("OpenAPI.fromSpec", () => {
 
     expect(spec.security).toStrictEqual([])
     expect(isRecord(components.securitySchemes) ? Object.keys(components.securitySchemes) : []).toStrictEqual([])
-    expect(result.tools.global_health?.input).toMatchObject({ type: "object", properties: {} })
-    const input = isRecord(result.tools.global_health?.input) ? result.tools.global_health.input : {}
+    const health = toolAt(result.tools, "global.health")
+    const healthInput = isRecord(health) ? health.input : undefined
+    expect(healthInput).toMatchObject({ type: "object", properties: {} })
+    const input = isRecord(healthInput) ? healthInput : {}
     expect(Object.keys(isRecord(input.properties) ? input.properties : {})).toStrictEqual([])
   })
 
@@ -157,7 +168,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(result.value).toMatchObject({
       items: [
         {
-          path: "tools.opencode.global_health",
+          path: "tools.opencode.global.health",
           description: "Get health information about the OpenCode server.",
         },
       ],
@@ -176,8 +187,8 @@ describe("OpenAPI.fromSpec", () => {
     const result = await Effect.runPromise(
       runtime
         .execute(`
-          const file = await tools.opencode.file_read({ query: { path: "README.md", directory: "/repo" } })
-          const session = await tools.opencode.session_create({ body: { title: "hello" } })
+          const file = await tools.opencode.file.read({ query: { path: "README.md", directory: "/repo" } })
+          const session = await tools.opencode.session.create({ body: { title: "hello" } })
           return { file, session }
         `)
         .pipe(Effect.provide(layer)),
@@ -201,7 +212,7 @@ describe("OpenAPI.fromSpec", () => {
     const runtime = CodeMode.make({ tools: { opencode: OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools } })
 
     const result = await Effect.runPromise(
-      runtime.execute("return await tools.opencode.file_read({})").pipe(Effect.provide(layer)),
+      runtime.execute("return await tools.opencode.file.read({})").pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({ ok: false })

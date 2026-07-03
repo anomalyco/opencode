@@ -68,7 +68,7 @@ export type Skipped = {
   readonly reason: string
 }
 
-export type Tools = { readonly [name: string]: Definition<HttpClient.HttpClient> }
+export type Tools = { [name: string]: Definition<HttpClient.HttpClient> | Tools }
 
 export type Result = {
   /** Tool subtree; the host places it under a key in its `tools` tree. */

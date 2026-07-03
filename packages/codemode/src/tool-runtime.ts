@@ -20,26 +20,22 @@ export type HostTools<R = never> = {
   [name: string]: HostTool<R> | Definition<R> | HostTools<R>
 }
 
-export type Services<Tools> = Tools extends (...args: Array<unknown>) => Effect.Effect<unknown, unknown, infer R>
-  ? R
-  : Tools extends {
-        readonly _tag: "CodeModeTool"
-        readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
-      }
+export type Services<Tools> = ServicesOf<Tools, []>
+
+type ServicesOf<Tools, Depth extends ReadonlyArray<unknown>> = Depth["length"] extends 8
+  ? never
+  : Tools extends (...args: Array<unknown>) => Effect.Effect<unknown, unknown, infer R>
     ? R
-    : Tools extends object
-      ? string extends keyof Tools
-        ? // Index-signature records (e.g. adapter-generated tool sets): read the value
-          // type directly. One level only - the recursive HostTools shape would not
-          // terminate, and concrete host trees always have literal keys.
-          Tools[string] extends {
-            readonly _tag: "CodeModeTool"
-            readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
-          }
-          ? R
-          : never
-        : Services<Tools[keyof Tools]>
-      : never
+    : Tools extends {
+          readonly _tag: "CodeModeTool"
+          readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
+        }
+      ? R
+      : Tools extends object
+        ? string extends keyof Tools
+          ? ServicesOf<Tools[string], [...Depth, unknown]>
+          : ServicesOf<Tools[keyof Tools], [...Depth, unknown]>
+        : never
 
 /** Minimal audit record retained for each admitted tool call. */
 export type ToolCall = {
