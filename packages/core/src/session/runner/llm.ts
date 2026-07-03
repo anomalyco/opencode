@@ -423,6 +423,10 @@ const layer = Layer.effect(
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
+        // Repeat steps while continuation is needed. A step needs continuation only
+        // when it recorded local tool calls whose results the model has not yet seen;
+        // a provider error suppresses it. Pending steers also continue the loop so
+        // interjections are answered before the session goes idle.
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step)
           // Steer/queue promotion inside runTurn has already made the pending input a visible
