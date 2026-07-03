@@ -25,7 +25,7 @@ const registrationName = (server: string, tool: string) => {
   return base.length > MAX_NAME_LENGTH ? fit(base, `${server}\u0000${tool}`) : base
 }
 
-export const permissionAction = (server: string, tool: string) => `mcp:${JSON.stringify([server, tool])}`
+export const permissionAction = (server: string, tool: string) => `mcp:${server}:${tool}`
 
 const toContent = (part: MCP.ToolResultContent): Tool.Content =>
   part.type === "text" ? { type: "text", text: part.text } : { type: "file", data: part.data, mime: part.mimeType }
@@ -67,16 +67,21 @@ export const Plugin = {
                   callID: context.toolCallID,
                 },
               })
-              .pipe(Effect.mapError((error) => new ToolFailure({ message: permissionError(error) })))
-            const result = yield* mcp
-              .callTool({ server: item.tool.server, name: item.tool.name, args })
               .pipe(
-                Effect.catchTags({
-                  "MCP.NotFoundError": (error) =>
-                    new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
-                  "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
-                }),
+                Effect.mapError(
+                  (error) =>
+                    new ToolFailure({
+                      message: error instanceof PermissionV2.CorrectedError ? error.feedback : "Permission denied",
+                    }),
+                ),
               )
+            const result = yield* mcp.callTool({ server: item.tool.server, name: item.tool.name, args }).pipe(
+              Effect.catchTags({
+                "MCP.NotFoundError": (error) =>
+                  new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
+                "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
+              }),
+            )
             if (result.isError)
               return yield* new ToolFailure({ message: errorText(result.content) || "MCP tool returned an error" })
             return { structured: result.structured ?? {}, content: result.content.map(toContent) }
@@ -86,12 +91,11 @@ export const Plugin = {
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
         const items = entries(yield* mcp.tools())
-        const record: Record<string, Tool.AnyTool> = {}
-        if (Flag.OPENCODE_CODE_MODE) {
-          if (items.length > 0) record.execute = yield* ExecuteTool.make(items)
-        } else {
-          for (const item of items) record[item.registration] = direct(item)
-        }
+        const record = Flag.OPENCODE_CODE_MODE
+          ? items.length === 0
+            ? {}
+            : { execute: yield* ExecuteTool.make(items) }
+          : Object.fromEntries(items.map((item) => [item.registration, direct(item)]))
         const next = yield* Scope.fork(scope)
         yield* ctx.tool.register(record).pipe(Scope.provide(next), Effect.orDie)
         if (current) yield* Scope.close(current, Exit.void)
@@ -99,9 +103,10 @@ export const Plugin = {
       }),
     )
 
-    yield* events
-      .subscribe(McpEvent.ToolsChanged)
-      .pipe(Stream.runForEach(() => reconcile), Effect.forkScoped({ startImmediately: true }))
+    yield* events.subscribe(McpEvent.ToolsChanged).pipe(
+      Stream.runForEach(() => reconcile),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     yield* reconcile
   }),
 }
@@ -153,8 +158,9 @@ function codeModeNames(values: ReadonlyArray<string>, namespace: boolean) {
     value !== "constructor" &&
     value !== "prototype" &&
     (!namespace || value !== "$codemode")
-  const used = new Set(unique.filter(valid))
-  const result = new Map(unique.filter(valid).map((value) => [value, value]))
+  const safe = unique.filter(valid)
+  const used = new Set(safe)
+  const result = new Map(safe.map((value) => [value, value]))
   for (const value of unique.filter((value) => !valid(value))) {
     let collision = 0
     let alias = `mcp_${sanitize(value).slice(0, 40)}${hashSuffix(value)}`
@@ -175,11 +181,4 @@ function jsonSchema(input: unknown): JsonSchema.JsonSchema {
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input)
-}
-
-function permissionError(error: unknown) {
-  if (error instanceof PermissionV2.CorrectedError) return error.feedback
-  if (typeof error === "object" && error !== null && "_tag" in error)
-    return `Permission denied: ${String(error._tag)}`
-  return "Permission denied"
 }

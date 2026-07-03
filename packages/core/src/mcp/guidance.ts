@@ -1,12 +1,12 @@
 export * as McpGuidance from "./guidance"
 
-import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
+import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
+import { SystemContext } from "../system-context/index"
 import { McpTool } from "../tool/mcp"
 import { MCP } from "./index"
-import { SystemContext } from "../system-context/index"
 
 const Summary = Schema.Struct({
   server: Schema.String,

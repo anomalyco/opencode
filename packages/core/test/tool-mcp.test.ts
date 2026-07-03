@@ -181,7 +181,7 @@ describe("MCP tool plugin", () => {
         })
 
         expect(calls).toEqual([{ server: "$codemode", name: "foo.bar", args: { query: "react" } }])
-        expect(assertions[0]?.action).toBe('mcp:["$codemode","foo.bar"]')
+        expect(assertions[0]?.action).toBe("mcp:$codemode:foo.bar")
         expect(settlement.output?.structured).toMatchObject({
           toolCalls: [{ tool: "$codemode.foo.bar", status: "completed", input: { query: "react" } }],
         })
@@ -220,7 +220,7 @@ describe("MCP tool plugin", () => {
           {
             sessionID,
             agent: toolIdentity.agent,
-            action: 'mcp:["context7","resolve-library-id"]',
+            action: "mcp:context7:resolve-library-id",
             resources: ["*"],
             save: ["*"],
             metadata: {
@@ -244,9 +244,7 @@ describe("MCP tool plugin", () => {
           },
         })
         expect(allowed.result).toEqual({ type: "text", value: "ok" })
-        expect(calls).toEqual([
-          { server: "context7", name: "resolve-library-id", args: { query: "react" } },
-        ])
+        expect(calls).toEqual([{ server: "context7", name: "resolve-library-id", args: { query: "react" } }])
 
         catalog = [item("github", "search_issues")]
         yield* events.publish(McpEvent.ToolsChanged, { server: MCP.ServerName.make("github") })

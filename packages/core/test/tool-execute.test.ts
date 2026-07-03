@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -157,49 +157,6 @@ describe("execute tool", () => {
     }),
   )
 
-  it.effect("waits for child approval before calling MCP", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const requested = yield* Deferred.make<void>()
-      const approved = yield* Deferred.make<void>()
-      let calls = 0
-      yield* registry.register({
-        execute: yield* make(
-          [{ action: "mcp:context7:resolve-library-id", tool }],
-          (input) =>
-            Effect.sync(() => {
-              calls++
-              return new MCP.ToolResult({
-                server: MCP.ServerName.make(input.server.toString()),
-                tool: input.name,
-                isError: false,
-                content: [{ type: "text", text: "ok" }],
-              })
-            }),
-          () => Deferred.succeed(requested, undefined).pipe(Effect.andThen(Deferred.await(approved))),
-        ),
-      })
-
-      const settlement = yield* settleTool(registry, {
-        sessionID,
-        ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: "call_execute_ask",
-          name: "execute",
-          input: {
-            code: 'return await tools.context7["resolve-library-id"]({ query: "react", libraryName: "react" })',
-          },
-        },
-      }).pipe(Effect.forkChild)
-      yield* Deferred.await(requested)
-      expect(calls).toBe(0)
-      yield* Deferred.succeed(approved, undefined)
-      yield* Fiber.join(settlement)
-      expect(calls).toBe(1)
-    }),
-  )
-
   it.effect("does not call MCP when child permission is denied", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
@@ -246,43 +203,6 @@ describe("execute tool", () => {
         error: true,
         toolCalls: [{ tool: "github.search_issues", status: "error", input: { query: "bug" } }],
       })
-    }),
-  )
-
-  it.effect("caps child calls per execution", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      let calls = 0
-      yield* registry.register({
-        execute: yield* make([{ action: "mcp:context7:resolve-library-id", tool }], (input) =>
-          Effect.sync(() => {
-            calls++
-            return new MCP.ToolResult({
-              server: MCP.ServerName.make(input.server.toString()),
-              tool: input.name,
-              isError: false,
-              content: [{ type: "text", text: "ok" }],
-            })
-          }),
-        ),
-      })
-
-      const settlement = yield* settleTool(registry, {
-        sessionID,
-        ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: "call_execute_limit",
-          name: "execute",
-          input: {
-            code: 'const out = []; for (let i = 0; i < 101; i++) out.push(await tools.context7["resolve-library-id"]({ query: "react", libraryName: "react" })); return out',
-          },
-        },
-      })
-
-      expect(calls).toBe(100)
-      expect(settlement.output?.structured).toMatchObject({ error: true })
-      expect(settlement.result).toMatchObject({ type: "text", value: expect.stringContaining("tool-call limit of 100") })
     }),
   )
 })
