@@ -1,16 +1,13 @@
 export * as VcsGit from "./git"
 
-import { formatPatch, structuredPatch } from "diff"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileStatus, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "../process"
 import type { DiffOptions, Interface } from "../vcs"
-
-const PATCH_CONTEXT_LINES = 2_147_483_647
-const MAX_PATCH_BYTES = 10_000_000
-const MAX_TOTAL_PATCH_BYTES = 10_000_000
+import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch"
+import type { Patch } from "./patch"
 
 /**
  * Git adapter for the Vcs service. Ported from the V1 pipeline: patches are
@@ -82,11 +79,6 @@ interface Stat {
   readonly file: string
   readonly additions: number
   readonly deletions: number
-}
-
-interface Patch {
-  readonly text: string
-  readonly truncated: boolean
 }
 
 interface PatchOptions {
@@ -325,8 +317,6 @@ function makeGit(proc: AppProcess.Interface) {
   }
 }
 
-const emptyPatch = (file: string) => formatPatch(structuredPatch(file, file, "", "", "", "", { context: 0 }))
-
 const nums = (list: Stat[]) =>
   new Map(list.map((item) => [item.file, { additions: item.additions, deletions: item.deletions }] as const))
 
@@ -340,70 +330,6 @@ const merge = (...lists: Item[][]) => {
 
 const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
 
-const parseQuotedPath = (value: string) => {
-  let out = ""
-  for (let idx = 1; idx < value.length; idx++) {
-    const char = value[idx]
-    if (char === '"') return { value: out, end: idx + 1 }
-    if (char !== "\\") {
-      out += char
-      continue
-    }
-
-    const next = value[++idx]
-    if (next === "t") out += "\t"
-    else if (next === "n") out += "\n"
-    else if (next === "r") out += "\r"
-    else if (next === '"' || next === "\\") out += next
-    else out += next ?? ""
-  }
-}
-
-const parsePathToken = (value: string) => {
-  if (!value.startsWith('"')) return value.split("\t")[0]
-  return parseQuotedPath(value)?.value ?? value
-}
-
-const fileFromDiffPath = (value: string | undefined) => {
-  if (!value || value === "/dev/null") return
-  const file = parsePathToken(value)
-  if (file.startsWith("a/") || file.startsWith("b/")) return file.slice(2)
-  return file
-}
-
-const fileFromGitHeader = (header: string) => {
-  if (header.startsWith('"')) {
-    const first = parseQuotedPath(header)
-    const second = first ? header.slice(first.end).trimStart() : undefined
-    if (!second) return
-    if (!second.startsWith('"')) return fileFromDiffPath(second)
-    return fileFromDiffPath(parseQuotedPath(second)?.value)
-  }
-
-  const separator = header.indexOf(" b/")
-  if (separator === -1) return
-  return fileFromDiffPath(header.slice(separator + 1))
-}
-
-const fileFromPatchChunk = (chunk: string) => {
-  const next = /^\+\+\+ (.+)$/m.exec(chunk)?.[1]
-  const before = /^--- (.+)$/m.exec(chunk)?.[1]
-  const file = fileFromDiffPath(next) ?? fileFromDiffPath(before)
-  if (file) return file
-
-  const header = /^diff --git (.+)$/m.exec(chunk)?.[1]
-  return fileFromGitHeader(header ?? "")
-}
-
-const splitGitPatch = (patch: Patch) => {
-  const starts = [...patch.text.matchAll(/(?:^|\n)diff --git /g)].map((match) =>
-    match[0].startsWith("\n") ? match.index + 1 : match.index,
-  )
-  const chunks = starts.map((start, index) => patch.text.slice(start, starts[index + 1] ?? patch.text.length))
-  if (!patch.truncated) return chunks
-  return chunks.slice(0, -1)
-}
-
 const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: Item[], options?: DiffOptions) {
   if (list.length === 0) return emptyBatch()
 
@@ -413,12 +339,7 @@ const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: I
   })
 
   return {
-    patches: splitGitPatch(result).reduce((acc, patch, index) => {
-      const file = fileFromPatchChunk(patch) ?? list[index]?.file
-      if (!file) return acc
-      acc.set(file, (acc.get(file) ?? "") + patch)
-      return acc
-    }, new Map<string, string>()),
+    patches: chunksByFile(result, (index) => list[index]?.file),
     capped: result.truncated,
   }
 })
