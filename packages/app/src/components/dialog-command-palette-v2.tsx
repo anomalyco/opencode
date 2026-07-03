@@ -249,8 +249,7 @@ function createSessionEntries(props: {
   return { sessions }
 }
 
-function groups(entries: Entry[], grouped: boolean) {
-  if (!grouped) return [{ category: "", entries }]
+function groups(entries: Entry[]) {
   const map = new Map<string, Entry[]>()
   for (const entry of entries) map.set(entry.category, [...(map.get(entry.category) ?? []), entry])
   return Array.from(map.entries()).map(([category, entries]) => ({ category, entries }))
@@ -321,7 +320,7 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
 
   const [entries] = createResource(query, loadItems, { initialValue: [] as Entry[] })
   const visibleEntries = createMemo(() => uniqueEntries(entries() ?? []))
-  const groupedEntries = createMemo(() => groups(visibleEntries(), query().trim().length > 0))
+  const groupedEntries = createMemo(() => groups(visibleEntries()))
   const activeEntry = createMemo(() => visibleEntries()[active()])
 
   createEffect(() => {
