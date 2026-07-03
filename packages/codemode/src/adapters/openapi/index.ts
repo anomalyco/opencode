@@ -1,10 +1,12 @@
 import { HttpClient } from "effect/unstable/http"
 import { Tool, type Definition } from "../../tool.js"
-import { invoke } from "./invoke.js"
-import { componentDefinitions } from "./schema.js"
-import { isRecord, methods, nonEmptyString } from "./shared.js"
+import { invoke } from "./runtime.js"
 import {
+  componentDefinitions,
   inputSchema,
+  isRecord,
+  methods,
+  nonEmptyString,
   operationName,
   operationParameters,
   outputSchema,
