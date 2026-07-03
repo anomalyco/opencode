@@ -32,6 +32,7 @@ import type {
   StreamCommit,
 } from "@/cli/cmd/run/types"
 import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
+import { selectedCommand } from "@/cli/cmd/run/footer.prompt"
 import { RejectField } from "@/cli/cmd/run/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -832,6 +833,52 @@ test("direct footer slash autocomplete keeps a real skills command", async () =>
   }
 })
 
+test("selectedCommand backfills the catalog source for bound drafts", () => {
+  const catalog = [command({ name: "opencode-ts", description: "TS skill", source: "skill" })]
+
+  // The skill picker binds `/name ` drafts; older drafts may lack source.
+  expect(selectedCommand("/opencode-ts fix it", { name: "opencode-ts", arguments: "" }, catalog)).toEqual({
+    name: "opencode-ts",
+    arguments: "fix it",
+    source: "skill",
+  })
+  // An explicit source wins without a catalog lookup.
+  expect(selectedCommand("/opencode-ts", { name: "opencode-ts", arguments: "", source: "skill" })).toEqual({
+    name: "opencode-ts",
+    arguments: "",
+    source: "skill",
+  })
+  // Plain commands stay untagged.
+  expect(selectedCommand("/deploy prod", { name: "deploy", arguments: "" }, [
+    command({ name: "deploy", description: "Deploy" }),
+  ])).toEqual({ name: "deploy", arguments: "prod" })
+})
+
+test("direct footer tags skill slash submissions with their catalog source", async () => {
+  const submits: RunPrompt[] = []
+  const app = await renderFooter({
+    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
+    onSubmit(prompt) {
+      submits.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    "/formatter src".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits).toEqual([
+      { text: "/formatter src", parts: [], command: { name: "formatter", arguments: "src", source: "skill" } },
+    ])
+  } finally {
+    app.cleanup()
+  }
+})
+
 // OpenTUI currently segfaults Bun while tearing down this composer-to-skill-panel transition.
 // Re-enable after the upstream renderer teardown fix lands.
 test.skip("direct footer skill picker inserts an editable bound skill command", async () => {
@@ -864,7 +911,7 @@ test.skip("direct footer skill picker inserts an editable bound skill command", 
     app.mockInput.pressEnter()
     await app.renderOnce()
 
-    expect(submits).toEqual([{ text: "/new task", parts: [], command: { name: "new", arguments: "task" } }])
+    expect(submits).toEqual([{ text: "/new task", parts: [], command: { name: "new", arguments: "task", source: "skill" } }])
   } finally {
     app.cleanup()
   }

@@ -93,6 +93,8 @@ export type RunPrompt = {
   command?: {
     name: string
     arguments: string
+    // Catalog source of the matched slash entry ("skill" routes to session.skill).
+    source?: string
   }
 }
 

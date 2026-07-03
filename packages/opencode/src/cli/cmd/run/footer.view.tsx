@@ -781,6 +781,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                                 command: {
                                   name,
                                   arguments: "",
+                                  source: "skill",
                                 },
                               })
                               closePanel()

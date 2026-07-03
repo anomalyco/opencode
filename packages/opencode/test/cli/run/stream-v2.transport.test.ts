@@ -1002,6 +1002,395 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("runs a shell turn through v2.session.shell and renders live output", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let request: Parameters<OpencodeClient["v2"]["session"]["shell"]>[0] | undefined
+    spyOn(client.v2.session, "shell").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_shell_start",
+          created: 0,
+          type: "shell.started",
+          durable: durable("ses_1"),
+          data: { sessionID: "ses_1", callID: "call_shell", command: "ls" },
+        })
+        events.push({
+          id: "evt_shell_end",
+          created: 0,
+          type: "shell.ended",
+          durable: durable("ses_1", 1),
+          data: { sessionID: "ses_1", callID: "call_shell", output: "file.txt" },
+        })
+      })
+      return ok(undefined) as never
+    })
+
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { text: "ls", parts: [], mode: "shell" },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(request).toMatchObject({ sessionID: "ses_1", command: "ls" })
+    expect(ui.commits.filter((item) => item.shell)).toMatchObject([
+      { phase: "start", tool: "bash", toolState: "running", shell: { callID: "call_shell", command: "ls" } },
+      { phase: "progress", text: "file.txt", toolState: "completed", shell: { callID: "call_shell", command: "ls" } },
+    ])
+    expect(ui.events).toContainEqual({ type: "stream.patch", patch: { phase: "running", status: "running shell" } })
+    await transport.close()
+  })
+
+  test("aborts an active shell turn without interrupting the session", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let started = false
+    let aborted = false
+    spyOn(client.v2.session, "shell").mockImplementation(
+      (_input, options) =>
+        new Promise((_, reject) => {
+          started = true
+          options?.signal?.addEventListener("abort", () => {
+            aborted = true
+            reject(new Error("aborted"))
+          })
+        }) as never,
+    )
+    const interrupted = spyOn(client.v2.session, "interrupt").mockImplementation(() => ok(undefined))
+
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { text: "sleep 100", parts: [], mode: "shell" },
+      files: [],
+      includeFiles: true,
+    })
+    while (!started) await Bun.sleep(0)
+    await transport.interruptActiveTurn()
+    await turn
+
+    expect(aborted).toBe(true)
+    expect(interrupted).not.toHaveBeenCalled()
+    await transport.close()
+  })
+
+  test("hydrates projected shell transcripts once and dedupes live redelivery", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      messages: {
+        ses_1: [
+          {
+            id: "msg_shell",
+            type: "shell" as const,
+            callID: "call_1",
+            command: "ls",
+            output: "file.txt",
+            time: { created: 1, completed: 2 },
+          },
+        ],
+      },
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    events.push({
+      id: "evt_shell_end",
+      created: 0,
+      type: "shell.ended",
+      durable: durable("ses_1", 1),
+      data: { sessionID: "ses_1", callID: "call_1", output: "file.txt" },
+    })
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+
+    expect(ui.commits.filter((item) => item.shell)).toMatchObject([
+      { phase: "start", shell: { callID: "call_1", command: "ls" } },
+      { phase: "progress", text: "file.txt", toolState: "completed" },
+    ])
+    await transport.close()
+  })
+
+  test("routes command prompts through v2.session.command", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let request: Parameters<OpencodeClient["v2"]["session"]["command"]>[0] | undefined
+    spyOn(client.v2.session, "command").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_prompted",
+          created: 0,
+          type: "prompt.promoted",
+          durable: durable("ses_1"),
+          data: {
+            sessionID: "ses_1",
+            inputID: "msg_cmd",
+          },
+        })
+        events.push({
+          id: "evt_settled",
+          created: 0,
+          type: "execution.settled",
+          data: { sessionID: "ses_1", outcome: "success" },
+        })
+      })
+      return ok({
+        data: {
+          admittedSeq: 1,
+          id: input.id ?? "msg_cmd",
+          sessionID: "ses_1",
+          prompt: { text: "evaluated template" },
+          delivery: "steer" as const,
+          timeCreated: 2,
+        },
+      })
+    })
+
+    await transport.runPromptTurn({
+      agent: "build",
+      model: { providerID: "test", modelID: "model" },
+      variant: undefined,
+      prompt: {
+        messageID: "msg_cmd",
+        text: "/deploy prod",
+        parts: [],
+        command: { name: "deploy", arguments: "prod" },
+      },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(request).toMatchObject({
+      sessionID: "ses_1",
+      id: "msg_cmd",
+      command: "deploy",
+      arguments: "prod",
+      agent: "build",
+      model: { providerID: "test", id: "model" },
+      delivery: "steer",
+    })
+    // Selection rides the command payload; no separate client-side switch.
+    expect(client.v2.session.switchAgent).not.toHaveBeenCalled()
+    expect(client.v2.session.switchModel).not.toHaveBeenCalled()
+    await transport.close()
+  })
+
+  test("routes skill prompts through v2.session.skill and settles without promotion", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let request: Parameters<OpencodeClient["v2"]["session"]["skill"]>[0] | undefined
+    const command = spyOn(client.v2.session, "command")
+    const prompt = spyOn(client.v2.session, "prompt")
+    spyOn(client.v2.session, "skill").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_skill",
+          created: 0,
+          type: "skill.activated",
+          durable: durable("ses_1"),
+          data: {
+            sessionID: "ses_1",
+            name: input.skill ?? "tigerstyle",
+            text: "skill instructions",
+          },
+        })
+        events.push({
+          id: "evt_settled",
+          created: 0,
+          type: "execution.settled",
+          data: { sessionID: "ses_1", outcome: "success" },
+        })
+      })
+      return ok(undefined) as never
+    })
+
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: {
+        messageID: "msg_skill",
+        text: "/tigerstyle",
+        parts: [],
+        command: { name: "tigerstyle", arguments: "", source: "skill" },
+      },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(request).toMatchObject({ sessionID: "ses_1", id: "msg_skill", skill: "tigerstyle" })
+    expect(command).not.toHaveBeenCalled()
+    expect(prompt).not.toHaveBeenCalled()
+    expect(ui.commits).toContainEqual(
+      expect.objectContaining({ kind: "system", text: '→ Skill "tigerstyle"', messageID: "msg_skill" }),
+    )
+    await transport.close()
+  })
+
+  test("does not resolve a skill turn before the matching activation is observed", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    let sent = false
+    spyOn(client.v2.session, "skill").mockImplementation(() => {
+      sent = true
+      return ok(undefined) as never
+    })
+
+    let done = false
+    const turn = transport
+      .runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: {
+          messageID: "msg_skill",
+          text: "/tigerstyle",
+          parts: [],
+          command: { name: "tigerstyle", arguments: "", source: "skill" },
+        },
+        files: [],
+        includeFiles: true,
+      })
+      .then(() => {
+        done = true
+      })
+    while (!sent) await Bun.sleep(0)
+    events.push({
+      id: "evt_unrelated_settled",
+      created: 0,
+      type: "execution.settled",
+      data: { sessionID: "ses_1", outcome: "success" },
+    })
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+    expect(done).toBe(false)
+
+    events.push({
+      id: "evt_skill",
+      created: 0,
+      type: "skill.activated",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        name: "tigerstyle",
+        text: "skill instructions",
+      },
+    })
+    events.push({
+      id: "evt_skill_settled",
+      created: 0,
+      type: "execution.settled",
+      data: { sessionID: "ses_1", outcome: "success" },
+    })
+    await turn
+
+    expect(done).toBe(true)
+    await transport.close()
+  })
+
+  test("hydrates skill activation messages once and dedupes live redelivery", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      messages: {
+        ses_1: [
+          {
+            id: "msg_skill",
+            type: "skill" as const,
+            name: "tigerstyle",
+            text: "skill instructions",
+            time: { created: 2 },
+          },
+        ],
+      },
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    events.push({
+      id: "evt_skill",
+      created: 0,
+      type: "skill.activated",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        name: "tigerstyle",
+        text: "skill instructions",
+      },
+    })
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+
+    expect(ui.commits.filter((item) => item.text === '→ Skill "tigerstyle"')).toHaveLength(1)
+    await transport.close()
+  })
+
   test("discovers a live child session and tracks its tab and selected detail", async () => {
     const events = feed()
     events.push(connected())

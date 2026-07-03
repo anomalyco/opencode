@@ -665,7 +665,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               (row) => row.commit.kind !== "user" || row.commit.messageID !== prompt.messageID,
             )
           }
-          includeFiles = false
+          // Shell and skill turns never send CLI file attachments; keep them
+          // pending for the next prompt-shaped turn.
+          if (prompt.mode !== "shell" && prompt.command?.source !== "skill") includeFiles = false
         } catch (error) {
           if (signal.aborted || footer.isClosed) {
             return

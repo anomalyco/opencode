@@ -175,14 +175,18 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
     return { type: "pending" as const }
   }
 
-  if (!commands.some((item) => item.name === head.name)) {
+  const item = commands.find((entry) => entry.name === head.name)
+  if (!item) {
     return { type: "none" as const }
   }
 
-  return { type: "command" as const, command: { name: head.name, arguments: head.arguments } }
+  return {
+    type: "command" as const,
+    command: { name: head.name, arguments: head.arguments, ...(item.source ? { source: item.source } : {}) },
+  }
 }
 
-function selectedCommand(text: string, command: RunPrompt["command"]) {
+export function selectedCommand(text: string, command: RunPrompt["command"], commands?: RunCommand[]) {
   if (!command) {
     return
   }
@@ -192,9 +196,14 @@ function selectedCommand(text: string, command: RunPrompt["command"]) {
     return
   }
 
+  // Bound drafts (e.g. the skill picker) may predate or omit the catalog
+  // source; resolve it at submit time so routing never degrades to a plain
+  // command for a skill entry.
+  const source = command.source ?? commands?.find((item) => item.name === command.name)?.source
   return {
     name: command.name,
     arguments: head.arguments,
+    ...(source ? { source } : {}),
   }
 }
 
@@ -1178,7 +1187,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
+    const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command, input.commands())
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return
