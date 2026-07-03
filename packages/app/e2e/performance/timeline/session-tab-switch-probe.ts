@@ -16,11 +16,41 @@ async function installSessionSwitchProbe(
     const samples: SessionSwitchSample[] = []
     let started: number | undefined
     let running = true
+    const reviewLevels: Record<string, string> = {
+      panel: "#review-panel",
+      tabs: '#review-panel [data-component="tabs"]',
+      body: '#review-panel [data-slot="session-review-v2-body"]',
+      review: '#review-panel [data-component="session-review-v2"]',
+      preview: '#review-panel [data-slot="session-review-v2-preview"]',
+      scroll: '#review-panel [data-slot="session-review-v2-diff-scroll"]',
+      file: '#review-panel [data-component="file"][data-mode="diff"]',
+    }
+    const initialReviewNodes: Record<string, Element | null> = {}
     const sample = () => {
       if (!running || started === undefined) return
       setTimeout(() => {
         if (!running || started === undefined) return
         const observedAtMs = performance.now() - started
+        const reviewPanel = document.querySelector<HTMLElement>("#review-panel")
+        const reviewFile = reviewPanel?.querySelector('[data-component="file"][data-mode="diff"]')
+        const initialReviewFile = initialReviewNodes.file
+        const replacedLevels = Object.entries(reviewLevels).flatMap(([name, selector]) => {
+          const initial = initialReviewNodes[name]
+          if (!initial) return []
+          const current = document.querySelector(selector)
+          return current && current !== initial ? [name] : []
+        })
+        const review = reviewPanel
+          ? {
+              fileHost: !!reviewFile,
+              fileHostReplaced: !!initialReviewFile && !!reviewFile && reviewFile !== initialReviewFile,
+              header:
+                reviewPanel
+                  .querySelector<HTMLElement>('[data-slot="session-review-v2-file-header"]')
+                  ?.textContent?.trim() ?? "",
+              replacedLevels,
+            }
+          : undefined
         const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
           element.querySelector("[data-timeline-row]"),
         )
@@ -44,9 +74,10 @@ async function installSessionSwitchProbe(
             hasVisibleRows,
             last: visible.includes(lastID),
             bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
+            review,
           })
         } else {
-          samples.push({ observedAtMs, destination: [], source: [], hasVisibleRows: false, last: false })
+          samples.push({ observedAtMs, destination: [], source: [], hasVisibleRows: false, last: false, review })
         }
         requestAnimationFrame(sample)
       }, 0)
@@ -57,6 +88,9 @@ async function installSessionSwitchProbe(
         const link = event.target instanceof Element ? event.target.closest("a") : undefined
         if (link?.getAttribute("href") !== href) return
         started = performance.now()
+        for (const [name, selector] of Object.entries(reviewLevels)) {
+          initialReviewNodes[name] = document.querySelector(selector)
+        }
         requestAnimationFrame(sample)
       },
       { capture: true, once: true },

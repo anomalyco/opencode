@@ -24,7 +24,6 @@ function SessionTabSlot(props: {
   id: string
   index: () => number
   active: () => boolean
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   serverCtx: () => ServerCtx | undefined
   onNavigate: (element: HTMLDivElement) => void
@@ -112,7 +111,6 @@ function SessionTabSlot(props: {
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active()}
-        activeServer={props.tab.server === props.activeServerKey}
         forceTruncate={props.forceTruncate}
         dragging={sortable.isDragSource()}
       />
@@ -165,7 +163,6 @@ function DraftTabSlot(props: {
 export function TitlebarTabStrip(props: {
   tabs: Tab[]
   currentTab: () => Tab | undefined
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -271,7 +268,6 @@ export function TitlebarTabStrip(props: {
                       id={id}
                       index={index}
                       active={() => props.currentTab() === tab}
-                      activeServerKey={props.activeServerKey}
                       forceTruncate={props.forceTruncate}
                       serverCtx={serverCtx}
                       onNavigate={(element) => {
