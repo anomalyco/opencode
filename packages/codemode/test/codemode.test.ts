@@ -512,6 +512,44 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("renders bracket notation for tool names that are not JavaScript identifiers", async () => {
+    const resolveLibrary = Tool.make({
+      description: "Resolve a library ID",
+      input: Schema.Struct({ libraryName: Schema.String }),
+      output: Schema.String,
+      run: ({ libraryName }) => Effect.succeed(`/resolved/${libraryName}`),
+    })
+    const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
+
+    expect(runtime.catalog()).toStrictEqual([{
+      path: "context7.resolve-library-id",
+      description: "Resolve a library ID",
+      signature: 'tools.context7["resolve-library-id"](input: { libraryName: string }): Promise<string>',
+    }])
+    expect(runtime.instructions()).toContain('tools.context7["resolve-library-id"](input: { libraryName: string }): Promise<string>')
+
+    const search = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: "resolve library id" })`))
+    expect(search.ok).toBe(true)
+    if (search.ok) {
+      expect(search.value).toStrictEqual({
+        items: [{
+          path: 'tools.context7["resolve-library-id"]',
+          description: "Resolve a library ID",
+          signature: 'tools.context7["resolve-library-id"](input: {\n  libraryName: string\n}): Promise<string>',
+        }],
+        total: 1,
+      })
+    }
+
+    const call = await Effect.runPromise(runtime.execute(`return await tools.context7["resolve-library-id"]({ libraryName: "TypeScript" })`))
+    expect(call.ok).toBe(true)
+    if (call.ok) expect(call.value).toBe("/resolved/TypeScript")
+
+    const exact = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: 'tools.context7["resolve-library-id"]' })`))
+    expect(exact.ok).toBe(true)
+    if (exact.ok) expect((exact.value as { total: number }).total).toBe(1)
+  })
+
   test("instructions use markdown sections with placeholder-only call forms", () => {
     const runtime = CodeMode.make({ tools })
     const instructions = runtime.instructions()
@@ -527,6 +565,9 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("Return only the fields you need")
     expect(instructions).toContain("raw payloads get truncated and waste context")
     expect(instructions).toContain("`const res = await tools.<namespace>.<tool>(input)`")
+    expect(instructions).toContain("surrounding agent tools are not available unless listed here")
+    expect(instructions).toContain("Only tools listed here are available inside `tools`")
+    expect(instructions).toContain("bracket notation may appear for names that are not JavaScript identifiers")
     // Placeholders use the <namespace>.<tool>/<field> style ONLY — no fabricated tool
     // names, and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`return { <field>: data.<field> }`")
@@ -543,6 +584,7 @@ describe("CodeMode public contract", () => {
     expect(partial).toContain(
       '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })` — short phrases like "list issues" work best.',
     )
+    expect(partial).toContain("Only tools listed here or returned by `tools.$codemode.search` are available inside `tools`")
     expect(partial).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
     expect(partial).not.toContain("total_count")
     expect(partial).not.toContain("tools.orders.lookup({")

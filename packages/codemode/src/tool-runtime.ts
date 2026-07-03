@@ -68,6 +68,13 @@ const reservedNamespace = "$codemode"
 const defaultMaxInlineCatalogTokens = 2_000
 const defaultSearchLimit = 10
 const searchSignature = "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
+const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
+
+const toolExpression = (path: string) =>
+  "tools" + path
+    .split(".")
+    .map((segment) => identifierSegment.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`)
+    .join("")
 
 export class ToolReference {
   constructor(readonly path: ReadonlyArray<string>) {}
@@ -255,10 +262,10 @@ const definitions = <R>(tools: HostTools<R>, path: ReadonlyArray<string> = []): 
 }
 
 const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDescription => ({
-    path,
-    description: definition.description,
-    signature: `tools.${path}(input: ${inputTypeScript(definition)}): Promise<${outputTypeScript(definition)}>`,
-  })
+  path,
+  description: definition.description,
+  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition)}): Promise<${outputTypeScript(definition)}>`,
+})
 
 const visibleDefinitions = <R>(tools: HostTools<R>) =>
   definitions(tools).flatMap(({ path, definition }) => {
@@ -330,7 +337,7 @@ const catalogLine = (tool: ToolDescription) => {
 
 const toSearchEntry = <R>(path: string, definition: Definition<R>, description: ToolDescription): SearchEntry => ({
   description,
-  signature: `tools.${path}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
+  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
   namespace: path.split(".", 1)[0]!,
   searchText: [
     path,
@@ -418,13 +425,15 @@ export const discoveryPlan = <R>(
 
   // Section order is deliberate: workflow first (the top is the least likely part of a long
   // description to be truncated or skimmed away), then rules, then syntax, with the budgeted
-  // catalog at the bottom. Every call form uses explicit `<namespace>.<tool>` placeholders —
+  // catalog at the bottom. Example call forms use explicit `<namespace>.<tool>` placeholders —
   // never a real or fabricated tool name.
   const intro = [
     "Write a CodeMode program to answer the request. Return code only.",
     empty
       ? "Execute JavaScript in a confined runtime."
-      : "Execute JavaScript in a confined runtime with access to the tools listed below under `tools.*`.",
+      : complete
+        ? "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed below; surrounding agent tools are not available unless listed here."
+        : "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed or searchable below; surrounding agent tools are not available unless listed here.",
   ]
 
   // The search step exists only when search is advertised (PARTIAL catalog); a COMPLETE
@@ -438,14 +447,14 @@ export const discoveryPlan = <R>(
         ...(complete
           ? [
               "1. Pick a tool from the list under `## Available tools` — each line is the exact call signature; use it as-is rather than guessing segments.",
-              "2. Call it: `const res = await tools.<namespace>.<tool>(input)`",
+              "2. Call it using the exact signature shown: `const res = await tools.<namespace>.<tool>(input)` — bracket notation may appear for names that are not JavaScript identifiers.",
               '3. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string.',
               "4. Return only the fields you need: `return { <field>: data.<field> }` — raw payloads get truncated and waste context.",
             ]
           : [
               '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })` — short phrases like "list issues" work best.',
               "2. Read the matches: each item is `{ path, description, signature }` — read the description before using an unfamiliar tool.",
-              "3. Call it with the result's `path` as-is (never guess segments): `const res = await tools.<namespace>.<tool>(input)`",
+              "3. Call it with the result's `path` as-is (never guess segments): `const res = await tools.<namespace>.<tool>(input)` — bracket notation may appear for names that are not JavaScript identifiers.",
               '4. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string.',
               "5. Return only the fields you need: `return { <field>: data.<field> }` — raw payloads get truncated and waste context.",
             ]),
@@ -457,6 +466,9 @@ export const discoveryPlan = <R>(
         "",
         "## Rules",
         "",
+        complete
+          ? "- Only tools listed here are available inside `tools`; tools from the surrounding agent/runtime are not implicitly exposed."
+          : "- Only tools listed here or returned by `tools.$codemode.search` are available inside `tools`; tools from the surrounding agent/runtime are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code — never return them raw or call a tool per item across messages.",
         "- A result typed `Promise<unknown>` has no guaranteed shape — verify what actually came back before relying on its fields.",
         "- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`.",
@@ -646,11 +658,12 @@ export const make = <R>(
               try: () => {
                 const limit = typeof request.limit === "number" ? request.limit : defaultSearchLimit
                 const scoped = namespace === undefined ? searchIndex : searchIndex.filter((entry) => entry.namespace === namespace)
-                // A query that names one tool path exactly (optionally `tools.`-prefixed) is a
-                // lookup, not a search: return that tool alone.
+                // A query that names one tool path exactly (canonical path or rendered
+                // JavaScript expression) is a lookup, not a search: return that tool alone.
                 const trimmed = query.trim()
                 const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
-                const exact = pathQuery === "" ? undefined : scoped.find((entry) => entry.description.path === pathQuery)
+                const exact = pathQuery === "" ? undefined : scoped.find((entry) =>
+                  entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed)
                 const terms = tokenize(query).map(termForms)
                 // Additive field-weighted scoring, summed across terms: exact path or path
                 // segment (20) > path substring (8) > description substring (4) > any
@@ -678,13 +691,14 @@ export const make = <R>(
                       .sort((left, right) =>
                         right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path))
                       .map(({ entry }) => entry)
-                // Result paths carry the `tools.` prefix so each `path` is directly usable
-                // as the call site (`await tools.github.list({ ... })`); the signature is
-                // the pretty, JSDoc-annotated form (schema descriptions and constraints
-                // ride along as field comments).
+                // Result paths are rendered as JavaScript expressions so each `path` is
+                // directly usable as the call site (`await tools.github.list({ ... })` or
+                // `await tools.ns["dashed-name"]({ ... })`). The signature is the pretty,
+                // JSDoc-annotated form (schema descriptions and constraints ride along as
+                // field comments).
                 const items = ranked.slice(0, limit).map(({ description, signature }) => ({
                   ...description,
-                  path: `tools.${description.path}`,
+                  path: toolExpression(description.path),
                   signature,
                 }))
                 return copyIn({ items, total: ranked.length }, "Result from tool '$codemode.search'")
