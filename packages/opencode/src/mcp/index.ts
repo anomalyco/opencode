@@ -155,9 +155,10 @@ export interface ServerInstructions {
 
 /** An MCP tool in its native shape; consumers adapt it to their own tool format. */
 export interface McpTool {
-  def: MCPToolDef
-  client: MCPClient
-  timeout?: number
+  /** Shared cached definition; consumers must copy rather than mutate it. */
+  readonly def: MCPToolDef
+  readonly client: MCPClient
+  readonly timeout?: number
 }
 
 export interface Interface {
