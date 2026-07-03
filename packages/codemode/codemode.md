@@ -890,13 +890,17 @@ Pre-PR fixes (user-approved cut):
       call tools that can only fail at permission time, and per-message `tools[key]=false`
       disabling has no child-call equivalent. Fix: filter the catalog with the same
       ruleset.
-- [ ] Style: `code-mode.ts` is the only `src/session` sibling without the
+- [x] Style: `code-mode.ts` is the only `src/session` sibling without the
       `export * as ... from "./..."` self-reexport footer, forcing a star import at
       `tools.ts:26` (AGENTS.md violation). Add footer + import the projection.
-- [ ] Trivial: latent `groupByServer` fallback bug — `key.slice(0, key.indexOf("_"))` is
+      DONE: added `export * as SessionCodeMode from "./code-mode"` footer; `tools.ts` now
+      imports the named `SessionCodeMode` projection.
+- [x] Trivial: latent `groupByServer` fallback bug — `key.slice(0, key.indexOf("_"))` is
       `slice(0, -1)` when no underscore (unreachable today; guard or drop); dead
       `CODE_MODE_TOOL` export (integration points hardcode `"execute"` — use it or inline
       it).
+      DONE: no-underscore key now falls back to the whole key (test pins it); the four
+      `title: "execute"` sites in `code-mode.ts` now reference `CODE_MODE_TOOL`.
 
 Post-MVP (logged, not blocking an experimental flag):
 - [ ] **Plugin `tool.execute.before/after` hooks skip child calls** — legacy MCP

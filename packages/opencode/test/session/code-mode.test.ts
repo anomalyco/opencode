@@ -74,6 +74,17 @@ describe("code mode execute", () => {
     })
   })
 
+  test("groupByServer uses the whole key as the server name when it has no underscore", () => {
+    const groups = groupByServer({ standalone: mcpTool("standalone", () => "") }, [])
+    expect([...groups.keys()]).toEqual(["standalone"])
+    expect(groups.get("standalone")![0]).toMatchObject({
+      path: "standalone.standalone",
+      server: "standalone",
+      local: "standalone",
+      key: "standalone",
+    })
+  })
+
   test("groupByServer carries the raw MCP schemas for rendering", () => {
     const defs: Record<string, MCPToolDef> = {
       weather_current: {

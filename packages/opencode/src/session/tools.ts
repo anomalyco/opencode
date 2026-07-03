@@ -23,7 +23,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { McpCatalog } from "@/mcp/catalog"
-import * as CodeModeTool from "./code-mode"
+import { SessionCodeMode } from "./code-mode"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -99,7 +99,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const codeModeTool =
     flags.experimentalCodeMode && Object.keys(mcpTools).length > 0
       ? yield* Tool.init(
-          yield* CodeModeTool.define(
+          yield* SessionCodeMode.define(
             mcpTools,
             yield* mcp.defs(),
             Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize),

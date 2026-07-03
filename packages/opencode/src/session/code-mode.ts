@@ -85,7 +85,7 @@ export function groupByServer(
   const byLongest = [...servers].sort((a, b) => b.length - a.length)
   const groups = new Map<string, CatalogEntry[]>()
   for (const key of Object.keys(mcpTools).sort((a, b) => a.localeCompare(b))) {
-    const server = byLongest.find((name) => key.startsWith(name + "_")) ?? key.slice(0, key.indexOf("_"))
+    const server = byLongest.find((name) => key.startsWith(name + "_")) ?? (key.includes("_") ? key.slice(0, key.indexOf("_")) : key)
     const local = server && key.startsWith(server + "_") ? key.slice(server.length + 1) : key
     const def = mcpDefs[key]
     const entry: CatalogEntry = {
@@ -270,7 +270,7 @@ export function define(
         // race below; racing alone would still let the program run its first steps.)
         if (ctx.abort.aborted) {
           return {
-            title: "execute",
+            title: CODE_MODE_TOOL,
             metadata: { toolCalls: [], error: true },
             output: "Execution cancelled.",
           } satisfies Tool.ExecuteResult<Metadata>
@@ -282,7 +282,7 @@ export function define(
         const collect = (attachment: Attachment) => void attachments.push(attachment)
         // Stream the current call list to the UI. Sent on every status change so the
         // tool part shows each child call appearing and resolving while the program runs.
-        const publish = () => ctx.metadata({ title: "execute", metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
+        const publish = () => ctx.metadata({ title: CODE_MODE_TOOL, metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
 
         // One CodeMode tool per MCP tool: gate on permission, dispatch through the
         // ai-sdk wrapper (which owns callTool timeouts/progress and turns an MCP
@@ -346,7 +346,7 @@ export function define(
 
         if (result.ok) {
           return {
-            title: "execute",
+            title: CODE_MODE_TOOL,
             metadata: { toolCalls: calls },
             output: withLogs(formatValue(result.value), logs),
             ...attached,
@@ -356,7 +356,7 @@ export function define(
         // discovery); append the ones the message doesn't already contain.
         const hints = (result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))
         return {
-          title: "execute",
+          title: CODE_MODE_TOOL,
           metadata: { toolCalls: calls, error: true },
           output: withLogs([result.error.message, ...hints].join("\n"), logs),
           ...attached,
@@ -365,3 +365,5 @@ export function define(
     }),
   )
 }
+
+export * as SessionCodeMode from "./code-mode"
