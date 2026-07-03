@@ -89,7 +89,6 @@ export type Event =
   | EventTuiToastShow2
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
-  | EventMcpBrowserOpenFailed
   | EventMcpStatusChanged
   | EventCommandExecuted
   | EventProjectUpdated
@@ -1554,14 +1553,6 @@ export type GlobalEvent = {
         type: "mcp.tools.changed"
         properties: {
           server: string
-        }
-      }
-    | {
-        id: string
-        type: "mcp.browser.open.failed"
-        properties: {
-          mcpName: string
-          url: string
         }
       }
     | {
@@ -3177,7 +3168,6 @@ export type V2Event =
   | TuiToastShow
   | TuiSessionSelect
   | McpToolsChanged
-  | McpBrowserOpenFailed
   | McpStatusChanged
   | CommandExecuted
   | ProjectUpdated
@@ -6373,20 +6363,6 @@ export type McpToolsChanged = {
   }
 }
 
-export type McpBrowserOpenFailed = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "mcp.browser.open.failed"
-  location?: LocationRef
-  data: {
-    mcpName: string
-    url: string
-  }
-}
-
 export type McpStatusChanged = {
   id: string
   created: number
@@ -7490,15 +7466,6 @@ export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
     server: string
-  }
-}
-
-export type EventMcpBrowserOpenFailed = {
-  id: string
-  type: "mcp.browser.open.failed"
-  properties: {
-    mcpName: string
-    url: string
   }
 }
 

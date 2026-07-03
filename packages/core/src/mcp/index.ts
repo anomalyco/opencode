@@ -127,7 +127,11 @@ export class ResourceContent extends Schema.Class<ResourceContent>("MCP.Resource
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP.NotFoundError", {
   server: ServerName,
-}) {}
+}) {
+  override get message() {
+    return `MCP server not found: ${this.server}`
+  }
+}
 
 export class ToolCallError extends Schema.TaggedErrorClass<ToolCallError>()("MCP.ToolCallError", {
   server: ServerName,

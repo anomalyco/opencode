@@ -12,6 +12,7 @@ import {
 } from "../src/index.js"
 import { EventManifest } from "../src/event-manifest.js"
 import { IdeEvent } from "../src/ide-event.js"
+import { McpEvent } from "../src/mcp-event.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionTodo } from "../src/session-todo.js"
 import { SessionV1 } from "../src/session-v1.js"
@@ -63,6 +64,8 @@ describe("public event manifest", () => {
     expect(Permission.Event.Definitions).toEqual([Permission.Event.Asked, Permission.Event.Replied])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
+    expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.StatusChanged])
+    expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
     const sessionV1TailStart = EventManifest.Definitions.indexOf(SessionV1.Event.PartDelta)

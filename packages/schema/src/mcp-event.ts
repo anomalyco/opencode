@@ -27,4 +27,4 @@ export const StatusChanged = Event.ephemeral({
   },
 })
 
-export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed, StatusChanged)
+export const Definitions = Event.inventory(ToolsChanged, StatusChanged)
