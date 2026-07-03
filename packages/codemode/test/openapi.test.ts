@@ -21,10 +21,37 @@ const opencodeSpec = async (): Promise<Document> => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const operationCount = (spec: Document) =>
-  Object.values(isRecord(spec.paths) ? spec.paths : {}).flatMap((path) =>
-    isRecord(path) ? Object.entries(path).filter(([method, operation]) => methods.has(method) && isRecord(operation)) : [],
-  ).length
+const operations = (spec: Document) =>
+  Object.entries(isRecord(spec.paths) ? spec.paths : {}).flatMap(([path, pathValue]) =>
+    isRecord(pathValue)
+      ? Object.entries(pathValue).flatMap(([method, operation]) =>
+          methods.has(method) && isRecord(operation) ? [{ path, method, operation }] : [],
+        )
+      : [],
+  )
+
+const nonEmptyString = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" ? value : undefined
+
+const toolNameEntries = (spec: Document) => {
+  const used = new Set<string>()
+  return operations(spec).map((item) => {
+    const { path, method, operation } = item
+    const raw = nonEmptyString(operation.operationId) ?? `${method}_${path.replaceAll(/[{}]/g, "")}`
+    const base = raw.replaceAll(/[^A-Za-z0-9_$]+/g, "_").replace(/^_+|_+$/g, "").replace(/^([0-9])/, "_$1") || "operation"
+    const name = used.has(base) ? `${base}_2` : base
+    used.add(name)
+    return { ...item, name }
+  })
+}
+
+const jsonContentSchema = (content: unknown) =>
+  isRecord(content)
+    ? Object.entries(content).find(([mediaType]) => {
+        const normalized = mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
+        return normalized === "application/json" || normalized.endsWith("+json")
+      })?.[1]
+    : undefined
 
 const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest) => Response) => {
   const requests: Array<Recorded> = []
@@ -51,15 +78,69 @@ const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } })
 
 describe("OpenAPI.fromSpec", () => {
-  test("converts the opencode OpenAPI spec without skipped operations", async () => {
+  test("converts every opencode operation into the expected tool shape", async () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    expect(Object.keys(result.tools)).toHaveLength(operationCount(spec))
+    const entries = toolNameEntries(spec)
+    expect(Object.keys(result.tools).sort()).toStrictEqual(entries.map((entry) => entry.name).sort())
     expect(result.skipped).toStrictEqual([])
     expect(Object.keys(result.tools)).toContain("global_health")
     expect(Object.keys(result.tools)).toContain("file_read")
     expect(Object.keys(result.tools)).toContain("session_create")
+
+    for (const item of entries) {
+      const tool = result.tools[item.name]
+      expect(tool).toMatchObject({
+        _tag: "CodeModeTool",
+        description:
+          nonEmptyString(item.operation.description) ?? nonEmptyString(item.operation.summary) ?? `${item.method.toUpperCase()} ${item.path}`,
+      })
+
+      const input = isRecord(tool?.input) ? tool.input : {}
+      expect(input.type).toBe("object")
+      const properties = isRecord(input.properties) ? input.properties : {}
+      const parameters = Array.isArray(item.operation.parameters) ? item.operation.parameters.filter(isRecord) : []
+      for (const group of [
+        { name: "path", location: "path" },
+        { name: "query", location: "query" },
+        { name: "headers", location: "header" },
+      ]) {
+        const names = parameters
+          .filter((parameter) => parameter.in === group.location)
+          .map((parameter) => parameter.name)
+          .filter((name): name is string => typeof name === "string")
+        if (names.length === 0) continue
+        const groupSchema = isRecord(properties[group.name]) ? properties[group.name] : {}
+        expect(Object.keys(isRecord(groupSchema.properties) ? groupSchema.properties : {}).sort()).toStrictEqual(
+          names.sort(),
+        )
+      }
+
+      const requestBody = isRecord(item.operation.requestBody) ? item.operation.requestBody : undefined
+      if (requestBody !== undefined && jsonContentSchema(requestBody.content) !== undefined) {
+        expect(properties).toHaveProperty("body")
+      }
+
+      const successes = Object.entries(isRecord(item.operation.responses) ? item.operation.responses : {})
+        .filter(([status]) => /^2\d\d$/.test(status) || status.toUpperCase() === "2XX")
+        .map(([, response]) => (isRecord(response) ? response : {}))
+      if (successes.some((response) => jsonContentSchema(response.content) !== undefined)) {
+        expect(tool?.output).not.toBeUndefined()
+      }
+    }
+  })
+
+  test("documents that the opencode fixture is unauthenticated", async () => {
+    const spec = await opencodeSpec()
+    const components = isRecord(spec.components) ? spec.components : {}
+    const result = OpenAPI.fromSpec({ spec, baseUrl })
+
+    expect(spec.security).toStrictEqual([])
+    expect(isRecord(components.securitySchemes) ? Object.keys(components.securitySchemes) : []).toStrictEqual([])
+    expect(result.tools.global_health?.input).toMatchObject({ type: "object", properties: {} })
+    const input = isRecord(result.tools.global_health?.input) ? result.tools.global_health.input : {}
+    expect(Object.keys(isRecord(input.properties) ? input.properties : {})).toStrictEqual([])
   })
 
   test("exposes real opencode operations through CodeMode discovery", async () => {
