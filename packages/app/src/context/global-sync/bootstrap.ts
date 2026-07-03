@@ -321,7 +321,7 @@ export async function bootstrapDirectory(input: {
         retry(() =>
           input.sdk.v2.form.request.list().then((x) => {
             const forms: QuestionForm[] = (x.data?.data ?? []).flatMap((form) => (isQuestionForm(form) ? [form] : []))
-            const ids = forms.map((question) => question.sessionID)
+            const ids = forms.map((question) => question.sessionID).filter((sessionID) => sessionID !== "global")
             const grouped = groupBySession(forms)
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
@@ -331,7 +331,7 @@ export async function bootstrapDirectory(input: {
                 const current = input.session?.data.question ?? input.store.question
                 for (const sessionID of Object.keys(current)) {
                   if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                  if (sessionID !== "global" && input.session?.get(sessionID)?.directory !== input.directory) continue
                   if (input.session) input.session.set("question", sessionID, [])
                   if (!input.session) input.setStore("question", sessionID, [])
                 }

@@ -49,5 +49,5 @@ export function sessionQuestionRequest(
   sessionID?: string,
   include?: (item: QuestionForm) => boolean,
 ) {
-  return sessionTreeRequest(session, request, sessionID, include)
+  return sessionTreeRequest(session, request, sessionID, include) ?? request.global?.find(include ?? (() => true))
 }

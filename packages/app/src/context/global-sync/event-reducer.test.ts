@@ -527,7 +527,8 @@ describe("applyDirectoryEvent", () => {
       directory: "/tmp",
       loadLsp() {},
     })
-    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.fields[0]?.description).toBe("updated")
+    const form = store.question[sessionID]?.find((x) => x.id === "q_2")
+    expect(form?.mode === "form" ? form.fields[0]?.description : undefined).toBe("updated")
 
     applyDirectoryEvent({
       event: { type: "form.cancelled", properties: { sessionID, id: "q_2" } },

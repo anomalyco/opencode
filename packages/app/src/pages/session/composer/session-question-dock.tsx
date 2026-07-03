@@ -12,7 +12,15 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
 import { ScopedKey } from "@/utils/server-scope"
-import { questionAnswer, type QuestionAnswer, type QuestionForm } from "@/utils/question-form"
+import {
+  questionAllowsCustom,
+  questionAnswer,
+  questionLabel,
+  questionMessage,
+  questionOptions,
+  type QuestionAnswer,
+  type QuestionForm,
+} from "@/utils/question-form"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
 
@@ -67,8 +75,8 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
 
-  const questions = createMemo(() => props.request.fields)
-  const total = createMemo(() => questions().length)
+  const questions = createMemo(() => (props.request.mode === "form" ? props.request.fields : []))
+  const total = createMemo(() => (props.request.mode === "url" ? 1 : questions().length))
 
   const cached = cache.get(cacheKey)
   const [store, setStore] = createStore({
@@ -90,17 +98,23 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
   let focusFrame: number | undefined
 
   const question = createMemo(() => questions()[store.tab])
-  const options = createMemo(() => question()?.options ?? [])
-  const custom = createMemo(() => question()?.custom !== false)
+  const options = createMemo(() => questionOptions(question()))
+  const custom = createMemo(() => questionAllowsCustom(question()))
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const on = createMemo(() => custom() && store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.type === "multiselect")
   const count = createMemo(() => options().length + (custom() ? 1 : 0))
 
   const summary = createMemo(() => {
+    if (props.request.title) return props.request.title
     const n = Math.min(store.tab + 1, total())
     return language.t("session.question.progress", { current: n, total: total() })
   })
+  const body = createMemo(() => {
+    if (props.request.mode === "url") return props.request.title ?? "Open URL request"
+    return questionLabel(question())
+  })
+  const message = createMemo(() => questionMessage(props.request))
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
   const customPlaceholder = () => language.t("ui.question.custom.placeholder")
 
@@ -154,11 +168,11 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
   const clamp = (i: number) => Math.max(0, Math.min(count() - 1, i))
 
   const pickFocus = (tab: number = store.tab) => {
-    const list = questions()[tab]?.options ?? []
-    if (questions()[tab]?.custom !== false && store.customOn[tab] === true) return list.length
+    const list = questionOptions(questions()[tab])
+    if (questionAllowsCustom(questions()[tab]) && store.customOn[tab] === true) return list.length
     return Math.max(
       0,
-      list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false),
+      list.findIndex((item) => store.answers[tab]?.includes(item.value) ?? false),
     )
   }
 
@@ -228,7 +242,7 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
       sdk().client.v2.session.form.reply({
         sessionID: props.request.sessionID,
         formID: props.request.id,
-        formReply: { answer: questionAnswer(props.request.fields, answers) },
+        formReply: { answer: props.request.mode === "url" ? {} : questionAnswer(props.request.fields, answers) },
       }),
     onMutate: () => {
       props.onSubmit()
@@ -268,7 +282,7 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
 
   const answered = (i: number) => {
     if ((store.answers[i]?.length ?? 0) > 0) return true
-    return questions()[i]?.custom !== false && store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
+    return questionAllowsCustom(questions()[i]) && store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
   }
 
   const picked = (answer: string) => store.answers[store.tab]?.includes(answer) ?? false
@@ -386,10 +400,10 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
     if (!opt) return
     if (multi()) {
       setStore("editing", false)
-      toggle(opt.label)
+      toggle(opt.value)
       return
     }
-    pick(opt.label)
+    pick(opt.value)
   }
 
   const commitCustom = () => {
@@ -535,11 +549,24 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
             overflow: store.minimized ? "hidden" : undefined,
           }}
         >
-          {question()?.title}
+          {body()}
         </div>
+        <Show when={message()}>
+          <div data-slot="question-hint">{message()}</div>
+        </Show>
         <Show when={!store.minimized}>
-          <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
-            <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
+          <Show
+            when={props.request.mode === "url"}
+            fallback={
+              <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
+                <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
+              </Show>
+            }
+          >
+            <div data-slot="question-hint">Open this URL, complete the request, then submit.</div>
+            <a href={props.request.mode === "url" ? props.request.url : undefined} target="_blank" rel="noreferrer">
+              {props.request.mode === "url" ? props.request.url : ""}
+            </a>
           </Show>
         </Show>
         <div
@@ -557,7 +584,7 @@ export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: (
             {(opt, i) => (
               <Option
                 multi={multi()}
-                picked={picked(opt.label)}
+                picked={picked(opt.value)}
                 label={opt.label}
                 description={opt.description}
                 disabled={sending()}

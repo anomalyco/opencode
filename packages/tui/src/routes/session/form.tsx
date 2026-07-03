@@ -339,6 +339,11 @@ export function FormPrompt(props: { request: PromptForm; location?: LocationRef 
           <Match when={props.request.mode === "url"}>
             <box paddingLeft={1} gap={1}>
               <text fg={theme.text}>{props.request.title ?? "Open URL request"}</text>
+              <Show when={formMessage(props.request)}>
+                <text fg={theme.textMuted} wrapMode="word">
+                  {formMessage(props.request)}
+                </text>
+              </Show>
               <text fg={theme.textMuted}>Open this URL, complete the request, then press enter:</text>
               <text fg={theme.secondary}>{props.request.mode === "url" ? props.request.url : ""}</text>
             </box>
@@ -348,6 +353,13 @@ export function FormPrompt(props: { request: PromptForm; location?: LocationRef 
               <box paddingLeft={1}>
                 <text fg={theme.text} wrapMode="word">
                   {props.request.mode === "form" ? props.request.title : ""}
+                </text>
+              </box>
+            </Show>
+            <Show when={formMessage(props.request)}>
+              <box paddingLeft={1}>
+                <text fg={theme.textMuted} wrapMode="word">
+                  {formMessage(props.request)}
                 </text>
               </box>
             </Show>
@@ -641,8 +653,13 @@ function fieldOptions(field: FormField | undefined) {
 const CUSTOM_OPTION_VALUE = "__custom__"
 
 function withCustomOption(options: FieldOption[], custom: boolean | undefined): FieldOption[] {
-  if (custom === false) return options
+  if (options.length > 0 && custom !== true) return options
   return [...options, { value: CUSTOM_OPTION_VALUE, label: "Type custom value", custom: true }]
+}
+
+function formMessage(form: PromptForm) {
+  const message = form.metadata?.message
+  return typeof message === "string" && message !== form.title ? message : undefined
 }
 
 function optionCount(field: FormField | undefined) {
