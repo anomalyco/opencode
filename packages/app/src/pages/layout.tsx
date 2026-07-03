@@ -70,9 +70,8 @@ import {
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
-  deepLinkEvent,
-  drainPendingDeepLinks,
 } from "./layout/deep-links"
+import { useDeepLinkListener } from "./layout/use-deep-link-listener"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -1275,17 +1274,7 @@ export default function LegacyLayout(props: ParentProps) {
     }
   }
 
-  onMount(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ urls: string[] }>).detail
-      const urls = detail?.urls ?? []
-      if (urls.length === 0) return
-      handleDeepLinks(urls)
-    }
-
-    handleDeepLinks(drainPendingDeepLinks(window))
-    makeEventListener(window, deepLinkEvent, handler as EventListener)
-  })
+  useDeepLinkListener(handleDeepLinks)
 
   async function renameProject(project: LocalProject, next: string) {
     const current = displayName(project)

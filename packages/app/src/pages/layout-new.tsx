@@ -3,18 +3,36 @@ import { useNavigate } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
 import { HelpButton } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
 import { useSettingsCommand } from "@/components/settings-dialog"
+import { collectOpenProjectDeepLinks } from "./layout/deep-links"
+import { useDeepLinkListener } from "./layout/use-deep-link-listener"
 
 export default function NewLayout(props: ParentProps) {
+  const layout = useLayout()
   const platform = usePlatform()
+  const server = useServer()
   const navigate = useNavigate()
   setNavigate(navigate)
   useSettingsCommand()
 
   createEffect(() => setV2Toast(true))
+
+  const handleDeepLinks = (urls: string[]) => {
+    if (!server.isLocal()) return
+
+    for (const directory of collectOpenProjectDeepLinks(urls)) {
+      layout.projects.open(directory)
+      layout.home.setSelection({ server: server.key, directory })
+      navigate("/")
+    }
+  }
+
+  useDeepLinkListener(handleDeepLinks)
 
   const update: TitlebarUpdate = {
     version: () => {
