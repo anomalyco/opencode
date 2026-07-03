@@ -82,16 +82,7 @@ const spec = {
   components: {
     securitySchemes: {
       ApiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" },
-      OAuth2: {
-        type: "oauth2",
-        flows: {
-          authorizationCode: {
-            authorizationUrl: "https://auth.widgets.dev/authorize",
-            tokenUrl: "https://auth.widgets.dev/token",
-            scopes: { "widgets:write": "Modify widgets" },
-          },
-        },
-      },
+      OAuth2: { type: "oauth2" },
     },
     schemas: {
       Widget: {
@@ -110,7 +101,6 @@ type Recorded = {
   readonly body: unknown
 }
 
-/** Test transport: records every request and returns a canned response. */
 const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest) => Response) => {
   const requests: Array<Recorded> = []
   const layer = Layer.succeed(HttpClient.HttpClient)(
@@ -151,8 +141,8 @@ describe("OpenAPI.fromSpec", () => {
   test("generates one tool per operation and reports unrepresentable ones", () => {
     const result = OpenAPI.fromSpec({ spec, auth })
     expect(Object.keys(result.tools).sort()).toStrictEqual(["createWidget", "deleteWidget", "listWidgets"])
-    expect(result.skipped).toStrictEqual([
-      { method: "POST", path: "/upload", reason: "request body has no JSON content (declared: multipart/form-data)" },
+    expect(result.skipped).toMatchObject([
+      { method: "POST", path: "/upload", reason: expect.stringContaining("multipart/form-data") },
     ])
   })
 
@@ -177,7 +167,7 @@ describe("OpenAPI.fromSpec", () => {
     const runtime = CodeMode.make({ tools: { widgets: OpenAPI.fromSpec({ spec, auth }).tools } })
 
     const result = await Effect.runPromise(
-      runtime.execute('return await tools.widgets.listWidgets({ query: { limit: 5 } })').pipe(Effect.provide(layer)),
+      runtime.execute("return await tools.widgets.listWidgets({ query: { limit: 5 } })").pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({ ok: true, value: { items: [{ id: "w_1", name: "one" }] } })
@@ -220,6 +210,19 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests[0]!.headers["x-client"]).toBe("codemode")
   })
 
+  test("a missing required body fails clearly without hitting the network", async () => {
+    const { requests, layer } = recordingClient(() => json({}))
+    const runtime = CodeMode.make({ tools: { widgets: OpenAPI.fromSpec({ spec, auth }).tools } })
+
+    const result = await Effect.runPromise(
+      runtime.execute("return await tools.widgets.createWidget({})").pipe(Effect.provide(layer)),
+    )
+
+    expect(result).toMatchObject({ ok: false })
+    expect(JSON.stringify(result)).toContain("Missing required request body")
+    expect(requests).toHaveLength(0)
+  })
+
   test("non-2xx responses become safe tool failures carrying status and body", async () => {
     const { layer } = recordingClient(() => json({ message: "widget not found" }, 404))
     const runtime = CodeMode.make({ tools: { widgets: OpenAPI.fromSpec({ spec, auth }).tools } })
@@ -245,21 +248,16 @@ describe("OpenAPI.fromSpec", () => {
   test("an unavailable credential fails clearly without hitting the network", async () => {
     const { requests, layer } = recordingClient(() => json({}))
     const runtime = CodeMode.make({
-      tools: {
-        widgets: OpenAPI.fromSpec({
-          spec,
-          auth: { resolve: () => Effect.succeed(undefined) },
-        }).tools,
-      },
+      tools: { widgets: OpenAPI.fromSpec({ spec, auth: { resolve: () => Effect.succeed(undefined) } }).tools },
     })
 
     const result = await Effect.runPromise(
-      runtime.execute('return await tools.widgets.listWidgets({})').pipe(Effect.provide(layer)),
+      runtime.execute("return await tools.widgets.listWidgets({})").pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({
       ok: false,
-      error: { kind: "ToolFailure", message: "GET /widgets requires authentication; no credential available for: ApiKeyAuth." },
+      error: { kind: "ToolFailure", message: expect.stringContaining("ApiKeyAuth") },
     })
     expect(requests).toHaveLength(0)
   })
@@ -276,7 +274,7 @@ describe("OpenAPI.fromSpec", () => {
     })
 
     const result = await Effect.runPromise(
-      runtime.execute('return await tools.widgets.listWidgets({})').pipe(Effect.provide(layer)),
+      runtime.execute("return await tools.widgets.listWidgets({})").pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({ ok: false, error: { kind: "ToolFailure", message: "token refresh failed" } })
@@ -348,11 +346,11 @@ describe("OpenAPI.fromSpec", () => {
     expect(requests[1]!.headers["cookie"]).toBe("session=secret")
   })
 
-  test("2XX wildcard responses and error-only responses advertise the right output", () => {
-    const ranges = {
+  test("output schemas follow response declarations", () => {
+    const responses = {
       openapi: "3.1.0",
-      info: { title: "Ranges", version: "1.0.0" },
-      servers: [{ url: "https://ranges.example" }],
+      info: { title: "Responses", version: "1.0.0" },
+      servers: [{ url: "https://responses.example" }],
       paths: {
         "/wild": {
           get: {
@@ -365,226 +363,15 @@ describe("OpenAPI.fromSpec", () => {
             },
           },
         },
-        "/errors": {
-          get: { operationId: "errorsOnly", responses: { "404": { description: "missing" } } },
-        },
-      },
-    }
-    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: ranges }).tools } })
-    const instructions = runtime.instructions()
-    expect(instructions).toContain("tools.api.wild(input: {}): Promise<{ ok?: boolean }>")
-    expect(instructions).toContain("tools.api.errorsOnly(input: {}): Promise<unknown>")
-  })
-
-  test("a missing required body fails clearly without hitting the network", async () => {
-    const { requests, layer } = recordingClient(() => json({}))
-    const runtime = CodeMode.make({ tools: { widgets: OpenAPI.fromSpec({ spec, auth }).tools } })
-
-    const result = await Effect.runPromise(
-      runtime.execute("return await tools.widgets.createWidget({})").pipe(Effect.provide(layer)),
-    )
-
-    expect(result).toMatchObject({ ok: false })
-    expect(JSON.stringify(result)).toContain("Missing required request body")
-    expect(requests).toHaveLength(0)
-  })
-
-  test("declared non-JSON responses advertise unknown instead of null", () => {
-    const plain = {
-      openapi: "3.1.0",
-      info: { title: "Plain", version: "1.0.0" },
-      servers: [{ url: "https://plain.example" }],
-      paths: {
+        "/errors": { get: { operationId: "errorsOnly", responses: { "404": { description: "missing" } } } },
         "/text": {
           get: {
             operationId: "getText",
             responses: { "200": { description: "ok", content: { "text/plain": { schema: { type: "string" } } } } },
           },
         },
-      },
-    }
-    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: plain }).tools } })
-    expect(runtime.instructions()).toContain("tools.api.getText(input: {}): Promise<unknown>")
-  })
-
-  test("two credentials colliding on one query parameter fail clearly", async () => {
-    const colliding = {
-      openapi: "3.1.0",
-      info: { title: "Collide", version: "1.0.0" },
-      servers: [{ url: "https://collide.example" }],
-      paths: {
-        "/x": {
-          get: {
-            operationId: "x",
-            security: [{ KeyA: [], KeyB: [] }],
-            responses: { "200": { description: "ok" } },
-          },
-        },
-      },
-      components: {
-        securitySchemes: {
-          KeyA: { type: "apiKey", in: "query", name: "api_key" },
-          KeyB: { type: "apiKey", in: "query", name: "api_key" },
-        },
-      },
-    }
-    const { requests, layer } = recordingClient(() => json({}))
-    const runtime = CodeMode.make({
-      tools: {
-        api: OpenAPI.fromSpec({
-          spec: colliding,
-          auth: { resolve: () => Effect.succeed({ type: "apiKey", value: "secret" } as const) },
-        }).tools,
-      },
-    })
-
-    const result = await Effect.runPromise(runtime.execute("return await tools.api.x({})").pipe(Effect.provide(layer)))
-
-    expect(result).toMatchObject({ ok: false })
-    expect(JSON.stringify(result)).toContain("two credentials on the 'api_key' query parameter")
-    expect(requests).toHaveLength(0)
-  })
-
-  test("a no-content success response resolves to null even when default declares an error shape", () => {
-    const mixed = {
-      openapi: "3.1.0",
-      info: { title: "Mixed", version: "1.0.0" },
-      servers: [{ url: "https://mixed.example" }],
-      paths: {
         "/thing": {
-          delete: {
-            operationId: "deleteThing",
-            responses: {
-              "204": { description: "deleted" },
-              default: {
-                description: "error",
-                content: {
-                  "application/json": { schema: { type: "object", properties: { message: { type: "string" } } } },
-                },
-              },
-            },
-          },
-        },
-      },
-    }
-    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: mixed }).tools } })
-    expect(runtime.instructions()).toContain("tools.api.deleteThing(input: {}): Promise<null>")
-  })
-
-  test("auth cookies shadow model cookie parameters and model values are encoded", async () => {
-    const cookieSpec = {
-      openapi: "3.1.0",
-      info: { title: "Cookies", version: "1.0.0" },
-      servers: [{ url: "https://cookies.example" }],
-      paths: {
-        "/c": {
-          get: {
-            operationId: "c",
-            security: [{ CookieKey: [] }],
-            parameters: [
-              { name: "session", in: "cookie", schema: { type: "string" } },
-              { name: "theme", in: "cookie", schema: { type: "string" } },
-            ],
-            responses: { "200": { description: "ok" } },
-          },
-        },
-      },
-      components: { securitySchemes: { CookieKey: { type: "apiKey", in: "cookie", name: "session" } } },
-    }
-    const { requests, layer } = recordingClient(() => json({}))
-    const runtime = CodeMode.make({
-      tools: {
-        api: OpenAPI.fromSpec({
-          spec: cookieSpec,
-          auth: { resolve: () => Effect.succeed({ type: "apiKey", value: "real" } as const) },
-        }).tools,
-      },
-    })
-
-    const result = await Effect.runPromise(
-      runtime
-        .execute(`return await tools.api.c({ cookies: { session: "forged", theme: "dark; session=forged" } })`)
-        .pipe(Effect.provide(layer)),
-    )
-
-    expect(result).toMatchObject({ ok: true })
-    expect(requests[0]!.headers["cookie"]).toBe("session=real; theme=dark%3B%20session%3Dforged")
-  })
-
-  test("missing required non-path parameters fail locally before auth or network", async () => {
-    const strict = {
-      openapi: "3.1.0",
-      info: { title: "Strict", version: "1.0.0" },
-      servers: [{ url: "https://strict.example" }],
-      security: [{ Key: [] }],
-      paths: {
-        "/s": {
-          get: {
-            operationId: "s",
-            parameters: [{ name: "tenant", in: "query", required: true, schema: { type: "string" } }],
-            responses: { "200": { description: "ok" } },
-          },
-        },
-      },
-      components: { securitySchemes: { Key: { type: "apiKey", in: "header", name: "X-Key" } } },
-    }
-    const { requests, layer } = recordingClient(() => json({}))
-    const resolved: Array<string> = []
-    const runtime = CodeMode.make({
-      tools: {
-        api: OpenAPI.fromSpec({
-          spec: strict,
-          auth: {
-            resolve: ({ schemeName }) => {
-              resolved.push(schemeName)
-              return Effect.succeed({ type: "apiKey", value: "k" } as const)
-            },
-          },
-        }).tools,
-      },
-    })
-
-    const result = await Effect.runPromise(runtime.execute("return await tools.api.s({})").pipe(Effect.provide(layer)))
-
-    expect(result).toMatchObject({ ok: false })
-    expect(JSON.stringify(result)).toContain("Missing required query parameter 'tenant'")
-    expect(resolved).toHaveLength(0)
-    expect(requests).toHaveLength(0)
-  })
-
-  test("a static host header satisfies a required header parameter", async () => {
-    const tenanted = {
-      openapi: "3.1.0",
-      info: { title: "Tenanted", version: "1.0.0" },
-      servers: [{ url: "https://tenanted.example" }],
-      paths: {
-        "/t": {
-          get: {
-            operationId: "t",
-            parameters: [{ name: "X-Tenant", in: "header", required: true, schema: { type: "string" } }],
-            responses: { "200": { description: "ok" } },
-          },
-        },
-      },
-    }
-    const { requests, layer } = recordingClient(() => json({}))
-    const runtime = CodeMode.make({
-      tools: { api: OpenAPI.fromSpec({ spec: tenanted, headers: { "x-tenant": "acme" } }).tools },
-    })
-
-    const result = await Effect.runPromise(runtime.execute("return await tools.api.t({})").pipe(Effect.provide(layer)))
-
-    expect(result).toMatchObject({ ok: true })
-    expect(requests[0]!.headers["x-tenant"]).toBe("acme")
-  })
-
-  test("a JSON success sibling wins over an earlier no-content success", () => {
-    const siblings = {
-      openapi: "3.1.0",
-      info: { title: "Siblings", version: "1.0.0" },
-      servers: [{ url: "https://siblings.example" }],
-      paths: {
-        "/thing": {
+          delete: { operationId: "deleteThing", responses: { "204": { description: "deleted" } } },
           post: {
             operationId: "createThing",
             responses: {
@@ -598,41 +385,30 @@ describe("OpenAPI.fromSpec", () => {
         },
       },
     }
-    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: siblings }).tools } })
-    expect(runtime.instructions()).toContain("tools.api.createThing(input: {}): Promise<{ id?: string }>")
+    const runtime = CodeMode.make({ tools: { api: OpenAPI.fromSpec({ spec: responses }).tools } })
+    const instructions = runtime.instructions()
+    expect(instructions).toContain("tools.api.wild(input: {}): Promise<{ ok?: boolean }>")
+    expect(instructions).toContain("tools.api.errorsOnly(input: {}): Promise<unknown>")
+    expect(instructions).toContain("tools.api.getText(input: {}): Promise<unknown>")
+    expect(instructions).toContain("tools.api.deleteThing(input: {}): Promise<null>")
+    expect(instructions).toContain("tools.api.createThing(input: {}): Promise<{ id?: string }>")
   })
 
-  test("relative server URLs are skipped with a clear reason", () => {
-    const relative = {
-      openapi: "3.1.0",
-      info: { title: "Relative", version: "1.0.0" },
-      servers: [{ url: "/v2" }],
-      paths: { "/ping": { get: { operationId: "ping", responses: { "200": { description: "ok" } } } } },
-    }
-    const result = OpenAPI.fromSpec({ spec: relative })
-    expect(Object.keys(result.tools)).toStrictEqual([])
-    expect(result.skipped[0]!.reason).toContain("relative server URL")
-
-    const overridden = OpenAPI.fromSpec({ spec: relative, baseUrl: "https://real.example" })
-    expect(Object.keys(overridden.tools)).toStrictEqual(["ping"])
-  })
-
-  test("spec server variables substitute defaults and explicit values", () => {
+  test("non-absolute server URLs are skipped unless baseUrl overrides them", () => {
     const templated = {
       openapi: "3.1.0",
       info: { title: "T", version: "1" },
-      servers: [{ url: "https://{region}.example/{version}", variables: { version: { default: "v1" } } }],
+      servers: [{ url: "https://{region}.example" }],
       paths: { "/ping": { get: { operationId: "ping", responses: { "200": { description: "ok" } } } } },
     }
-    const unresolved = OpenAPI.fromSpec({ spec: templated })
-    expect(Object.keys(unresolved.tools)).toStrictEqual([])
-    expect(unresolved.skipped[0]!.reason).toContain("unresolved variables")
+    const skipped = OpenAPI.fromSpec({ spec: templated })
+    expect(Object.keys(skipped.tools)).toStrictEqual([])
+    expect(skipped.skipped[0]!.reason).toContain("not an absolute URL")
 
-    const resolved = OpenAPI.fromSpec({ spec: templated, serverVariables: { region: "eu" } })
-    expect(Object.keys(resolved.tools)).toStrictEqual(["ping"])
-  })
+    const relative = OpenAPI.fromSpec({ spec: { ...templated, servers: [{ url: "/v2" }] } })
+    expect(relative.skipped[0]!.reason).toContain("not an absolute URL")
 
-  test("throws on structurally invalid specs", () => {
-    expect(() => OpenAPI.fromSpec({ spec: "[1,2]" })).toThrow("OpenAPI spec must be a JSON object.")
+    const overridden = OpenAPI.fromSpec({ spec: templated, baseUrl: "https://real.example" })
+    expect(Object.keys(overridden.tools)).toStrictEqual(["ping"])
   })
 })

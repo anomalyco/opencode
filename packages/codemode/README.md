@@ -163,7 +163,7 @@ import { Effect } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 
 const api = OpenAPI.fromSpec({
-  spec: await Bun.file("openapi.json").json(), // parsed object or JSON text (no YAML)
+  spec: await Bun.file("openapi.json").json(), // parsed document (no YAML)
   auth: {
     resolve: ({ schemeName, scopes, operation }) =>
       schemeName === "BearerAuth"
@@ -176,11 +176,9 @@ const runtime = CodeMode.make({ tools: { opencode: api.tools } })
 const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide(FetchHttpClient.layer)))
 ```
 
-`fromSpec` is synchronous and returns `{ tools, skipped }`. It throws when given JSON text that does not parse to an object; operations it cannot represent (non-JSON request bodies, unresolved server URL templates) are reported in `skipped` with a reason instead of producing broken tools. See the `Options` and `AuthResolver` docstrings in `src/openapi.ts` for the full option and auth semantics; the essentials:
+`fromSpec` is synchronous and returns `{ tools, skipped }`; operations it cannot represent (non-JSON request bodies, non-absolute server URLs) land in `skipped` with a reason instead of producing broken tools. Tool inputs group parameters by location - `{ path, query, headers, body }` - and never include auth. Non-2xx responses become safe tool failures carrying the status and a size-capped body summary, so programs can `catch` and read them.
 
-- Tool inputs group parameters by OpenAPI location - `{ path, query, headers, cookies, body }` - and never include auth. Output schemas come from the first success (2xx/`2XX`) JSON response; `#/components/schemas/*` refs are expanded by the signature renderer. No-content success responses (e.g. 204) resolve to `null`; declared non-JSON responses advertise `unknown` and return the raw body. Non-2xx responses become safe tool failures carrying the status and a size-capped body summary, so programs can `catch` and read them.
-- Auth follows OpenAPI `security` semantics (root default, operation override, `security: []` = unauthenticated, OR across requirements, AND within one). `auth.resolve` supplies credential material per scheme per invocation; the apiKey carrier comes from the scheme declaration, never from the host. Returning `undefined` tries the next alternative; failing aborts the call; two credentials colliding on one carrier fail clearly. Credential storage, OAuth flows, and token refresh stay host-side behind `resolve`.
-- `headers` adds static host headers (not model-visible; declared header parameters may override them, auth always wins). Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
+Auth follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the adapter. See the `Options` and `AuthResolver` docstrings in `src/openapi.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
 
 ## Discovery
 

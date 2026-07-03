@@ -3,7 +3,7 @@ import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/unstable/
 import { ToolError, toolError } from "./tool-error.js"
 import { Tool, type Definition, type JsonSchema } from "./tool.js"
 
-/** A parsed OpenAPI 3.x document. */
+/** A parsed OpenAPI 3.x document. YAML must be parsed by the host. */
 export type Document = Record<string, unknown>
 
 /** The operation identity handed to auth resolution and errors. */
@@ -29,8 +29,8 @@ export type SecurityScheme = {
 
 /**
  * Credential material returned by a host auth resolver. The carrier for `apiKey`
- * comes from the scheme definition, not the credential, so a host cannot place a
- * key on the wrong carrier. `header` is the escape hatch for nonstandard schemes.
+ * comes from the scheme definition, not the credential. `header` is the escape
+ * hatch for nonstandard schemes.
  */
 export type Credential =
   | { readonly type: "bearer"; readonly token: string }
@@ -40,9 +40,8 @@ export type Credential =
 
 /**
  * Resolves credential material for one named security scheme at call time.
- * `undefined` means "this scheme is unavailable, try the next OR alternative";
- * a failure aborts the tool call (an expired refresh token must not silently
- * fall through to an unauthenticated alternative).
+ * `undefined` means unavailable, try the next OR alternative; a failure aborts
+ * the call rather than falling through.
  */
 export type AuthResolver = (context: {
   readonly schemeName: string
@@ -52,22 +51,12 @@ export type AuthResolver = (context: {
 }) => Effect.Effect<Credential | undefined, unknown>
 
 export type Options = {
-  /** Parsed OpenAPI document or JSON text. YAML must be parsed by the host. */
-  readonly spec: Document | string
-  /**
-   * Overrides the spec's `servers` (of which only the first entry is used).
-   * Required when the spec declares no absolute server URL.
-   */
+  readonly spec: Document
+  /** Overrides the spec's `servers` (only the first entry is used). Required when the spec has no absolute server URL. */
   readonly baseUrl?: string | undefined
-  /** Values for templated server URL variables; spec defaults apply when omitted. */
-  readonly serverVariables?: Readonly<Record<string, string>> | undefined
   /** Host credential resolution, keyed by security scheme name. */
   readonly auth?: { readonly resolve: AuthResolver } | undefined
-  /**
-   * Static headers applied to every request. Not model-visible, but a
-   * spec-declared header parameter with the same name may override the value;
-   * auth headers always win over both.
-   */
+  /** Static headers on every request. Not model-visible; declared header params may override them, auth always wins. */
   readonly headers?: Readonly<Record<string, string>> | undefined
   /** Curate which operations become tools. Defaults to all. */
   readonly operations?: ((operation: Operation) => boolean) | undefined
@@ -80,7 +69,7 @@ export type Skipped = {
   readonly reason: string
 }
 
-/** Internal marker for "this operation/URL cannot be represented; report in `skipped`". */
+/** Unrepresentable; reported in `skipped`. */
 type Skip = { readonly reason: string }
 
 export type Tools = { readonly [name: string]: Definition<HttpClient.HttpClient> }
@@ -92,9 +81,10 @@ export type Result = {
 }
 
 const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
-const parameterLocations = new Set(["path", "query", "header", "cookie"])
+const parameterLocations = new Set(["path", "query", "header"])
+// OpenAPI: header parameters with these names SHALL be ignored.
+const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
-/** Upstream failure bodies are summarized for the model, capped to keep context small. */
 const maxErrorBodyChars = 1_024
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -106,25 +96,19 @@ const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined
 
 /**
- * Builds a CodeMode tool subtree from an OpenAPI 3.x document. One tool per
- * operation, named from `operationId` (sanitized) or `method_path`. Auth is
- * never part of the model-visible input: the adapter reads each operation's
- * effective `security`, asks `auth.resolve` for credentials by scheme name, and
- * injects them into the carrier the scheme declares. Generated tools require
- * `HttpClient.HttpClient` from the Effect environment; the host provides the
- * transport layer (e.g. `FetchHttpClient.layer`).
- *
- * Throws when `spec` is JSON text that does not parse to an object. Operations
- * that cannot be represented (non-JSON request bodies, unresolved server
- * templates) are reported in `skipped` instead of producing broken tools.
+ * Builds a CodeMode tool subtree from an OpenAPI 3.x document, one tool per
+ * operation. Auth is never model-visible: credentials come from `auth.resolve`
+ * per the operation's effective `security` and are injected into the carrier
+ * the scheme declares. Generated tools require `HttpClient.HttpClient` from the
+ * Effect environment. Unrepresentable operations land in `skipped`.
  */
 export const fromSpec = (options: Options): Result => {
-  const document = parseDocument(options.spec)
+  const document = options.spec
   const schemes = securitySchemes(document)
   const defaultSecurity = securityRequirements(document.security)
   const definitions = componentDefinitions(document)
   const paths = isRecord(document.paths) ? document.paths : {}
-  const base = options.baseUrl ?? specServerUrl(document, options.serverVariables ?? {})
+  const base = options.baseUrl ?? specServerUrl(document)
   const used = new Set<string>()
   const skipped: Array<Skipped> = []
   const tools: Record<string, Definition<HttpClient.HttpClient>> = {}
@@ -185,47 +169,31 @@ export const OpenAPI = { fromSpec }
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
-const parseDocument = (spec: Document | string): Document => {
-  if (typeof spec !== "string") return spec
-  const parsed = decodeJson(spec)
-  if (Option.isNone(parsed) || !isRecord(parsed.value)) throw new Error("OpenAPI spec must be a JSON object.")
-  return parsed.value
-}
-
-const pointerSegment = (segment: string) => segment.replaceAll("~1", "/").replaceAll("~0", "~")
-
-const resolvePointer = (document: Document, ref: string): unknown => {
-  if (!ref.startsWith("#/")) return undefined
-  return ref
-    .slice(2)
-    .split("/")
-    .map(pointerSegment)
-    .reduce<unknown>((value, segment) => (isRecord(value) ? value[segment] : undefined), document)
-}
-
 /** Resolves a top-level `$ref` on parameter/requestBody/response objects. */
 const resolve = (document: Document, value: unknown): unknown => {
   if (!isRecord(value)) return value
   const ref = nonEmptyString(value.$ref)
-  if (ref === undefined) return value
-  return resolvePointer(document, ref) ?? value
+  if (ref === undefined || !ref.startsWith("#/")) return value
+  const target = ref
+    .slice(2)
+    .split("/")
+    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
+    .reduce<unknown>((current, segment) => (isRecord(current) ? current[segment] : undefined), document)
+  return target ?? value
 }
 
 // ---------------------------------------------------------------------------
-// Schema projection - OpenAPI schema objects to render-only JsonSchema with
-// `#/components/schemas/X` refs rewritten to `#/$defs/X` (the only ref form the
-// signature renderer resolves).
+// Schema projection
 // ---------------------------------------------------------------------------
-
-const rewriteRef = (ref: string): string => {
-  const name = ref.match(/^#\/components\/schemas\/(.+)$/)?.[1]
-  return name === undefined ? ref : `#/$defs/${name}`
-}
 
 const projectSchema = (value: unknown, depth = 0): JsonSchema => {
   if (depth > 24 || !isRecord(value)) return {}
   const ref = nonEmptyString(value.$ref)
-  if (ref !== undefined) return { $ref: rewriteRef(ref) }
+  if (ref !== undefined) {
+    // `#/components/schemas/X` becomes `#/$defs/X`, the only ref form the signature renderer resolves.
+    const name = ref.match(/^#\/components\/schemas\/(.+)$/)?.[1]
+    return { $ref: name === undefined ? ref : `#/$defs/${name.replaceAll("~1", "/").replaceAll("~0", "~")}` }
+  }
 
   const type = Array.isArray(value.type)
     ? value.type.filter((item): item is string => typeof item === "string")
@@ -283,7 +251,7 @@ const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string
 // Parameters and bodies
 // ---------------------------------------------------------------------------
 
-type ParameterLocation = "path" | "query" | "header" | "cookie"
+type ParameterLocation = "path" | "query" | "header"
 
 type Parameter = {
   readonly name: string
@@ -305,16 +273,16 @@ const operationParameters = (
     const name = nonEmptyString(resolved.name)
     const location = nonEmptyString(resolved.in)
     if (name === undefined || location === undefined || !parameterLocations.has(location)) continue
+    if (location === "header" && ignoredHeaderParameters.has(name.toLowerCase())) continue
     const base = projectSchema(resolved.schema)
+    const description = nonEmptyString(resolved.description)
     merged.set(`${location}:${name}`, {
       name,
       location: location as ParameterLocation,
       required: resolved.required === true || location === "path",
       schema: {
         ...base,
-        ...(base.description === undefined && nonEmptyString(resolved.description) !== undefined
-          ? { description: nonEmptyString(resolved.description) }
-          : {}),
+        ...(base.description === undefined && description !== undefined ? { description } : {}),
       },
     })
   }
@@ -342,7 +310,6 @@ const isJsonMediaType = (mediaType: string): boolean => {
   return normalized === "application/json" || normalized.endsWith("+json")
 }
 
-/** The schema of the JSON media-type entry in an OpenAPI `content` record, if declared. */
 const jsonContentSchema = (content: Record<string, unknown>): unknown => {
   const entry = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
   return entry !== undefined && isRecord(entry[1]) ? entry[1].schema : undefined
@@ -357,7 +324,6 @@ const inputSchema = (
     { name: "path", location: "path" },
     { name: "query", location: "query" },
     { name: "headers", location: "header" },
-    { name: "cookies", location: "cookie" },
   ]
   const grouped = groups.flatMap((group) => {
     const items = parameters.filter((parameter) => parameter.location === group.location)
@@ -378,10 +344,7 @@ const inputSchema = (
     ...grouped.filter((group) => group.required).map((group) => group.name),
     ...(body?.required === true ? ["body"] : []),
   ]
-  return withDefinitions(
-    { type: "object", properties, ...(required.length === 0 ? {} : { required }) },
-    definitions,
-  )
+  return withDefinitions({ type: "object", properties, ...(required.length === 0 ? {} : { required }) }, definitions)
 }
 
 const outputSchema = (
@@ -391,29 +354,23 @@ const outputSchema = (
 ): JsonSchema | undefined => {
   if (!isRecord(operation.responses)) return undefined
   const entries = Object.entries(operation.responses)
-  // Literal 2xx codes, then the 2XX wildcard range. `default` typically
-  // describes errors, so it is consulted only when no success response exists.
   const successes = [
     ...entries.filter(([status]) => /^2\d\d$/.test(status)).sort(([a], [b]) => a.localeCompare(b)),
     ...entries.filter(([status]) => status.toUpperCase() === "2XX"),
   ]
-  const candidates = (successes.length > 0 ? successes : entries.filter(([status]) => status === "default"))
     .map(([, ref]) => resolve(document, ref))
     .filter(isRecord)
-  // The first candidate declaring a JSON schema wins, even when an earlier
-  // sibling has no content (e.g. "200": no content plus "201": JSON).
-  for (const response of candidates) {
+  for (const response of successes) {
     const schema = jsonContentSchema(isRecord(response.content) ? response.content : {})
     if (schema !== undefined) return withDefinitions(projectSchema(schema), definitions)
   }
-  // Declared content without a usable JSON schema (e.g. text/plain): the tool
-  // returns the raw body, so advertise unknown rather than a wrong null.
-  const declaresContent = candidates.some(
+  // Declared non-JSON content (e.g. text/plain) returns the raw body -> unknown.
+  const declaresContent = successes.some(
     (response) => isRecord(response.content) && Object.keys(response.content).length > 0,
   )
   if (declaresContent) return undefined
-  // Only no-content success responses (e.g. 204) remain: the tool resolves to null.
-  return candidates.length > 0 ? { type: "null" } : undefined
+  // No-content success (e.g. 204) -> null.
+  return successes.length > 0 ? { type: "null" } : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -437,27 +394,15 @@ const operationName = (
   return next(2)
 }
 
-const specServerUrl = (document: Document, variables: Readonly<Record<string, string>>): string | Skip => {
+const specServerUrl = (document: Document): string | Skip => {
   const server = asArray(document.servers).find(isRecord)
   const url = server === undefined ? undefined : nonEmptyString(server.url)
   if (url === undefined) return { reason: "spec declares no servers; pass baseUrl" }
-  const defaults = isRecord(server?.variables) ? server.variables : {}
-  const substituted = url.replaceAll(/\{([^{}]+)\}/g, (whole, name: string) => {
-    const explicit = variables[name]
-    if (explicit !== undefined) return explicit
-    const declared = defaults[name]
-    return (isRecord(declared) ? nonEmptyString(declared.default) : undefined) ?? whole
-  })
-  if (/\{[^{}]+\}/.test(substituted)) {
-    return { reason: `server URL has unresolved variables: ${url}; pass baseUrl or serverVariables` }
+  // Templated or relative server URLs cannot be resolved by the adapter.
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url) || /\{[^{}]+\}/.test(url)) {
+    return { reason: `server URL '${url}' is not an absolute URL; pass baseUrl` }
   }
-  // OpenAPI allows relative server URLs (resolved against the document's own
-  // location), which the adapter cannot resolve; skip instead of generating
-  // tools whose every call fails with a transport error.
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(substituted)) {
-    return { reason: `spec declares a relative server URL '${substituted}'; pass baseUrl` }
-  }
-  return substituted
+  return url
 }
 
 // ---------------------------------------------------------------------------
@@ -530,26 +475,12 @@ type AppliedAuth = {
 const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const value = isRecord(input) ? input : {}
-    const path = isRecord(value.path) ? value.path : {}
     const query = isRecord(value.query) ? value.query : {}
     const headers = isRecord(value.headers) ? value.headers : {}
-    const cookies = isRecord(value.cookies) ? value.cookies : {}
 
-    // Cheap local validation runs before auth resolution so an unsendable call
-    // never triggers credential work (e.g. a token refresh).
-    const url = buildUrl(plan, path)
+    // Local validation before auth resolution, which may refresh tokens.
+    const url = buildUrl(plan, isRecord(value.path) ? value.path : {})
     if (url instanceof ToolError) return yield* Effect.fail(url)
-    const hostHeaders = new Set(Object.keys(plan.headers).map((name) => name.toLowerCase()))
-    for (const parameter of plan.parameters) {
-      if (parameter.location === "path" || !parameter.required) continue
-      // A required header parameter is satisfied by a static host header.
-      if (parameter.location === "header" && hostHeaders.has(parameter.name.toLowerCase())) continue
-      const group = parameter.location === "query" ? query : parameter.location === "header" ? headers : cookies
-      const item = group[parameter.name]
-      if (item === undefined || item === null) {
-        return yield* Effect.fail(toolError(`Missing required ${parameter.location} parameter '${parameter.name}'.`))
-      }
-    }
     if (plan.body?.required === true && value.body === undefined) {
       return yield* Effect.fail(toolError("Missing required request body."))
     }
@@ -561,8 +492,9 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
       if (parameter.location !== "query") continue
       const item = query[parameter.name]
       if (item === undefined || item === null) continue
-      for (const rendered of queryValues(item)) {
-        request = HttpClientRequest.appendUrlParam(request, parameter.name, rendered)
+      const rendered = Array.isArray(item) ? item.map(renderPrimitive) : [renderPrimitive(item)]
+      for (const one of rendered) {
+        request = HttpClientRequest.appendUrlParam(request, parameter.name, one)
       }
     }
     for (const [name, item] of Object.entries(auth.query)) {
@@ -576,21 +508,7 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
       if (item === undefined || item === null) continue
       request = HttpClientRequest.setHeader(request, parameter.name, renderPrimitive(item))
     }
-    // Auth cookies come first and shadow model cookie parameters with the same
-    // name (servers take the first occurrence). Model values are encoded so a
-    // value containing ';' or '=' cannot inject extra cookie pairs; host
-    // credentials are trusted and sent verbatim.
-    const cookiePairs = [
-      ...Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`),
-      ...plan.parameters
-        .filter((parameter) => parameter.location === "cookie" && auth.cookies[parameter.name] === undefined)
-        .flatMap((parameter) => {
-          const item = cookies[parameter.name]
-          return item === undefined || item === null
-            ? []
-            : [`${parameter.name}=${encodeURIComponent(renderPrimitive(item))}`]
-        }),
-    ]
+    const cookiePairs = Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`)
     if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
     request = HttpClientRequest.setHeaders(request, auth.headers)
     if (plan.body !== undefined && value.body !== undefined) {
@@ -606,7 +524,7 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
         ),
       )
     const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
-    const parsed = parseBody(text)
+    const parsed = text === "" ? null : Option.getOrElse(decodeJson(text), () => text)
     if (response.status < 200 || response.status >= 300) {
       return yield* Effect.fail(
         toolError(
@@ -617,9 +535,6 @@ const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, Htt
     return parsed
   })
 
-const parseBody = (text: string): unknown =>
-  text === "" ? null : Option.getOrElse(decodeJson(text), () => text)
-
 const summarizeBody = (body: unknown): string => {
   const rendered = typeof body === "string" ? body : (JSON.stringify(body) ?? "")
   if (rendered === "" || rendered === "null") return "no response body"
@@ -628,9 +543,6 @@ const summarizeBody = (body: unknown): string => {
 
 const renderPrimitive = (value: unknown): string =>
   typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)
-
-const queryValues = (value: unknown): ReadonlyArray<string> =>
-  Array.isArray(value) ? value.map(renderPrimitive) : [renderPrimitive(value)]
 
 const buildUrl = (plan: Plan, path: Readonly<Record<string, unknown>>): string | ToolError => {
   let url = plan.url
@@ -648,11 +560,9 @@ const buildUrl = (plan: Plan, path: Readonly<Record<string, unknown>>): string |
 }
 
 /**
- * Applies the operation's effective security. The requirement list is OR (first
- * satisfiable alternative wins, in spec order); schemes inside one requirement
- * are AND (all must resolve). `{}` in the list means unauthenticated is
- * acceptable. `resolve` returning `undefined` skips to the next alternative;
- * a `resolve` failure aborts the call.
+ * Applies the operation's effective security: the first satisfiable OR
+ * alternative wins in spec order, every scheme within it must resolve (AND),
+ * and `{}` means unauthenticated is acceptable.
  */
 const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
   Effect.gen(function* () {
@@ -660,11 +570,29 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
     if (plan.security.length === 0) return none
 
     const unavailable: Array<string> = []
-    for (const requirement of plan.security) {
-      if (Object.keys(requirement).length === 0) return none
-      const credentials = yield* collectCredentials(plan, requirement, unavailable)
-      if (credentials === undefined) continue
-      const applied = applyCredentials(plan.operation, credentials)
+    alternatives: for (const requirement of plan.security) {
+      const names = Object.keys(requirement)
+      if (names.length === 0) return none
+      const credentials: Array<readonly [SecurityScheme, Credential]> = []
+      for (const name of names) {
+        const scheme = plan.schemes[name]
+        if (scheme === undefined || plan.auth === undefined) {
+          unavailable.push(name)
+          continue alternatives
+        }
+        const credential = yield* plan.auth.resolve({
+          schemeName: name,
+          scheme,
+          scopes: requirement[name] ?? [],
+          operation: plan.operation,
+        })
+        if (credential === undefined) {
+          unavailable.push(name)
+          continue alternatives
+        }
+        credentials.push([scheme, credential])
+      }
+      const applied = applyCredentials(credentials)
       return applied instanceof ToolError ? yield* Effect.fail(applied) : applied
     }
 
@@ -675,61 +603,25 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
     )
   })
 
-/**
- * Resolves every scheme in one AND requirement. Returns `undefined` when a
- * scheme is unknown or its credential is unavailable (recording the name in
- * `unavailable`), so the caller can try the next OR alternative.
- */
-const collectCredentials = (plan: Plan, requirement: SecurityRequirement, unavailable: Array<string>) =>
-  Effect.gen(function* () {
-    const credentials: Array<readonly [SecurityScheme, Credential]> = []
-    for (const name of Object.keys(requirement)) {
-      const scheme = plan.schemes[name]
-      if (scheme === undefined || plan.auth === undefined) {
-        unavailable.push(name)
-        return undefined
-      }
-      const credential = yield* plan.auth.resolve({
-        schemeName: name,
-        scheme,
-        scopes: requirement[name] ?? [],
-        operation: plan.operation,
-      })
-      if (credential === undefined) {
-        unavailable.push(name)
-        return undefined
-      }
-      credentials.push([scheme, credential])
-    }
-    return credentials
-  })
-
-const applyCredentials = (
-  operation: Operation,
-  credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>,
-): AppliedAuth | ToolError => {
+const applyCredentials = (credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>): AppliedAuth | ToolError => {
   const headers: Record<string, string> = {}
   const query: Record<string, string> = {}
   const cookies: Record<string, string> = {}
-  // Two credentials landing on the same carrier cannot both be sent.
-  const write = (target: Record<string, string>, name: string, value: string, carrier: string) => {
-    if (target[name] !== undefined) {
-      return toolError(
-        `${operation.method} ${operation.path} security requires two credentials on the '${name}' ${carrier}; this cannot be satisfied.`,
-      )
+  for (const [scheme, credential] of credentials) {
+    if (credential.type === "bearer") {
+      headers["authorization"] = `Bearer ${credential.token}`
+      continue
     }
-    target[name] = value
-    return undefined
-  }
-  const setHeader = (name: string, value: string) => write(headers, name.toLowerCase(), value, "header")
-  const writeCredential = (scheme: SecurityScheme, credential: Credential): ToolError | undefined => {
-    if (credential.type === "bearer") return setHeader("Authorization", `Bearer ${credential.token}`)
     if (credential.type === "basic") {
       // Buffer instead of btoa: btoa throws on non-Latin-1 credentials.
-      const encoded = Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")
-      return setHeader("Authorization", `Basic ${encoded}`)
+      headers["authorization"] =
+        `Basic ${Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")}`
+      continue
     }
-    if (credential.type === "header") return setHeader(credential.name, credential.value)
+    if (credential.type === "header") {
+      headers[credential.name.toLowerCase()] = credential.value
+      continue
+    }
     // apiKey: the carrier comes from the scheme declaration.
     const name = scheme.parameterName
     if (scheme.type !== "apiKey" || name === undefined || scheme.in === undefined) {
@@ -737,14 +629,9 @@ const applyCredentials = (
         `Security scheme '${scheme.name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
       )
     }
-    if (scheme.in === "header") return setHeader(name, credential.value)
-    if (scheme.in === "query") return write(query, name, credential.value, "query parameter")
-    return write(cookies, name, credential.value, "cookie")
-  }
-
-  for (const [scheme, credential] of credentials) {
-    const failure = writeCredential(scheme, credential)
-    if (failure !== undefined) return failure
+    if (scheme.in === "header") headers[name.toLowerCase()] = credential.value
+    if (scheme.in === "query") query[name] = credential.value
+    if (scheme.in === "cookie") cookies[name] = credential.value
   }
   return { headers, query, cookies }
 }

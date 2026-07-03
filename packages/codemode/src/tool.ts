@@ -169,7 +169,13 @@ const renderSchema = (
     }
     return alternatives.map((item) => renderSchema(item, ctx, depth + 1, seen)).join(" | ")
   }
-  if (schema.allOf) return schema.allOf.map((item) => renderSchema(item, ctx, depth + 1, seen)).join(" & ")
+  if (schema.allOf) {
+    // Parenthesize union members so `A & (B | null)` does not render as `A & B | null`.
+    return schema.allOf
+      .map((item) => renderSchema(item, ctx, depth + 1, seen))
+      .map((rendered) => (rendered.includes(" | ") ? `(${rendered})` : rendered))
+      .join(" & ")
+  }
   if (Array.isArray(schema.type)) {
     return schema.type.map((item) => renderSchema({ type: item }, ctx, depth + 1, seen)).join(" | ")
   }
