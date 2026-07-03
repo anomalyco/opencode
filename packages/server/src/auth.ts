@@ -1,6 +1,7 @@
 export * as ServerAuth from "./auth"
 
-import { Config as EffectConfig, Context, Effect, Layer, Option, Redacted } from "effect"
+import { Context, Effect, Layer, Option, Redacted } from "effect"
+import { all, option, string, withDefault } from "effect/Config"
 
 export type Credentials = {
   password?: string
@@ -27,9 +28,9 @@ export class Config extends Context.Service<Config, Info>()("@opencode/ServerAut
       this,
       Effect.gen(function* () {
         return Config.of(
-          yield* EffectConfig.all({
-            password: EffectConfig.string("OPENCODE_SERVER_PASSWORD").pipe(EffectConfig.option),
-            username: EffectConfig.string("OPENCODE_SERVER_USERNAME").pipe(EffectConfig.withDefault("opencode")),
+          yield* all({
+            password: string("OPENCODE_SERVER_PASSWORD").pipe(option),
+            username: string("OPENCODE_SERVER_USERNAME").pipe(withDefault("opencode")),
           }),
         )
       }),

@@ -1,10 +1,7 @@
 #!/usr/bin/env bun
 
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import * as NodeServices from "@effect/platform-node/NodeServices"
-import { NodeFileSystem } from "@effect/platform-node"
-import * as Effect from "effect/Effect"
-import { Layer, Logger, References } from "effect"
+import { NodeFileSystem, NodeRuntime, NodeServices } from "@effect/platform-node"
+import { Effect, Layer, Logger, References } from "effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Logging } from "@opencode-ai/core/observability/logging"
@@ -46,7 +43,11 @@ const Handlers = Runtime.handlers(Commands, {
   serve: () => import("./commands/handlers/serve"),
 })
 
-Effect.logInfo("cli starting", { version: InstallationVersion, channel: InstallationChannel, local: InstallationLocal }).pipe(
+Effect.logInfo("cli starting", {
+  version: InstallationVersion,
+  channel: InstallationChannel,
+  local: InstallationLocal,
+}).pipe(
   Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Updater.layer),

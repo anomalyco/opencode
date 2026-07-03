@@ -4,8 +4,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Global } from "@opencode-ai/core/global"
-import { Context, FileSystem, Layer, Option, Redacted, Schedule, Schema } from "effect"
-import * as Effect from "effect/Effect"
+import { Context, Effect, FileSystem, Layer, Option, Redacted, Schedule, Schema } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { createRoutes } from "@opencode-ai/server/routes"
@@ -60,7 +59,7 @@ export default Runtime.handler(
         if (!input.service && !input.stdio && !standalonePassword) console.log(`server password ${password}`)
         const updater = yield* Updater.Service
         yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
-        return yield* (input.stdio ? waitForStdinClose() : Effect.never)
+        return yield* input.stdio ? waitForStdinClose() : Effect.never
       }).pipe(Effect.annotateLogs({ role: "server" })),
     )
   }),

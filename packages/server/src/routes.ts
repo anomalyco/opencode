@@ -23,7 +23,7 @@ import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { PtyEnvironment } from "./pty-environment"
-import { layer as locationLayer } from "./location"
+import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 
@@ -82,7 +82,7 @@ function makeRoutes<AuthError, AuthServices>(
     Layer.provide(handlers),
     Layer.provide(formLocationLayer),
     Layer.provide(sessionLocationLayer),
-    Layer.provide(locationLayer),
+    Layer.provide(layer),
     Layer.provide(authorizationLayer),
     Layer.provide(schemaErrorLayer),
     Layer.provide(auth),
