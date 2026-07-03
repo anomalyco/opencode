@@ -21,9 +21,26 @@ describe("Ripgrep", () => {
     withTmp((cwd) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(cwd, "src")))
+        yield* Effect.promise(() => fs.mkdir(path.join(cwd, ".hidden")))
         yield* Effect.promise(() => fs.writeFile(path.join(cwd, "src", "match.ts"), "needle\n"))
+        yield* Effect.promise(() => fs.writeFile(path.join(cwd, ".hidden", "match.ts"), "needle\n"))
         const result = yield* (yield* Ripgrep.Service).glob({ cwd, pattern: "**/*.ts", limit: 10 })
         expect(result.map((item) => item.path)).toEqual([RelativePath.make("src/match.ts")])
+      }),
+    ),
+  )
+
+  it.live("globs explicitly named hidden directories", () =>
+    withTmp((cwd) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(path.join(cwd, ".hidden"), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(path.join(cwd, ".hidden", "resource.md"), "needle\n"))
+        yield* Effect.promise(() => fs.mkdir(path.join(cwd, "src", ".hidden"), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(path.join(cwd, "src", ".hidden", "resource.md"), "needle\n"))
+        const rootResult = yield* (yield* Ripgrep.Service).glob({ cwd, pattern: ".hidden/*", limit: 10 })
+        const nestedResult = yield* (yield* Ripgrep.Service).glob({ cwd, pattern: "src/.hidden/*", limit: 10 })
+        expect(rootResult.map((item) => item.path)).toEqual([RelativePath.make(".hidden/resource.md")])
+        expect(nestedResult.map((item) => item.path)).toEqual([RelativePath.make("src/.hidden/resource.md")])
       }),
     ),
   )
