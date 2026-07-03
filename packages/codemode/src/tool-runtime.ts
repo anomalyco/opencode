@@ -10,8 +10,9 @@ import {
   outputTypeScript,
   type Definition,
 } from "./tool.js"
-import { estimate } from "./token.js"
 import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
+
+const estimateTokens = (input: string) => Math.max(0, Math.round(input.length / 4))
 
 export type HostTool<R = never> = (...args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
 
@@ -438,7 +439,7 @@ export const discoveryPlan = <R>(
     picked: new Set<ToolDescription>(),
     queue: [...group].sort(
       (left, right) =>
-        estimate(catalogLine(left)) - estimate(catalogLine(right)) || left.path.localeCompare(right.path),
+        estimateTokens(catalogLine(left)) - estimateTokens(catalogLine(right)) || left.path.localeCompare(right.path),
     ),
   }))
   let used = 0
@@ -447,7 +448,7 @@ export const discoveryPlan = <R>(
     const stillActive: typeof active = []
     for (const selection of active) {
       const tool = selection.queue[0]!
-      const cost = estimate(catalogLine(tool))
+      const cost = estimateTokens(catalogLine(tool))
       if (used + cost > maxInlineCatalogTokens) continue
       selection.queue.shift()
       selection.picked.add(tool)
