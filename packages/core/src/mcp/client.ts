@@ -250,7 +250,7 @@ export const connect = Effect.fnUntraced(function* (
               { name: input.name, arguments: input.args ?? {} },
               CallToolResultSchema,
               // Keep progress tokens available without imposing a client timeout on tool execution.
-              { signal, onprogress: () => {} },
+              { signal, resetTimeoutOnProgress: true, onprogress: () => {} },
             ),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(
