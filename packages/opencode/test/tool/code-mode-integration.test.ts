@@ -176,7 +176,8 @@ describe("code mode integration (real MCP server)", () => {
     expect(description).toContain("// Add two numbers and return the structured sum")
     expect(description).not.toContain("$codemode")
     expect(description).toContain("## Workflow")
-    expect(description).toContain("`const res = await tools.<namespace>.<tool>(input)`")
+    expect(description).toContain("Do not infer or normalize tool names")
+    expect(description).toContain("bracket notation and quotes are part of the path")
     expect(description).not.toContain("total_count")
   })
 
