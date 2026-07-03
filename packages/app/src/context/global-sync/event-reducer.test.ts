@@ -541,6 +541,34 @@ describe("applyDirectoryEvent", () => {
     expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_3"])
   })
 
+  test("tracks global form lifecycles when session content is delegated", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: { type: "form.created", properties: { form: questionRequest("q_1", "global") } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      sessionContent: false,
+    })
+
+    expect(store.question.global?.map((x) => x.id)).toEqual(["q_1"])
+
+    applyDirectoryEvent({
+      event: { type: "form.cancelled", properties: { sessionID: "global", id: "q_1" } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      sessionContent: false,
+    })
+
+    expect(store.question.global).toEqual([])
+  })
+
   test("updates vcs branch in store and cache", () => {
     const [store, setStore] = createStore(baseState({ vcs: { branch: "main", default_branch: "main" } }))
     const [cacheStore, setCacheStore] = createStore({

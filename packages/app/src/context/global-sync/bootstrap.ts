@@ -321,8 +321,9 @@ export async function bootstrapDirectory(input: {
         retry(() =>
           input.sdk.v2.form.request.list().then((x) => {
             const forms: QuestionForm[] = (x.data?.data ?? []).flatMap((form) => (isQuestionForm(form) ? [form] : []))
-            const ids = forms.map((question) => question.sessionID).filter((sessionID) => sessionID !== "global")
-            const grouped = groupBySession(forms)
+            const global = forms.filter((question) => question.sessionID === "global")
+            const grouped = groupBySession(forms.filter((question) => question.sessionID !== "global"))
+            const ids = Object.keys(grouped)
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
               : warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk })
@@ -330,10 +331,21 @@ export async function bootstrapDirectory(input: {
               batch(() => {
                 const current = input.session?.data.question ?? input.store.question
                 for (const sessionID of Object.keys(current)) {
+                  if (sessionID === "global") continue
                   if (grouped[sessionID]) continue
-                  if (sessionID !== "global" && input.session?.get(sessionID)?.directory !== input.directory) continue
+                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
                   if (input.session) input.session.set("question", sessionID, [])
                   if (!input.session) input.setStore("question", sessionID, [])
+                }
+                if (global.length > 0 || input.store.question.global) {
+                  input.setStore(
+                    "question",
+                    "global",
+                    reconcile(
+                      global.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+                      { key: "id" },
+                    ),
+                  )
                 }
                 for (const [sessionID, questions] of Object.entries(grouped)) {
                   const value = reconcile(

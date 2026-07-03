@@ -120,7 +120,7 @@ export function applyDirectoryEvent(input: {
   permission?: State["permission"]
 }) {
   const event = input.event
-  if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type)) return
+  if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type) && !isGlobalQuestionEvent(event)) return
   const limit = Math.max(input.store.limit, input.retainedLimit ?? 0)
   switch (event.type) {
     case "server.instance.disposed": {
@@ -412,4 +412,14 @@ export function applyDirectoryEvent(input: {
       break
     }
   }
+}
+
+export function isGlobalQuestionEvent(event: { type: string; properties?: unknown }) {
+  if (event.type === "form.created") {
+    const form = (event.properties as { form?: unknown } | undefined)?.form
+    return isQuestionForm(form) && form.sessionID === "global"
+  }
+  if (event.type !== "form.replied" && event.type !== "form.cancelled") return false
+  const properties = event.properties as { sessionID?: unknown } | undefined
+  return properties?.sessionID === "global"
 }
