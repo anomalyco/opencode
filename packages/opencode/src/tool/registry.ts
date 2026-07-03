@@ -316,7 +316,7 @@ const layer = Layer.effect(
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema
               : undefined
-          const result: Tool.Def = {
+          return {
             id: tool.id,
             description: [
               output.description,
@@ -326,11 +326,10 @@ const layer = Layer.effect(
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
+            jsonSchema,
             execute: tool.execute,
+            formatValidationError: tool.formatValidationError,
           }
-          if (jsonSchema !== undefined) result.jsonSchema = jsonSchema
-          if (tool.formatValidationError !== undefined) result.formatValidationError = tool.formatValidationError
-          return result
         }),
         { concurrency: "unbounded" },
       )
