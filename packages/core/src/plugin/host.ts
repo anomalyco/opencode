@@ -248,7 +248,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         ),
     },
     tool: {
-      register: (input) => tools.register(input),
+      register: (input, options) => tools.register(input, options),
       execute: {
         before: (callback) =>
           toolHooks.hook.before((event) => {
