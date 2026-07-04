@@ -78,16 +78,24 @@ export type Result = {
 
 export type Skip = { readonly reason: string }
 
-export type ParameterLocation = "path" | "query" | "header"
+export type InputLocation = "path" | "query" | "header" | "body"
 
-export type Parameter = {
+export type InputField = {
+  /** Model-visible field name after cross-location collision handling. */
+  readonly inputName: string
+  /** Original parameter or body-property name used on the wire. */
   readonly name: string
-  readonly location: ParameterLocation
+  readonly location: InputLocation
   readonly required: boolean
   readonly schema: JsonSchema
 }
 
-export type Body = { readonly required: boolean; readonly schema: JsonSchema }
+export type Body = { readonly required: boolean; readonly mode: "object" | "value" }
+
+export type OperationInput = {
+  readonly fields: ReadonlyArray<InputField>
+  readonly body: Body | undefined
+}
 
 /** One OR alternative: scheme name -> required scopes. Empty object = unauthenticated is acceptable. */
 export type SecurityRequirement = Readonly<Record<string, ReadonlyArray<string>>>
@@ -95,7 +103,7 @@ export type SecurityRequirement = Readonly<Record<string, ReadonlyArray<string>>
 export type Plan = {
   readonly operation: Operation
   readonly url: string
-  readonly parameters: ReadonlyArray<Parameter>
+  readonly fields: ReadonlyArray<InputField>
   readonly body: Body | undefined
   readonly security: ReadonlyArray<SecurityRequirement>
   readonly schemes: Readonly<Record<string, SecurityScheme>>

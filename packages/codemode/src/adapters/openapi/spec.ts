@@ -1,8 +1,18 @@
 import type { JsonSchema } from "../../tool.js"
-import type { Body, Document, Parameter, ParameterLocation, SecurityRequirement, SecurityScheme, Skip } from "./types.js"
+import type {
+  Body,
+  Document,
+  InputField,
+  InputLocation,
+  OperationInput,
+  SecurityRequirement,
+  SecurityScheme,
+  Skip,
+} from "./types.js"
 
 export const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
-const parameterLocations = new Set(["path", "query", "header"])
+const parameterLocations = ["path", "query", "header"] as const
+const parameterLocationSet = new Set<string>(parameterLocations)
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
 const blockedOperationNames = new Set(["__proto__", "constructor", "prototype"])
@@ -108,25 +118,39 @@ const jsonContentSchema = (content: Record<string, unknown>): unknown => {
   return entry !== undefined && isRecord(entry[1]) ? entry[1].schema : undefined
 }
 
-export const operationParameters = (
+const isFlattenableObjectBody = (
+  schema: unknown,
+  requestRequired: boolean,
+): schema is Record<string, unknown> & { readonly properties: Record<string, unknown> } =>
+  isRecord(schema) &&
+  requestRequired &&
+  schema.type === "object" &&
+  isRecord(schema.properties) &&
+  schema.additionalProperties === false &&
+  schema.nullable !== true &&
+  schema.allOf === undefined &&
+  schema.anyOf === undefined &&
+  schema.oneOf === undefined
+
+export const operationInput = (
   document: Document,
   pathItem: Record<string, unknown>,
   operation: Record<string, unknown>,
-): ReadonlyArray<Parameter> => {
+): OperationInput | Skip => {
   // Operation-level parameters override path-level ones sharing (location, name).
-  const merged = new Map<string, Parameter>()
+  const merged = new Map<string, Omit<InputField, "inputName">>()
   for (const raw of [...asArray(pathItem.parameters), ...asArray(operation.parameters)]) {
     const resolved = resolve(document, raw)
     if (!isRecord(resolved)) continue
     const name = nonEmptyString(resolved.name)
     const location = nonEmptyString(resolved.in)
-    if (name === undefined || location === undefined || !parameterLocations.has(location)) continue
+    if (name === undefined || location === undefined || !parameterLocationSet.has(location)) continue
     if (location === "header" && ignoredHeaderParameters.has(name.toLowerCase())) continue
     const base = projectSchema(resolved.schema)
     const description = nonEmptyString(resolved.description)
     merged.set(`${location}:${name}`, {
       name,
-      location: location as ParameterLocation,
+      location: location as InputLocation,
       required: resolved.required === true || location === "path",
       schema: {
         ...base,
@@ -134,53 +158,71 @@ export const operationParameters = (
       },
     })
   }
-  return [...merged.values()]
-}
-
-export const requestBody = (document: Document, operation: Record<string, unknown>): Body | Skip | undefined => {
+  const fields: Array<Omit<InputField, "inputName">> = parameterLocations.flatMap((location) =>
+    [...merged.values()].filter((field) => field.location === location),
+  )
   const resolved = resolve(document, operation.requestBody)
-  if (!isRecord(resolved)) return undefined
-  const content = isRecord(resolved.content) ? resolved.content : {}
-  if (!Object.keys(content).some(isJsonMediaType)) {
-    const declared = Object.keys(content).join(", ") || "none"
-    return { reason: `request body has no JSON content (declared: ${declared})` }
-  }
+  const body: Body | Skip | undefined = (() => {
+    if (!isRecord(resolved)) return undefined
+    const content = isRecord(resolved.content) ? resolved.content : {}
+    if (!Object.keys(content).some(isJsonMediaType))
+      return { reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})` }
+    const source = jsonContentSchema(content)
+    const schema = resolve(document, source)
+    const required = resolved.required === true
+    if (!isFlattenableObjectBody(schema, required)) {
+      fields.push({ name: "body", location: "body", required, schema: projectSchema(source) })
+      return { required, mode: "value" } as const
+    }
+    const requiredProperties = new Set(
+      Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
+    )
+    fields.push(
+      ...Object.entries(schema.properties).map(([name, value]) => ({
+        name,
+        location: "body" as const,
+        required: required && requiredProperties.has(name),
+        schema: projectSchema(value),
+      })),
+    )
+    return { required, mode: "object" } as const
+  })()
+  if (body !== undefined && "reason" in body) return body
+
+  const conflicts = new Set(
+    [...Map.groupBy(fields, (field) => field.name)]
+      .filter(([, matches]) => new Set(matches.map((field) => field.location)).size > 1)
+      .map(([name]) => name),
+  )
+  const used = new Set<string>()
   return {
-    required: resolved.required === true,
-    schema: projectSchema(jsonContentSchema(content)),
+    fields: fields.map((field) => {
+      const base = conflicts.has(field.name) ? `${field.location}_${field.name}` : field.name
+      const next = (index: number): string => {
+        const candidate = index === 1 ? base : `${base}_${index}`
+        return used.has(candidate) ? next(index + 1) : candidate
+      }
+      const inputName = next(1)
+      used.add(inputName)
+      return { ...field, inputName }
+    }),
+    body,
   }
 }
 
 export const inputSchema = (
-  parameters: ReadonlyArray<Parameter>,
-  body: Body | undefined,
+  fields: ReadonlyArray<InputField>,
   definitions: Readonly<Record<string, JsonSchema>>,
 ): JsonSchema => {
-  const groups: ReadonlyArray<{ readonly name: string; readonly location: ParameterLocation }> = [
-    { name: "path", location: "path" },
-    { name: "query", location: "query" },
-    { name: "headers", location: "header" },
-  ]
-  const grouped = groups.flatMap((group) => {
-    const items = parameters.filter((parameter) => parameter.location === group.location)
-    if (items.length === 0) return []
-    const required = items.filter((item) => item.required).map((item) => item.name)
-    const schema: JsonSchema = {
+  const required = fields.filter((field) => field.required).map((field) => field.inputName)
+  return withDefinitions(
+    {
       type: "object",
-      properties: Object.fromEntries(items.map((item) => [item.name, item.schema])),
+      properties: Object.fromEntries(fields.map((field) => [field.inputName, field.schema])),
       ...(required.length === 0 ? {} : { required }),
-    }
-    return [{ name: group.name, schema, required: required.length > 0 }]
-  })
-  const properties = Object.fromEntries([
-    ...grouped.map((group) => [group.name, group.schema] as const),
-    ...(body === undefined ? [] : [["body", body.schema] as const]),
-  ])
-  const required = [
-    ...grouped.filter((group) => group.required).map((group) => group.name),
-    ...(body?.required === true ? ["body"] : []),
-  ]
-  return withDefinitions({ type: "object", properties, ...(required.length === 0 ? {} : { required }) }, definitions)
+    },
+    definitions,
+  )
 }
 
 export const outputSchema = (

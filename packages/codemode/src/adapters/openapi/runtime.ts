@@ -9,34 +9,29 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const value = isRecord(input) ? input : {}
-    const query = isRecord(value.query) ? value.query : {}
-    const headers = isRecord(value.headers) ? value.headers : {}
 
     // Local validation before auth resolution, which may refresh tokens.
-    const url = buildUrl(plan, isRecord(value.path) ? value.path : {})
+    const url = buildUrl(plan, value)
     if (url instanceof ToolError) return yield* Effect.fail(url)
-    if (plan.body?.required === true && value.body === undefined) {
-      return yield* Effect.fail(toolError("Missing required request body."))
-    }
-    for (const parameter of plan.parameters) {
-      if (!parameter.required || parameter.location === "path") continue
-      const source = parameter.location === "query" ? query : headers
-      const item = own(source, parameter.name)
-      if (item === undefined || item === null) {
-        return yield* Effect.fail(toolError(`Missing required ${parameter.location} parameter '${parameter.name}'.`))
+    for (const field of plan.fields) {
+      if (!field.required || field.location === "path") continue
+      const item = own(value, field.inputName)
+      if (item === undefined || (field.location !== "body" && item === null)) {
+        const label = field.location === "body" ? "body field" : `${field.location} parameter`
+        return yield* Effect.fail(toolError(`Missing required ${label} '${field.inputName}'.`))
       }
     }
 
     const auth = yield* resolveAuth(plan)
 
     let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
-    for (const parameter of plan.parameters) {
-      if (parameter.location !== "query") continue
-      const item = own(query, parameter.name)
+    for (const field of plan.fields) {
+      if (field.location !== "query") continue
+      const item = own(value, field.inputName)
       if (item === undefined || item === null) continue
       const rendered = Array.isArray(item) ? item.map(renderPrimitive) : [renderPrimitive(item)]
       for (const one of rendered) {
-        request = HttpClientRequest.appendUrlParam(request, parameter.name, one)
+        request = HttpClientRequest.appendUrlParam(request, field.name, one)
       }
     }
     for (const [name, item] of Object.entries(auth.query)) {
@@ -44,17 +39,29 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     }
     // Host headers first, then declared header params, then auth - auth must win.
     request = HttpClientRequest.setHeaders(request, plan.headers)
-    for (const parameter of plan.parameters) {
-      if (parameter.location !== "header") continue
-      const item = own(headers, parameter.name)
+    for (const field of plan.fields) {
+      if (field.location !== "header") continue
+      const item = own(value, field.inputName)
       if (item === undefined || item === null) continue
-      request = HttpClientRequest.setHeader(request, parameter.name, renderPrimitive(item))
+      request = HttpClientRequest.setHeader(request, field.name, renderPrimitive(item))
     }
     const cookiePairs = Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`)
     if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
     request = HttpClientRequest.setHeaders(request, auth.headers)
-    if (plan.body !== undefined && value.body !== undefined) {
-      request = HttpClientRequest.bodyJsonUnsafe(request, value.body)
+    if (plan.body?.mode === "value") {
+      const field = plan.fields.find((field) => field.location === "body")
+      const body = field === undefined ? undefined : own(value, field.inputName)
+      if (body !== undefined) request = HttpClientRequest.bodyJsonUnsafe(request, body)
+    }
+    if (plan.body?.mode === "object") {
+      const entries = plan.fields.flatMap((field) => {
+        if (field.location !== "body") return []
+        const item = own(value, field.inputName)
+        return item === undefined ? [] : [[field.name, item] as const]
+      })
+      if (plan.body.required || entries.length > 0) {
+        request = HttpClientRequest.bodyJsonUnsafe(request, Object.fromEntries(entries))
+      }
     }
 
     const client = yield* HttpClient.HttpClient
@@ -122,7 +129,9 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
     )
   })
 
-const applyCredentials = (credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>): AppliedAuth | ToolError => {
+const applyCredentials = (
+  credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>,
+): AppliedAuth | ToolError => {
   const headers: Record<string, string> = {}
   const query: Record<string, string> = {}
   const cookies: Record<string, string> = {}
@@ -158,21 +167,21 @@ const applyCredentials = (credentials: ReadonlyArray<readonly [SecurityScheme, C
 const renderPrimitive = (value: unknown): string =>
   typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)
 
-const buildUrl = (plan: Plan, path: Readonly<Record<string, unknown>>): string | ToolError => {
+const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string | ToolError => {
   let url = plan.url
-  for (const parameter of plan.parameters) {
-    if (parameter.location !== "path") continue
-    const item = own(path, parameter.name)
+  for (const field of plan.fields) {
+    if (field.location !== "path") continue
+    const item = own(input, field.inputName)
     if (item === undefined || item === null) {
-      return toolError(`Missing required path parameter '${parameter.name}'.`)
+      return toolError(`Missing required path parameter '${field.inputName}'.`)
     }
     const rendered = encodeURIComponent(renderPrimitive(item))
     // '.'/'..' survive encoding and URL normalization collapses them, letting a
     // model-supplied value retarget the request to a different endpoint.
     if (rendered === "" || rendered === "." || rendered === "..") {
-      return toolError(`Invalid path parameter '${parameter.name}'.`)
+      return toolError(`Invalid path parameter '${field.inputName}'.`)
     }
-    url = url.replaceAll(`{${parameter.name}}`, rendered)
+    url = url.replaceAll(`{${field.name}}`, rendered)
   }
   const unresolved = url.match(/\{[^{}]+\}/)
   if (unresolved !== null) return toolError(`Unresolved path parameter ${unresolved[0]}.`)

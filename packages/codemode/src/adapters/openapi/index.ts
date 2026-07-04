@@ -7,10 +7,9 @@ import {
   isRecord,
   methods,
   nonEmptyString,
+  operationInput,
   operationPath,
-  operationParameters,
   outputSchema,
-  requestBody,
   securityRequirements,
   securitySchemes,
   specServerUrl,
@@ -65,9 +64,9 @@ export const fromSpec = (options: Options): Result => {
         skipped.push({ method: operation.method, path, reason: base.reason })
         continue
       }
-      const body = requestBody(document, operationValue)
-      if (body !== undefined && "reason" in body) {
-        skipped.push({ method: operation.method, path, reason: body.reason })
+      const input = operationInput(document, pathValue, operationValue)
+      if ("reason" in input) {
+        skipped.push({ method: operation.method, path, reason: input.reason })
         continue
       }
 
@@ -76,8 +75,8 @@ export const fromSpec = (options: Options): Result => {
       const plan = {
         operation,
         url: `${base.replace(/\/+$/, "")}${path}`,
-        parameters: operationParameters(document, pathValue, operationValue),
-        body,
+        fields: input.fields,
+        body: input.body,
         security,
         schemes,
         auth: options.auth,
@@ -90,7 +89,7 @@ export const fromSpec = (options: Options): Result => {
         segments,
         Tool.make({
           description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
-          input: inputSchema(plan.parameters, body, definitions),
+          input: inputSchema(input.fields, definitions),
           output: outputSchema(document, operationValue, definitions),
           run: (input) => invoke(plan, input),
         }),
