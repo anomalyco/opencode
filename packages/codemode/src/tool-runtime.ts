@@ -10,8 +10,9 @@ import {
   outputTypeScript,
   type Definition,
 } from "./tool.js"
-import { estimate } from "./token.js"
 import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
+
+const estimateTokens = (input: string) => Math.max(0, Math.round(input.length / 4))
 
 export type HostTool<R = never> = (...args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
 
@@ -19,18 +20,22 @@ export type HostTools<R = never> = {
   [name: string]: HostTool<R> | Definition<R> | HostTools<R>
 }
 
-export type Services<Tools> = Tools extends (...args: Array<unknown>) => Effect.Effect<unknown, unknown, infer R>
-  ? R
-  : Tools extends {
-        readonly _tag: "CodeModeTool"
-        readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
-      }
+export type Services<Tools> = ServicesOf<Tools, []>
+
+type ServicesOf<Tools, Depth extends ReadonlyArray<unknown>> = Depth["length"] extends 8
+  ? never
+  : Tools extends (...args: Array<unknown>) => Effect.Effect<unknown, unknown, infer R>
     ? R
-    : Tools extends object
-      ? string extends keyof Tools
-        ? never
-        : Services<Tools[keyof Tools]>
-      : never
+    : Tools extends {
+          readonly _tag: "CodeModeTool"
+          readonly run: (input: unknown) => Effect.Effect<unknown, unknown, infer R>
+        }
+      ? R
+      : Tools extends object
+        ? string extends keyof Tools
+          ? ServicesOf<Tools[string], [...Depth, unknown]>
+          : ServicesOf<Tools[keyof Tools], [...Depth, unknown]>
+        : never
 
 /** Minimal audit record retained for each admitted tool call. */
 export type ToolCall = {
@@ -290,17 +295,16 @@ const definitions = <R>(
   return entries
 }
 
-const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDescription => ({
-  path,
-  description: definition.description,
-  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition)}): Promise<${outputTypeScript(definition)}>`,
-})
-
 const visibleDefinitions = <R>(tools: HostTools<R>) =>
-  definitions(tools).flatMap(({ path, definition }) => {
-    const description = describeDefinition(path, definition)
-    return [{ path, definition, description }]
-  })
+  definitions(tools).map(({ path, definition }) => ({
+    path,
+    definition,
+    description: {
+      path,
+      description: definition.description,
+      signature: `${toolExpression(path)}(input: ${inputTypeScript(definition)}): Promise<${outputTypeScript(definition)}>`,
+    },
+  }))
 
 export const catalog = <R>(tools: HostTools<R>): ReadonlyArray<ToolDescription> =>
   visibleDefinitions(tools).map(({ description }) => description)
@@ -351,16 +355,10 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
-const firstLine = (text: string) => text.split("\n", 1)[0]!.trim()
-
-/** One-line description used on inline catalog lines; the full text stays in search results. */
-const brief = (text: string, max = 120) => {
-  const line = firstLine(text)
-  return line.length > max ? line.slice(0, max - 1) + "..." : line
-}
-
 const catalogLine = (tool: ToolDescription) => {
-  const description = brief(tool.description)
+  // Inline catalog lines use only a compact first line; full text stays in search results.
+  const line = tool.description.split("\n", 1)[0]!.trim()
+  const description = line.length > 120 ? line.slice(0, 119) + "..." : line
   return description === "" ? `  - ${tool.signature}` : `  - ${tool.signature} // ${description}`
 }
 
@@ -430,7 +428,7 @@ export const discoveryPlan = <R>(
     picked: new Set<ToolDescription>(),
     queue: [...group].sort(
       (left, right) =>
-        estimate(catalogLine(left)) - estimate(catalogLine(right)) || left.path.localeCompare(right.path),
+        estimateTokens(catalogLine(left)) - estimateTokens(catalogLine(right)) || left.path.localeCompare(right.path),
     ),
   }))
   let used = 0
@@ -439,7 +437,7 @@ export const discoveryPlan = <R>(
     const stillActive: typeof active = []
     for (const selection of active) {
       const tool = selection.queue[0]!
-      const cost = estimate(catalogLine(tool))
+      const cost = estimateTokens(catalogLine(tool))
       if (used + cost > maxInlineCatalogTokens) continue
       selection.queue.shift()
       selection.picked.add(tool)
@@ -636,9 +634,6 @@ export type ToolRuntime<R = never> = {
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
-const failureMessage = (error: unknown): string =>
-  error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
-
 export const make = <R>(
   tools: HostTools<R>,
   /** Undefined means unlimited tool calls. */
@@ -657,9 +652,16 @@ export const make = <R>(
     const startedAt = Date.now()
     return effect.pipe(
       Effect.tap(() => onEnd({ ...call, durationMs: Date.now() - startedAt, outcome: "success" })),
-      Effect.tapError((error) =>
-        onEnd({ ...call, durationMs: Date.now() - startedAt, outcome: "failure", message: failureMessage(error) }),
-      ),
+      Effect.tapError((error) => {
+        const message =
+          error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
+        return onEnd({
+          ...call,
+          durationMs: Date.now() - startedAt,
+          outcome: "failure",
+          message,
+        })
+      }),
     )
   }
 

@@ -152,6 +152,33 @@ interface ExecuteFailure {
 
 `onToolCallEnd` receives `{ index, name, input, durationMs, outcome, message? }` when an admitted call settles. `outcome` is `"success"` or `"failure"`; `message` is the model-safe failure message and is present only on failure. Interrupted calls (for example when the execution timeout fires) do not produce an end event. Both hooks are Effect-returning and must not fail.
 
+### OpenAPI tools
+
+`OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Dotted `operationId` values form namespaces such as `v2.session.get`. Missing IDs receive a flat method/path fallback such as `getUsersById`; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+
+```ts
+import { CodeMode, OpenAPI } from "@opencode-ai/codemode"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const api = OpenAPI.fromSpec({
+  spec: await Bun.file("openapi.json").json(), // parsed document (no YAML)
+  auth: {
+    resolve: ({ name, scopes, operation }) =>
+      name === "BearerAuth"
+        ? Effect.succeed({ type: "bearer", token })
+        : Effect.succeed(undefined),
+  },
+})
+
+const runtime = CodeMode.make({ tools: { opencode: api.tools } })
+const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+`fromSpec` is synchronous and returns `{ tools, skipped }`. The initial adapter supports query `form`/`deepObject`, path/header `simple`, JSON request bodies, JSON responses, and text responses; unsupported parameter encodings, non-JSON request bodies, binary responses, and streaming operations land in `skipped` instead of producing broken tools. Operation and path servers take precedence over document servers unless `baseUrl` explicitly overrides all of them. Tool inputs flatten path, query, header, and closed object-body fields into one model-facing object while retaining their HTTP locations internally. Cross-location name collisions receive a location prefix such as `path_id` and `query_id`; composed, nullable, dictionary, conditionally-required, and non-object JSON bodies remain under `body`. Auth is never model-visible. Responses are limited to 50 MiB, and non-2xx responses become safe tool failures carrying the status and a size-capped body summary. Deferred capabilities are tracked in `src/openapi/TODO.md`.
+
+Supported bearer, basic, header, and query authentication follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the compiler. Cookie authentication alternatives are discarded; an operation is skipped when it has no supported alternative. See the option docstrings in `src/openapi/types.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution. The supplied client owns redirect policy; credentialed hosts should reject redirects or strip credentials when the origin changes.
+
 ## Discovery
 
 The agent-tool instructions use a budgeted catalog. Every tool namespace is always listed with its tool count regardless of budget, and as many complete tool signatures (each with a one-line description) as fit an estimated-token budget are inlined. Selection is round-robin across namespaces for fairness: in each round (namespaces alphabetical), every namespace still holding un-inlined tools attempts to place its next-cheapest signature line against the shared budget, and a namespace whose next line does not fit drops out while the others keep going - so every namespace gets some representation before any namespace gets everything. The instructions state exactly how comprehensive the list is, both overall (`COMPLETE list` vs `PARTIAL - N of M shown`) and per namespace (`(3 tools)`, `(3 tools, 1 shown)`, `(3 tools, none shown)`).

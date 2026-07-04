@@ -159,8 +159,8 @@ describe("pretty signature rendering", () => {
       $ref: "#/$defs/Node",
       $defs: { Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" }, name: { type: "string" } } } },
     } as const
-    expect(jsonSchemaToTypeScript(cyclic)).toBe("{ child?: Node; name?: string }")
-    expect(jsonSchemaToTypeScript(cyclic, true)).toContain("child?: Node")
+    expect(jsonSchemaToTypeScript(cyclic)).toBe("{ child?: unknown; name?: string }")
+    expect(jsonSchemaToTypeScript(cyclic, true)).toContain("child?: unknown")
 
     let deep: Record<string, unknown> = { type: "string" }
     for (let level = 0; level < 12; level += 1) deep = { type: "object", properties: { next: deep } }
@@ -169,6 +169,43 @@ describe("pretty signature rendering", () => {
       expect(rendered).toContain("unknown")
       expect(rendered).toContain("next?:")
     }
+  })
+
+  test("intersects ref and union siblings instead of discarding them", () => {
+    expect(
+      jsonSchemaToTypeScript({
+        $ref: "#/$defs/User",
+        properties: { active: { type: "boolean" } },
+        required: ["active"],
+        $defs: {
+          User: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+      }),
+    ).toBe("{ id: string } & { active: boolean }")
+    expect(
+      jsonSchemaToTypeScript({
+        type: "object",
+        properties: { common: { type: "boolean" } },
+        required: ["common"],
+        anyOf: [
+          { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+          { type: "object", properties: { count: { type: "number" } }, required: ["count"] },
+        ],
+      }),
+    ).toBe("({ name: string } | { count: number }) & { common: boolean }")
+    expect(jsonSchemaToTypeScript({ $ref: "https://example.com/schema.json" })).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        $ref: "#/$defs/User/properties/id",
+        $defs: { User: { type: "object" }, id: { type: "string" } },
+      }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        type: ["object", "null"],
+        properties: { name: { type: "string" } },
+      }),
+    ).toBe("{ name?: string } | null")
   })
 })
 
@@ -267,6 +304,32 @@ describe("union schemas render every alternative", () => {
     })
     expect(inputTypeScript(tool)).toBe("{ value?: string | number }")
     expect(outputTypeScript(tool)).toBe("number | boolean")
+  })
+
+  test("allOf renders intersections with parenthesized union members", () => {
+    const schema = {
+      allOf: [
+        { type: "object", properties: { id: { type: "string" } } },
+        { type: ["string", "null"] },
+      ],
+    } as const
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
+  })
+
+  test("allOf does not discard an unresolved constraint", () => {
+    expect(jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { $ref: "https://example.com/external.json" }] })).toBe(
+      "unknown",
+    )
+    expect(
+      jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }] }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        type: "string",
+        allOf: [{ $ref: "#/$defs/Constraint" }],
+        $defs: { Constraint: { description: "TypeScript-neutral constraint" } },
+      }),
+    ).toBe("string")
   })
 })
 
