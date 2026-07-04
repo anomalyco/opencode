@@ -130,6 +130,7 @@ const context = createContext<{
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
   models: () => ModelV2Info[]
+  messages: () => SessionMessage[]
   tui: ReturnType<typeof useTuiConfig>
 }>()
 
@@ -883,6 +884,7 @@ export function Session() {
           groupExploration,
           diffWrapMode,
           models,
+          messages,
           tui: tuiConfig,
         }}
       >
@@ -1229,9 +1231,17 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
 function SessionSwitchMessageV2(props: { message: SessionMessage }) {
   const ctx = use()
   const { theme } = useTheme()
+  const previousModel = () => {
+    const index = ctx.messages().findIndex((message) => message.id === props.message.id)
+    const previous = ctx
+      .messages()
+      .slice(0, index)
+      .findLast((message) => message.type === "model-switched" || message.type === "assistant")
+    return previous?.type === "model-switched" || previous?.type === "assistant" ? previous.model : undefined
+  }
   const text = () => {
     if (props.message.type === "agent-switched") return `Switched agent to ${props.message.agent}`
-    if (props.message.type === "model-switched") return switchLabel(props.message.model, ctx.models())
+    if (props.message.type === "model-switched") return switchLabel(props.message.model, ctx.models(), previousModel())
     return ""
   }
   return <text fg={theme.textMuted}>{text()}</text>
