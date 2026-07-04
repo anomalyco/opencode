@@ -31,6 +31,7 @@
     "./terminal-win32": "./src/terminal-win32.ts",
     "./config/keybind": "./src/config/keybind.ts",
     "./keymap": "./src/keymap.tsx",
+    "./prompt/content": "./src/prompt/content.ts",
     "./prompt/display": "./src/prompt/display.ts",
     "./plugin/runtime": "./src/plugin/runtime.tsx",
     "./plugin/slots": "./src/plugin/slots.tsx",

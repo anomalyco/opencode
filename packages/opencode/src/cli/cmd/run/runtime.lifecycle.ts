@@ -12,9 +12,8 @@ import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
-import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
-import { Session as SessionApi } from "@/session/session"
+import { isDefaultTitle } from "@/session/title"
 import * as Locale from "@/util/locale"
 import { resolveInteractiveStdin } from "./runtime.stdin"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
@@ -64,7 +63,7 @@ export type LifecycleInput = {
   agent: string | undefined
   model: RunInput["model"]
   variant: string | undefined
-  tuiConfig: RunTuiConfig
+  tuiConfig: RunTuiConfig | Promise<RunTuiConfig>
   backgroundSubagents: boolean
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onQuestionReply: (input: QuestionReply) => void | Promise<void>
@@ -108,7 +107,7 @@ function shutdown(renderer: CliRenderer): void {
 }
 
 function splashInfo(title: string | undefined, history: RunPrompt[]) {
-  if (title && !SessionApi.isDefaultTitle(title)) {
+  if (title && !isDefaultTitle(title)) {
     return {
       title,
       showSession: true,
@@ -168,6 +167,7 @@ function queueSplash(
 // the entry splash, RunFooter takes over the footer region.
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
   const source = resolveInteractiveStdin()
+  const footerTask = import("./footer")
   let unregisterKeymap: (() => void) | undefined
 
   try {
@@ -186,10 +186,10 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       consoleMode: "disabled",
       clearOnShutdown: false,
     })
-    const theme = await resolveRunTheme(renderer)
+    const [theme, tuiConfig] = await Promise.all([resolveRunTheme(renderer), input.tuiConfig])
     renderer.setBackgroundColor(theme.background)
     const keymap = createDefaultOpenTuiKeymap(renderer)
-    unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.tuiConfig)
+    unregisterKeymap = registerOpencodeKeymap(keymap, renderer, tuiConfig)
     const state: SplashState = {
       entry: false,
       exit: false,
@@ -204,7 +204,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       model: input.model,
       variant: input.variant,
     })
-    const footerTask = import("./footer")
     const wrote = queueSplash(
       renderer,
       state,
@@ -236,9 +235,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       theme,
       wrote,
       keymap,
-      tuiConfig: input.tuiConfig,
+      tuiConfig,
       backgroundSubagents: input.backgroundSubagents,
-      diffStyle: input.tuiConfig.diff_style ?? "auto",
+      diffStyle: tuiConfig.diff_style ?? "auto",
       onPermissionReply: input.onPermissionReply,
       onQuestionReply: input.onQuestionReply,
       onQuestionReject: input.onQuestionReject,
@@ -252,6 +251,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           return
         }
 
+        const { openEditor } = await import("@opencode-ai/tui/editor")
         await renderer.idle().catch(() => {})
         const ignore = () => {}
         detachSigint()

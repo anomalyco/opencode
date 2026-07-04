@@ -159,9 +159,11 @@ export async function resolveCurrentSession(
   sessionID: string,
   limit = LIMIT,
 ): Promise<RunSession> {
-  const response = await sdk.v2.session.messages({ sessionID, limit, order: "desc" }, { throwOnError: true })
+  const [response, session] = await Promise.all([
+    sdk.v2.session.messages({ sessionID, limit, order: "desc" }, { throwOnError: true }),
+    sdk.v2.session.get({ sessionID }, { throwOnError: true }),
+  ])
   const messages = response.data.data.toReversed()
-  const session = await sdk.v2.session.get({ sessionID }, { throwOnError: true })
   return {
     first: messages.length === 0,
     turns: messages.flatMap((message) => {

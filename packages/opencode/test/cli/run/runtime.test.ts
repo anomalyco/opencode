@@ -301,14 +301,17 @@ describe("run interactive runtime", () => {
     expect(legacyCommands).not.toHaveBeenCalled()
   })
 
-  test("paints before resolving the catalog-selected model", async () => {
+  test("defers catalog-selected model resolution until after first paint", async () => {
     const sdk = new OpencodeClient()
     const defaultStarted = defer<void>()
     const releaseDefault = defer<void>()
     const lifecycleStarted = defer<void>()
+    const painted = defer<void>()
     const modelShown = defer<void>()
+    let defaultRequested = false
     const events: FooterEvent[] = []
     const api = footer(events)
+    api.idle = () => painted.promise
     const event = api.event
     api.event = (value) => {
       event(value)
@@ -318,6 +321,7 @@ describe("run interactive runtime", () => {
     }
 
     spyOn(sdk.v2.model, "default").mockImplementation(async () => {
+      defaultRequested = true
       defaultStarted.resolve()
       await releaseDefault.promise
       return ok({
@@ -382,8 +386,10 @@ describe("run interactive runtime", () => {
       },
     )
 
-    await defaultStarted.promise
     await lifecycleStarted.promise
+    expect(defaultRequested).toBe(false)
+    painted.resolve()
+    await defaultStarted.promise
     releaseDefault.resolve()
     await modelShown.promise
     await task
@@ -393,6 +399,49 @@ describe("run interactive runtime", () => {
       model: "gpt-5 · openai",
       selection: { providerID: "openai", modelID: "gpt-5" },
     })
+  })
+
+  test("does not start deferred work after the footer closes", async () => {
+    const sdk = new OpencodeClient()
+    const lifecycleStarted = defer<void>()
+    const painted = defer<void>()
+    const api = footer()
+    api.idle = () => painted.promise
+    const defaultModel = spyOn(sdk.v2.model, "default")
+
+    const task = runInteractiveMode(
+      {
+        sdk,
+        directory: "/tmp",
+        sessionID: "ses-closed",
+        resume: false,
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+        thinking: false,
+        backgroundSubagents: false,
+      },
+      {
+        createRuntimeLifecycle: async () => {
+          lifecycleStarted.resolve()
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+      },
+    )
+
+    await lifecycleStarted.promise
+    api.close()
+    painted.resolve()
+    await task
+
+    expect(defaultModel).not.toHaveBeenCalled()
   })
 
   test("retains last-known-good state across failed coalesced refreshes and retries later", async () => {

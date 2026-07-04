@@ -111,9 +111,10 @@ export async function waitForDefaultModel(input: {
   sdk: OpencodeClient
   directory: string
   timeoutMs?: number
+  active?: () => boolean
 }): Promise<{ providerID: string; modelID: string } | undefined> {
   const deadline = Date.now() + (input.timeoutMs ?? 5_000)
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && (input.active?.() ?? true)) {
     const model = await input.sdk.v2.model
       .default(location(input.directory), { throwOnError: true })
       .then((result) => result.data?.data)

@@ -105,7 +105,7 @@ export class RunScrollbackStream {
   ) {
     this.diffStyle = options.diffStyle
     this.sessionID = options.sessionID
-    this.treeSitterClient = options.treeSitterClient ?? getTreeSitterClient()
+    this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
     this.onThemeRelease = options.onThemeRelease
   }
@@ -151,6 +151,7 @@ export class RunScrollbackStream {
       startOnNewLine: entryFlags(commit).startOnNewLine,
     })
     const style = entryLook(commit, this.theme.entry)
+    const treeSitterClient = body.type === "text" ? undefined : (this.treeSitterClient ??= getTreeSitterClient())
     const renderable =
       body.type === "text"
         ? new TextRenderable(surface.renderContext, {
@@ -170,7 +171,7 @@ export class RunScrollbackStream {
               drawUnstyledText: false,
               streaming: true,
               fg: entryColor(commit, this.theme),
-              treeSitterClient: this.treeSitterClient,
+              treeSitterClient,
             })
           : new MarkdownRenderable(surface.renderContext, {
               content: "",
@@ -180,7 +181,7 @@ export class RunScrollbackStream {
               internalBlockMode: "top-level",
               tableOptions: { widthMode: "content" },
               fg: entryColor(commit, this.theme),
-              treeSitterClient: this.treeSitterClient,
+              treeSitterClient,
             })
 
     surface.root.add(renderable)
