@@ -88,7 +88,9 @@ export const Plugin = {
                   ),
                 )
             }).pipe(
-              Effect.mapError(() => new ToolFailure({ message: `Unable to find files matching ${input.pattern}` })),
+              Effect.mapError(
+                (error) => new ToolFailure({ message: `Unable to find files matching ${input.pattern}`, error }),
+              ),
             ),
         }),
       })

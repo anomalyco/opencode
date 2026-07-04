@@ -18,8 +18,7 @@ export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 export const MAX_CAPTURE_BYTES = 1024 * 1024
 
-const BACKGROUND_STARTED =
-  "The command has not completed; it is now running in the background."
+const BACKGROUND_STARTED = "The command has not completed; it is now running in the background."
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
@@ -245,9 +244,9 @@ export const Plugin = {
                 }
               }
 
-              const result = yield* runtime.job.block({ id: job.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)),
-              )
+              const result = yield* runtime.job
+                .block({ id: job.id, sessionID: context.sessionID })
+                .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
                 return {
@@ -258,14 +257,19 @@ export const Plugin = {
                   ...(warnings.length ? { warnings } : {}),
                 }
               }
-              if (result?.info.status === "error") return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
+              if (result?.info.status === "error")
+                return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
               if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
 
               return {
                 ...(yield* settleShell()),
                 ...(warnings.length ? { warnings } : {}),
               }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
+            }).pipe(
+              Effect.mapError(
+                (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
+              ),
+            ),
         }),
       })
       .pipe(Effect.orDie)

@@ -622,6 +622,9 @@ const layer = Layer.effectDiscard(
         })
       }),
     )
+    yield* events.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
+    yield* events.project(SessionEvent.Execution.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
     yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Skill.Activated, (event) =>
@@ -648,7 +651,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
+    yield* events.project(SessionEvent.RetryScheduled, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
       db

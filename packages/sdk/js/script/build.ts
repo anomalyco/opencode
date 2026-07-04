@@ -60,7 +60,7 @@ if (schemas) {
   visit({ ...document, components: { ...document.components, schemas: undefined } })
   for (const name of Object.keys(schemas)) {
     if (
-      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionSettled|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetried|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1$/.test(
+      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1$/.test(
         name,
       ) &&
       !reachable.has(name)
@@ -100,17 +100,23 @@ await createClient({
 const generatedTypesPath = "./src/v2/gen/types.gen.ts"
 const generatedTypes = await Bun.file(generatedTypesPath).text()
 if (
-  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionSettled|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetried|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1 =/.test(
+  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1 =/.test(
     generatedTypes,
   )
 ) {
   throw new Error("Session history generated duplicate Session event variants")
 }
-const logTypesPatched = generatedTypes.replace(
-  /(export type V2SessionLogData = \{[\s\S]*?query\?: \{\s*after\?: )string/,
-  "$1number",
-)
-if (logTypesPatched === generatedTypes) {
+const duplicateSessionErrorStart = generatedTypes.indexOf("export type SessionStructuredError2 =")
+const duplicateSessionErrorEnd = generatedTypes.indexOf("\n\nexport type ", duplicateSessionErrorStart + 1)
+if (duplicateSessionErrorStart === -1 || duplicateSessionErrorEnd === -1) {
+  throw new Error("Session structured error duplicate prune did not apply")
+}
+const sessionErrorTypesPatched =
+  generatedTypes.slice(0, duplicateSessionErrorStart) + generatedTypes.slice(duplicateSessionErrorEnd + 2)
+const logTypesPatched = sessionErrorTypesPatched
+  .replaceAll("SessionStructuredError2", "SessionStructuredError")
+  .replace(/(export type V2SessionLogData = \{[\s\S]*?query\?: \{\s*after\?: )string/, "$1number")
+if (logTypesPatched === sessionErrorTypesPatched) {
   throw new Error("Session log numeric query patch did not apply")
 }
 const sessionListTypesPatched = logTypesPatched.replace(
@@ -128,11 +134,14 @@ if (sessionMessagesTypesPatched === sessionListTypesPatched) {
   throw new Error("Session messages numeric query patch did not apply")
 }
 const eventSubscribeTypesPatched = sessionMessagesTypesPatched.replace(
-  /(export type V2EventSubscribeResponses = \{\s*\/\*\*[\s\S]*?\*\/\s*200: )\{\s*id: string \| null;?\s*event: string;?\s*data: V2EventStreamV2;?\s*\};?/,
+  /(export type V2EventSubscribeResponses = \{\s*\/\*\*[\s\S]*?\*\/\s*200: )\{\s*id: string \| null;?\s*event: string;?\s*data: V2EventStream(?:V2)?;?\s*\};?/,
   "$1V2Event",
 )
 if (eventSubscribeTypesPatched === sessionMessagesTypesPatched) {
   throw new Error("Event subscribe response patch did not apply")
+}
+if (/SessionStructuredError\d/.test(eventSubscribeTypesPatched)) {
+  throw new Error("Session structured error generated a name-mangled duplicate")
 }
 await Bun.write(generatedTypesPath, eventSubscribeTypesPatched)
 

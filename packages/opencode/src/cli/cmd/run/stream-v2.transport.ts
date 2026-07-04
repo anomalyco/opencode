@@ -785,7 +785,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         event.data.tokens.cache.write
       const usage = total > 0 ? total.toLocaleString() : ""
       write([], {
-        phase: event.data.finish === "tool-calls" ? "running" : "idle",
         usage: event.data.cost ? `${usage} · ${money.format(event.data.cost)}` : usage,
       })
       return
@@ -798,21 +797,33 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       write([{ kind: "error", source: "system", text: errorMessage(event.data.error), phase: "start" }])
       return
     }
-    if (event.type === "session.execution.settled") {
+    if (event.type === "session.execution.started") {
+      write([], { phase: "running" })
+      return
+    }
+    if (
+      event.type === "session.execution.succeeded" ||
+      event.type === "session.execution.failed" ||
+      event.type === "session.execution.interrupted"
+    ) {
       write([], { phase: "idle", status: "" })
       const current = state.wait
       if (!current || (!current.promoted && !current.interrupted)) return
       state.wait = undefined
-      if (current.interrupted) {
+      if (current.interrupted && event.type === "session.execution.interrupted" && event.data.reason === "user") {
         current.resolve()
         return
       }
-      if (event.data.outcome === "failure") {
+      if (event.type === "session.execution.failed") {
         if (current.failureRendered) {
           current.resolve()
           return
         }
-        current.reject(new Error(event.data.error ? errorMessage(event.data.error) : "Session execution failed"))
+        current.reject(new Error(errorMessage(event.data.error)))
+        return
+      }
+      if (event.type === "session.execution.interrupted") {
+        current.reject(new Error(`Session interrupted: ${event.data.reason}`))
         return
       }
       current.resolve()

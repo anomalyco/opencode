@@ -1214,6 +1214,15 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
+      <Show when={props.message.retry}>
+        {(retry) => (
+          <box paddingLeft={3} marginTop={1}>
+            <text fg={theme.textMuted}>
+              Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
+            </text>
+          </box>
+        )}
+      </Show>
       <box paddingLeft={3} marginTop={props.message.error ? 1 : 0}>
         <text>
           <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
@@ -1551,6 +1560,15 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
         >
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
+      </Show>
+      <Show when={props.message.retry}>
+        {(retry) => (
+          <box paddingLeft={3} marginTop={1}>
+            <text fg={theme.textMuted}>
+              Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
+            </text>
+          </box>
+        )}
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error}>

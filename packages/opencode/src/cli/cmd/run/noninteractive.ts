@@ -165,8 +165,8 @@ export async function runNonInteractivePrompt(input: Input) {
         }
       }
       if (
-        event.type === "session.execution.settled" &&
-        event.data.outcome === "interrupted" &&
+        event.type === "session.execution.interrupted" &&
+        event.data.reason === "user" &&
         (interrupted || permissionRejected || questionRejected || formCancelled)
       ) {
         return
@@ -351,16 +351,25 @@ export async function runNonInteractivePrompt(input: Input) {
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
-      if (event.type === "session.execution.settled") {
-        if (event.data.outcome === "failure" && !emittedError && !questionRejected && !formCancelled) {
+      if (event.type === "session.execution.failed") {
+        if (!emittedError && !questionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
-          const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
-          if (!emit("error", time, { error })) UI.error(error.message)
+          if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         }
-        if (event.data.outcome === "interrupted" && interrupted) process.exitCode = 130
         return
       }
+      if (event.type === "session.execution.interrupted") {
+        if (event.data.reason === "user" && interrupted) process.exitCode = 130
+        if (event.data.reason !== "user" && !emittedError) {
+          emittedError = true
+          process.exitCode = 1
+          const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
+          if (!emit("error", time, { error })) UI.error(error.message)
+        }
+        return
+      }
+      if (event.type === "session.execution.succeeded") return
     }
   }
 

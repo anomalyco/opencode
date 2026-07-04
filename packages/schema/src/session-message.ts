@@ -5,11 +5,13 @@ import { optional } from "./schema.js"
 import { ToolContent } from "./llm.js"
 import { Model } from "./model.js"
 import { FileAttachment, Prompt } from "./prompt.js"
-import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema.js"
+import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { ascending } from "./identifier.js"
 import { Event } from "./event.js"
 import { Shell as ShellSchema } from "./shell.js"
+import { FinishReason } from "./llm.js"
+import { SessionError } from "./session-error.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
@@ -19,12 +21,6 @@ export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
   })),
 )
 export type ID = typeof ID.Type
-
-export interface UnknownError extends Schema.Schema.Type<typeof UnknownError> {}
-export const UnknownError = Schema.Struct({
-  type: Schema.Literal("unknown"),
-  message: Schema.String,
-}).annotate({ identifier: "Session.Error.Unknown" })
 
 const Base = {
   id: ID,
@@ -127,7 +123,7 @@ export const ToolStateError = Schema.Struct({
   input: Schema.Record(Schema.String, Schema.Unknown),
   content: ToolContent.pipe(Schema.Array),
   structured: Schema.Record(Schema.String, Schema.Unknown),
-  error: UnknownError,
+  error: SessionError.Error,
   result: Schema.Unknown.pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
@@ -175,6 +171,13 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
 )
 export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool
 
+export interface AssistantRetry extends Schema.Schema.Type<typeof AssistantRetry> {}
+export const AssistantRetry = Schema.Struct({
+  attempt: PositiveInt,
+  at: DateTimeUtcFromMillis,
+  error: SessionError.Error,
+}).annotate({ identifier: "Session.Message.Assistant.Retry" })
+
 export interface Assistant extends Schema.Schema.Type<typeof Assistant> {}
 export const Assistant = Schema.Struct({
   ...Base,
@@ -187,7 +190,7 @@ export const Assistant = Schema.Struct({
     end: Schema.String.pipe(optional),
     files: Schema.Array(RelativePath).pipe(optional),
   }).pipe(optional),
-  finish: Schema.String.pipe(optional),
+  finish: FinishReason.pipe(optional),
   cost: Schema.Finite.pipe(optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
@@ -195,7 +198,8 @@ export const Assistant = Schema.Struct({
     reasoning: Schema.Finite,
     cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
   }).pipe(optional),
-  error: UnknownError.pipe(optional),
+  error: SessionError.Error.pipe(optional),
+  retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),

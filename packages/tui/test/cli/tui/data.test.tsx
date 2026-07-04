@@ -7,7 +7,8 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { onMount } from "solid-js"
 import { ProjectProvider } from "../../../src/context/project"
 import { SDKProvider } from "../../../src/context/sdk"
-import { DataProvider, useData } from "../../../src/context/data"
+import { DataProvider, mergeActiveSessionStatus, useData } from "../../../src/context/data"
+import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createClient, createEventStream, createFetch, directory, json } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
@@ -26,6 +27,24 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: V2Event)
 function durable(sessionID: string, seq = 0, version = 1) {
   return { aggregateID: sessionID, seq, version }
 }
+
+test("active bootstrap preserves newer lifecycle status", () => {
+  expect(
+    mergeActiveSessionStatus(
+      { "snapshot-active": {} },
+      { "started-during-bootstrap": "running", "stopped-during-bootstrap": "idle" },
+      new Map([
+        ["started-during-bootstrap", 2],
+        ["stopped-during-bootstrap", 3],
+      ]),
+      1,
+    ),
+  ).toEqual({
+    "snapshot-active": "running",
+    "started-during-bootstrap": "running",
+    "stopped-during-bootstrap": "idle",
+  })
+})
 
 test("refreshes resources into reactive getters", async () => {
   const events = createEventStream()
@@ -244,9 +263,11 @@ test("tracks session status from active sessions and execution events", async ()
       return json({ data: { "session-active": { type: "running" } }, watermarks: {} })
   }, events)
   let data!: ReturnType<typeof useData>
+  let rows!: SessionRow[]
 
   function Probe() {
     data = useData()
+    rows = createSessionRows(() => "session-retry")
     return <box />
   }
 
@@ -267,6 +288,15 @@ test("tracks session status from active sessions and execution events", async ()
     expect(data.session.status("session-idle")).toBe("idle")
 
     emitEvent(events, {
+      id: "evt_execution_started",
+      created: 0,
+      type: "session.execution.started",
+      durable: durable("session-live"),
+      data: { sessionID: "session-live" },
+    })
+    await wait(() => data.session.status("session-live") === "running")
+
+    emitEvent(events, {
       id: "evt_step_started",
       created: 0,
       type: "session.step.started",
@@ -278,8 +308,6 @@ test("tracks session status from active sessions and execution events", async ()
         model: { id: "model", providerID: "provider" },
       },
     })
-    await wait(() => data.session.status("session-live") === "running")
-
     emitEvent(events, {
       id: "evt_step_ended",
       created: 0,
@@ -300,15 +328,22 @@ test("tracks session status from active sessions and execution events", async ()
     expect(data.session.status("session-live")).toBe("running")
 
     emitEvent(events, {
-      id: "evt_execution_settled",
+      id: "evt_execution_succeeded",
       created: 0,
-      type: "session.execution.settled",
-      data: {
-        sessionID: "session-live",
-        outcome: "success",
-      },
+      type: "session.execution.succeeded",
+      durable: durable("session-live", 1, 3),
+      data: { sessionID: "session-live" },
     })
     await wait(() => data.session.status("session-live") === "idle")
+
+    emitEvent(events, {
+      id: "evt_failed_execution_started",
+      created: 0,
+      type: "session.execution.started",
+      durable: durable("session-failed"),
+      data: { sessionID: "session-failed" },
+    })
+    await wait(() => data.session.status("session-failed") === "running")
 
     emitEvent(events, {
       id: "evt_failed_step_started",
@@ -322,8 +357,6 @@ test("tracks session status from active sessions and execution events", async ()
         model: { id: "model", providerID: "provider" },
       },
     })
-    await wait(() => data.session.status("session-failed") === "running")
-
     emitEvent(events, {
       id: "evt_step_failed",
       created: 0,
@@ -332,26 +365,112 @@ test("tracks session status from active sessions and execution events", async ()
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
-        error: { type: "unknown", message: "Provider unavailable" },
+        error: { type: "provider.content-filter", message: "Provider blocked the response" },
       },
     })
     await wait(() => {
       const assistant = data.session.message.get("session-failed", "message-failed")
-      return assistant?.type === "assistant" && assistant.finish === "error"
+      return (
+        assistant?.type === "assistant" &&
+        assistant.finish === "error" &&
+        assistant.error?.type === "provider.content-filter"
+      )
     })
     expect(data.session.status("session-failed")).toBe("running")
 
     emitEvent(events, {
-      id: "evt_failed_execution_settled",
+      id: "evt_failed_execution_failed",
       created: 0,
-      type: "session.execution.settled",
+      type: "session.execution.failed",
+      durable: durable("session-failed", 1, 3),
       data: {
         sessionID: "session-failed",
-        outcome: "failure",
-        error: { type: "unknown", message: "Provider unavailable" },
+        error: { type: "provider.content-filter", message: "Provider blocked the response" },
       },
     })
     await wait(() => data.session.status("session-failed") === "idle")
+
+    emitEvent(events, {
+      id: "evt_retry_execution_started",
+      created: 0,
+      type: "session.execution.started",
+      durable: durable("session-retry"),
+      data: { sessionID: "session-retry" },
+    })
+    emitEvent(events, {
+      id: "evt_retry_step_started",
+      created: 0,
+      type: "session.step.started",
+      durable: durable("session-retry", 1, 2),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_retry_scheduled",
+      created: 0,
+      type: "session.retry.scheduled",
+      durable: durable("session-retry", 1, 3),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        attempt: 2,
+        at: 2_000,
+        error: { type: "provider.transport", message: "Disconnected" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-retry", "message-retry")
+      return assistant?.type === "assistant" && assistant.retry?.attempt === 2
+    })
+    await wait(() => rows.some((row) => row.type === "assistant-footer" && row.messageID === "message-retry"))
+    emitEvent(events, {
+      id: "evt_retry_next_step",
+      created: 2_000,
+      type: "session.step.started",
+      durable: durable("session-retry", 1, 4),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-retry", "message-retry")
+      return assistant?.type === "assistant" && assistant.retry === undefined
+    })
+    await wait(() => !rows.some((row) => row.type === "assistant-footer" && row.messageID === "message-retry"))
+    expect(data.session.message.list("session-retry").filter((message) => message.type === "assistant")).toHaveLength(1)
+    emitEvent(events, {
+      id: "evt_retry_scheduled_again",
+      created: 2_000,
+      type: "session.retry.scheduled",
+      durable: durable("session-retry", 1, 5),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        attempt: 3,
+        at: 6_000,
+        error: { type: "provider.transport", message: "Disconnected again" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-retry", "message-retry")
+      return assistant?.type === "assistant" && assistant.retry?.attempt === 3
+    })
+    emitEvent(events, {
+      id: "evt_retry_interrupted",
+      created: 2_000,
+      type: "session.execution.interrupted",
+      durable: durable("session-retry", 1, 6),
+      data: { sessionID: "session-retry", reason: "shutdown" },
+    })
+    await wait(() => data.session.status("session-retry") === "idle")
+    expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
 
     emitEvent(events, {
       id: "evt_compaction_started",

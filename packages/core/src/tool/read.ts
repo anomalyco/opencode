@@ -106,7 +106,9 @@ export const Plugin = {
                   start: type === "directory" ? resolved : dirname(resolved),
                   stop: root,
                 })
-                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter((file) => dirname(file) !== root)
+                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
+                  (file) => dirname(file) !== root,
+                )
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(
@@ -130,7 +132,7 @@ export const Plugin = {
                   error instanceof Image.SizeError
                     ? error.message
                     : `Unable to read ${input.path}`
-                return new ToolFailure({ message })
+                return new ToolFailure({ message, error })
               }),
             )
           },

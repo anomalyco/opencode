@@ -12,6 +12,8 @@ import { definition, permission, registrationEntries, settle, type AnyTool, type
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "../effect/app-node"
+import { SessionError } from "@opencode-ai/schema/session-error"
+import { toSessionError } from "../session/to-session-error"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -40,6 +42,7 @@ export interface Settlement {
   readonly result: ToolResultValue
   readonly output?: ToolOutput
   readonly outputPaths?: ReadonlyArray<string>
+  readonly error?: SessionError.Error
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
@@ -60,9 +63,15 @@ const registryLayer = Layer.effect(
             type: "error" as const,
             value: advertised ? `Stale tool call: ${input.call.name}` : `Unknown tool: ${input.call.name}`,
           },
+          error: advertised
+            ? ({ type: "tool.stale", message: `Stale tool call: ${input.call.name}`, name: input.call.name } as const)
+            : ({ type: "tool.unknown", message: `Unknown tool: ${input.call.name}`, name: input.call.name } as const),
         }
       if (advertised && registration.identity !== advertised)
-        return { result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` } }
+        return {
+          result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` },
+          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}`, name: input.call.name },
+        }
       // Hooks fire only for hosted/local tools; provider-executed calls never reach settleWith.
       const beforeEvent: ToolHooks.BeforeEvent = {
         tool: input.call.name,
@@ -73,22 +82,33 @@ const registryLayer = Layer.effect(
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
-      const pending = yield* settle(registration.tool, { ...input.call, input: beforeEvent.input }, {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        assistantMessageID: input.assistantMessageID,
-        toolCallID: input.call.id,
-      }).pipe(
+      const pending = yield* settle(
+        registration.tool,
+        { ...input.call, input: beforeEvent.input },
+        {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          assistantMessageID: input.assistantMessageID,
+          toolCallID: input.call.id,
+        },
+      ).pipe(
         Effect.map((output) => ({ output })),
         Effect.catchTag("LLM.ToolFailure", (failure) =>
-          Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
+          Effect.succeed({
+            result: { type: "error" as const, value: failure.message },
+            error: toSessionError(failure),
+          }),
         ),
       )
       let settlement: Settlement
       if ("result" in pending) {
         settlement = pending
       } else {
-        const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output: pending.output })
+        const bounded = yield* resources.bound({
+          sessionID: input.sessionID,
+          toolCallID: input.call.id,
+          output: pending.output,
+        })
         const result = ToolOutput.toResultValue(bounded.output)
         settlement =
           result.type === "error"
@@ -115,6 +135,7 @@ const registryLayer = Layer.effect(
         result: afterEvent.result,
         ...(afterEvent.output !== undefined ? { output: afterEvent.output } : {}),
         ...(afterEvent.outputPaths !== undefined ? { outputPaths: afterEvent.outputPaths } : {}),
+        ...(settlement.error !== undefined ? { error: settlement.error } : {}),
       }
     })
 
@@ -157,7 +178,10 @@ const registryLayer = Layer.effect(
           settle: (input) => {
             const registration = registrations.get(input.call.name)
             if (registration) return settleWith(input, registration.identity)
-            return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
+            return Effect.succeed({
+              result: { type: "error", value: `Unknown tool: ${input.call.name}` },
+              error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}`, name: input.call.name },
+            })
           },
         }
       }),

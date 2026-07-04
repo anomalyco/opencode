@@ -8,6 +8,9 @@ export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schem
 })
 export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
 
+export const FinishReason = Schema.Literals(["stop", "length", "tool-calls", "content-filter", "error", "unknown"])
+export type FinishReason = typeof FinishReason.Type
+
 export interface ToolTextContent extends Schema.Schema.Type<typeof ToolTextContent> {}
 export const ToolTextContent = Schema.Struct({
   type: Schema.Literal("text"),

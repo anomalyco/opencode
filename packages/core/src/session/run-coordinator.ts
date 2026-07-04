@@ -3,7 +3,7 @@ export * as SessionRunCoordinator from "./run-coordinator"
 import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
-export interface Coordinator<Key, E> {
+export interface Coordinator<Key, E, Reason = never> {
   /** Snapshots keys with an execution owned by this coordinator. */
   readonly active: Effect.Effect<ReadonlySet<Key>>
   /** Starts an execution while idle, or joins the active execution and returns its exit. */
@@ -11,7 +11,7 @@ export interface Coordinator<Key, E> {
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key) => Effect.Effect<void>
   /** Stops the active execution, clears its doorbell, and waits for cleanup. No-op when idle. */
-  readonly interrupt: (key: Key) => Effect.Effect<void>
+  readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -23,11 +23,13 @@ export interface Coordinator<Key, E> {
  * closes the gap between a drain's last eligibility check and the idle transition, since
  * those cannot be one atomic step. `done` resolves joiners with this execution's exit.
  */
-type Execution<E> = {
+type Execution<E, Reason> = {
   readonly done: Deferred.Deferred<void, E>
   owner?: Fiber.Fiber<void>
   pendingWake: boolean
   stopping: boolean
+  settling: boolean
+  interruptionReason?: Reason
 }
 
 /**
@@ -41,19 +43,21 @@ type Execution<E> = {
  *                                      waiters get this exit
  * ```
  */
-export const make = <Key, E>(options: {
+export const make = <Key, E, Reason = never>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
+  /** Runs once when a process-local busy period begins, before its first drain. */
+  readonly started?: (key: Key) => Effect.Effect<void>
   /**
    * Runs in the execution fiber for every exit, including interruption, after the final
    * drain and before the execution settles (waiters resolve after it completes).
    */
-  readonly settled?: (key: Key, exit: Exit.Exit<void, E>) => Effect.Effect<void>
-}): Effect.Effect<Coordinator<Key, E>, never, Scope.Scope> =>
+  readonly settled?: (key: Key, exit: Exit.Exit<void, E>, reason?: Reason) => Effect.Effect<void>
+}): Effect.Effect<Coordinator<Key, E, Reason>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const executions = new Map<Key, Execution<E>>()
+    const executions = new Map<Key, Execution<E, Reason>>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
-    const loop = (key: Key, execution: Execution<E>, force: boolean): Effect.Effect<void, E> =>
+    const loop = (key: Key, execution: Execution<E, Reason>, force: boolean): Effect.Effect<void, E> =>
       Effect.suspend(() => options.drain(key, force)).pipe(
         Effect.flatMap(() =>
           Effect.suspend(() => {
@@ -66,15 +70,25 @@ export const make = <Key, E>(options: {
       )
 
     const start = (key: Key, force: boolean) => {
-      const execution: Execution<E> = { done: Deferred.makeUnsafe<void, E>(), pendingWake: false, stopping: false }
+      const execution: Execution<E, Reason> = {
+        done: Deferred.makeUnsafe<void, E>(),
+        pendingWake: false,
+        stopping: false,
+        settling: false,
+      }
       executions.set(key, execution)
       // The leading yield lets `owner` be assigned before the drain can settle, and keeps
       // failing self-waking executions from growing the stack across successor starts.
       // Drains start one tick after wake; callers observe progress through events or run.
       execution.owner = fork(
         Effect.yieldNow.pipe(
+          Effect.andThen(Effect.uninterruptible(options.started?.(key) ?? Effect.void)),
           Effect.andThen(loop(key, execution, force)),
-          Effect.onExit((exit) => options.settled?.(key, exit) ?? Effect.void),
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              execution.settling = true
+            }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
+          ),
           Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
           Effect.exit,
           Effect.asVoid,
@@ -85,7 +99,7 @@ export const make = <Key, E>(options: {
 
     // A doorbell that survives the execution loop (rung after the loop decided to end, or
     // during failure or interruption cleanup) starts a fresh execution for the remaining work.
-    const settle = (key: Key, execution: Execution<E>, exit: Exit.Exit<void, E>) => {
+    const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
       if (execution.pendingWake) start(key, false)
       else executions.delete(key)
       Deferred.doneUnsafe(execution.done, exit)
@@ -112,12 +126,13 @@ export const make = <Key, E>(options: {
         start(key, false)
       })
 
-    const interrupt = (key: Key): Effect.Effect<void> =>
+    const interrupt = (key: Key, reason?: Reason): Effect.Effect<void> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
-        if (execution?.owner === undefined) return Effect.void
+        if (execution?.owner === undefined || execution.stopping || execution.settling) return Effect.void
         execution.stopping = true
         execution.pendingWake = false
+        execution.interruptionReason = reason
         return Fiber.interrupt(execution.owner)
       })
 

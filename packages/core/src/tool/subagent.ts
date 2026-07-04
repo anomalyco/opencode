@@ -104,7 +104,9 @@ export const Plugin = {
               const parent = yield* runtime.session
                 .get(context.sessionID)
                 .pipe(
-                  Effect.mapError(() => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` })),
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                  ),
                 )
               const agent = yield* agents.resolve(input.agent)
               if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
@@ -123,7 +125,9 @@ export const Plugin = {
                   // session (V1 deriveSubagentSessionPermission). MVP uses the agent's own permissions.
                 })
                 .pipe(
-                  Effect.mapError(() => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` })),
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
+                  ),
                 )
 
               const background = input.background === true

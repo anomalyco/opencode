@@ -13,6 +13,19 @@ function reduce(data: ReturnType<typeof createSessionData>, event: unknown, thin
   })
 }
 
+function shell(status: "running" | "exited" = "running") {
+  return {
+    id: "sh_1",
+    status,
+    command: "pwd",
+    cwd: "/tmp",
+    shell: "/bin/sh",
+    file: "/tmp/shell-output",
+    metadata: {},
+    time: { started: 1, completed: status === "exited" ? 2 : undefined },
+  }
+}
+
 function assistant(id: string, extra: Record<string, unknown> = {}) {
   return {
     type: "message.updated",
@@ -332,9 +345,7 @@ describe("run session data", () => {
       type: "session.shell.started",
       properties: {
         sessionID: "session-1",
-        timestamp: 1,
-        callID: "call-1",
-        command: "pwd",
+        shell: shell(),
       },
     })
 
@@ -342,10 +353,10 @@ describe("run session data", () => {
       expect.objectContaining({
         kind: "tool",
         phase: "start",
-        partID: "shell:call-1",
+        partID: "shell:sh_1",
         tool: "bash",
         shell: {
-          callID: "call-1",
+          callID: "sh_1",
           command: "pwd",
         },
       }),
@@ -356,9 +367,8 @@ describe("run session data", () => {
       type: "session.shell.ended",
       properties: {
         sessionID: "session-1",
-        timestamp: 2,
-        callID: "call-1",
-        output: "/tmp/demo\n",
+        shell: shell("exited"),
+        output: { output: "/tmp/demo\n", cursor: 10, size: 10, truncated: false },
       },
     })
 
@@ -366,12 +376,12 @@ describe("run session data", () => {
       expect.objectContaining({
         kind: "tool",
         phase: "progress",
-        partID: "shell:call-1",
+        partID: "shell:sh_1",
         tool: "bash",
         text: "/tmp/demo\n",
         toolState: "completed",
         shell: {
-          callID: "call-1",
+          callID: "sh_1",
           command: "pwd",
         },
       }),
@@ -383,9 +393,7 @@ describe("run session data", () => {
       type: "session.shell.started",
       properties: {
         sessionID: "session-1",
-        timestamp: 1,
-        callID: "call-1",
-        command: "pwd",
+        shell: shell(),
       },
     }).data
 
@@ -395,7 +403,7 @@ describe("run session data", () => {
         tool({
           id: "tool-1",
           messageID: "msg-1",
-          callID: "call-1",
+          callID: "sh_1",
           tool: "bash",
           state: {
             status: "running",
@@ -412,9 +420,8 @@ describe("run session data", () => {
       type: "session.shell.ended",
       properties: {
         sessionID: "session-1",
-        timestamp: 2,
-        callID: "call-1",
-        output: "/tmp/demo\n",
+        shell: shell("exited"),
+        output: { output: "/tmp/demo\n", cursor: 10, size: 10, truncated: false },
       },
     }).data
 
@@ -424,7 +431,7 @@ describe("run session data", () => {
         tool({
           id: "tool-1",
           messageID: "msg-1",
-          callID: "call-1",
+          callID: "sh_1",
           tool: "bash",
           state: {
             status: "completed",
@@ -449,7 +456,7 @@ describe("run session data", () => {
       tool({
         id: "tool-1",
         messageID: "msg-1",
-        callID: "call-1",
+        callID: "sh_1",
         tool: "bash",
         state: {
           status: "running",
@@ -466,9 +473,7 @@ describe("run session data", () => {
         type: "session.shell.started",
         properties: {
           sessionID: "session-1",
-          timestamp: 1,
-          callID: "call-1",
-          command: "pwd",
+          shell: shell(),
         },
       }).commits,
     ).toEqual([])
@@ -478,7 +483,7 @@ describe("run session data", () => {
       tool({
         id: "tool-1",
         messageID: "msg-1",
-        callID: "call-1",
+        callID: "sh_1",
         tool: "bash",
         state: {
           status: "completed",
@@ -500,9 +505,8 @@ describe("run session data", () => {
         type: "session.shell.ended",
         properties: {
           sessionID: "session-1",
-          timestamp: 2,
-          callID: "call-1",
-          output: "/tmp/demo\n",
+          shell: shell("exited"),
+          output: { output: "/tmp/demo\n", cursor: 10, size: 10, truncated: false },
         },
       }).commits,
     ).toEqual([])

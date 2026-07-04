@@ -24,7 +24,10 @@ export type Event =
   | EventSessionForked
   | EventSessionPromptPromoted
   | EventSessionPromptAdmitted
-  | EventSessionExecutionSettled
+  | EventSessionExecutionStarted
+  | EventSessionExecutionSucceeded
+  | EventSessionExecutionFailed
+  | EventSessionExecutionInterrupted
   | EventSessionContextUpdated
   | EventSessionSynthetic
   | EventSessionSkillActivated
@@ -46,7 +49,7 @@ export type Event =
   | EventSessionToolProgress
   | EventSessionToolSuccess
   | EventSessionToolFailed
-  | EventSessionRetried
+  | EventSessionRetryScheduled
   | EventSessionCompactionStarted
   | EventSessionCompactionDelta
   | EventSessionCompactionEnded
@@ -919,11 +922,32 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.execution.settled"
+        type: "session.execution.started"
         properties: {
           sessionID: string
-          outcome: "success" | "failure" | "interrupted"
-          error?: SessionErrorUnknown
+        }
+      }
+    | {
+        id: string
+        type: "session.execution.succeeded"
+        properties: {
+          sessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.execution.failed"
+        properties: {
+          sessionID: string
+          error: SessionStructuredError
+        }
+      }
+    | {
+        id: string
+        type: "session.execution.interrupted"
+        properties: {
+          sessionID: string
+          reason: "user" | "shutdown" | "superseded"
         }
       }
     | {
@@ -994,7 +1018,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          finish: string
+          finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
           cost: number
           tokens: {
             input: number
@@ -1015,7 +1039,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          error: SessionErrorUnknown
+          error: SessionStructuredError
         }
       }
     | {
@@ -1153,7 +1177,7 @@ export type GlobalEvent = {
           sessionID: string
           assistantMessageID: string
           callID: string
-          error: SessionErrorUnknown
+          error: SessionStructuredError
           result?: unknown
           executed: boolean
           resultState?: SessionMessageProviderState
@@ -1161,11 +1185,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.retried"
+        type: "session.retry.scheduled"
         properties: {
           sessionID: string
+          assistantMessageID: string
           attempt: number
-          error: SessionRetryError
+          at: number
+          error: SessionStructuredError
         }
       }
     | {
@@ -1710,6 +1736,10 @@ export type GlobalEvent = {
     | SyncEventSessionForked
     | SyncEventSessionPromptPromoted
     | SyncEventSessionPromptAdmitted
+    | SyncEventSessionExecutionStarted
+    | SyncEventSessionExecutionSucceeded
+    | SyncEventSessionExecutionFailed
+    | SyncEventSessionExecutionInterrupted
     | SyncEventSessionContextUpdated
     | SyncEventSessionSynthetic
     | SyncEventSessionSkillActivated
@@ -1728,7 +1758,7 @@ export type GlobalEvent = {
     | SyncEventSessionToolProgress
     | SyncEventSessionToolSuccess
     | SyncEventSessionToolFailed
-    | SyncEventSessionRetried
+    | SyncEventSessionRetryScheduled
     | SyncEventSessionCompactionStarted
     | SyncEventSessionCompactionEnded
     | SyncEventSessionRevertStaged
@@ -2878,6 +2908,10 @@ export type SessionDurableEvent =
   | SessionForked
   | SessionPromptPromoted
   | SessionPromptAdmitted
+  | SessionExecutionStarted
+  | SessionExecutionSucceeded
+  | SessionExecutionFailed
+  | SessionExecutionInterrupted
   | SessionContextUpdated
   | SessionSynthetic
   | SessionSkillActivated
@@ -2896,7 +2930,7 @@ export type SessionDurableEvent =
   | SessionToolProgress
   | SessionToolSuccess
   | SessionToolFailed
-  | SessionRetried
+  | SessionRetryScheduled
   | SessionCompactionStarted
   | SessionCompactionEnded
   | SessionRevertStaged
@@ -3019,7 +3053,10 @@ export type V2Event =
   | SessionForked
   | SessionPromptPromoted
   | SessionPromptAdmitted
-  | SessionExecutionSettled
+  | SessionExecutionStarted
+  | SessionExecutionSucceeded
+  | SessionExecutionFailed
+  | SessionExecutionInterrupted
   | SessionContextUpdated
   | SessionSynthetic
   | SessionSkillActivated
@@ -3041,7 +3078,7 @@ export type V2Event =
   | SessionToolProgress
   | SessionToolSuccess
   | SessionToolFailed
-  | SessionRetried
+  | SessionRetryScheduled
   | SessionCompactionStarted
   | SessionCompactionDelta
   | SessionCompactionEnded
@@ -3258,10 +3295,83 @@ export type PromptAgentAttachment = {
   source?: PromptSource
 }
 
-export type SessionErrorUnknown = {
-  type: "unknown"
-  message: string
-}
+export type SessionStructuredError =
+  | {
+      type: "provider.rate-limit"
+      message: string
+      retryAfterMs?: number
+    }
+  | {
+      type: "provider.auth"
+      message: string
+    }
+  | {
+      type: "provider.quota"
+      message: string
+    }
+  | {
+      type: "provider.content-filter"
+      message: string
+    }
+  | {
+      type: "provider.transport"
+      message: string
+    }
+  | {
+      type: "provider.internal"
+      message: string
+    }
+  | {
+      type: "provider.invalid-output"
+      message: string
+    }
+  | {
+      type: "provider.invalid-request"
+      message: string
+    }
+  | {
+      type: "provider.no-route"
+      message: string
+    }
+  | {
+      type: "provider.unknown"
+      message: string
+    }
+  | {
+      type: "permission.rejected"
+      message: string
+      permission: string
+      resources: Array<string>
+    }
+  | {
+      type: "tool.unknown"
+      message: string
+      name: string
+    }
+  | {
+      type: "tool.stale"
+      message: string
+      name?: string
+    }
+  | {
+      type: "tool.execution"
+      message: string
+    }
+  | {
+      type: "tool.result-missing"
+      message: string
+      callID?: string
+    }
+  | {
+      type: "aborted"
+      message: string
+      reason?: "user" | "shutdown" | "timeout"
+    }
+  | {
+      type: "unknown"
+      message: string
+      agent?: string
+    }
 
 export type SessionMessageProviderState = {
   [key: string]: unknown
@@ -3280,19 +3390,6 @@ export type ToolFileContent = {
 }
 
 export type LlmToolContent = ToolTextContent | ToolFileContent
-
-export type SessionRetryError = {
-  message: string
-  statusCode?: number
-  isRetryable: boolean
-  responseHeaders?: {
-    [key: string]: string
-  }
-  responseBody?: string
-  metadata?: {
-    [key: string]: string
-  }
-}
 
 export type FileDiff = {
   path: string
@@ -3713,6 +3810,64 @@ export type SyncEventSessionPromptAdmitted = {
   }
 }
 
+export type SyncEventSessionExecutionStarted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.execution.started.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+    }
+  }
+}
+
+export type SyncEventSessionExecutionSucceeded = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.execution.succeeded.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+    }
+  }
+}
+
+export type SyncEventSessionExecutionFailed = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.execution.failed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      error: SessionStructuredError
+    }
+  }
+}
+
+export type SyncEventSessionExecutionInterrupted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.execution.interrupted.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      reason: "user" | "shutdown" | "superseded"
+    }
+  }
+}
+
 export type SyncEventSessionContextUpdated = {
   type: "sync"
   id: string
@@ -3828,7 +3983,7 @@ export type SyncEventSessionStepEnded = {
     data: {
       sessionID: string
       assistantMessageID: string
-      finish: string
+      finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
       cost: number
       tokens: {
         input: number
@@ -3856,7 +4011,7 @@ export type SyncEventSessionStepFailed = {
     data: {
       sessionID: string
       assistantMessageID: string
-      error: SessionErrorUnknown
+      error: SessionStructuredError
     }
   }
 }
@@ -4036,7 +4191,7 @@ export type SyncEventSessionToolFailed = {
       sessionID: string
       assistantMessageID: string
       callID: string
-      error: SessionErrorUnknown
+      error: SessionStructuredError
       result?: unknown
       executed: boolean
       resultState?: SessionMessageProviderState
@@ -4044,18 +4199,20 @@ export type SyncEventSessionToolFailed = {
   }
 }
 
-export type SyncEventSessionRetried = {
+export type SyncEventSessionRetryScheduled = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.retried.1"
+    type: "session.retry.scheduled.1"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
+      assistantMessageID: string
       attempt: number
-      error: SessionRetryError
+      at: number
+      error: SessionStructuredError
     }
   }
 }
@@ -4412,7 +4569,7 @@ export type SessionMessageToolStateError = {
   structured: {
     [key: string]: unknown
   }
-  error: SessionErrorUnknown
+  error: SessionStructuredError
   result?: unknown
 }
 
@@ -4436,6 +4593,12 @@ export type SessionMessageAssistantTool = {
   }
 }
 
+export type SessionMessageAssistantRetry = {
+  attempt: number
+  at: number
+  error: SessionStructuredError
+}
+
 export type SessionMessageAssistant = {
   id: string
   metadata?: {
@@ -4454,7 +4617,7 @@ export type SessionMessageAssistant = {
     end?: string
     files?: Array<string>
   }
-  finish?: string
+  finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   cost?: number
   tokens?: {
     input: number
@@ -4465,7 +4628,8 @@ export type SessionMessageAssistant = {
       write: number
     }
   }
-  error?: SessionErrorUnknown
+  error?: SessionStructuredError
+  retry?: SessionMessageAssistantRetry
 }
 
 export type SessionMessageCompaction = {
@@ -4637,6 +4801,80 @@ export type SessionPromptAdmitted = {
   }
 }
 
+export type SessionExecutionStarted = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.started"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+  }
+}
+
+export type SessionExecutionSucceeded = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.succeeded"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+  }
+}
+
+export type SessionExecutionFailed = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.failed"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    error: SessionStructuredError
+  }
+}
+
+export type SessionExecutionInterrupted = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.interrupted"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    reason: "user" | "shutdown" | "superseded"
+  }
+}
+
 export type SessionContextUpdated = {
   id: string
   created: number
@@ -4781,7 +5019,7 @@ export type SessionStepEnded = {
   data: {
     sessionID: string
     assistantMessageID: string
-    finish: string
+    finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
     cost: number
     tokens: {
       input: number
@@ -4813,7 +5051,7 @@ export type SessionStepFailed = {
   data: {
     sessionID: string
     assistantMessageID: string
-    error: SessionErrorUnknown
+    error: SessionStructuredError
   }
 }
 
@@ -5033,20 +5271,20 @@ export type SessionToolFailed = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    error: SessionErrorUnknown
+    error: SessionStructuredError
     result?: unknown
     executed: boolean
     resultState?: SessionMessageProviderState
   }
 }
 
-export type SessionRetried = {
+export type SessionRetryScheduled = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.retried"
+  type: "session.retry.scheduled"
   durable: {
     aggregateID: string
     seq: number
@@ -5055,8 +5293,10 @@ export type SessionRetried = {
   location?: LocationRef
   data: {
     sessionID: string
+    assistantMessageID: string
     attempt: number
-    error: SessionRetryError
+    at: number
+    error: SessionStructuredError
   }
 }
 
@@ -5680,21 +5920,6 @@ export type MessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
-  }
-}
-
-export type SessionExecutionSettled = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.execution.settled"
-  location?: LocationRef
-  data: {
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: SessionErrorUnknown
   }
 }
 
@@ -6783,13 +7008,37 @@ export type EventSessionPromptAdmitted = {
   }
 }
 
-export type EventSessionExecutionSettled = {
+export type EventSessionExecutionStarted = {
   id: string
-  type: "session.execution.settled"
+  type: "session.execution.started"
   properties: {
     sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: SessionErrorUnknown
+  }
+}
+
+export type EventSessionExecutionSucceeded = {
+  id: string
+  type: "session.execution.succeeded"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventSessionExecutionFailed = {
+  id: string
+  type: "session.execution.failed"
+  properties: {
+    sessionID: string
+    error: SessionStructuredError
+  }
+}
+
+export type EventSessionExecutionInterrupted = {
+  id: string
+  type: "session.execution.interrupted"
+  properties: {
+    sessionID: string
+    reason: "user" | "shutdown" | "superseded"
   }
 }
 
@@ -6867,7 +7116,7 @@ export type EventSessionStepEnded = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    finish: string
+    finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
     cost: number
     tokens: {
       input: number
@@ -6889,7 +7138,7 @@ export type EventSessionStepFailed = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    error: SessionErrorUnknown
+    error: SessionStructuredError
   }
 }
 
@@ -7040,20 +7289,22 @@ export type EventSessionToolFailed = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    error: SessionErrorUnknown
+    error: SessionStructuredError
     result?: unknown
     executed: boolean
     resultState?: SessionMessageProviderState
   }
 }
 
-export type EventSessionRetried = {
+export type EventSessionRetryScheduled = {
   id: string
-  type: "session.retried"
+  type: "session.retry.scheduled"
   properties: {
     sessionID: string
+    assistantMessageID: string
     attempt: number
-    error: SessionRetryError
+    at: number
+    error: SessionStructuredError
   }
 }
 
@@ -8084,11 +8335,6 @@ export type SessionMessageToolStateCompleted2 = {
   result?: unknown
 }
 
-export type SessionErrorUnknown2 = {
-  type: "unknown"
-  message: string
-}
-
 export type SessionMessageToolStateError2 = {
   status: "error"
   input: {
@@ -8098,7 +8344,7 @@ export type SessionMessageToolStateError2 = {
   structured: {
     [key: string]: unknown
   }
-  error: SessionErrorUnknown2
+  error: SessionStructuredError
   result?: unknown
 }
 
@@ -8122,6 +8368,12 @@ export type SessionMessageAssistantTool2 = {
   }
 }
 
+export type SessionMessageAssistantRetry2 = {
+  attempt: number
+  at: number
+  error: SessionStructuredError
+}
+
 export type SessionMessageAssistant2 = {
   id: string
   metadata?: {
@@ -8140,7 +8392,7 @@ export type SessionMessageAssistant2 = {
     end?: string
     files?: Array<string>
   }
-  finish?: string
+  finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   cost?: number
   tokens?: {
     input: number
@@ -8151,7 +8403,8 @@ export type SessionMessageAssistant2 = {
       write: number
     }
   }
-  error?: SessionErrorUnknown2
+  error?: SessionStructuredError
+  retry?: SessionMessageAssistantRetry2
 }
 
 export type SessionMessageCompaction2 = {
@@ -8326,6 +8579,80 @@ export type SessionPromptAdmitted2 = {
   }
 }
 
+export type SessionExecutionStarted2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.started"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    sessionID: string
+  }
+}
+
+export type SessionExecutionSucceeded2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.succeeded"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    sessionID: string
+  }
+}
+
+export type SessionExecutionFailed2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.failed"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    sessionID: string
+    error: SessionStructuredError
+  }
+}
+
+export type SessionExecutionInterrupted2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.execution.interrupted"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef2
+  data: {
+    sessionID: string
+    reason: "user" | "shutdown" | "superseded"
+  }
+}
+
 export type SessionContextUpdated2 = {
   id: string
   created: number
@@ -8488,7 +8815,7 @@ export type SessionStepEnded2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    finish: string
+    finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
     cost: number
     tokens: {
       input: number
@@ -8520,7 +8847,7 @@ export type SessionStepFailed2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    error: SessionErrorUnknown2
+    error: SessionStructuredError
   }
 }
 
@@ -8760,33 +9087,20 @@ export type SessionToolFailed2 = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    error: SessionErrorUnknown2
+    error: SessionStructuredError
     result?: unknown
     executed: boolean
     resultState?: SessionMessageProviderState7
   }
 }
 
-export type SessionRetryError2 = {
-  message: string
-  statusCode?: number
-  isRetryable: boolean
-  responseHeaders?: {
-    [key: string]: string
-  }
-  responseBody?: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type SessionRetried2 = {
+export type SessionRetryScheduled2 = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.retried"
+  type: "session.retry.scheduled"
   durable: {
     aggregateID: string
     seq: number
@@ -8795,8 +9109,10 @@ export type SessionRetried2 = {
   location?: LocationRef2
   data: {
     sessionID: string
+    assistantMessageID: string
     attempt: number
-    error: SessionRetryError2
+    at: number
+    error: SessionStructuredError
   }
 }
 
@@ -8904,6 +9220,10 @@ export type SessionDurableEventV2 =
   | SessionForked2
   | SessionPromptPromoted2
   | SessionPromptAdmitted2
+  | SessionExecutionStarted2
+  | SessionExecutionSucceeded2
+  | SessionExecutionFailed2
+  | SessionExecutionInterrupted2
   | SessionContextUpdated2
   | SessionSynthetic2
   | SessionSkillActivated2
@@ -8922,7 +9242,7 @@ export type SessionDurableEventV2 =
   | SessionToolProgress2
   | SessionToolSuccess2
   | SessionToolFailed2
-  | SessionRetried2
+  | SessionRetryScheduled2
   | SessionCompactionStarted2
   | SessionCompactionEnded2
   | SessionRevertStaged2
@@ -10140,21 +10460,6 @@ export type MessagePartRemoved2 = {
   }
 }
 
-export type SessionExecutionSettled2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.execution.settled"
-  location?: LocationRef2
-  data: {
-    sessionID: string
-    outcome: "success" | "failure" | "interrupted"
-    error?: SessionErrorUnknown2
-  }
-}
-
 export type SessionTextDelta2 = {
   id: string
   created: number
@@ -11071,7 +11376,10 @@ export type V2EventV2 =
   | SessionForked2
   | SessionPromptPromoted2
   | SessionPromptAdmitted2
-  | SessionExecutionSettled2
+  | SessionExecutionStarted2
+  | SessionExecutionSucceeded2
+  | SessionExecutionFailed2
+  | SessionExecutionInterrupted2
   | SessionContextUpdated2
   | SessionSynthetic2
   | SessionSkillActivated2
@@ -11093,7 +11401,7 @@ export type V2EventV2 =
   | SessionToolProgress2
   | SessionToolSuccess2
   | SessionToolFailed2
-  | SessionRetried2
+  | SessionRetryScheduled2
   | SessionCompactionStarted2
   | SessionCompactionDelta2
   | SessionCompactionEnded2
