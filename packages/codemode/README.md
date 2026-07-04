@@ -154,7 +154,7 @@ interface ExecuteFailure {
 
 ### OpenAPI tools
 
-`OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Tool names use `operationId` when present. Otherwise, static path segments form resource namespaces and REST conventions provide leaves such as `users.list`, `users.create`, `users.get`, `users.update`, and `users.delete`; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+`OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Dotted `operationId` values form namespaces such as `v2.session.get`. Missing IDs receive a flat method/path fallback such as `getUsersById`; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
 
 ```ts
 import { CodeMode, OpenAPI } from "@opencode-ai/codemode"
