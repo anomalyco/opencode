@@ -1135,7 +1135,7 @@ function SessionGroupView(props: {
     refs.flatMap((ref) => {
       const message = props.message(ref.messageID)
       if (message?.type !== "assistant") return []
-      const part = message.content.find((part) => part.type === "tool" && part.id === ref.partID)
+      const part = resolvePart(message, ref.partID)
       if (part?.type !== "tool") return []
       return [part]
     })

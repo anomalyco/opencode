@@ -62,7 +62,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       called: boolean
       settled: boolean
       providerExecuted: boolean
-      providerState?: Record<string, unknown>
     }
   >()
   let assistantMessageID: SessionMessage.ID | undefined
@@ -307,14 +306,14 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (tool.called) return yield* Effect.die(new Error(`Duplicate tool call: ${event.id}`))
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
-        tool.providerState = providerState(event.providerMetadata)
+        const state = providerState(event.providerMetadata)
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           input: record(event.input),
           executed: tool.providerExecuted,
-          state: tool.providerState,
+          state,
         })
         return
       }

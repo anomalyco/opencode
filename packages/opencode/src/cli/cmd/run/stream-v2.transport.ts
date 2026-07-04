@@ -5,13 +5,12 @@ import type {
   QuestionRequest,
   QuestionV2Request,
   SessionMessage,
-  SessionMessageAssistant,
   SessionMessageAssistantTool,
   V2Event,
 } from "@opencode-ai/sdk/v2"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
-import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
+import { createSubagentTracker, currentFragmentID, legacyTool, nextFragmentID, toolCommit } from "./stream-v2.subagent"
 import type {
   FooterApi,
   FooterView,
@@ -95,7 +94,6 @@ type ToolState = {
   input: Record<string, unknown>
   started: number
   running: boolean
-  executed?: boolean
   providerState?: Record<string, unknown>
 }
 
@@ -110,8 +108,6 @@ type State = {
   projectedReasoning: Map<string, string>
   textOrdinals: Map<string, number>
   reasoningOrdinals: Map<string, number>
-  activeText: Map<string, string>
-  activeReasoning: Map<string, string>
   tools: Map<string, ToolState>
   finishedTools: Set<string>
   skillMessages: Set<string>
@@ -296,8 +292,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     projectedReasoning: new Map(),
     textOrdinals: new Map(),
     reasoningOrdinals: new Map(),
-    activeText: new Map(),
-    activeReasoning: new Map(),
     tools: new Map(),
     finishedTools: new Set(),
     skillMessages: new Set(),
@@ -362,13 +356,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const part = legacyTool({
       sessionID: input.sessionID,
       messageID,
-      callID: item.id,
-      name: item.name,
-      state: item.state,
-      time: item.time,
-      executed: item.executed,
-      providerState: item.providerState,
-      providerResultState: item.providerResultState,
+      tool: item,
     })
     if (item.state.status === "pending") return
     if (item.state.status === "running") {
@@ -379,6 +367,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         input: item.state.input,
         started: item.time.ran ?? item.time.created,
         running: true,
+        providerState: item.providerState,
       })
       write([toolCommit(part, "start")], { phase: "running", status: `running ${item.name}` })
       return
@@ -615,15 +604,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.text.started") {
-      const ordinal = state.textOrdinals.get(event.data.assistantMessageID) ?? 0
-      state.textOrdinals.set(event.data.assistantMessageID, ordinal + 1)
-      state.activeText.set(event.data.assistantMessageID, `text:${ordinal}`)
+      nextFragmentID("text", state.textOrdinals, event.data.assistantMessageID)
       return
     }
     if (event.type === "session.text.delta") {
-      const id =
-        state.activeText.get(event.data.assistantMessageID) ??
-        `text:${Math.max(0, (state.textOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const id = currentFragmentID("text", state.textOrdinals, event.data.assistantMessageID)
       const key = streamPartKey(event.data.assistantMessageID, id)
       const projected = state.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -646,9 +631,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.text.ended") {
-      const id =
-        state.activeText.get(event.data.assistantMessageID) ??
-        `text:${Math.max(0, (state.textOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const id = currentFragmentID("text", state.textOrdinals, event.data.assistantMessageID)
       const key = streamPartKey(event.data.assistantMessageID, id)
       const previous = state.text.get(key) ?? ""
       if (event.data.text.length > previous.length)
@@ -664,19 +647,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         ])
       state.text.set(key, event.data.text)
       state.projectedText.delete(key)
-      state.activeText.delete(event.data.assistantMessageID)
       return
     }
     if (event.type === "session.reasoning.started") {
-      const ordinal = state.reasoningOrdinals.get(event.data.assistantMessageID) ?? 0
-      state.reasoningOrdinals.set(event.data.assistantMessageID, ordinal + 1)
-      state.activeReasoning.set(event.data.assistantMessageID, `reasoning:${ordinal}`)
+      nextFragmentID("reasoning", state.reasoningOrdinals, event.data.assistantMessageID)
       return
     }
     if (event.type === "session.reasoning.delta") {
-      const id =
-        state.activeReasoning.get(event.data.assistantMessageID) ??
-        `reasoning:${Math.max(0, (state.reasoningOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const id = currentFragmentID("reasoning", state.reasoningOrdinals, event.data.assistantMessageID)
       const key = streamPartKey(event.data.assistantMessageID, id)
       const projected = state.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -700,9 +678,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.reasoning.ended") {
-      const id =
-        state.activeReasoning.get(event.data.assistantMessageID) ??
-        `reasoning:${Math.max(0, (state.reasoningOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const id = currentFragmentID("reasoning", state.reasoningOrdinals, event.data.assistantMessageID)
       const key = streamPartKey(event.data.assistantMessageID, id)
       const previous = state.reasoning.get(key) ?? ""
       if (input.thinking && event.data.text.length > previous.length)
@@ -718,7 +694,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         ])
       state.reasoning.set(key, event.data.text)
       state.projectedReasoning.delete(key)
-      state.activeReasoning.delete(event.data.assistantMessageID)
       return
     }
     if (event.type === "session.tool.input.started") {
@@ -734,15 +709,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (event.type === "session.tool.called") {
       if (state.finishedTools.has(event.data.callID)) return
       const current = state.tools.get(event.data.callID)
-      state.tools.set(event.data.callID, {
-        messageID: event.data.assistantMessageID,
-        name: current?.name ?? "tool",
-        input: event.data.input,
-        started: current?.started ?? event.created,
-        running: true,
-        executed: event.data.executed,
-        providerState: event.data.state,
-      })
       const item: SessionMessageAssistantTool = {
         type: "tool",
         id: event.data.callID,
@@ -809,6 +775,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.ended") {
+      state.textOrdinals.delete(event.data.assistantMessageID)
+      state.reasoningOrdinals.delete(event.data.assistantMessageID)
       const total =
         event.data.tokens.input +
         event.data.tokens.output +
@@ -823,6 +791,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.failed") {
+      state.textOrdinals.delete(event.data.assistantMessageID)
+      state.reasoningOrdinals.delete(event.data.assistantMessageID)
       state.errors.add(event.data.assistantMessageID)
       if (state.wait) state.wait.failureRendered = true
       write([{ kind: "error", source: "system", text: errorMessage(event.data.error), phase: "start" }])
@@ -1104,8 +1074,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         state.projectedReasoning.clear()
         state.textOrdinals.clear()
         state.reasoningOrdinals.clear()
-        state.activeText.clear()
-        state.activeReasoning.clear()
         state.tools.clear()
         state.finishedTools.clear()
         state.skillMessages.clear()
