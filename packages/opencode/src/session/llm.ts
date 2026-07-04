@@ -302,12 +302,12 @@ const live: Layer.Layer<
               }
             }
             return {
-              ...failed.toolCall,
-              input: JSON.stringify({
+              toolCallId: failed.toolCall.toolCallId,
+              toolName: "invalid",
+              args: JSON.stringify({
                 tool: failed.toolCall.toolName,
                 error: failed.error.message,
               }),
-              toolName: "invalid",
             }
           },
           temperature: prepared.params.temperature,
