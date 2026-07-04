@@ -40,7 +40,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
       }
     }
   }
-  if (cause instanceof PermissionV2.RejectedError)
+  if (cause instanceof PermissionV2.BlockedError)
     return {
       type: "permission.rejected",
       message: cause.message,

@@ -67,7 +67,13 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
 
 export class BlockedError extends Schema.TaggedErrorClass<BlockedError>()("PermissionV2.BlockedError", {
   rules: Permission.Ruleset,
-}) {}
+  permission: Schema.String,
+  resources: Schema.Array(Schema.String),
+}) {
+  override get message() {
+    return `Permission denied: ${this.permission}`
+  }
+}
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("PermissionV2.NotFoundError", {
   requestID: ID,
@@ -201,6 +207,8 @@ const layer = Layer.effect(
           if (result.effect === "deny") {
             return yield* new BlockedError({
               rules: relevant(input, result.rules),
+              permission: input.action,
+              resources: input.resources,
             })
           }
           if (result.effect === "allow") return

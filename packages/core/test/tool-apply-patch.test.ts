@@ -47,7 +47,15 @@ const permission = Layer.succeed(
       }).pipe(
         Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
         Effect.andThen(
-          input.action === denyAction ? Effect.fail(new PermissionV2.BlockedError({ rules: [] })) : Effect.void,
+          input.action === denyAction
+            ? Effect.fail(
+                new PermissionV2.BlockedError({
+                  rules: [],
+                  permission: input.action,
+                  resources: input.resources,
+                }),
+              )
+            : Effect.void,
         ),
       ),
     ask: () => Effect.die("unused"),

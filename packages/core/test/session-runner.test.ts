@@ -2825,7 +2825,7 @@ describe("SessionRunnerLLM", () => {
           input: Schema.Struct({}),
           output: Schema.Struct({}),
           execute: () =>
-            Effect.fail(new PermissionV2.BlockedError({ rules: [] })).pipe(
+            Effect.fail(new PermissionV2.BlockedError({ rules: [], permission: "blocked", resources: ["*"] })).pipe(
               Effect.mapError(() => new Tool.Failure({ message: "Permission blocked" })),
             ),
         }),
@@ -3013,8 +3013,12 @@ describe("SessionRunnerLLM", () => {
           output: Schema.Struct({}),
           execute: () =>
             new ToolFailure({
-              message: "Permission rejected: edit",
-              error: new PermissionV2.RejectedError({ permission: "edit", resources: ["src/index.ts"] }),
+              message: "Permission denied: edit",
+              error: new PermissionV2.BlockedError({
+                rules: [],
+                permission: "edit",
+                resources: ["src/index.ts"],
+              }),
             }),
         }),
       })
@@ -3041,7 +3045,7 @@ describe("SessionRunnerLLM", () => {
           finish: "error",
           error: {
             type: "permission.rejected",
-            message: "Permission rejected: edit",
+            message: "Permission denied: edit",
             permission: "edit",
             resources: ["src/index.ts"],
           },
@@ -3053,7 +3057,7 @@ describe("SessionRunnerLLM", () => {
                 status: "error",
                 error: {
                   type: "permission.rejected",
-                  message: "Permission rejected: edit",
+                  message: "Permission denied: edit",
                   permission: "edit",
                   resources: ["src/index.ts"],
                 },

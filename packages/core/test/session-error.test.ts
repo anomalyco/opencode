@@ -56,16 +56,16 @@ describe("toSessionError", () => {
   })
 
   test("preserves structured permission rejection data without inventing resources", () => {
-    const rejected = new PermissionV2.RejectedError({ permission: "external_directory", resources: [] })
-    expect(toSessionError(rejected)).toEqual({
+    const blocked = new PermissionV2.BlockedError({ rules: [], permission: "external_directory", resources: [] })
+    expect(toSessionError(blocked)).toEqual({
       type: "permission.rejected",
-      message: "Permission rejected: external_directory",
+      message: "Permission denied: external_directory",
       permission: "external_directory",
       resources: [],
     })
-    expect(toSessionError(new ToolFailure({ message: rejected.message, error: rejected }))).toEqual({
+    expect(toSessionError(new ToolFailure({ message: blocked.message, error: blocked }))).toEqual({
       type: "permission.rejected",
-      message: "Permission rejected: external_directory",
+      message: "Permission denied: external_directory",
       permission: "external_directory",
       resources: [],
     })
