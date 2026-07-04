@@ -1,6 +1,118 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {},
+  "provider": {
+    "talos": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-swap (talos)",
+      "options": {
+        "baseURL": "http://talos.techthrones.com/v1"
+      },
+      "models": {
+        "gemma4:26b-turbo4": {
+          "name": "Gemma 4 26B",
+          "tool_call": true,
+          "limit": {
+            "context": 262144,
+            "output": 16192
+          }
+        },
+        "qwen3.6:35b": {
+          "name": "Qwen3.6-35B-A3B",
+          "tool_call": true,
+          "limit": {
+            "context": 254000,
+            "output": 16192
+          }
+        },
+        "ornith:35b": {
+          "name": "Ornith 35B",
+          "tool_call": true,
+          "limit": {
+            "context": 258000,
+            "output": 16192
+          }
+        },
+        "qwen3-coder:30b-a3b-instruct-q4_K_M": {
+          "name": "Qwen3 Coder 30B A3B Instruct",
+          "tool_call": true,
+          "limit": {
+            "context": 131072,
+            "output": 8192
+          }
+        },
+        "qwen3.6:27b": {
+          "name": "Qwen3.6-27B",
+          "tool_call": true,
+          "limit": {
+            "context": 254000,
+            "output": 16192
+          }
+        },
+        "gpt-oss:20b": {
+          "name": "GPT-OSS 20B",
+          "tool_call": true,
+          "limit": {
+            "context": 131072,
+            "output": 8192
+          }
+        }
+      }
+    },
+    "ethereal-caste": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-swap (ethereal-caste)",
+      "options": {
+        "baseURL": "http://ethereal-caste:18080/v1"
+      },
+      "models": {
+        "ornith:9b": {
+          "name": "Ornith 9B (caste)",
+          "tool_call": true,
+          "limit": {
+            "context": 262144,
+            "output": 8192
+          }
+        },
+        "qwen3.5:9b": {
+          "name": "Qwen3.5 9B (caste)",
+          "tool_call": true,
+          "limit": {
+            "context": 262144,
+            "output": 8192
+          }
+        },
+        "gemma4:12b-caste": {
+          "name": "Gemma 4 12B (caste)",
+          "tool_call": true,
+          "limit": {
+            "context": 94000,
+            "output": 8192
+          }
+        }
+      }
+    }
+  },
+  "model": "talos/ornith:35b",
+  "small_model": "ethereal-caste/ornith:9b",
+  "agent": {
+    "general": {
+      "mode": "subagent",
+      "model": "talos/ornith:35b"
+    },
+    "explore": {
+      "mode": "subagent",
+      "model": "ethereal-caste/ornith:9b"
+    }
+  },
+  "enabled_providers": [
+    "talos",
+    "ethereal-caste"
+  ],
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 32768
+  },
   "permission": {},
   "references": {
     "effect": {
@@ -14,7 +126,18 @@
   },
   "mcp": {},
   "tools": {
+    "bash": true,
+    "read": true,
+    "write": true,
+    "edit": true,
+    "glob": true,
+    "grep": true,
+    "task": true,
+    "question": true,
+    "todowrite": true,
+    "todoread": true,
+    "skill": true,
     "github-triage": false,
-    "github-pr-search": false,
-  },
+    "github-pr-search": false
+  }
 }

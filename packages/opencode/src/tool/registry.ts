@@ -35,7 +35,9 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CommandSession } from "@opencode-ai/core/command-session"
 import { Format } from "../format"
+import { CommandSessionTool } from "./command-session"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
@@ -104,6 +106,7 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const commandSession = yield* CommandSessionTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -211,6 +214,7 @@ const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          commandSession: Tool.init(commandSession),
         })
 
         return {
@@ -230,6 +234,7 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            tool.commandSession,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
