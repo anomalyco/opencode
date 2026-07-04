@@ -622,12 +622,12 @@ describe("CodeMode public contract", () => {
     )
     expect(instructions).toContain("Return only the fields you need")
     expect(instructions).toContain("raw payloads get truncated and waste context")
-    expect(instructions).toContain("`const res = await tools.<namespace>.<tool>(input)`")
+    expect(instructions).toContain("Do not infer or normalize tool names")
+    expect(instructions).toContain("bracket notation and quotes are part of the path")
     expect(instructions).toContain("surrounding agent tools are not available unless listed here")
     expect(instructions).toContain("Only tools listed here are available inside `tools`")
-    expect(instructions).toContain("bracket notation may appear for names that are not JavaScript identifiers")
-    // Placeholders use the <namespace>.<tool>/<field> style ONLY - no fabricated tool
-    // names, and no real catalog tools cherry-picked into example lines.
+    // Placeholders use generic namespace/tool/field names only - no fabricated real tools
+    // and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`return { <field>: data.<field> }`")
     expect(instructions).not.toContain("total_count")
     expect(instructions).not.toContain("list_issues")
@@ -640,7 +640,7 @@ describe("CodeMode public contract", () => {
     // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
     // a query string, never a tool name) and the browse-namespace rule appears.
     expect(partial).toContain(
-      '1. Find a tool (skip when it is already listed below): `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })` - short phrases like "list issues" work best.',
+      '1. If the exact signature is not listed below, first search: `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
     )
     expect(partial).toContain(
       "Only tools listed here or returned by `tools.$codemode.search` are available inside `tools`",
