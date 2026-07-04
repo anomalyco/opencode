@@ -45,19 +45,35 @@ export const layer = Layer.effectDiscard(
             },
             execute: (input, context) =>
               Effect.gen(function* () {
-                yield* permission.assert({
-                  action: name(tool.server, tool.name),
-                  resources: ["*"],
-                  save: ["*"],
-                  metadata: {},
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: {
-                    type: "tool",
-                    messageID: context.assistantMessageID,
-                    callID: context.toolCallID,
-                  },
-                })
+                yield* permission
+                  .assert({
+                    action: name(tool.server, tool.name),
+                    resources: ["*"],
+                    save: ["*"],
+                    metadata: {},
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: {
+                      type: "tool",
+                      messageID: context.assistantMessageID,
+                      callID: context.toolCallID,
+                    },
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new ToolFailure({
+                          message:
+                            error instanceof PermissionV2.CorrectedError
+                              ? error.feedback
+                              : error instanceof PermissionV2.DeniedError
+                                ? "Permission denied"
+                                : error instanceof PermissionV2.RejectedError
+                                  ? "Permission rejected"
+                                  : error.message,
+                        }),
+                    ),
+                  )
                 const result = yield* mcp
                   .callTool({
                     server: tool.server,
