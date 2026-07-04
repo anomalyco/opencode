@@ -276,6 +276,16 @@ function ServerKey(props: ParentProps) {
   )
 }
 
+// Router base for embedded/proxied deployments. Forge serves this SPA under a
+// per-run path prefix (`/portal/talos-runs/{id}/ui`) and its reverse-proxy shim
+// sets `window.__FORGE_BASE__` to that prefix BEFORE this module runs, so the
+// SolidJS router matches routes beneath it (and prepends it to generated links).
+// Unset — i.e. normal root-served opencode — yields "", identical to before.
+function forgeBase(): string {
+  if (typeof window === "undefined") return ""
+  return (window as unknown as { __FORGE_BASE__?: string }).__FORGE_BASE__ ?? ""
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
@@ -291,6 +301,7 @@ export function AppInterface(props: {
             <GlobalSyncProvider>
               <Dynamic
                 component={props.router ?? Router}
+                base={forgeBase()}
                 root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
               >
                 <Route path="/" component={HomeRoute} />

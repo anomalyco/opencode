@@ -499,13 +499,37 @@ export namespace Server {
       .all("/*", async (c) => {
         const path = c.req.path
 
-        const response = await proxy(`https://app.opencode.ai${path}`, {
-          ...c.req,
-          headers: {
-            ...c.req.raw.headers,
-            host: "app.opencode.ai",
-          },
-        })
+        // When OPENCODE_WEB_DIST points at a locally-built `packages/app`, serve
+        // it directly instead of proxying the hosted bundle. This is what lets a
+        // reverse proxy (forge) run OUR patched app — the hosted app.opencode.ai
+        // bundle can't be patched to honour a path-prefix router base. Unset =>
+        // proxy the hosted app, unchanged.
+        const dist = process.env["OPENCODE_WEB_DIST"]
+        let response: Response
+        if (dist) {
+          // Strip leading slashes and drop any "" / "." / ".." segment so a
+          // request path can never escape the dist dir (path traversal).
+          const rel = path
+            .split("/")
+            .filter((s) => s && s !== "." && s !== "..")
+            .join("/")
+          const asset = rel ? Bun.file(`${dist}/${rel}`) : null
+          response =
+            asset && (await asset.exists())
+              ? new Response(asset) // Bun infers content-type from the extension
+              : // SPA fallback: every client route (/, /:dir/session/:id, …) is index.html
+                new Response(Bun.file(`${dist}/index.html`), {
+                  headers: { "content-type": "text/html; charset=utf-8" },
+                })
+        } else {
+          response = await proxy(`https://app.opencode.ai${path}`, {
+            ...c.req,
+            headers: {
+              ...c.req.raw.headers,
+              host: "app.opencode.ai",
+            },
+          })
+        }
         response.headers.set(
           "Content-Security-Policy",
           "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
