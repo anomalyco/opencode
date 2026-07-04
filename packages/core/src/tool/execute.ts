@@ -3,9 +3,11 @@ export * as ExecuteTool from "./execute"
 import {
   CodeMode,
   ExecuteInputSchema,
-  ExecuteResultSchema,
   Tool,
   toolError,
+  type DataValue,
+  type ExecuteResult,
+  type ToolCallHooks,
   type ToolDefinition,
 } from "@opencode-ai/codemode"
 import { ToolOutput } from "@opencode-ai/llm"
@@ -18,8 +20,23 @@ const ExecuteFile = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
 })
 
+const ExecuteCall = Schema.Struct({
+  tool: Schema.String,
+  status: Schema.Literals(["running", "completed", "error"]),
+  input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+})
+
+type ExecuteCall = typeof ExecuteCall.Type
+
+const ExecuteMetadata = Schema.Struct({
+  toolCalls: Schema.Array(ExecuteCall),
+  error: Schema.optionalKey(Schema.Literal(true)),
+})
+
 const ExecuteOutput = Schema.Struct({
-  result: ExecuteResultSchema,
+  output: Schema.String,
+  toolCalls: Schema.Array(ExecuteCall),
+  error: Schema.optionalKey(Schema.Literal(true)),
   files: Schema.Array(ExecuteFile),
 })
 
@@ -41,6 +58,7 @@ export const create = (options: {
 }) => {
   const runtime = (
     invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
+    hooks?: ToolCallHooks,
   ) => {
     const tools: Record<string, ToolDefinition<never> | Record<string, ToolDefinition<never>>> = {}
     for (const [name, registration] of options.registrations) {
@@ -70,17 +88,20 @@ export const create = (options: {
       entries[path] = value
       tools[namespace] = entries
     }
-    return CodeMode.make<typeof tools>({ tools })
+    return CodeMode.make<typeof tools>({ tools, ...hooks })
   }
   const discovery = runtime(() => Effect.fail(toolError("Execute context is unavailable")))
   return make({
     description: discovery.instructions(),
     input: ExecuteInputSchema,
     output: ExecuteOutput,
-    structured: ExecuteResultSchema,
-    toStructuredOutput: ({ output }) => output.result,
+    structured: ExecuteMetadata,
+    toStructuredOutput: ({ output }) => ({
+      toolCalls: output.toolCalls,
+      ...(output.error ? { error: true as const } : {}),
+    }),
     toModelOutput: ({ output }) => [
-      { type: "text" as const, text: JSON.stringify(output.result) },
+      { type: "text" as const, text: output.output },
       ...output.files.map((file) => ({
         type: "file" as const,
         data: file.data,
@@ -92,36 +113,86 @@ export const create = (options: {
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
-        const result = yield* runtime((name, registration, input) =>
-          Effect.gen(function* () {
-            const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-            const current = options.current(name)
-            if (!current || current.identity !== registration.identity)
-              return yield* Effect.fail(toolError(`Stale tool call: ${name}`))
-            const output = yield* settle(
-              current.tool,
-              { type: "tool-call", id: context.toolCallID, name, input },
-              {
-                sessionID: context.sessionID,
-                agent: context.agent,
-                assistantMessageID: context.assistantMessageID,
-                toolCallID: context.toolCallID,
-              },
-            ).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
-            const outputFileParts = outputFiles(output)
-            if (outputFileParts.length > 0)
-              yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-            return output.structured
-          }),
+        const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        // TODO: Publish live call-list updates once V2 has a generic tool progress API.
+        const finalCalls = Ref.get(calls).pipe(
+          Effect.map((items) =>
+            items.map((call) => (call.status === "running" ? { ...call, status: "error" as const } : call)),
+          ),
+        )
+        const result = yield* runtime(
+          (name, registration, input) =>
+            Effect.gen(function* () {
+              const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+              const current = options.current(name)
+              if (!current || current.identity !== registration.identity)
+                return yield* Effect.fail(toolError(`Stale tool call: ${name}`))
+              const output = yield* settle(
+                current.tool,
+                { type: "tool-call", id: context.toolCallID, name, input },
+                {
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  assistantMessageID: context.assistantMessageID,
+                  toolCallID: context.toolCallID,
+                },
+              ).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
+              const outputFileParts = outputFiles(output)
+              if (outputFileParts.length > 0)
+                yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
+              return output.structured
+            }),
+          {
+            onToolCallStart: ({ index, name, input }) =>
+              Effect.gen(function* () {
+                const shown = displayInput(input)
+                yield* Ref.update(calls, (items) => {
+                  const next = [...items]
+                  next[index] = { tool: name, status: "running", ...(shown ? { input: shown } : {}) }
+                  return next
+                })
+              }),
+            onToolCallEnd: ({ index, outcome }) =>
+              Ref.update(calls, (items) => {
+                const current = items[index]
+                if (!current) return items
+                const next = [...items]
+                next[index] = { ...current, status: outcome === "success" ? "completed" : "error" }
+                return next
+              }),
+          },
         ).execute(code)
-        return {
-          result,
-          files: (yield* Ref.get(files))
-            .toSorted((left, right) => left.index - right.index)
-            .flatMap((item) => item.files),
-        }
+        const toolCalls = yield* finalCalls
+        const collected = (yield* Ref.get(files))
+          .toSorted((left, right) => left.index - right.index)
+          .flatMap((item) => item.files)
+        const output = formatResult(result)
+        return { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
       }),
   })
+}
+
+function displayInput(input: unknown): Record<string, unknown> | undefined {
+  if (input === null || input === undefined) return
+  if (typeof input !== "object" || Array.isArray(input)) return { input }
+  if (Object.keys(input).length === 0) return
+  return input as Record<string, unknown>
+}
+
+function formatResult(result: ExecuteResult) {
+  const output = result.ok
+    ? formatValue(result.value)
+    : [result.error.message, ...(result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))]
+        .join("\n")
+        .trim()
+  if (!result.logs || result.logs.length === 0) return output
+  const logs = `Logs:\n${result.logs.join("\n")}`
+  return output === "" ? logs : `${output}\n\n${logs}`
+}
+
+function formatValue(value: DataValue) {
+  if (typeof value === "string") return value
+  return JSON.stringify(value, null, 2) ?? String(value)
 }
 
 function outputFiles(output: ToolOutput): Array<typeof ExecuteFile.Type> {
