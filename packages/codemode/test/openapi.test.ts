@@ -661,21 +661,21 @@ describe("OpenAPI.fromSpec", () => {
     const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: singleOperation({}) }).tools, "test")
     if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
     const oversized = recordingClient(
-      () => new Response(null, { headers: { "content-length": String(1024 * 1024 + 1) } }),
+      () => new Response(null, { headers: { "content-length": String(50 * 1024 * 1024 + 1) } }),
     )
     const malformed = recordingClient(
       () => new Response("{", { headers: { "content-type": "application/json" } }),
     )
-    const chunked = recordingClient(() => new Response(new Uint8Array(1024 * 1024 + 1)))
+    const chunked = recordingClient(() => new Response(new Uint8Array(50 * 1024 * 1024 + 1)))
 
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(oversized.layer)))).rejects.toThrow(
-      "response exceeds 1 MiB",
+      "response exceeds 50 MiB",
     )
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(malformed.layer)))).rejects.toThrow(
       "returned malformed JSON",
     )
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(chunked.layer)))).rejects.toThrow(
-      "response exceeds 1 MiB",
+      "response exceeds 50 MiB",
     )
   })
 

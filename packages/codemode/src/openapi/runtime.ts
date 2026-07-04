@@ -5,7 +5,7 @@ import { isRecord, maxErrorBodyChars, own } from "./spec.js"
 import type { AppliedAuth, Credential, Plan, SecurityScheme } from "./types.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
-const maxResponseBodyBytes = 1024 * 1024
+const maxResponseBodyBytes = 50 * 1024 * 1024
 
 export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -287,13 +287,13 @@ const readResponseBody = (response: HttpClientResponse.HttpClientResponse, plan:
     const parsedSize = contentLength === undefined ? undefined : Number.parseInt(contentLength, 10)
     const declaredSize = parsedSize !== undefined && Number.isSafeInteger(parsedSize) && parsedSize >= 0 ? parsedSize : undefined
     if (declaredSize !== undefined && declaredSize > maxResponseBodyBytes) {
-      return yield* Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 1 MiB.`))
+      return yield* Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 50 MiB.`))
     }
     let body = Buffer.allocUnsafe(Math.min(maxResponseBodyBytes, declaredSize ?? 64 * 1024))
     let size = 0
     yield* Stream.runForEach(response.stream, (chunk) => {
       if (size + chunk.byteLength > maxResponseBodyBytes) {
-        return Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 1 MiB.`))
+        return Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 50 MiB.`))
       }
       if (size + chunk.byteLength > body.byteLength) {
         const grown = Buffer.allocUnsafe(Math.min(maxResponseBodyBytes, Math.max(size + chunk.byteLength, body.byteLength * 2)))
