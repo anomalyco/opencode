@@ -89,9 +89,11 @@ const layer = Layer.effect(
                     type: "update",
                   } satisfies Update)
                 })
-                subscription.on("error", (error) =>
-                  Effect.runFork(Effect.logError("watcher callback failed", { path: target, error })),
-                )
+                if ("on" in subscription && typeof subscription.on === "function") {
+                  subscription.on("error", (error: unknown) =>
+                    Effect.runFork(Effect.logError("watcher callback failed", { path: target, error })),
+                  )
+                }
                 return { unsubscribe: () => Promise.resolve(subscription.close()) }
               })
             : subscribeDirectory(native, backend, directory, ignore, pubsub)
