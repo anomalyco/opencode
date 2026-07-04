@@ -7,8 +7,7 @@ export type Document = Record<string, unknown>
 
 /** The operation identity handed to auth resolution and errors. */
 export type Operation = {
-  /** Generated tool path, using `operationId` when present and a method/path fallback otherwise. */
-  readonly id: string
+  readonly operationId: string | undefined
   readonly method: string
   readonly path: string
   readonly summary: string | undefined

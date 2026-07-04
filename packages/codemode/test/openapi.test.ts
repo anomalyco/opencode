@@ -442,7 +442,7 @@ describe("OpenAPI.fromSpec", () => {
     const contexts: Array<Parameters<OpenAPI.AuthResolver>[0]> = []
     const client = recordingClient(() => json({ ok: true }))
     const spec = {
-      ...singleOperation({}),
+      ...singleOperation({ operationId: undefined }),
       security: [{ bearer: [] }],
       components: { securitySchemes: { bearer: { type: "http", scheme: "bearer" } } },
     } satisfies Document
@@ -457,7 +457,7 @@ describe("OpenAPI.fromSpec", () => {
           },
         },
       }).tools,
-      "test",
+      "get__test",
     )
     if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
 
@@ -471,7 +471,7 @@ describe("OpenAPI.fromSpec", () => {
         definition: { type: "http", scheme: "bearer" },
         scopes: [],
         operation: {
-          id: "test",
+          operationId: undefined,
           method: "GET",
           path: "/test",
           summary: undefined,
