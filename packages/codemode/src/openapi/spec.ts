@@ -426,6 +426,32 @@ export const securityRequirements = (value: unknown): Parsed<ReadonlyArray<Secur
   }
 }
 
+export const operationSecurityRequirements = (
+  value: unknown,
+  defaults: Parsed<ReadonlyArray<SecurityRequirement>>,
+  schemes: Readonly<Record<string, SecurityScheme>>,
+): Parsed<ReadonlyArray<SecurityRequirement>> => {
+  const parsed = value === undefined ? defaults : securityRequirements(value)
+  if (!parsed.ok) return parsed
+  const supported = parsed.value.filter((requirement) =>
+    Object.keys(requirement).every((name) => {
+      const scheme = own(schemes, name)
+      return scheme !== undefined && !(scheme.type === "apiKey" && scheme.in === "cookie")
+    }),
+  )
+  if (parsed.value.length === 0 || supported.length > 0) return { ok: true, value: supported }
+
+  const names = [...new Set(parsed.value.flatMap((requirement) => Object.keys(requirement)))]
+  const cookieScheme = names.map((name) => own(schemes, name)).find((scheme) => scheme?.in === "cookie")
+  return {
+    ok: false,
+    reason:
+      cookieScheme === undefined
+        ? `security requirement references missing or malformed scheme: ${names.join(", ")}`
+        : `cookie authentication '${cookieScheme.name}' is not supported`,
+  }
+}
+
 export const securitySchemes = (document: Document): Readonly<Record<string, SecurityScheme>> => {
   const components = isRecord(document.components) ? document.components : {}
   const declared = isRecord(components.securitySchemes) ? components.securitySchemes : {}

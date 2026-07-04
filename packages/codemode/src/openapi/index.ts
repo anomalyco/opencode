@@ -9,7 +9,7 @@ import {
   nonEmptyString,
   operationInput,
   operationPath,
-  own,
+  operationSecurityRequirements,
   outputSchema,
   securityRequirements,
   securitySchemes,
@@ -86,28 +86,7 @@ export const fromSpec = (options: Options): Result => {
       }
       const input = parsedInput.value
 
-      const security = (() => {
-        const parsed =
-          operationValue.security === undefined ? defaultSecurity : securityRequirements(operationValue.security)
-        if (!parsed.ok) return parsed
-        const supported = parsed.value.filter((requirement) =>
-          Object.keys(requirement).every((name) => {
-            const scheme = own(schemes, name)
-            return scheme !== undefined && !(scheme.type === "apiKey" && scheme.in === "cookie")
-          }),
-        )
-        if (parsed.value.length === 0 || supported.length > 0) return { ok: true, value: supported } as const
-
-        const names = [...new Set(parsed.value.flatMap((requirement) => Object.keys(requirement)))]
-        const cookieScheme = names.map((name) => own(schemes, name)).find((scheme) => scheme?.in === "cookie")
-        return {
-          ok: false,
-          reason:
-            cookieScheme === undefined
-              ? `security requirement references missing or malformed scheme: ${names.join(", ")}`
-              : `cookie authentication '${cookieScheme.name}' is not supported`,
-        } as const
-      })()
+      const security = operationSecurityRequirements(operationValue.security, defaultSecurity, schemes)
       if (!security.ok) {
         skipped.push({ method: operation.method, path, reason: security.reason })
         continue
