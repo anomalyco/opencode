@@ -7,6 +7,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { Tools } from "@opencode-ai/core/tool/tools"
 import { testEffect } from "./lib/effect"
 import { testModel } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
@@ -166,6 +167,65 @@ describe("PluginV2", () => {
       })
       expect(settlement.result).toEqual({ type: "text", value: "after-mutated" })
       expect(settlement.output).toEqual({ structured: { rewritten: true }, content: [] })
+    }),
+  )
+
+  it.effect("fires plugin hooks around tools nested under execute", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const registry = yield* ToolRegistry.Service
+      const tools = yield* Tools.Service
+      const events: string[] = []
+      const executed: unknown[] = []
+
+      yield* plugins.add(
+        PluginV2.ID.make("execute-hooks"),
+        define({
+          id: "execute-hooks",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* ctx.tool.execute.before((event) => {
+                events.push(`before:${event.tool}:${event.toolCallID}`)
+                if (event.tool === "echo") event.input = { text: "mutated" }
+              })
+              yield* ctx.tool.execute.after((event) => {
+                events.push(`after:${event.tool}:${event.toolCallID}`)
+              })
+            }),
+        }).effect,
+      )
+      yield* tools.register(
+        {
+          echo: Tool.make({
+            description: "Echo",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
+          }),
+        },
+        { execute: { echo: ["test", "echo"] } },
+      )
+
+      const materialized = yield* registry.materialize({ model: testModel })
+      yield* materialized.settle({
+        sessionID: SessionV2.ID.make("ses_execute_hooks"),
+        agent: AgentV2.ID.make("build"),
+        assistantMessageID: SessionMessage.ID.make("msg_execute_hooks"),
+        call: {
+          type: "tool-call",
+          id: "call-execute-hooks",
+          name: "execute",
+          input: { code: 'return await tools.test.echo({ text: "original" })' },
+        },
+      })
+
+      expect(executed).toEqual([{ text: "mutated" }])
+      expect(events).toEqual([
+        "before:execute:call-execute-hooks",
+        "before:echo:call-execute-hooks/0",
+        "after:echo:call-execute-hooks/0",
+        "after:execute:call-execute-hooks",
+      ])
     }),
   )
 })

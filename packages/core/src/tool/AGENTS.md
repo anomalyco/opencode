@@ -8,7 +8,7 @@ This folder owns Core's one local tool representation, process and Location regi
 - `tools.ts` exposes the registration-only `Tools.Service` view used by Location producers.
 - `registry.ts` stores only canonical Location registrations, derives definitions, invokes tools, and applies generic output bounding.
 
-Do not add a second executable entry type, registry-owned executor, authorization callback, output-path callback, or legacy normalization path.
+Do not add a second executable entry type, registration store, authorization callback, output-path callback, or legacy normalization path.
 
 ## Construction
 
@@ -28,7 +28,7 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins and plugin tools register through `Tools.Service.register({ [name]: tool })`.
+Built-ins and plugin tools register through `Tools.Service.register({ [name]: tool })`. Core producers may attach an internal `execute` path as registration metadata; this changes model projection only and does not duplicate the canonical registration.
 
 Registrations are scoped:
 
@@ -46,11 +46,11 @@ Definition filtering is catalog visibility, not execution authorization. A call 
 
 ## Output
 
-Built-ins return complete validated domain output. `ToolRegistry.Materialization.settle` is the only execution and generic model-output bounding boundary and owns managed retention paths.
+Built-ins return complete validated domain output. `ToolRegistry.Materialization.settle` is the execution and generic model-output bounding boundary and owns managed retention paths. Calls nested under `execute` re-enter the same registry settlement path so hooks and leaf authorization remain intact.
 
 Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOutputBytes` and accurately reports stdout/stderr capture loss, but it does not run model-output truncation or return a managed `outputPath`.
 
 ## Current Gaps
 
-- MCP and future Session-scoped registrations still need an explicit canonical registration design.
+- Future Session-scoped registrations still need an explicit canonical registration design.
 - The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

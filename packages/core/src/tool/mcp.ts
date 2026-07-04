@@ -3,12 +3,14 @@ export * as McpTool from "./mcp"
 import { createHash } from "node:crypto"
 import { ToolFailure } from "@opencode-ai/llm"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Effect, Exit, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
+import { Effect, Exit, Layer, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
+import { Flag } from "../flag/flag"
 import { MCP } from "../mcp"
+import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
-import { Tools } from "./tools"
+import { Tools, type ExecutePath } from "./tools"
 import { ToolRegistry } from "./registry"
 
 const MAX_NAME_LENGTH = 64
@@ -20,6 +22,28 @@ const sanitize = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, "_")
 const hashSuffix = (raw: string) => "_" + createHash("sha1").update(raw).digest("hex").slice(0, HASH_LENGTH)
 
 const fit = (base: string, raw: string) => base.slice(0, MAX_NAME_LENGTH - HASH_LENGTH - 1) + hashSuffix(raw)
+
+const unique = (initial: string, raw: string, used: Set<string>, prefix = "") => {
+  if (!used.has(prefix + initial)) {
+    used.add(prefix + initial)
+    return initial
+  }
+  for (let attempt = 0; ; attempt++) {
+    const candidate = fit(initial, attempt === 0 ? raw : `${raw}\u0000${attempt}`)
+    if (used.has(prefix + candidate)) continue
+    used.add(prefix + candidate)
+    return candidate
+  }
+}
+
+const executeSegment = (value: string) => {
+  const sanitized = sanitize(value) || "_"
+  const safe =
+    sanitized === "$codemode" || ["__proto__", "constructor", "prototype"].includes(sanitized)
+      ? `_${sanitized}`
+      : sanitized
+  return safe.length > MAX_NAME_LENGTH ? fit(safe, value) : safe
+}
 
 /**
  * Registry/permission action name for an MCP tool: V1-compatible `<server>_<tool>` so existing deny
@@ -46,56 +70,94 @@ export const layer = Layer.effectDiscard(
     const mcp = yield* MCP.Service
     const tools = yield* Tools.Service
     const events = yield* EventV2.Service
+    const permission = yield* PermissionV2.Service
     const scope = yield* Scope.Scope
     const lock = Semaphore.makeUnsafe(1)
     let current: Scope.Closeable | undefined
 
-    const make = (server: MCP.ServerName, tool: MCP.Tool) =>
-      Tool.make({
-        description: tool.description ?? "",
-        jsonSchema: (tool.inputSchema as JsonSchema.JsonSchema | undefined) ?? { type: "object", properties: {} },
-        execute: (input) =>
-          Effect.gen(function* () {
-            const result = yield* mcp.callTool({ server, name: tool.name, args: (input ?? {}) as Record<string, unknown> }).pipe(
-              Effect.catchTags({
-                "MCP.NotFoundError": (error) => new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
-                "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
-              }),
-            )
-            if (result.isError)
-              return yield* new ToolFailure({ message: errorText(result.content) || "MCP tool returned an error" })
-            return { structured: result.structured ?? {}, content: result.content.map(toContent) }
-          }),
-      })
+    const make = (server: MCP.ServerName, tool: MCP.Tool, action: string) =>
+      Tool.withPermission(
+        Tool.make({
+          description: tool.description ?? "",
+          jsonSchema:
+            typeof tool.inputSchema === "object" && tool.inputSchema !== null && !Array.isArray(tool.inputSchema)
+              ? { ...tool.inputSchema }
+              : { type: "object", properties: {} },
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const args = typeof input === "object" && input !== null && !Array.isArray(input) ? { ...input } : {}
+              yield* permission
+                .assert({
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  action,
+                  resources: ["*"],
+                  save: ["*"],
+                  metadata: { server, tool: tool.name, arguments: args },
+                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                })
+                .pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new ToolFailure({
+                        message: error instanceof PermissionV2.CorrectedError ? error.feedback : "Permission denied",
+                      }),
+                  ),
+                )
+              const result = yield* mcp.callTool({ server, name: tool.name, args }).pipe(
+                Effect.catchTags({
+                  "MCP.NotFoundError": (error) =>
+                    new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
+                  "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
+                }),
+              )
+              if (result.isError)
+                return yield* new ToolFailure({ message: errorText(result.content) || "MCP tool returned an error" })
+              return {
+                structured: result.structured !== undefined ? result.structured : errorText(result.content),
+                content: result.content.map(toContent),
+              }
+            }),
+        }),
+        action,
+      )
 
     // Register the current tool set under a fresh child scope, then close the previous one so the
     // registry never has a gap where MCP tools disappear mid-swap.
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
         const used = new Set<string>()
+        const usedPaths = new Set<string>()
         const record: Record<string, Tool.AnyTool> = {}
+        const execute: Record<string, ExecutePath> = {}
         for (const tool of yield* mcp.tools()) {
           const initial = name(tool.server, tool.name)
-          const key = used.has(initial) ? fit(initial, `${tool.server}\u0000${tool.name}`) : initial
-          used.add(key)
-          record[key] = make(tool.server, tool)
+          const key = unique(initial, `${tool.server}\u0000${tool.name}`, used)
+          record[key] = make(tool.server, tool, key)
+          const namespace = executeSegment(tool.server)
+          const initialMember = executeSegment(tool.name)
+          const member = unique(initialMember, `${tool.server}\u0000${tool.name}`, usedPaths, `${namespace}\u0000`)
+          execute[key] = [namespace, member]
         }
         const next = yield* Scope.fork(scope)
-        yield* tools.register(record).pipe(Scope.provide(next), Effect.orDie)
+        yield* tools
+          .register(record, Flag.OPENCODE_CODE_MODE ? { execute } : undefined)
+          .pipe(Scope.provide(next), Effect.orDie)
         if (current) yield* Scope.close(current, Exit.void)
         current = next
       }),
     )
 
     yield* reconcile.pipe(Effect.forkScoped)
-    yield* events
-      .subscribe(McpEvent.ToolsChanged)
-      .pipe(Stream.runForEach(() => reconcile), Effect.forkScoped({ startImmediately: true }))
+    yield* events.subscribe(McpEvent.ToolsChanged).pipe(
+      Stream.runForEach(() => reconcile),
+      Effect.forkScoped({ startImmediately: true }),
+    )
   }),
 )
 
 export const node = makeLocationNode({
   name: "mcp-tools",
   layer,
-  deps: [ToolRegistry.toolsNode, MCP.node, EventV2.node],
+  deps: [ToolRegistry.toolsNode, MCP.node, EventV2.node, PermissionV2.node],
 })
