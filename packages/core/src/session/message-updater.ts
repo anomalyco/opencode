@@ -8,6 +8,7 @@ export type MemoryState = {
 }
 
 export interface Adapter {
+  readonly getModel: () => Effect.Effect<SessionMessage.ModelSelected["model"] | undefined, never, never>
   readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined, never, never>
   readonly getAssistant: (
     messageID: SessionMessage.ID,
@@ -29,6 +30,15 @@ export function memory(state: MemoryState): Adapter {
   const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
 
   return {
+    getModel() {
+      return Effect.sync(
+        () =>
+          state.messages.findLast(
+            (message): message is SessionMessage.ModelSelected | SessionMessage.Assistant =>
+              message.type === "model-switched" || message.type === "assistant",
+          )?.model,
+      )
+    },
     getCurrentAssistant() {
       return Effect.sync(() => {
         const index = latestAssistantIndex()
@@ -115,16 +125,19 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         )
       },
       "session.model.selected": (event) => {
-        return adapter.appendMessage(
-          SessionMessage.ModelSelected.make({
-            id: SessionMessage.ID.fromEvent(event.id),
-            type: "model-switched",
-            metadata: event.metadata,
-            model: event.data.model,
-            change: event.data.change,
-            time: { created: event.created },
-          }),
-        )
+        return Effect.gen(function* () {
+          const previous = yield* adapter.getModel()
+          yield* adapter.appendMessage(
+            SessionMessage.ModelSelected.make({
+              id: SessionMessage.ID.fromEvent(event.id),
+              type: "model-switched",
+              metadata: event.metadata,
+              model: event.data.model,
+              previous,
+              time: { created: event.created },
+            }),
+          )
+        })
       },
       "session.moved": () => Effect.void,
       "session.renamed": () => Effect.void,

@@ -767,7 +767,18 @@ test("adds and dismisses question requests from live events", async () => {
 
 test("settles pending tools when a live failure arrives", async () => {
   const events = createEventStream()
-  const calls = createFetch(undefined, events)
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message/msg_model_1")
+      return json({
+        data: {
+          id: "msg_model_1",
+          type: "model-switched",
+          previous: { id: "model-1", providerID: "provider-1", variant: "medium" },
+          model: { id: "model-1", providerID: "provider-1", variant: "high" },
+          time: { created: 0 },
+        },
+      })
+  }, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -808,7 +819,7 @@ test("settles pending tools when a live failure arrives", async () => {
       durable: durable("session-1", 1),
       data: {
         sessionID: "session-1",
-        model: { id: "model-1", providerID: "provider-1" },
+        model: { id: "model-1", providerID: "provider-1", variant: "high" },
       },
     })
     emitEvent(events, {
@@ -895,6 +906,11 @@ test("settles pending tools when a live failure arrives", async () => {
       "model-switched",
       "assistant",
     ])
+    expect(sync.session.message.get("session-1", "msg_model_1")).toMatchObject({
+      type: "model-switched",
+      previous: { id: "model-1", providerID: "provider-1", variant: "medium" },
+      model: { id: "model-1", providerID: "provider-1", variant: "high" },
+    })
   } finally {
     app.renderer.destroy()
   }

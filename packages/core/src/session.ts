@@ -613,10 +613,6 @@ const layer = Layer.effect(
         yield* events.publish(SessionEvent.ModelSelected, {
           sessionID: input.sessionID,
           model: input.model,
-          change:
-            session.model?.providerID === input.model.providerID && session.model.id === input.model.id
-              ? "variant"
-              : "model",
         })
       }),
       rename: Effect.fn("V2Session.rename")(function* (input) {

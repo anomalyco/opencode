@@ -871,7 +871,6 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           model: ModelRef
-          change?: "model" | "variant"
         }
       }
     | {
@@ -3646,7 +3645,6 @@ export type SyncEventSessionModelSelected = {
     data: {
       sessionID: string
       model: ModelRef
-      change?: "model" | "variant"
     }
   }
 }
@@ -4312,7 +4310,7 @@ export type SessionMessageModelSelected = {
   }
   type: "model-switched"
   model: ModelRef
-  change?: "model" | "variant"
+  previous?: ModelRef
 }
 
 export type SessionMessageUser = {
@@ -4568,7 +4566,6 @@ export type SessionModelSelected = {
   data: {
     sessionID: string
     model: ModelRef
-    change?: "model" | "variant"
   }
 }
 
@@ -6778,7 +6775,6 @@ export type EventSessionModelSelected = {
   properties: {
     sessionID: string
     model: ModelRef
-    change?: "model" | "variant"
   }
 }
 
@@ -7990,7 +7986,7 @@ export type SessionMessageModelSelected2 = {
   }
   type: "model-switched"
   model: ModelRef2
-  change?: "model" | "variant"
+  previous?: ModelRef2
 }
 
 export type SessionMessageUser2 = {
@@ -8292,7 +8288,6 @@ export type SessionModelSelected2 = {
   data: {
     sessionID: string
     model: ModelRef2
-    change?: "model" | "variant"
   }
 }
 

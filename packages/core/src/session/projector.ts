@@ -5,6 +5,7 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { makeGlobalNode } from "../effect/app-node"
+import { ModelV2 } from "../model"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
@@ -356,6 +357,17 @@ function run(db: DatabaseService, event: MessageEvent) {
     }
     const appendMessage = (message: SessionMessage.Message) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
+      getModel() {
+        return db
+          .select({ model: SessionTable.model })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => (row?.model ? Schema.decodeUnknownSync(ModelV2.Ref)(row.model) : undefined)),
+          )
+      },
       getCurrentAssistant() {
         return Effect.gen(function* () {
           // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
@@ -570,13 +582,13 @@ const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.ModelSelected, (event) =>
       Effect.gen(function* () {
+        yield* run(db, event)
         yield* db
           .update(SessionTable)
           .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.created) })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* run(db, event)
       }),
     )
     yield* events.project(SessionEvent.Renamed, (event) =>

@@ -36,13 +36,13 @@ describe("util.model", () => {
   })
 
   test("distinguishes variant-only switches from model switches", () => {
-    expect(switchLabel({ providerID: "openai", id: "gpt-5.5", variant: "high" }, undefined, "variant")).toBe(
-      "Switched variant to high",
-    )
-    expect(switchLabel({ providerID: "openai", id: "gpt-5.5" }, undefined, "variant")).toBe(
+    const previous = { providerID: "openai", id: "gpt-5.5", variant: "medium" }
+
+    expect(switchLabel({ ...previous, variant: "high" }, undefined, previous)).toBe("Switched variant to high")
+    expect(switchLabel({ providerID: "openai", id: "gpt-5.5" }, undefined, previous)).toBe(
       "Switched variant to default",
     )
-    expect(switchLabel({ providerID: "anthropic", id: "sonnet", variant: "high" }, undefined, "model")).toBe(
+    expect(switchLabel({ providerID: "anthropic", id: "sonnet", variant: "high" }, undefined, previous)).toBe(
       "Switched model to anthropic/sonnet/high",
     )
   })

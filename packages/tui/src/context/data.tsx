@@ -117,6 +117,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         index.set(item.id, messages.length)
         messages.push(item)
       },
+      replace(messages: SessionMessage[], index: Map<string, number>, item: SessionMessage) {
+        const position = index.get(item.id)
+        if (position === undefined) return message.append(messages, index, item)
+        messages[position] = item
+      },
       activeAssistant(messages: SessionMessage[]) {
         const item = messages.findLast((item) => item.type === "assistant" && !item.time.completed)
         return item?.type === "assistant" ? item : undefined
@@ -240,10 +245,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               id: messageIDFromEvent(event.id),
               type: "model-switched",
               model: event.data.model,
-              change: event.data.change,
+              metadata: { "projection-pending": true },
               time: { created: event.created },
             })
           })
+          void sdk.api.session
+            .message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
+            .then((item) =>
+              message.update(event.data.sessionID, (draft, index) => message.replace(draft, index, mutable(item))),
+            )
+            .catch(() => result.session.message.refresh(event.data.sessionID))
+            .catch((error) => console.error("Failed to load projected model switch message", error))
           break
         case "session.renamed":
           if (store.session.info[event.data.sessionID])
@@ -684,7 +696,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const messages = [
               ...loaded.map((message) => {
                 if (message.type === "user") return message
-                return liveByID.get(message.id) ?? message
+                const live = liveByID.get(message.id)
+                if (live?.metadata?.["projection-pending"] === true) return message
+                return live ?? message
               }),
               ...live.filter((message) => !loadedIDs.has(message.id)),
             ].toSorted((a, b) => a.time.created - b.time.created)

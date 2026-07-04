@@ -34,6 +34,7 @@ const sessionsLayer = AppNodeBuilder.build(SessionV2.node, [[SessionExecution.no
 const sessionID = SessionV2.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
+const previousModel = { ...model, variant: ModelV2.VariantID.make("medium") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
 const assistantRow = (
@@ -238,6 +239,7 @@ describe("SessionProjector", () => {
           directory: "/project",
           title: "test",
           version: "test",
+          model: previousModel,
         })
         .run()
         .pipe(Effect.orDie)
@@ -250,7 +252,6 @@ describe("SessionProjector", () => {
       yield* events.publish(SessionEvent.ModelSelected, {
         sessionID,
         model,
-        change: "variant",
       })
       yield* events.publish(SessionEvent.Synthetic, {
         sessionID,
@@ -338,7 +339,7 @@ describe("SessionProjector", () => {
         text: "synthetic context",
         metadata: { source: "projector-test" },
       })
-      expect(messages.find((message) => message.type === "model-switched")).toMatchObject({ change: "variant" })
+      expect(messages.find((message) => message.type === "model-switched")).toMatchObject({ previous: previousModel })
       expect(messages.find((message) => message.type === "shell")).toMatchObject({
         shell: { command: "pwd", status: "exited", exit: 0 },
         output: { output: "/project", truncated: false },

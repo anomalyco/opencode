@@ -1070,7 +1070,12 @@ function SessionMessageView(props: { message: SessionMessage }) {
       <Match when={props.message.type === "shell"}>
         <ShellMessage message={props.message as Extract<SessionMessage, { type: "shell" }>} />
       </Match>
-      <Match when={props.message.type === "agent-switched" || props.message.type === "model-switched"}>
+      <Match
+        when={
+          props.message.type === "agent-switched" ||
+          (props.message.type === "model-switched" && props.message.metadata?.["projection-pending"] !== true)
+        }
+      >
         <SessionSwitchMessageV2 message={props.message} />
       </Match>
       <Match
@@ -1232,7 +1237,7 @@ function SessionSwitchMessageV2(props: { message: SessionMessage }) {
   const text = () => {
     if (props.message.type === "agent-switched") return `Switched agent to ${props.message.agent}`
     if (props.message.type === "model-switched")
-      return switchLabel(props.message.model, ctx.models(), props.message.change)
+      return switchLabel(props.message.model, ctx.models(), props.message.previous)
     return ""
   }
   return <text fg={theme.textMuted}>{text()}</text>

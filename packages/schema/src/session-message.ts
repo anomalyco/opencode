@@ -44,7 +44,7 @@ export const ModelSelected = Schema.Struct({
   ...Base,
   type: Schema.Literal("model-switched"),
   model: Model.Ref,
-  change: Schema.Literals(["model", "variant"]).pipe(optional),
+  previous: Model.Ref.pipe(optional),
 }).annotate({ identifier: "Session.Message.ModelSelected" })
 
 export interface User extends Schema.Schema.Type<typeof User> {}

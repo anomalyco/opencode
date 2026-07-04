@@ -928,7 +928,7 @@ export type SessionContextOutput = {
         readonly time: { readonly created: number }
         readonly type: "model-switched"
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-        readonly change?: "model" | "variant"
+        readonly previous?: { readonly id: string; readonly providerID: string; readonly variant?: string }
       }
     | {
         readonly id: string
@@ -1143,7 +1143,6 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: string
             readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-            readonly change?: "model" | "variant"
           }
         }
       | {
@@ -1623,7 +1622,7 @@ export type SessionMessageOutput = {
         readonly time: { readonly created: number }
         readonly type: "model-switched"
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-        readonly change?: "model" | "variant"
+        readonly previous?: { readonly id: string; readonly providerID: string; readonly variant?: string }
       }
     | {
         readonly id: string
@@ -1823,7 +1822,7 @@ export type MessageListOutput = {
         readonly time: { readonly created: number }
         readonly type: "model-switched"
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-        readonly change?: "model" | "variant"
+        readonly previous?: { readonly id: string; readonly providerID: string; readonly variant?: string }
       }
     | {
         readonly id: string
@@ -4416,7 +4415,6 @@ export type EventSubscribeOutput =
       readonly data: {
         readonly sessionID: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-        readonly change?: "model" | "variant"
       }
     }
   | {
