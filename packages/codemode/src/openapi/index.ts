@@ -1,5 +1,5 @@
 import { HttpClient } from "effect/unstable/http"
-import { Tool, type Definition } from "../../tool.js"
+import { Tool, type Definition } from "../tool.js"
 import { invoke } from "./runtime.js"
 import {
   componentDefinitions,

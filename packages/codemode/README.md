@@ -154,11 +154,10 @@ interface ExecuteFailure {
 
 ### OpenAPI tools
 
-`OpenAPI.fromSpec` (from `@opencode-ai/codemode/adapters/openapi`) turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Tool names use `operationId` when present, otherwise a method/path fallback; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+`OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Tool names use `operationId` when present, otherwise a method/path fallback; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
 
 ```ts
-import { CodeMode } from "@opencode-ai/codemode"
-import { OpenAPI } from "@opencode-ai/codemode/adapters/openapi"
+import { CodeMode, OpenAPI } from "@opencode-ai/codemode"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 
@@ -178,7 +177,7 @@ const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide
 
 `fromSpec` is synchronous and returns `{ tools, skipped }`; operations it cannot represent (non-JSON request bodies, non-absolute server URLs) land in `skipped` with a reason instead of producing broken tools. Tool inputs flatten path, query, header, and closed object-body fields into one model-facing object while retaining their HTTP locations internally. Cross-location name collisions receive a location prefix such as `path_id` and `query_id`; composed, nullable, dictionary, conditionally-required, and non-object JSON bodies remain under `body` so the adapter does not discard valid payloads. Auth is never model-visible. Non-2xx responses become safe tool failures carrying the status and a size-capped body summary, so programs can `catch` and read them.
 
-Auth follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the adapter. See the `Options` and `AuthResolver` docstrings in `src/adapters/openapi/types.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
+Auth follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the compiler. See the option docstrings in `src/openapi/types.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution.
 
 ## Discovery
 

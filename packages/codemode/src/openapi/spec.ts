@@ -1,4 +1,4 @@
-import type { JsonSchema } from "../../tool.js"
+import type { JsonSchema } from "../tool.js"
 import type {
   Body,
   Document,
