@@ -2080,11 +2080,11 @@ function Shell(props: ToolProps) {
   })
   const color = createMemo(() => (permission() ? theme.warning : theme.text))
   const shellID = createMemo(() => stringValue(props.metadata.shellID))
-  const backgrounded = createMemo(() => {
+  const backgroundRunning = createMemo(() => {
     const id = shellID()
     return Boolean(id && data.shell.get(id))
   })
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const isRunning = createMemo(() => props.part.state.status === "running" || backgroundRunning())
   const command = createMemo(() => stringValue(props.input.command))
   const output = createMemo(() => {
     if (props.part.state.status === "pending") return ""
@@ -2131,7 +2131,7 @@ function Shell(props: ToolProps) {
             </Spinner>
           </Show>
         </Show>
-        <Show when={backgrounded()}>
+        <Show when={shellID()}>
           <text>
             <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Backgrounded </span>
           </text>
