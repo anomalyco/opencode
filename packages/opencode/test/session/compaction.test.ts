@@ -929,15 +929,17 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const summary = all.find(
         (msg) => msg.info.role === "assistant" && msg.info.summary,
       )
 
-      expect(result).toBe("stop")
+      // With the self-healing fix, compaction overflow retries with aggressive
+      // truncation and returns "continue" with a minimal summary instead of "stop".
+      expect(result).toBe("continue")
       expect(summary?.info.role).toBe("assistant")
       if (summary?.info.role === "assistant") {
-        expect(summary.info.finish).toBe("error")
-        expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
+        expect(summary.info.finish).not.toBe("error")
       }
     }).pipe(withCompaction({ result: "compact" })),
   )
