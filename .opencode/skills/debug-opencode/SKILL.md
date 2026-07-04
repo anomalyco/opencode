@@ -104,6 +104,25 @@ bun dev api <operationId> --param key=value
 - If no compatible background server is registered, `bun dev api` starts one through the daemon service. Use `bun dev service status`, `bun dev service restart`, and `bun dev service stop` when you need explicit lifecycle control.
 - Prefer raw method/path calls for quick server debugging and operation IDs when exercising documented OpenAPI routes with path or query parameters.
 
+## Auditing installed `opencode2` sessions
+
+Installed next-channel sessions normally use `~/.local/share/opencode/opencode-next.db` and `~/.local/share/opencode/log/opencode.log`; `OPENCODE_DB` can override the database. Before calling `opencode2 api`, inspect `~/.local/state/opencode/service.json` because the command may start a daemon when none is healthy.
+
+For a supplied `ses_...` ID, compare three sources:
+
+- `opencode2 api get /api/session/active` and the Session/message endpoints for live server state.
+- The database's ordered `event` rows for durable history.
+- `packages/tui/src/context/data.tsx` and the relevant route for client projection and rendering.
+
+Locate an uncertain database without modifying it:
+
+```bash
+SESSION=ses_...
+for db in ~/.local/share/opencode/*.db; do
+  sqlite3 "file:$db?mode=ro" "select 1 from session where id='$SESSION' limit 1" 2>/dev/null | grep -q 1 && printf '%s\n' "$db"
+done
+```
+
 ## Logs
 
 - Log files live under `~/.local/share/opencode/log/`. In a local/dev checkout the active file is `opencode-local.log`; `opencode.log` is used for non-local (released) channel installs. Both are append-only, shared across every CLI and server process on the machine.

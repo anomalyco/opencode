@@ -20,7 +20,7 @@ import type {
   SkillV2Info,
   V2Event,
 } from "@opencode-ai/sdk/v2"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { createSignal, onCleanup } from "solid-js"
@@ -100,7 +100,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
+    let connectionGeneration = 0
+    let statusChanges: Set<string> | undefined
     let bootstrapping: Promise<void> | undefined
+
+    function setSessionStatus(sessionID: string, status: DataSessionStatus) {
+      statusChanges?.add(sessionID)
+      setStore("session", "status", sessionID, status)
+    }
 
     const message = {
       update(sessionID: string, fn: (messages: SessionMessage[], index: Map<string, number>) => void) {
@@ -249,16 +256,19 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "info", event.data.sessionID, "title", event.data.title)
           break
         case "session.prompt.promoted": {
-          setStore("session", "status", event.data.sessionID, "running")
+          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
-            const existing = position === undefined ? undefined : draft[position]
-            if (existing?.type === "user") {
+            if (position === undefined) return
+            const existing = draft[position]
+            if (existing?.type === "user" && existing.metadata?.queued === true) {
               existing.time.created = event.created
-              if (existing.metadata?.queued === true) {
-                delete existing.metadata.queued
-                if (Object.keys(existing.metadata).length === 0) existing.metadata = undefined
-              }
+              delete existing.metadata.queued
+              if (Object.keys(existing.metadata).length === 0) existing.metadata = undefined
+              draft.splice(position, 1)
+              draft.push(existing)
+              index.clear()
+              draft.forEach((message, indexValue) => index.set(message.id, indexValue))
               return
             }
           })
@@ -300,7 +310,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.shell.started":
-          setStore("session", "status", event.data.sessionID, "running")
+          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
@@ -311,7 +321,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.shell.ended":
-          setStore("session", "status", event.data.sessionID, "idle")
+          setSessionStatus(event.data.sessionID, "idle")
           message.update(event.data.sessionID, (draft) => {
             const match = message.shell(draft, event.data.shell.id)
             if (!match) return
@@ -321,7 +331,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.step.started":
-          setStore("session", "status", event.data.sessionID, "running")
+          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             if (index.has(event.data.assistantMessageID)) return
             const currentAssistant = message.activeAssistant(draft)
@@ -338,7 +348,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.step.ended":
-          setStore("session", "status", event.data.sessionID, "running")
+          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
             if (!currentAssistant) return
@@ -518,10 +528,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.retried":
         case "session.compaction.started":
-          setStore("session", "status", event.data.sessionID, "running")
+          setSessionStatus(event.data.sessionID, "running")
           break
         case "session.execution.settled":
-          setStore("session", "status", event.data.sessionID, "idle")
+          setSessionStatus(event.data.sessionID, "idle")
           break
         case "session.revert.staged":
           if (store.session.info[event.data.sessionID])
@@ -858,15 +868,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             )
             for (const session of response.data) registerSession(session.id)
           }),
-        sdk.api.session
-          .active()
-          .then((active) =>
-            setStore(
-              "session",
-              "status",
-              Object.fromEntries(Object.keys(active.data).map((sessionID) => [sessionID, "running" as const])),
-            ),
-          ),
         result.location.refresh(),
         result.location.agent.refresh(),
         result.location.integration.refresh(),
@@ -888,9 +889,30 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       return bootstrapping
     }
 
+    function refreshActive() {
+      const generation = ++connectionGeneration
+      const changed = new Set<string>()
+      statusChanges = changed
+      void sdk.api.session
+        .active()
+        .then((active) => {
+          if (generation !== connectionGeneration) return
+          const status: Record<string, DataSessionStatus> = Object.fromEntries(
+            Object.keys(active.data).map((sessionID) => [sessionID, "running" as const]),
+          )
+          for (const sessionID of changed) status[sessionID] = store.session.status[sessionID]
+          setStore("session", "status", reconcile(status))
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (statusChanges === changed) statusChanges = undefined
+        })
+    }
+
     onCleanup(
       sdk.event.listen(({ details }) => {
         if (details.type === "server.connected") {
+          refreshActive()
           void bootstrap()
           return
         }

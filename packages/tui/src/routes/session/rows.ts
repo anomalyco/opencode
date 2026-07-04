@@ -28,23 +28,24 @@ export function createSessionRows(sessionID: Accessor<string>) {
   function reduce() {
     const messages = data.session.message.list(sessionID())
     const boundary = revertBoundary()
-    return reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages)
+    const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages)
+    partitionPending(rows, pendingPermissions())
+    return rows
   }
 
-  createEffect(() => {
-    const pending = new Set(
+  function pendingPermissions() {
+    return new Set(
       (data.session.permission.list(sessionID()) ?? []).flatMap((request) =>
         request.source?.type === "tool" ? [request.source.callID] : [],
       ),
     )
+  }
+
+  createEffect(() => {
+    const pending = pendingPermissions()
     setRows(
       produce((draft) => {
-        draft.forEach((row) => {
-          if (row.type !== "group") return
-          const refs = [...row.refs, ...row.pending]
-          row.refs = refs.filter((ref) => !pending.has(ref.partID))
-          row.pending = refs.filter((ref) => pending.has(ref.partID))
-        })
+        partitionPending(draft, pending)
       }),
     )
   })
@@ -67,6 +68,20 @@ export function createSessionRows(sessionID: Accessor<string>) {
     on(revertBoundary, () => {
       setRows(reconcile(reduce()))
     }),
+  )
+
+  createEffect(
+    on(
+      () =>
+        data.session.message
+          .list(sessionID())
+          .flatMap((message) =>
+            message.type === "user"
+              ? [{ id: message.id, created: message.time.created, queued: message.metadata?.queued === true }]
+              : [],
+          ),
+      () => setRows(reconcile(reduce())),
+    ),
   )
 
   const appendMessage = (messageID: string) =>
@@ -134,7 +149,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
   }
   const subscriptions = [
     data.on("session.prompt.admitted", input),
-    data.on("session.prompt.promoted", input),
     data.on("session.context.updated", message),
     data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
@@ -223,6 +237,15 @@ function append(rows: SessionRow[], ref: PartRef, part: SessionMessageAssistant[
 function completePrevious(rows: SessionRow[], index = rows.length) {
   const previous = rows[index - 1]
   if (previous?.type === "group") previous.completed = true
+}
+
+function partitionPending(rows: SessionRow[], pending: Set<string>) {
+  rows.forEach((row) => {
+    if (row.type !== "group") return
+    const refs = [...row.refs, ...row.pending]
+    row.refs = refs.filter((ref) => !pending.has(ref.partID))
+    row.pending = refs.filter((ref) => pending.has(ref.partID))
+  })
 }
 
 function exploration(name: string) {
