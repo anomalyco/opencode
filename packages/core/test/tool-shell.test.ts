@@ -478,9 +478,13 @@ describe("ShellTool", () => {
             const structured = settled.output?.structured as Record<string, unknown> | undefined
             const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
             expect(settled.output?.structured).toMatchObject({ truncated: false })
-            expect(settled.output?.content[0]).toMatchObject({
+            expect(settled.output?.content[0]).toEqual({
               type: "text",
-              text: expect.stringContaining("running in the background"),
+              text: "The command was moved to the background.",
+            })
+            expect(settled.output?.content[1]).toMatchObject({
+              type: "text",
+              text: expect.stringContaining("DO NOT sleep, poll"),
             })
             expect(shellID).toStartWith("sh_")
 

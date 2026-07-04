@@ -2079,14 +2079,16 @@ function Shell(props: ToolProps) {
     return request?.source?.type === "tool" && request.source.callID === props.part.id
   })
   const color = createMemo(() => (permission() ? theme.warning : theme.text))
-  const isRunning = createMemo(() => {
-    if (props.part.state.status === "running") return true
-    const shellID = stringValue(props.metadata.shellID)
-    return Boolean(shellID && data.shell.get(shellID))
+  const shellID = createMemo(() => stringValue(props.metadata.shellID))
+  const backgrounded = createMemo(() => {
+    const id = shellID()
+    return Boolean(id && data.shell.get(id))
   })
+  const isRunning = createMemo(() => props.part.state.status === "running")
   const command = createMemo(() => stringValue(props.input.command))
   const output = createMemo(() => {
     if (props.part.state.status === "pending") return ""
+    if (shellID()) return ""
     const content = props.part.state.content[0]
     return stripAnsi(content?.type === "text" ? content.text.trim() : "")
   })
@@ -2128,6 +2130,11 @@ function Shell(props: ToolProps) {
               <span style={{ fg: theme.textMuted }}>{limited().slice(input().length)}</span>
             </Spinner>
           </Show>
+        </Show>
+        <Show when={backgrounded()}>
+          <text>
+            <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Backgrounded </span>
+          </text>
         </Show>
         <Show when={collapsed().overflow}>
           <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
