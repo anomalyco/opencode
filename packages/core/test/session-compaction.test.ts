@@ -19,7 +19,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -73,6 +73,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     requests = []
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const events = yield* EventV2.Service
     const store = yield* SessionStore.Service
     const sessionID = SessionV2.ID.make("ses_manual_compaction")
     const userMessage = {
@@ -108,7 +109,12 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         ),
       )
 
+    const delta = yield* events
+      .subscribe(SessionEvent.Compaction.Delta)
+      .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+    yield* Effect.yieldNow
     expect(yield* compaction.compactManual({ session, messages: [userMessage] })).toBe(true)
+    expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
 
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")

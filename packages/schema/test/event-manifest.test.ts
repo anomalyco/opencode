@@ -16,6 +16,8 @@ import { FileSystemV1 } from "../src/filesystem-v1.js"
 import { IdeEvent } from "../src/ide-event.js"
 import { McpEvent } from "../src/mcp-event.js"
 import { SessionEvent } from "../src/session-event.js"
+import { SessionID } from "../src/session-id.js"
+import { SessionMessage } from "../src/session-message.js"
 import { SessionTodo } from "../src/session-todo.js"
 import { SessionV1 } from "../src/session-v1.js"
 import { WorkspaceEvent } from "../src/workspace-event.js"
@@ -129,5 +131,33 @@ describe("public event manifest", () => {
       SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
     )
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
+  })
+
+  test("keeps simplified session fragment and tool payloads on durable version 1", () => {
+    const sessionID = SessionID.make("ses_test")
+    const assistantMessageID = SessionMessage.ID.make("msg_test")
+    const text = SessionEvent.Text.Started.data.make({ sessionID, assistantMessageID })
+    const reasoning = SessionEvent.Reasoning.Ended.data.make({
+      sessionID,
+      assistantMessageID,
+      text: "thought",
+      state: { signature: "sig" },
+    })
+    const tool = SessionEvent.Tool.Called.data.make({
+      sessionID,
+      assistantMessageID,
+      callID: "call_test",
+      input: {},
+      executed: true,
+      state: { itemId: "item_test" },
+    })
+
+    expect(text).not.toHaveProperty("textID")
+    expect(reasoning).not.toHaveProperty("reasoningID")
+    expect(reasoning).not.toHaveProperty("providerMetadata")
+    expect(tool).not.toHaveProperty("tool")
+    expect(tool).not.toHaveProperty("provider")
+    expect(SessionEvent.Text.Started.durable?.version).toBe(1)
+    expect(SessionEvent.Tool.Called.durable?.version).toBe(1)
   })
 })

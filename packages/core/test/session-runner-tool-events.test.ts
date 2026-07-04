@@ -47,6 +47,7 @@ const capture = () => {
         id: ModelV2.ID.make("model"),
         providerID: ProviderV2.ID.make("provider"),
       },
+      provider: "openai",
     }),
   }
 }
@@ -90,12 +91,25 @@ test("local tool success serializes media base64 once and reconstructs from stru
   })
 })
 
-test("provider-executed success retains its compatibility result", async () => {
+test("provider-executed success retains its raw provider result", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
   const success = published.find((event) => event.type === "session.tool.success.1")
   expect(success?.data).toHaveProperty("result")
+})
+
+test("provider state uses the route provider instead of the catalog provider", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { openai: { itemId: "reasoning" } } }),
+    ),
+  )
+
+  expect(published.find((event) => event.type === "session.reasoning.started.1")?.data).toMatchObject({
+    state: { itemId: "reasoning" },
+  })
 })
 
 test("binary failure emits no success event", async () => {
@@ -114,7 +128,7 @@ test("binary failure emits no success event", async () => {
   expect(published.some((event) => event.type === "session.tool.failed.1")).toBe(true)
 })
 
-test("old success event data containing result still decodes", () => {
+test("success event data can carry a provider-executed result", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,
     assistantMessageID: SessionMessage.ID.create(),
@@ -122,7 +136,7 @@ test("old success event data containing result still decodes", () => {
     structured: { type: "media", mime: "image/png" },
     content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
     result: { type: "content", value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }] },
-    provider: { executed: false },
+    executed: true,
   })
   expect(decoded.result).toMatchObject({ type: "content" })
 })

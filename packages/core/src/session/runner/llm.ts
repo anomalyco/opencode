@@ -137,10 +137,7 @@ const layer = Layer.effect(
             assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
-            provider: {
-              executed: tool.provider?.executed === true,
-              ...(tool.provider?.metadata === undefined ? {} : { metadata: tool.provider.metadata }),
-            },
+            executed: tool.executed === true,
           })
         }
       }
@@ -228,6 +225,7 @@ const layer = Layer.effect(
         // The selected catalog identity, not model.id: route-level ids are provider API
         // model ids (for example gpt-5.5-fast resolves to api id gpt-5.5).
         model: resolved.ref,
+        provider: model.provider,
         snapshot: startSnapshot,
       })
       const publication = Semaphore.makeUnsafe(1)

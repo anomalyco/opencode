@@ -76,9 +76,8 @@ describe("Tool.Progress", () => {
             sessionID,
             assistantMessageID,
             callID,
-            tool: "bash",
             input: { command: "pwd" },
-            provider: { executed: false },
+            executed: false,
           })
         })
 
@@ -104,7 +103,7 @@ describe("Tool.Progress", () => {
         callID: "call-success",
         structured: { phase: "done" },
         content: content("complete"),
-        provider: { executed: false },
+        executed: false,
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
         state: { status: "completed", structured: { phase: "done" }, content: content("complete") },
@@ -123,7 +122,7 @@ describe("Tool.Progress", () => {
         assistantMessageID,
         callID: "call-failed",
         error: { type: "unknown", message: "boom" },
-        provider: { executed: false },
+        executed: false,
       })
       expect((yield* readAssistant).content[1]).toMatchObject({
         state: {

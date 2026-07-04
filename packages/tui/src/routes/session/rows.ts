@@ -116,6 +116,12 @@ export function createSessionRows(sessionID: Accessor<string>) {
       }),
     )
 
+  const latestFragmentRef = (messageID: string, kind: "text" | "reasoning") => {
+    const message = data.session.message.get(sessionID(), messageID)
+    const ordinal = message?.type === "assistant" ? message.content.filter((part) => part.type === kind).length - 1 : 0
+    return { messageID, partID: `${kind}:${Math.max(0, ordinal)}` }
+  }
+
   const isQueued = (messageID: string) => {
     const message = data.session.message.get(sessionID(), messageID)
     return message?.type === "user" && message.metadata?.queued === true
@@ -145,20 +151,19 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.model.selected", message),
     data.on("session.compaction.ended", message),
     data.on("session.text.delta", (event) => {
-      if (event.data.sessionID === sessionID())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
+      if (event.data.sessionID === sessionID()) appendPart(latestFragmentRef(event.data.assistantMessageID, "text"))
     }),
     data.on("session.text.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
+        appendPart(latestFragmentRef(event.data.assistantMessageID, "text"))
     }),
     data.on("session.reasoning.delta", (event) => {
       if (event.data.sessionID === sessionID())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
+        appendPart(latestFragmentRef(event.data.assistantMessageID, "reasoning"))
     }),
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
+        appendPart(latestFragmentRef(event.data.assistantMessageID, "reasoning"))
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
@@ -187,9 +192,11 @@ export function reduceSessionRows(messages: SessionMessage[]) {
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
+    const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
+      const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-      append(rows, { messageID: message.id, partID: part.id }, part)
+      append(rows, { messageID: message.id, partID }, part)
     })
     if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error) {
       completePrevious(rows)
@@ -197,6 +204,15 @@ export function reduceSessionRows(messages: SessionMessage[]) {
     }
     return rows
   }, [])
+}
+
+export function resolvePart(message: SessionMessageAssistant, partID: string) {
+  const tool = message.content.find((part) => part.type === "tool" && part.id === partID)
+  if (tool) return tool
+  const match = /^(text|reasoning):(\d+)$/.exec(partID)
+  if (!match) return
+  const ordinal = Number(match[2])
+  return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
 function isQueuedMessage(message: SessionMessage) {

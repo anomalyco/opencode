@@ -49,7 +49,6 @@ const executionNode = makeGlobalNode({
         }
         completed.add(sessionID)
         const assistantMessageID = SessionMessage.ID.create()
-        const textID = "text_subagent_test"
         yield* events.publish(SessionEvent.Step.Started, {
           sessionID,
           assistantMessageID,
@@ -59,12 +58,10 @@ const executionNode = makeGlobalNode({
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID,
           assistantMessageID,
-          textID,
         })
         yield* events.publish(SessionEvent.Text.Ended, {
           sessionID,
           assistantMessageID,
-          textID,
           text: childText,
         })
         yield* events.publish(SessionEvent.Step.Ended, {

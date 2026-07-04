@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Model } from "../src/model.js"
@@ -7,6 +7,7 @@ import { Project } from "../src/project.js"
 import { Pty } from "../src/pty.js"
 import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
+import { SessionMessage } from "../src/session-message.js"
 import { SessionTodo } from "../src/session-todo.js"
 import { optional } from "../src/schema.js"
 
@@ -66,5 +67,26 @@ describe("contract hygiene", () => {
 
     expect(source).not.toContain("Schema.Any")
     expect(source).not.toContain("Schema.mutable")
+  })
+
+  test("assistant content keeps only domain identities", () => {
+    expect(SessionMessage.AssistantText.make({ type: "text", text: "hello" })).toEqual({
+      type: "text",
+      text: "hello",
+    })
+    expect(
+      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", state: { id: "opaque" } }),
+    ).toEqual({ type: "reasoning", text: "thinking", state: { id: "opaque" } })
+    expect(
+      SessionMessage.AssistantTool.make({
+        type: "tool",
+        id: "call_1",
+        name: "search",
+        executed: true,
+        providerState: { itemId: "item_1" },
+        state: { status: "pending", input: "" },
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ).not.toHaveProperty("provider")
   })
 })

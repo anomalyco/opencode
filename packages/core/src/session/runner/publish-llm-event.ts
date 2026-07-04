@@ -1,5 +1,5 @@
 import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
-import { DateTime, Effect } from "effect"
+import { Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
@@ -10,6 +10,7 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
   readonly model: ModelV2.Ref
+  readonly provider: string
   readonly snapshot?: string
 }
 
@@ -61,10 +62,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       called: boolean
       settled: boolean
       providerExecuted: boolean
-      providerMetadata?: ProviderMetadata
+      providerState?: Record<string, unknown>
     }
   >()
-  const timestamp = DateTime.now
   let assistantMessageID: SessionMessage.ID | undefined
   let assistantActive = false
   let assistantFailed = false
@@ -86,15 +86,18 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantMessageID === undefined
       ? Effect.die(new Error("Tool event before assistant step start"))
       : Effect.succeed(assistantMessageID)
+  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.provider]
 
   const fragments = (
     name: string,
-    ended: (id: string, value: string, providerMetadata?: ProviderMetadata) => Effect.Effect<void>,
+    ended: (id: string, value: string, state?: Record<string, unknown>) => Effect.Effect<void>,
+    single = false,
   ) => {
     const chunks = new Map<string, string[]>()
     const start = (id: string) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
+        if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
         chunks.set(id, [])
         return Effect.void
       })
@@ -105,10 +108,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         current.push(value)
         return Effect.void
       })
-    const end = Effect.fnUntraced(function* (id: string, providerMetadata?: ProviderMetadata) {
+    const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* ended(id, current.join(""), providerMetadata)
+      yield* ended(id, current.join(""), state)
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -117,26 +120,30 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     return { start, append, end, flush }
   }
 
-  const text = fragments("text", (textID, value) =>
-    Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Text.Ended, {
-        sessionID: input.sessionID,
-        assistantMessageID: yield* currentAssistantMessageID(),
-        textID,
-        text: value,
-      })
-    }),
+  const text = fragments(
+    "text",
+    (_textID, value) =>
+      Effect.gen(function* () {
+        yield* events.publish(SessionEvent.Text.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          text: value,
+        })
+      }),
+    true,
   )
-  const reasoning = fragments("reasoning", (reasoningID, value, providerMetadata) =>
-    Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Reasoning.Ended, {
-        sessionID: input.sessionID,
-        assistantMessageID: yield* currentAssistantMessageID(),
-        reasoningID,
-        text: value,
-        providerMetadata,
-      })
-    }),
+  const reasoning = fragments(
+    "reasoning",
+    (_reasoningID, value, state) =>
+      Effect.gen(function* () {
+        yield* events.publish(SessionEvent.Reasoning.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          text: value,
+          state,
+        })
+      }),
+    true,
   )
   const toolInput = fragments("tool input", (callID, value) =>
     Effect.gen(function* () {
@@ -216,10 +223,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         assistantMessageID: tool.assistantMessageID,
         callID,
         error: { type: "unknown", message },
-        provider: {
-          executed: tool.providerExecuted,
-          ...(tool.providerMetadata === undefined ? {} : { metadata: tool.providerMetadata }),
-        },
+        executed: tool.providerExecuted,
       })
     }
   })
@@ -241,7 +245,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
-          textID: event.id,
         })
         return
       case "text-delta":
@@ -249,7 +252,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
-          textID: event.id,
           delta: event.text,
         })
         return
@@ -261,8 +263,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
-          reasoningID: event.id,
-          providerMetadata: event.providerMetadata,
+          state: providerState(event.providerMetadata),
         })
         return
       case "reasoning-delta":
@@ -270,12 +271,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
-          reasoningID: event.id,
           delta: event.text,
         })
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, event.providerMetadata)
+        yield* reasoning.end(event.id, providerState(event.providerMetadata))
         return
       case "tool-input-start":
         yield* startToolInput(event)
@@ -307,17 +307,14 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (tool.called) return yield* Effect.die(new Error(`Duplicate tool call: ${event.id}`))
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
-        tool.providerMetadata = event.providerMetadata
+        tool.providerState = providerState(event.providerMetadata)
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
-          tool: event.name,
           input: record(event.input),
-          provider: {
-            executed: tool.providerExecuted,
-            ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
-          },
+          executed: tool.providerExecuted,
+          state: tool.providerState,
         })
         return
       }
@@ -332,10 +329,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         }
         tool.settled = true
         const result = settledOutput(event.output, event.result)
-        const provider = {
-          executed: event.providerExecuted === true || tool.providerExecuted,
-          ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
-        }
+        const executed = event.providerExecuted === true || tool.providerExecuted
+        const resultState = providerState(event.providerMetadata)
         if ("error" in result) {
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
@@ -343,7 +338,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
             callID: event.id,
             error: result.error,
             result: event.result,
-            provider,
+            executed,
+            resultState,
           })
           return
         }
@@ -353,8 +349,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           callID: event.id,
           ...result,
           outputPaths,
-          ...(provider.executed ? { result: event.result } : {}),
-          provider,
+          ...(executed ? { result: event.result } : {}),
+          executed,
+          resultState,
         })
         return
       }
@@ -370,10 +367,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           error: { type: "unknown", message: event.message },
-          provider: {
-            executed: tool.providerExecuted,
-            ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
-          },
+          executed: tool.providerExecuted,
+          resultState: providerState(event.providerMetadata),
         })
         return
       }

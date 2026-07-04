@@ -190,11 +190,12 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.text.started") {
-        starts.set(event.data.textID, { id: partID(event.id), timestamp: time })
+        starts.set("text", { id: partID(event.id), timestamp: time })
         continue
       }
       if (event.type === "session.text.ended") {
-        const started = starts.get(event.data.textID)
+        const started = starts.get("text")
+        starts.delete("text")
         const part: TextPart = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
@@ -208,18 +209,19 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.reasoning.started") {
-        starts.set(event.data.reasoningID, { id: partID(event.id), timestamp: time })
+        starts.set("reasoning", { id: partID(event.id), timestamp: time })
         continue
       }
       if (event.type === "session.reasoning.ended" && input.thinking) {
-        const started = starts.get(event.data.reasoningID)
+        const started = starts.get("reasoning")
+        starts.delete("reasoning")
         const part: ReasoningPart = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "reasoning",
           text: event.data.text,
-          metadata: event.data.providerMetadata,
+          metadata: event.data.state,
           time: { start: started?.timestamp ?? time, end: time },
         }
         if (emit("reasoning", time, { part })) continue
@@ -257,10 +259,10 @@ export async function runNonInteractivePrompt(input: Input) {
           id: current?.id ?? partID(event.id),
           timestamp: current?.timestamp ?? time,
           assistantMessageID: event.data.assistantMessageID,
-          tool: event.data.tool,
+          tool: current?.tool ?? "tool",
           input: event.data.input,
           raw: current?.raw,
-          provider: event.data.provider,
+          provider: { executed: event.data.executed, state: event.data.state },
         })
         continue
       }
@@ -287,7 +289,7 @@ export async function runNonInteractivePrompt(input: Input) {
               outputPaths: event.data.outputPaths,
               result: event.data.result,
               providerCall: current.provider,
-              providerResult: event.data.provider,
+              providerResult: { executed: event.data.executed, state: event.data.resultState },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -314,7 +316,7 @@ export async function runNonInteractivePrompt(input: Input) {
             metadata: {
               result: event.data.result,
               providerCall: current.provider,
-              providerResult: event.data.provider,
+              providerResult: { executed: event.data.executed, state: event.data.resultState },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },

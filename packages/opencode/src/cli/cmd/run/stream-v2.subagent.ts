@@ -42,8 +42,18 @@ export function legacyTool(input: {
   name: string
   state: SessionMessageAssistantTool["state"]
   time: SessionMessageAssistantTool["time"]
-  provider?: SessionMessageAssistantTool["provider"]
+  executed?: boolean
+  providerState?: Record<string, unknown>
+  providerResultState?: Record<string, unknown>
 }): ToolPart {
+  const providerCall =
+    input.executed === undefined && input.providerState === undefined
+      ? undefined
+      : { executed: input.executed, state: input.providerState }
+  const providerResult =
+    input.executed === undefined && input.providerResultState === undefined
+      ? undefined
+      : { executed: input.executed, state: input.providerResultState }
   const base = {
     id: `prt_${input.callID}`,
     sessionID: input.sessionID,
@@ -65,7 +75,7 @@ export function legacyTool(input: {
         status: "running",
         input: input.state.input,
         title: input.name,
-        metadata: { structured: input.state.structured, content: input.state.content, providerCall: input.provider },
+        metadata: { structured: input.state.structured, content: input.state.content, providerCall },
         time: { start: input.time.ran ?? input.time.created },
       },
     }
@@ -83,7 +93,8 @@ export function legacyTool(input: {
           content: input.state.content,
           outputPaths: input.state.outputPaths,
           result: input.state.result,
-          providerCall: input.provider,
+          providerCall,
+          providerResult,
         },
         time: { start: input.time.ran ?? input.time.created, end: input.time.completed ?? input.time.created },
       },
@@ -99,7 +110,8 @@ export function legacyTool(input: {
         structured: input.state.structured,
         content: input.state.content,
         result: input.state.result,
-        providerCall: input.provider,
+        providerCall,
+        providerResult,
       },
       time: { start: input.time.ran ?? input.time.created, end: input.time.completed ?? input.time.created },
     },
@@ -141,6 +153,8 @@ type ToolTrack = {
   name: string
   input: Record<string, unknown>
   started: number
+  executed?: boolean
+  providerState?: Record<string, unknown>
 }
 
 type ChildState = {
@@ -157,6 +171,10 @@ type ChildState = {
   projectedText: Map<string, string>
   reasoning: Map<string, string>
   projectedReasoning: Map<string, string>
+  textOrdinals: Map<string, number>
+  reasoningOrdinals: Map<string, number>
+  activeText: Map<string, string>
+  activeReasoning: Map<string, string>
   tools: Map<string, ToolTrack>
   finishedTools: Set<string>
   messageIDs: Set<string>
@@ -217,6 +235,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   // Live subagent tool calls in the parent, so tool.success structured output
   // can be joined with the call's input metadata.
   const pendingCalls = new Map<string, Record<string, unknown>>()
+  const subagentCalls = new Set<string>()
   // Foreign sessions already resolved through session.get. Non-children stay
   // cached so unrelated concurrent sessions are checked at most once.
   const checked = new Set<string>()
@@ -225,6 +244,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   const pendingEvents = new Map<string, V2Event[]>()
   const hydrations = new Map<string, Promise<void>>()
   let selected: string | undefined
+  const fragmentKey = (messageID: string, partID: string) => `${messageID}\u0000${partID}`
 
   const ensureChild = (sessionID: string): ChildState => {
     const existing = children.get(sessionID)
@@ -241,6 +261,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       projectedText: new Map(),
       reasoning: new Map(),
       projectedReasoning: new Map(),
+      textOrdinals: new Map(),
+      reasoningOrdinals: new Map(),
+      activeText: new Map(),
+      activeReasoning: new Map(),
       tools: new Map(),
       finishedTools: new Set(),
       messageIDs: new Set(),
@@ -308,7 +332,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       name: item.name,
       state: item.state,
       time: item.time,
-      provider: item.provider,
+      executed: item.executed,
+      providerState: item.providerState,
+      providerResultState: item.providerResultState,
     })
     if (item.state.status === "pending") return
     child.callIDs.add(item.id)
@@ -327,6 +353,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     child.projectedText.clear()
     child.reasoning.clear()
     child.projectedReasoning.clear()
+    child.textOrdinals.clear()
+    child.reasoningOrdinals.clear()
+    child.activeText.clear()
+    child.activeReasoning.clear()
     child.finishedTools.clear()
     child.messageIDs.clear()
     child.callIDs.clear()
@@ -337,36 +367,44 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       }
       if (message.type !== "assistant") continue
       child.messageIDs.add(message.id)
+      let textOrdinal = 0
+      let reasoningOrdinal = 0
       for (const item of message.content) {
         if (item.type === "text") {
-          child.text.set(item.id, item.text)
-          child.projectedText.set(item.id, item.text)
-          setFrame(child, `text:${item.id}`, {
+          const id = `text:${textOrdinal++}`
+          const key = fragmentKey(message.id, id)
+          child.text.set(key, item.text)
+          child.projectedText.set(key, item.text)
+          setFrame(child, key, {
             kind: "assistant",
             source: "assistant",
             text: item.text,
             phase: "progress",
             messageID: message.id,
-            partID: item.id,
+            partID: id,
           })
           continue
         }
         if (item.type === "reasoning") {
-          child.reasoning.set(item.id, item.text)
-          child.projectedReasoning.set(item.id, item.text)
+          const id = `reasoning:${reasoningOrdinal++}`
+          const key = fragmentKey(message.id, id)
+          child.reasoning.set(key, item.text)
+          child.projectedReasoning.set(key, item.text)
           if (input.thinking)
-            setFrame(child, `reasoning:${item.id}`, {
+            setFrame(child, key, {
               kind: "reasoning",
               source: "reasoning",
               text: `Thinking: ${item.text}`,
               phase: "progress",
               messageID: message.id,
-              partID: item.id,
+              partID: id,
             })
           continue
         }
         childTool(child, item, message.id)
       }
+      child.textOrdinals.set(message.id, textOrdinal)
+      child.reasoningOrdinals.set(message.id, reasoningOrdinal)
       if (message.error) {
         setFrame(child, `error:${message.id}`, {
           kind: "error",
@@ -438,74 +476,104 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       input.emit()
       return
     }
+    if (event.type === "session.text.started") {
+      const ordinal = child.textOrdinals.get(event.data.assistantMessageID) ?? 0
+      child.textOrdinals.set(event.data.assistantMessageID, ordinal + 1)
+      child.activeText.set(event.data.assistantMessageID, `text:${ordinal}`)
+      return
+    }
     if (event.type === "session.text.delta") {
-      const projected = child.projectedText.get(event.data.textID)
+      const id =
+        child.activeText.get(event.data.assistantMessageID) ??
+        `text:${Math.max(0, (child.textOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      const projected = child.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
-        child.projectedText.set(event.data.textID, projected.slice(covered + event.data.delta.length))
+        child.projectedText.set(key, projected.slice(covered + event.data.delta.length))
         return
       }
-      const next = (child.text.get(event.data.textID) ?? "") + event.data.delta
-      child.text.set(event.data.textID, next)
-      setFrame(child, `text:${event.data.textID}`, {
+      const next = (child.text.get(key) ?? "") + event.data.delta
+      child.text.set(key, next)
+      setFrame(child, key, {
         kind: "assistant",
         source: "assistant",
         text: next,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.textID,
+        partID: id,
       })
       touch(child, event.created)
       notifyDetail(child)
       return
     }
     if (event.type === "session.text.ended") {
-      child.text.set(event.data.textID, event.data.text)
-      child.projectedText.delete(event.data.textID)
-      setFrame(child, `text:${event.data.textID}`, {
+      const id =
+        child.activeText.get(event.data.assistantMessageID) ??
+        `text:${Math.max(0, (child.textOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      child.text.set(key, event.data.text)
+      child.projectedText.delete(key)
+      child.activeText.delete(event.data.assistantMessageID)
+      setFrame(child, key, {
         kind: "assistant",
         source: "assistant",
         text: event.data.text,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.textID,
+        partID: id,
       })
       touch(child, event.created)
       notifyDetail(child)
       return
     }
+    if (event.type === "session.reasoning.started") {
+      const ordinal = child.reasoningOrdinals.get(event.data.assistantMessageID) ?? 0
+      child.reasoningOrdinals.set(event.data.assistantMessageID, ordinal + 1)
+      child.activeReasoning.set(event.data.assistantMessageID, `reasoning:${ordinal}`)
+      return
+    }
     if (event.type === "session.reasoning.delta") {
-      const projected = child.projectedReasoning.get(event.data.reasoningID)
+      const id =
+        child.activeReasoning.get(event.data.assistantMessageID) ??
+        `reasoning:${Math.max(0, (child.reasoningOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      const projected = child.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
-        child.projectedReasoning.set(event.data.reasoningID, projected.slice(covered + event.data.delta.length))
+        child.projectedReasoning.set(key, projected.slice(covered + event.data.delta.length))
         return
       }
-      const next = (child.reasoning.get(event.data.reasoningID) ?? "") + event.data.delta
-      child.reasoning.set(event.data.reasoningID, next)
+      const next = (child.reasoning.get(key) ?? "") + event.data.delta
+      child.reasoning.set(key, next)
       if (!input.thinking) return
-      setFrame(child, `reasoning:${event.data.reasoningID}`, {
+      setFrame(child, key, {
         kind: "reasoning",
         source: "reasoning",
         text: `Thinking: ${next}`,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.reasoningID,
+        partID: id,
       })
       notifyDetail(child)
       return
     }
     if (event.type === "session.reasoning.ended") {
-      child.reasoning.set(event.data.reasoningID, event.data.text)
-      child.projectedReasoning.delete(event.data.reasoningID)
+      const id =
+        child.activeReasoning.get(event.data.assistantMessageID) ??
+        `reasoning:${Math.max(0, (child.reasoningOrdinals.get(event.data.assistantMessageID) ?? 1) - 1)}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      child.reasoning.set(key, event.data.text)
+      child.projectedReasoning.delete(key)
+      child.activeReasoning.delete(event.data.assistantMessageID)
       if (!input.thinking) return
-      setFrame(child, `reasoning:${event.data.reasoningID}`, {
+      setFrame(child, key, {
         kind: "reasoning",
         source: "reasoning",
         text: `Thinking: ${event.data.text}`,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.reasoningID,
+        partID: id,
       })
       notifyDetail(child)
       return
@@ -517,17 +585,20 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     if (event.type === "session.tool.called") {
       const current = child.tools.get(event.data.callID)
       child.tools.set(event.data.callID, {
-        name: event.data.tool,
+        name: current?.name ?? "tool",
         input: event.data.input,
         started: current?.started ?? event.created,
+        executed: event.data.executed,
+        providerState: event.data.state,
       })
       childTool(
         child,
         {
           type: "tool",
           id: event.data.callID,
-          name: event.data.tool,
-          provider: event.data.provider,
+          name: current?.name ?? "tool",
+          executed: event.data.executed,
+          providerState: event.data.state,
           state: { status: "running", input: event.data.input, structured: {}, content: [] },
           time: { created: current?.started ?? event.created, ran: event.created },
         },
@@ -547,7 +618,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           type: "tool",
           id: event.data.callID,
           name: current?.name ?? "tool",
-          provider: event.data.provider,
+          executed: event.data.executed,
+          providerState: current?.providerState,
+          providerResultState: event.data.resultState,
           state: failed
             ? {
                 status: "error",
@@ -613,17 +686,23 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
 
   return {
     main(event) {
+      if (event.type === "session.tool.input.started") {
+        if (event.data.name === "subagent") subagentCalls.add(event.data.callID)
+        return
+      }
       if (event.type === "session.tool.called") {
-        if (event.data.tool === "subagent") pendingCalls.set(event.data.callID, event.data.input)
+        if (subagentCalls.has(event.data.callID)) pendingCalls.set(event.data.callID, event.data.input)
         return
       }
       if (event.type === "session.tool.failed") {
         pendingCalls.delete(event.data.callID)
+        subagentCalls.delete(event.data.callID)
         return
       }
       if (event.type !== "session.tool.success") return
       const pending = pendingCalls.get(event.data.callID)
       pendingCalls.delete(event.data.callID)
+      subagentCalls.delete(event.data.callID)
       const found = childSessionID(record(event.data.structured))
       if (!found) return
       const child = ensureChild(found.sessionID)

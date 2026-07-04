@@ -113,6 +113,6 @@ export const commit = Effect.fn("SessionRevert.commit")(function* (session: Sess
   const events = yield* EventV2.Service
   yield* events.publish(SessionEvent.RevertEvent.Committed, {
     sessionID: session.id,
-    messageID: session.revert.messageID,
+    to: session.revert.messageID,
   })
 })

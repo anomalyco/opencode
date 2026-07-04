@@ -455,7 +455,7 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         LLMEvent.textStart({ id }),
         ...chunks.map((text) => LLMEvent.textDelta({ id, text })),
       ]
-      const expectedContent = { type: "text", id, text }
+      const expectedContent = { type: "text", text }
       return {
         delta: SessionEvent.Text.Delta,
         partialEvents,
@@ -475,7 +475,7 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         LLMEvent.reasoningStart({ id }),
         ...chunks.map((text) => LLMEvent.reasoningDelta({ id, text })),
       ]
-      const expectedContent = { type: "reasoning", id, text }
+      const expectedContent = { type: "reasoning", text }
       return {
         delta: SessionEvent.Reasoning.Delta,
         partialEvents,
@@ -1552,7 +1552,7 @@ describe("SessionRunnerLLM", () => {
           finish: "tool-calls",
           tokens: { input: 8, output: 3, reasoning: 1, cache: { read: 2, write: 0 } },
           content: [
-            { type: "reasoning", id: "reasoning-1", text: "Think" },
+            { type: "reasoning", text: "Think" },
             {
               type: "tool",
               id: "call-error",
@@ -1567,7 +1567,9 @@ describe("SessionRunnerLLM", () => {
               type: "tool",
               id: "call-provider",
               name: "web_search",
-              provider: { executed: true, metadata: { fake: { source: "provider" } } },
+              executed: true,
+              providerState: { source: "provider" },
+              providerResultState: { source: "provider" },
               state: {
                 status: "completed",
                 input: { query: "hello" },
@@ -1637,7 +1639,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
-        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-final", text: "Done" }] },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -1696,15 +1698,24 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.reasoningStart({ id: "reasoning-anthropic" }),
         LLMEvent.reasoningDelta({ id: "reasoning-anthropic", text: "Signed thought" }),
-        LLMEvent.reasoningEnd({ id: "reasoning-anthropic", providerMetadata: { anthropic: { signature: "sig_1" } } }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-anthropic",
+          providerMetadata: { fake: { signature: "sig_1" }, anthropic: { ignored: true } },
+        }),
         LLMEvent.reasoningStart({
           id: "reasoning-openai",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: {
+            fake: { itemId: "rs_1", reasoningEncryptedContent: null },
+            openai: { ignored: true },
+          },
         }),
         LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
         LLMEvent.reasoningEnd({
           id: "reasoning-openai",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            fake: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+            openai: { ignored: true },
+          },
         }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
@@ -1717,11 +1728,11 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           content: [
-            { type: "reasoning", text: "Signed thought", providerMetadata: { anthropic: { signature: "sig_1" } } },
+            { type: "reasoning", text: "Signed thought", state: { signature: "sig_1" } },
             {
               type: "reasoning",
               text: "Encrypted thought",
-              providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+              state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
             },
           ],
         },
@@ -1732,11 +1743,11 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests[1]?.messages[1]?.content).toEqual([
-        { type: "reasoning", text: "Signed thought", providerMetadata: { anthropic: { signature: "sig_1" } } },
+        { type: "reasoning", text: "Signed thought", providerMetadata: { fake: { signature: "sig_1" } } },
         {
           type: "reasoning",
           text: "Encrypted thought",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: { fake: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
     }),
@@ -1756,14 +1767,14 @@ describe("SessionRunnerLLM", () => {
           name: "web_search",
           input: { query: "Effect" },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "hosted-search" } },
+          providerMetadata: { fake: { itemId: "hosted-search" }, openai: { ignored: true } },
         }),
         LLMEvent.toolResult({
           id: "hosted-search",
           name: "web_search",
           result: { type: "json", value: [{ title: "Effect" }] },
           providerExecuted: true,
-          providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+          providerMetadata: { fake: { blockType: "web_search_tool_result" }, anthropic: { ignored: true } },
         }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
@@ -1783,7 +1794,7 @@ describe("SessionRunnerLLM", () => {
           name: "web_search",
           input: { query: "Effect" },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "hosted-search" } },
+          providerMetadata: { fake: { itemId: "hosted-search" } },
         },
         {
           type: "tool-result",
@@ -1791,7 +1802,7 @@ describe("SessionRunnerLLM", () => {
           name: "web_search",
           result: { type: "json", value: [{ title: "Effect" }] },
           providerExecuted: true,
-          providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+          providerMetadata: { fake: { blockType: "web_search_tool_result" } },
         },
       ])
     }),
@@ -1980,7 +1991,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Run once" },
-        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-once", text: "Once" }] },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Once" }] },
       ])
     }),
   )
@@ -2402,9 +2413,8 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         assistantMessageID,
         callID: "call-interrupted",
-        tool: "echo",
         input: { text: "stale" },
-        provider: { executed: false },
+        executed: false,
       })
       requests.length = 0
       response = []
@@ -2462,9 +2472,9 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         assistantMessageID,
         callID: "call-hosted-interrupted",
-        tool: "web_search",
         input: { query: "stale" },
-        provider: { executed: true, metadata: { openai: { itemId: "call-hosted-interrupted" } } },
+        executed: true,
+        state: { itemId: "call-hosted-interrupted" },
       })
       requests.length = 0
       response = []
@@ -2477,7 +2487,7 @@ describe("SessionRunnerLLM", () => {
           type: "tool-call",
           id: "call-hosted-interrupted",
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "call-hosted-interrupted" } },
+          providerMetadata: { fake: { itemId: "call-hosted-interrupted" } },
         },
         { type: "tool-result", id: "call-hosted-interrupted", providerExecuted: true, result: { type: "error" } },
       ])
@@ -2726,7 +2736,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
-        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-after-error", text: "Recovered" }] },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
     }),
   )
@@ -3339,7 +3349,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("keeps interleaved assistant text blocks separate", () =>
+  it.effect("rejects a second text start before the open fragment ends", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -3352,9 +3362,31 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "text-1" }),
         LLMEvent.textStart({ id: "text-2" }),
+      ]
+
+      const defect = yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))
+      expect(defect).toBeInstanceOf(Error)
+      if (!(defect instanceof Error)) return
+      expect(defect.message).toBe("text start before end: text-2")
+    }),
+  )
+
+  it.effect("projects sequential text fragments as separate content parts", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Two blocks" }), resume: false })
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-1" }),
         LLMEvent.textDelta({ id: "text-1", text: "First" }),
-        LLMEvent.textDelta({ id: "text-2", text: "Second" }),
         LLMEvent.textEnd({ id: "text-1" }),
+        LLMEvent.textStart({ id: "text-2" }),
+        LLMEvent.textDelta({ id: "text-2", text: "Second" }),
         LLMEvent.textEnd({ id: "text-2" }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
@@ -3367,8 +3399,8 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           content: [
-            { type: "text", id: "text-1", text: "First" },
-            { type: "text", id: "text-2", text: "Second" },
+            { type: "text", text: "First" },
+            { type: "text", text: "Second" },
           ],
         },
       ])

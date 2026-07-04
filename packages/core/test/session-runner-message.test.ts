@@ -28,17 +28,14 @@ describe("toLLMMessages", () => {
     const messages = toLLMMessages(
       [
         assistant("empty", []),
-        assistant("empty-text", [SessionMessage.AssistantText.make({ type: "text", id: "empty", text: "" })]),
-        assistant("empty-reasoning", [
-          SessionMessage.AssistantReasoning.make({ type: "reasoning", id: "empty-reasoning", text: "" }),
-        ]),
-        assistant("text", [SessionMessage.AssistantText.make({ type: "text", id: "text", text: "Partial" })]),
+        assistant("empty-text", [SessionMessage.AssistantText.make({ type: "text", text: "" })]),
+        assistant("empty-reasoning", [SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "" })]),
+        assistant("text", [SessionMessage.AssistantText.make({ type: "text", text: "Partial" })]),
         assistant("reasoning", [
           SessionMessage.AssistantReasoning.make({
             type: "reasoning",
-            id: "reasoning",
             text: "",
-            providerMetadata: { anthropic: { signature: "sig_1" } },
+            state: { signature: "sig_1" },
           }),
         ]),
       ],
@@ -158,12 +155,11 @@ Recent work
           agent: "build",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
-            SessionMessage.AssistantText.make({ type: "text", id: "text-1", text: "Checking" }),
+            SessionMessage.AssistantText.make({ type: "text", text: "Checking" }),
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
-              id: "reasoning-1",
               text: "Think",
-              providerMetadata: { anthropic: { signature: "sig_1" } },
+              state: { signature: "sig_1" },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
@@ -208,11 +204,9 @@ Recent work
               type: "tool",
               id: "hosted",
               name: "web_search",
-              provider: {
-                executed: true,
-                metadata: { fake: { continuation: "hosted-call" } },
-                resultMetadata: { fake: { continuation: "hosted-result" } },
-              },
+              executed: true,
+              providerState: { continuation: "hosted-call" },
+              providerResultState: { continuation: "hosted-result" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
@@ -225,7 +219,8 @@ Recent work
               type: "tool",
               id: "hosted-failed",
               name: "write",
-              provider: { executed: true, metadata: { fake: { continuation: "failed" } } },
+              executed: true,
+              providerState: { continuation: "failed" },
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { path: "README.md" },
@@ -245,7 +240,7 @@ Recent work
     expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
-      { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "sig_1" } } },
+      { type: "reasoning", text: "Think", providerMetadata: { provider: { signature: "sig_1" } } },
       { type: "tool-call", id: "pending", name: "read", input: { path: "README.md" } },
       { type: "tool-call", id: "running", name: "read", input: { path: "README.md" } },
       {
@@ -260,14 +255,14 @@ Recent work
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: { fake: { continuation: "hosted-call" } },
+        providerMetadata: { provider: { continuation: "hosted-call" } },
       },
       {
         type: "tool-result",
         id: "hosted",
         name: "web_search",
         providerExecuted: true,
-        providerMetadata: { fake: { continuation: "hosted-result" } },
+        providerMetadata: { provider: { continuation: "hosted-result" } },
         result: { type: "text", value: "Found it" },
       },
       {
@@ -276,14 +271,14 @@ Recent work
         name: "write",
         input: { path: "README.md" },
         providerExecuted: true,
-        providerMetadata: { fake: { continuation: "failed" } },
+        providerMetadata: { provider: { continuation: "failed" } },
       },
       {
         type: "tool-result",
         id: "hosted-failed",
         name: "write",
         providerExecuted: true,
-        providerMetadata: { fake: { continuation: "failed" } },
+        providerMetadata: { provider: { continuation: "failed" } },
         result: {
           type: "error",
           value: { error: { type: "unknown", message: "Denied" }, content: [], structured: {} },
@@ -317,9 +312,8 @@ Recent work
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
-              id: "reasoning-openai",
               text: "Think",
-              providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+              state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
             }),
           ],
           time: { created, completed: created },
@@ -332,7 +326,7 @@ Recent work
       {
         type: "reasoning",
         text: "Think",
-        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        providerMetadata: { provider: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
       },
     ])
   })
@@ -348,19 +342,16 @@ Recent work
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
-              id: "reasoning-failed",
               text: "Partial thought",
-              providerMetadata: { openai: { itemId: "rs_failed", reasoningEncryptedContent: null } },
+              state: { itemId: "rs_failed", reasoningEncryptedContent: null },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
               id: "hosted-failed",
               name: "web_search",
-              provider: {
-                executed: true,
-                metadata: { openai: { itemId: "call_failed" } },
-                resultMetadata: { openai: { itemId: "result_failed" } },
-              },
+              executed: true,
+              providerState: { itemId: "call_failed" },
+              providerResultState: { itemId: "result_failed" },
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { query: "Effect" },
@@ -420,19 +411,16 @@ Recent work
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
-              id: "reasoning-old-model",
               text: "Visible thought",
-              providerMetadata: { anthropic: { signature: "sig_old" } },
+              state: { signature: "sig_old" },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
               id: "hosted-old-model",
               name: "web_search",
-              provider: {
-                executed: true,
-                metadata: { openai: { itemId: "hosted-old-model" } },
-                resultMetadata: { openai: { itemId: "hosted-old-model" } },
-              },
+              executed: true,
+              providerState: { itemId: "hosted-old-model" },
+              providerResultState: { itemId: "hosted-old-model" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
@@ -446,11 +434,9 @@ Recent work
               type: "tool",
               id: "local-old-model",
               name: "read",
-              provider: {
-                executed: false,
-                metadata: { fake: { call: "old" } },
-                resultMetadata: { fake: { result: "old" } },
-              },
+              executed: false,
+              providerState: { call: "old" },
+              providerResultState: { result: "old" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { path: "README.md" },

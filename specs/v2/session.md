@@ -116,6 +116,10 @@ Compaction keeps the full transcript durable while replacing its active model re
 
 `session.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.compaction.ended.1` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next physical attempt, the runner observes that completed compaction and directly renders a fresh Context Epoch baseline. A failed or interrupted attempt therefore leaves the previous history boundary active.
 
+Assistant text and reasoning follow a strict `started` / live-only `delta` / durable full-value `ended` lifecycle. A publisher permits at most one open fragment of each kind in a step and fails on a second start before the matching end. Provider block IDs remain internal to LLM adapters; projected UI identity is the assistant message ID plus content kind and ordinal. Tool calls retain `callID` because settlements and provider replay correlate through it.
+
+Provider continuation state is opaque and un-nested at the Session boundary. The publisher selects only the active model provider's entry from LLM provider metadata. Same-model replay re-nests that state under the current provider; model switches and failed assistant steps continue to suppress provider-native continuation state.
+
 Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending step.
 
 When a provider rejects a request as context overflow before durable assistant output or tool execution, the runner attempts one overflow-triggered compaction even when the local estimate did not predict pressure. A completed checkpoint rebuilds the same logical step with one remaining physical attempt. A second overflow, unavailable compaction, or overflow after durable output becomes the ordinary terminal failure; recovery never loops or replays partial side effects. Deterministic old tool-result pruning remains a separate follow-up.
