@@ -23,31 +23,25 @@ type SubstituteInput = ParseSource & {
   env?: Record<string, string>
 }
 
-function source(input: ParseSource) {
-  return input.type === "path" ? input.path : input.source
-}
-
-function dir(input: ParseSource) {
-  return input.type === "path" ? path.dirname(input.path) : input.dir
-}
-
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
 export const substitute = Effect.fn("ConfigVariable.substitute")(function* (input: SubstituteInput) {
+  const text = input.text.replace(
+    /\{env:([^}]+)\}/g,
+    (_, varName: string) => (input.env?.[varName] ?? process.env[varName]) || "",
+  )
+  if (!text.includes("{file:")) return text
+  return yield* substituteFiles(input, text)
+})
+
+const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, text: string) {
   const fs = yield* FSUtil.Service
-  const missing = input.missing ?? "error"
-  const text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-    return (input.env?.[varName] ?? process.env[varName]) || ""
-  })
-
-  const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
-  if (!fileMatches.length) return text
-
-  const configDir = dir(input)
-  const configSource = source(input)
+  const configDir = input.type === "path" ? path.dirname(input.path) : input.dir
+  const configSource = input.type === "path" ? input.path : input.source
+  const matches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
   let out = ""
   let cursor = 0
 
-  for (const match of fileMatches) {
+  for (const match of matches) {
     const token = match[0]
     const index = match.index
     out += text.slice(cursor, index)
@@ -65,7 +59,7 @@ export const substitute = Effect.fn("ConfigVariable.substitute")(function* (inpu
     const resolvedPath = path.isAbsolute(expandedPath) ? expandedPath : path.resolve(configDir, expandedPath)
     const fileContent = yield* fs.readFileString(resolvedPath).pipe(
       Effect.catch((error) => {
-        if (missing === "empty") return Effect.succeed("")
+        if (input.missing === "empty") return Effect.succeed("")
 
         const message = `bad file reference: "${token}"`
         return Effect.fail(
