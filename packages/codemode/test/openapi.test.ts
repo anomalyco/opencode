@@ -18,6 +18,10 @@ const opencodeSpec = async (): Promise<Document> => {
   return Bun.file(new URL("./fixtures/opencode-v2-openapi.json", import.meta.url)).json() as Promise<Document>
 }
 
+const happyPathSpec = async (): Promise<Document> => {
+  return Bun.file(new URL("./fixtures/openapi-happy-path.json", import.meta.url)).json() as Promise<Document>
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -54,6 +58,112 @@ const singleOperation = (operation: Record<string, unknown>, method = "get"): Do
 })
 
 describe("OpenAPI.fromSpec", () => {
+  test("covers a representative API from generation through execution", async () => {
+    const resolutions: Array<string> = []
+    const client = recordingClient((request) => {
+      const url = Option.getOrElse(HttpClientRequest.toUrl(request), () => new URL(request.url))
+      if (request.method === "POST") {
+        return new Response(
+          JSON.stringify({ id: "user-2", name: "Grace", email: "grace@example.test", role: "admin" }),
+          { status: 201, headers: { "content-type": "application/vnd.example+json" } },
+        )
+      }
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      if (url.pathname === "/search") {
+        return new Response("2 matches", { headers: { "content-type": "text/plain" } })
+      }
+      return json({ id: "user-1", name: "Ada", email: "ada@example.test", role: "member" })
+    })
+    const api = OpenAPI.fromSpec({
+      spec: await happyPathSpec(),
+      baseUrl,
+      auth: {
+        resolve: ({ schemeName }) => {
+          resolutions.push(schemeName)
+          return Effect.succeed(
+            schemeName === "BearerAuth"
+              ? { type: "bearer", token: "bearer-secret" }
+              : { type: "apiKey", value: "api-secret" },
+          )
+        },
+      },
+    })
+    const get = toolAt(api.tools, "users.get")
+    const create = toolAt(api.tools, "users.create")
+    const search = toolAt(api.tools, "search.run")
+    const remove = toolAt(api.tools, "users.remove")
+
+    expect(api.skipped).toEqual([])
+    if (!Tool.isDefinition(get) || !Tool.isDefinition(create) || !Tool.isDefinition(search) || !Tool.isDefinition(remove)) {
+      throw new Error("happy-path fixture did not generate every operation")
+    }
+    expect(inputTypeScript(get)).toBe(
+      '{ userId: string; include?: Array<string>; verbose?: boolean; "X-Trace-ID"?: string }',
+    )
+    expect(inputTypeScript(create)).toBe('{ name: string; email: string; role?: "admin" | "member" }')
+    expect(inputTypeScript(search)).toBe("{ filter?: { query: string; page?: number }; tags?: Array<string> }")
+    expect(inputTypeScript(remove)).toBe("{ userId: string }")
+    expect(outputTypeScript(get)).toContain("id: string")
+    expect(outputTypeScript(create)).toContain('role?: "admin" | "member"')
+    expect(outputTypeScript(search)).toBe("string")
+    expect(outputTypeScript(remove)).toBe("null")
+
+    const result = await Effect.runPromise(
+      CodeMode.make({ tools: { api: api.tools } })
+        .execute(`
+          const user = await tools.api.users.get({
+            userId: "user-1",
+            include: ["profile", "permissions"],
+            verbose: true,
+            "X-Trace-ID": "trace-1",
+          })
+          const created = await tools.api.users.create({
+            name: "Grace",
+            email: "grace@example.test",
+            role: "admin",
+          })
+          const summary = await tools.api.search.run({
+            filter: { query: "effect", page: 2 },
+            tags: ["typescript", "runtime"],
+          })
+          const removed = await tools.api.users.remove({ userId: "user-1" })
+          return { user, created, summary, removed }
+        `)
+        .pipe(Effect.provide(client.layer)),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        user: { id: "user-1", name: "Ada" },
+        created: { id: "user-2", name: "Grace" },
+        summary: "2 matches",
+        removed: null,
+      },
+    })
+    expect(resolutions).toEqual(["BearerAuth", "ApiKey", "BearerAuth"])
+    expect(client.requests).toHaveLength(4)
+
+    const getUrl = new URL(client.requests[0]!.url)
+    expect(getUrl.pathname).toBe("/users/user-1")
+    expect(getUrl.searchParams.get("include")).toBe("profile,permissions")
+    expect(getUrl.searchParams.get("verbose")).toBe("true")
+    expect(client.requests[0]!.headers["x-trace-id"]).toBe("trace-1")
+    expect(client.requests[0]!.headers.authorization).toBe("Bearer bearer-secret")
+
+    const createUrl = new URL(client.requests[1]!.url)
+    expect(createUrl.searchParams.get("api_key")).toBe("api-secret")
+    expect(client.requests[1]!.body).toEqual({ name: "Grace", email: "grace@example.test", role: "admin" })
+
+    const searchUrl = new URL(client.requests[2]!.url)
+    expect(searchUrl.searchParams.get("filter[query]")).toBe("effect")
+    expect(searchUrl.searchParams.get("filter[page]")).toBe("2")
+    expect(searchUrl.searchParams.getAll("tags")).toEqual(["typescript", "runtime"])
+    expect(client.requests[2]!.headers.authorization).toBeUndefined()
+    expect(new URL(client.requests[3]!.url).pathname).toBe("/users/user-1")
+    expect(client.requests[3]!.headers.authorization).toBe("Bearer bearer-secret")
+  })
+
   test("converts representative opencode operations into the expected tool shape", async () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
