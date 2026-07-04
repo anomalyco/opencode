@@ -14,7 +14,7 @@ import { testEffect } from "./lib/effect"
 import { settleTool, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<PermissionV2.AssertInput> | undefined
-let permission: Deferred.Deferred<void> | undefined
+let decision: Effect.Effect<void, PermissionV2.Error> = Effect.void
 let calls = 0
 
 const mcp = Layer.mock(MCP.Service, {
@@ -42,9 +42,9 @@ const mcp = Layer.mock(MCP.Service, {
 const permissions = Layer.mock(PermissionV2.Service, {
   assert: (input) =>
     Effect.gen(function* () {
-      if (!assertion || !permission) return yield* Effect.die("Permission test is not initialized")
+      if (!assertion) return yield* Effect.die("Permission test is not initialized")
       yield* Deferred.succeed(assertion, input)
-      yield* Deferred.await(permission)
+      yield* decision
     }),
 })
 const events = Layer.mock(EventV2.Service, { subscribe: () => Stream.never })
@@ -76,7 +76,8 @@ it.effect("waits for permission before calling an MCP tool", () =>
   Effect.gen(function* () {
     calls = 0
     assertion = yield* Deferred.make<PermissionV2.AssertInput>()
-    permission = yield* Deferred.make<void>()
+    const permission = yield* Deferred.make<void>()
+    decision = Deferred.await(permission)
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "demo_search")
 
@@ -103,5 +104,24 @@ it.effect("waits for permission before calling an MCP tool", () =>
     yield* Deferred.succeed(permission, undefined)
     yield* Fiber.join(fiber)
     expect(calls).toBe(1)
+  }),
+)
+
+it.effect("does not call MCP when permission is rejected", () =>
+  Effect.gen(function* () {
+    calls = 0
+    assertion = yield* Deferred.make<PermissionV2.AssertInput>()
+    decision = Effect.fail(new PermissionV2.RejectedError())
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "demo_search")
+
+    expect(
+      yield* settleTool(registry, {
+        sessionID: SessionV2.ID.make("ses_mcp_rejected"),
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call_mcp_rejected", name: "demo_search", input: {} },
+      }),
+    ).toEqual({ result: { type: "error", value: "Unable to execute demo_search" } })
+    expect(calls).toBe(0)
   }),
 )
