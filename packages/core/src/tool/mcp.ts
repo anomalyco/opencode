@@ -16,15 +16,6 @@ import { ToolRegistry } from "./registry"
 export const name = (server: string, tool: string) =>
   `${server.replace(/[^a-zA-Z0-9_-]/g, "_")}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
-const toContent = (part: MCP.ToolResultContent): Tool.Content =>
-  part.type === "text" ? { type: "text", text: part.text } : { type: "file", data: part.data, mime: part.mimeType }
-
-const errorText = (content: ReadonlyArray<MCP.ToolResultContent>) =>
-  content
-    .flatMap((part) => (part.type === "text" ? [part.text] : []))
-    .join("\n")
-    .trim()
-
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
@@ -34,27 +25,6 @@ export const layer = Layer.effectDiscard(
     const lock = Semaphore.makeUnsafe(1)
     let current: Scope.Closeable | undefined
 
-    const make = (server: MCP.ServerName, tool: MCP.Tool) =>
-      Tool.make({
-        description: tool.description ?? "",
-        jsonSchema: (tool.inputSchema as JsonSchema.JsonSchema | undefined) ?? { type: "object", properties: {} },
-        execute: (input) =>
-          Effect.gen(function* () {
-            const result = yield* mcp
-              .callTool({ server, name: tool.name, args: (input ?? {}) as Record<string, unknown> })
-              .pipe(
-                Effect.catchTags({
-                  "MCP.NotFoundError": (error) =>
-                    new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
-                  "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
-                }),
-              )
-            if (result.isError)
-              return yield* new ToolFailure({ message: errorText(result.content) || "MCP tool returned an error" })
-            return { structured: result.structured ?? {}, content: result.content.map(toContent) }
-          }),
-      })
-
     // Register the current tool set under a fresh child scope, then close the previous one so the
     // registry never has a gap where MCP tools disappear mid-swap.
     const reconcile = lock.withPermit(
@@ -62,7 +32,45 @@ export const layer = Layer.effectDiscard(
         const groups = new Map<string, Record<string, Tool.AnyTool>>()
         for (const tool of yield* mcp.tools()) {
           const group = groups.get(tool.server) ?? {}
-          group[tool.name] = make(tool.server, tool)
+          group[tool.name] = Tool.make({
+            description: tool.description ?? "",
+            jsonSchema: (tool.inputSchema as JsonSchema.JsonSchema | undefined) ?? {
+              type: "object",
+              properties: {},
+            },
+            execute: (input) =>
+              Effect.gen(function* () {
+                const result = yield* mcp
+                  .callTool({
+                    server: tool.server,
+                    name: tool.name,
+                    args: (input ?? {}) as Record<string, unknown>,
+                  })
+                  .pipe(
+                    Effect.catchTags({
+                      "MCP.NotFoundError": (error) =>
+                        new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
+                      "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
+                    }),
+                  )
+                if (result.isError)
+                  return yield* new ToolFailure({
+                    message:
+                      result.content
+                        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                        .join("\n")
+                        .trim() || "MCP tool returned an error",
+                  })
+                return {
+                  structured: result.structured ?? {},
+                  content: result.content.map((part) =>
+                    part.type === "text"
+                      ? { type: "text" as const, text: part.text }
+                      : { type: "file" as const, data: part.data, mime: part.mimeType },
+                  ),
+                }
+              }),
+          })
           groups.set(tool.server, group)
         }
         const next = yield* Scope.fork(scope)
