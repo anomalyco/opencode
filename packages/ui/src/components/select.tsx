@@ -20,7 +20,6 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   triggerStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
   triggerProps?: Record<string, string | number | boolean | undefined>
-  instantClose?: boolean
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -41,7 +40,6 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "triggerStyle",
     "triggerVariant",
     "triggerProps",
-    "instantClose",
   ])
 
   const state = {
@@ -167,7 +165,6 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           }}
           data-component="select-content"
           data-trigger-style={local.triggerVariant}
-          data-instant-close={local.instantClose ? "" : undefined}
         >
           <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>

@@ -24,11 +24,6 @@
   animation: select-v2-content-out 80ms ease-in forwards;
 }
 
-[data-component="menu-v2-content"][data-slot="select-v2-content"][data-instant-close][data-closed] {
-  animation: none;
-  opacity: 0;
-}
-
 @keyframes select-v2-content-in {
   from {
     opacity: 0;
@@ -70,7 +65,10 @@
   box-shadow: var(--v2-elevation-button-neutral);
   flex: none;
   align-self: stretch;
-  transition: outline-color 85ms ease-out;
+  transition:
+    background 85ms ease-out,
+    outline-color 85ms ease-out,
+    box-shadow 85ms ease-out;
 }
 
 [data-component="select-v2"][data-appearance="large"] {

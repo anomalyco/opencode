@@ -444,7 +444,6 @@ export const SettingsGeneral: Component = () => {
             size="small"
             triggerVariant="settings"
             triggerStyle={{ "min-width": "220px" }}
-            instantClose
           />
         </SettingsRow>
 
@@ -470,7 +469,6 @@ export const SettingsGeneral: Component = () => {
             variant="secondary"
             size="small"
             triggerVariant="settings"
-            instantClose
           />
         </SettingsRow>
 

@@ -422,7 +422,6 @@ export const SettingsGeneralV2: Component<{
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => option && theme.setColorScheme(option.value)}
-            instantClose
           />
         </SettingsRowV2>
 
@@ -450,7 +449,6 @@ export const SettingsGeneralV2: Component<{
               if (!option) return
               theme.setTheme(option.id)
             }}
-            instantClose
           />
         </SettingsRowV2>
 
