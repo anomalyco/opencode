@@ -357,6 +357,22 @@ const sanitizeOperationSegment = (raw: string): string => {
   return isBlockedMember(base) ? `${base}_2` : base
 }
 
+const fallbackOperationPath = (method: string, path: string): ReadonlyArray<string> => {
+  const parts = path.split("/").filter((part) => part !== "")
+  const terminal = parts.at(-1)
+  const item = terminal?.startsWith("{") === true && terminal.endsWith("}")
+  const resources = parts
+    .filter((part) => !(part.startsWith("{") && part.endsWith("}")))
+    .map(sanitizeOperationSegment)
+  const operation = (() => {
+    if (method === "get") return item ? "get" : "list"
+    if (method === "post") return item ? "post" : "create"
+    if (method === "put" || method === "patch") return "update"
+    return method
+  })()
+  return [...(resources.length === 0 ? ["root"] : resources), operation]
+}
+
 export const operationPath = (
   method: string,
   path: string,
@@ -365,10 +381,17 @@ export const operationPath = (
   namespaces: ReadonlySet<string>,
 ): ReadonlyArray<string> => {
   const raw = nonEmptyString(operation.operationId)
-  const segments = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split(".")).map(
-    sanitizeOperationSegment,
-  )
+  const segments = raw === undefined ? fallbackOperationPath(method, path) : raw.split(".").map(sanitizeOperationSegment)
   if (isOperationPathAvailable(segments, used, namespaces)) return segments
+  if (segments.slice(0, -1).every((_, index) => !used.has(segments.slice(0, index + 1).join(".")))) {
+    const prefix = segments.slice(0, -1)
+    const leaf = segments.at(-1) ?? "operation"
+    const next = (index: number): ReadonlyArray<string> => {
+      const candidate = [...prefix, `${leaf}_${index}`]
+      return isOperationPathAvailable(candidate, used, namespaces) ? candidate : next(index + 1)
+    }
+    return next(2)
+  }
   const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
   if (conflict >= 0 && conflict + 1 < segments.length) {
     const collapsed = segments.flatMap((segment, index) => {

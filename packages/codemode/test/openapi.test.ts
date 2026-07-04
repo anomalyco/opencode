@@ -224,8 +224,34 @@ describe("OpenAPI.fromSpec", () => {
     })
 
     expect(Tool.isDefinition(toolAt(result.tools, "group.item"))).toBe(true)
-    expect(Tool.isDefinition(toolAt(result.tools, "group_item_2"))).toBe(true)
+    expect(Tool.isDefinition(toolAt(result.tools, "group.item_2"))).toBe(true)
     expect(Tool.isDefinition(toolAt(result.tools, "group.operation.other"))).toBe(true)
+  })
+
+  test("groups operations without operation IDs by resource and REST convention", () => {
+    const response = { responses: { 200: { description: "Success" } } }
+    const tools = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        openapi: "3.1.0",
+        paths: {
+          "/users": { get: response, post: response },
+          "/users/{id}": { get: response, patch: response, delete: response },
+          "/organizations/{organizationId}/users/{id}": { get: response },
+        },
+      },
+    }).tools
+
+    for (const path of [
+      "users.list",
+      "users.create",
+      "users.get",
+      "users.update",
+      "users.delete",
+      "organizations.users.get",
+    ]) {
+      expect(Tool.isDefinition(toolAt(tools, path))).toBe(true)
+    }
   })
 
   test("lets operation parameters override matching path parameters", () => {
@@ -534,7 +560,7 @@ describe("OpenAPI.fromSpec", () => {
           },
         },
       }).tools,
-      "get__test",
+      "test.list",
     )
     if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
 
