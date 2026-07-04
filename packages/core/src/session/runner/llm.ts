@@ -142,7 +142,7 @@ const layer = Layer.effect(
             sessionID,
             assistantMessageID: message.id,
             callID: tool.id,
-            error: { type: "tool.stale", message: "Tool execution interrupted", name: tool.name },
+            error: { type: "tool.stale", message: `Tool execution interrupted: ${tool.name}` },
             executed: tool.executed === true,
           })
         }

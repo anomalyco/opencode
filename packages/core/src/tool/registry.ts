@@ -142,12 +142,12 @@ const registryLayer = Layer.effect(
             type: "error" as const,
             value: `Stale tool call: ${input.call.name}`,
           },
-          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}`, name: input.call.name },
+          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}` },
         }
       if (registration.identity !== advertised)
         return {
           result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` },
-          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}`, name: input.call.name },
+          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}` },
         }
       return yield* settleTool(input, registration.tool)
     })
@@ -228,7 +228,7 @@ const registryLayer = Layer.effect(
             if (registration) return settleWith(input, registration.identity)
             return Effect.succeed({
               result: { type: "error", value: `Unknown tool: ${input.call.name}` },
-              error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}`, name: input.call.name },
+              error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },
             })
           },
         }

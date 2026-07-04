@@ -24,13 +24,14 @@ Compatibility:
 ## 2026-07-03: Add Execution Lifecycle, Retry, And Structured Session Errors
 
 - Replace live-only `session.execution.settled` and unused `session.retried` with durable v1 `session.execution.started`, `session.execution.succeeded`, `session.execution.failed`, `session.execution.interrupted`, and `session.retry.scheduled` events.
-- Add the closed, dot-cased `SessionError` wire union and browser-safe `FinishReason` contract.
+- Add an open `SessionError` wire envelope with dot-cased type values and the browser-safe `FinishReason` contract.
 - Project retry state onto the current assistant and classify content-filter finishes as failed steps.
 - Reuse one projected assistant across pre-output retry steps; each provider call remains a distinct step and consumes agent allowance.
 
 Compatibility:
 
 - Experimental V2 event, sequence, input, and message-projection rows are reset. Durable event contracts restart at v1.
+- `SessionError.type` remains an open string so new error classifications do not require event-version or database migrations. Unknown fields are ignored by older decoders; richer public details require a separate compatibility design.
 - Execution lifecycle events are historical observations of one process-local coordinator busy period. Unmatched starts never establish current liveness or recovery work; `/api/session/active` remains the current-process liveness authority.
 - Scheduled retries are historical UI state after a crash and never trigger provider recovery.
 

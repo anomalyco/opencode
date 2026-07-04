@@ -391,7 +391,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           callID: event.id,
           error:
             event.message === `Unknown tool: ${event.name}`
-              ? { type: "tool.unknown", message: event.message, name: event.name }
+              ? { type: "tool.unknown", message: event.message }
               : { type: "tool.execution", message: event.message },
           executed: tool.providerExecuted,
           resultState: providerState(event.providerMetadata),

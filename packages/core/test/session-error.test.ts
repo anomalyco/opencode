@@ -22,11 +22,10 @@ import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 const llm = (reason: LLMError["reason"]) => new LLMError({ module: "test", method: "stream", reason })
 
 describe("toSessionError", () => {
-  test("maps every LLM reason to the closed wire type", () => {
+  test("maps every LLM reason to the open wire type", () => {
     expect(toSessionError(llm(new RateLimitReason({ message: "rate", retryAfterMs: 123 })))).toEqual({
       type: "provider.rate-limit",
       message: "rate",
-      retryAfterMs: 123,
     })
     expect(toSessionError(llm(new AuthenticationReason({ message: "auth", kind: "invalid" }))).type).toBe(
       "provider.auth",
@@ -55,19 +54,15 @@ describe("toSessionError", () => {
     expect(toSessionError(llm(new UnknownProviderReason({ message: "unknown" }))).type).toBe("provider.unknown")
   })
 
-  test("preserves structured permission rejection data without inventing resources", () => {
+  test("preserves the permission rejection type without exposing internal fields", () => {
     const blocked = new PermissionV2.BlockedError({ rules: [], permission: "external_directory", resources: [] })
     expect(toSessionError(blocked)).toEqual({
       type: "permission.rejected",
       message: "Permission denied: external_directory",
-      permission: "external_directory",
-      resources: [],
     })
     expect(toSessionError(new ToolFailure({ message: blocked.message, error: blocked }))).toEqual({
       type: "permission.rejected",
       message: "Permission denied: external_directory",
-      permission: "external_directory",
-      resources: [],
     })
   })
 

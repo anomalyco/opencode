@@ -97,8 +97,6 @@ describe("QuestionTool", () => {
         error: {
           type: "permission.rejected",
           message: "Permission denied: question",
-          permission: "question",
-          resources: ["*"],
         },
       })
       expect(capturedInput()).toBeUndefined()

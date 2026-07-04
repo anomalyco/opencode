@@ -3310,83 +3310,10 @@ export type PromptAgentAttachment = {
   mention?: PromptMention
 }
 
-export type SessionStructuredError =
-  | {
-      type: "provider.rate-limit"
-      message: string
-      retryAfterMs?: number
-    }
-  | {
-      type: "provider.auth"
-      message: string
-    }
-  | {
-      type: "provider.quota"
-      message: string
-    }
-  | {
-      type: "provider.content-filter"
-      message: string
-    }
-  | {
-      type: "provider.transport"
-      message: string
-    }
-  | {
-      type: "provider.internal"
-      message: string
-    }
-  | {
-      type: "provider.invalid-output"
-      message: string
-    }
-  | {
-      type: "provider.invalid-request"
-      message: string
-    }
-  | {
-      type: "provider.no-route"
-      message: string
-    }
-  | {
-      type: "provider.unknown"
-      message: string
-    }
-  | {
-      type: "permission.rejected"
-      message: string
-      permission: string
-      resources: Array<string>
-    }
-  | {
-      type: "tool.unknown"
-      message: string
-      name: string
-    }
-  | {
-      type: "tool.stale"
-      message: string
-      name?: string
-    }
-  | {
-      type: "tool.execution"
-      message: string
-    }
-  | {
-      type: "tool.result-missing"
-      message: string
-      callID?: string
-    }
-  | {
-      type: "aborted"
-      message: string
-      reason?: "user" | "shutdown" | "timeout"
-    }
-  | {
-      type: "unknown"
-      message: string
-      agent?: string
-    }
+export type SessionStructuredError = {
+  type: string
+  message: string
+}
 
 export type SessionMessageProviderState = {
   [key: string]: unknown

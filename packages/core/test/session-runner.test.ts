@@ -2493,7 +2493,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-interrupted",
               state: {
                 status: "error",
-                error: { type: "tool.stale", message: "Tool execution interrupted", name: "echo" },
+                error: { type: "tool.stale", message: "Tool execution interrupted: echo" },
               },
             },
           ],
@@ -3093,8 +3093,6 @@ describe("SessionRunnerLLM", () => {
           error: {
             type: "permission.rejected",
             message: "Permission denied: edit",
-            permission: "edit",
-            resources: ["src/index.ts"],
           },
           content: [
             {
@@ -3105,8 +3103,6 @@ describe("SessionRunnerLLM", () => {
                 error: {
                   type: "permission.rejected",
                   message: "Permission denied: edit",
-                  permission: "edit",
-                  resources: ["src/index.ts"],
                 },
               },
             },
