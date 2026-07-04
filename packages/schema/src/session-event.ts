@@ -67,6 +67,7 @@ export const ModelSelected = Event.durable({
   schema: {
     ...Base,
     model: Model.Ref,
+    change: Schema.Literals(["model", "variant"]).pipe(optional),
   },
 })
 export type ModelSelected = typeof ModelSelected.Type

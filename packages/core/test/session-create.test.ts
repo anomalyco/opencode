@@ -564,7 +564,28 @@ describe("SessionV2.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ type: "session.model.selected", data: { model } }])
+      ).toMatchObject([{ type: "session.model.selected", data: { model, change: "model" } }])
+    }),
+  )
+
+  it.effect("labels a selection on the current model as a variant change", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const model = ModelV2.Ref.make({
+        id: ModelV2.ID.make("sonnet"),
+        providerID: ProviderV2.ID.anthropic,
+        variant: ModelV2.VariantID.make("medium"),
+      })
+      const created = yield* session.create({ location, model })
+
+      yield* session.switchModel({
+        sessionID: created.id,
+        model: ModelV2.Ref.make({ ...model, variant: ModelV2.VariantID.make("high") }),
+      })
+
+      expect(
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ type: "session.model.selected", data: { change: "variant" } }])
     }),
   )
 

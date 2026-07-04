@@ -34,10 +34,9 @@ export function formatRef(model: { providerID: string; id: string; variant?: str
 export function switchLabel(
   model: { providerID: string; id: string; variant?: string },
   models?: readonly { providerID: string; id: string; name: string }[],
-  previous?: { providerID: string; id: string; variant?: string },
+  change?: "model" | "variant",
 ) {
-  if (previous?.providerID === model.providerID && previous.id === model.id && previous.variant !== model.variant)
-    return `Switched variant to ${model.variant ?? "default"}`
+  if (change === "variant") return `Switched variant to ${model.variant ?? "default"}`
   const display = models?.find((item) => item.providerID === model.providerID && item.id === model.id)?.name
   if (display === undefined) return `Switched model to ${formatRef(model)}`
   const variant = model.variant && model.variant !== "default" ? ` (${model.variant})` : ""

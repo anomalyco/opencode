@@ -121,6 +121,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             type: "model-switched",
             metadata: event.metadata,
             model: event.data.model,
+            change: event.data.change,
             time: { created: event.created },
           }),
         )

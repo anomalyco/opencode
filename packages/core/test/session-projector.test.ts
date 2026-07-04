@@ -250,6 +250,7 @@ describe("SessionProjector", () => {
       yield* events.publish(SessionEvent.ModelSelected, {
         sessionID,
         model,
+        change: "variant",
       })
       yield* events.publish(SessionEvent.Synthetic, {
         sessionID,
@@ -337,6 +338,7 @@ describe("SessionProjector", () => {
         text: "synthetic context",
         metadata: { source: "projector-test" },
       })
+      expect(messages.find((message) => message.type === "model-switched")).toMatchObject({ change: "variant" })
       expect(messages.find((message) => message.type === "shell")).toMatchObject({
         shell: { command: "pwd", status: "exited", exit: 0 },
         output: { output: "/project", truncated: false },

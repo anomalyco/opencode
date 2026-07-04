@@ -240,6 +240,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               id: messageIDFromEvent(event.id),
               type: "model-switched",
               model: event.data.model,
+              change: event.data.change,
               time: { created: event.created },
             })
           })
