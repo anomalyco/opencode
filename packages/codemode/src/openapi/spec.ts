@@ -13,7 +13,6 @@ import type {
 export const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
 const parameterLocations = ["path", "query", "header"] as const
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
-const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
 const blockedNames = new Set(["__proto__", "constructor", "prototype"])
 export const maxErrorBodyChars = 1_024
 
@@ -442,13 +441,16 @@ export const operationSecurityRequirements = (
   if (parsed.value.length === 0 || supported.length > 0) return { ok: true, value: supported }
 
   const names = [...new Set(parsed.value.flatMap((requirement) => Object.keys(requirement)))]
-  const cookieScheme = names.map((name) => own(schemes, name)).find((scheme) => scheme?.in === "cookie")
+  const cookieScheme = names.find((name) => {
+    const definition = own(schemes, name)
+    return definition?.type === "apiKey" && definition.in === "cookie"
+  })
   return {
     ok: false,
     reason:
       cookieScheme === undefined
         ? `security requirement references missing or malformed scheme: ${names.join(", ")}`
-        : `cookie authentication '${cookieScheme.name}' is not supported`,
+        : `cookie authentication '${cookieScheme}' is not supported`,
   }
 }
 
@@ -460,26 +462,19 @@ export const securitySchemes = (document: Document): Readonly<Record<string, Sec
       const resolved = resolve(document, value)
       if (!isRecord(resolved)) return []
       const type = nonEmptyString(resolved.type)
-      if (type === undefined || !schemeTypes.has(type)) return []
+      if (type !== "apiKey" && type !== "http" && type !== "oauth2" && type !== "openIdConnect") return []
       const carrier = nonEmptyString(resolved.in)
-      const parameterName = nonEmptyString(resolved.name)
+      const parameter = nonEmptyString(resolved.name)
       const scheme = nonEmptyString(resolved.scheme)?.toLowerCase()
-      if (type === "apiKey" && (parameterName === undefined || !["header", "query", "cookie"].includes(carrier ?? ""))) {
-        return []
-      }
-      if (type === "http" && scheme === undefined) return []
-      return [
-        [
-          name,
-          {
-            name,
-            type: type as SecurityScheme["type"],
-            in: carrier === "header" || carrier === "query" || carrier === "cookie" ? carrier : undefined,
-            parameterName,
-            scheme,
-          },
-        ] as const,
-      ]
+      const definition: SecurityScheme | undefined = (() => {
+        if (type === "apiKey") {
+          if (parameter === undefined || (carrier !== "header" && carrier !== "query" && carrier !== "cookie")) return
+          return { type, name: parameter, in: carrier }
+        }
+        if (type === "http") return scheme === undefined ? undefined : { type, scheme }
+        return { type }
+      })()
+      return definition === undefined ? [] : [[name, definition] as const]
     }),
   )
 }

@@ -164,8 +164,8 @@ import { FetchHttpClient } from "effect/unstable/http"
 const api = OpenAPI.fromSpec({
   spec: await Bun.file("openapi.json").json(), // parsed document (no YAML)
   auth: {
-    resolve: ({ schemeName, scopes, operation }) =>
-      schemeName === "BearerAuth"
+    resolve: ({ name, scopes, operation }) =>
+      name === "BearerAuth"
         ? Effect.succeed({ type: "bearer", token })
         : Effect.succeed(undefined),
   },

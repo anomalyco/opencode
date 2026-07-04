@@ -7,6 +7,7 @@ export type Document = Record<string, unknown>
 
 /** The operation identity handed to auth resolution and errors. */
 export type Operation = {
+  /** Generated tool path, using `operationId` when present and a method/path fallback otherwise. */
   readonly id: string
   readonly method: string
   readonly path: string
@@ -15,16 +16,11 @@ export type Operation = {
 }
 
 /** A resolved OpenAPI security scheme from `components.securitySchemes`. */
-export type SecurityScheme = {
-  readonly name: string
-  readonly type: "apiKey" | "http" | "oauth2" | "openIdConnect"
-  /** apiKey carrier declared by the spec. */
-  readonly in: "header" | "query" | "cookie" | undefined
-  /** apiKey parameter name declared by the spec. */
-  readonly parameterName: string | undefined
-  /** `http` scheme (`bearer`, `basic`, ...). */
-  readonly scheme: string | undefined
-}
+export type SecurityScheme =
+  | { readonly type: "apiKey"; readonly name: string; readonly in: "header" | "query" | "cookie" }
+  | { readonly type: "http"; readonly scheme: string }
+  | { readonly type: "oauth2" }
+  | { readonly type: "openIdConnect" }
 
 /**
  * Credential material returned by a host auth resolver. The carrier for `apiKey`
@@ -43,8 +39,8 @@ export type Credential =
  * the call rather than falling through.
  */
 export type AuthResolver = (context: {
-  readonly schemeName: string
-  readonly scheme: SecurityScheme
+  readonly name: string
+  readonly definition: SecurityScheme
   readonly scopes: ReadonlyArray<string>
   readonly operation: Operation
 }) => Effect.Effect<Credential | undefined, unknown>

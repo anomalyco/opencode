@@ -78,10 +78,10 @@ describe("OpenAPI.fromSpec", () => {
       spec: await happyPathSpec(),
       baseUrl,
       auth: {
-        resolve: ({ schemeName }) => {
-          resolutions.push(schemeName)
+        resolve: ({ name }) => {
+          resolutions.push(name)
           return Effect.succeed(
-            schemeName === "BearerAuth"
+            name === "BearerAuth"
               ? { type: "bearer", token: "bearer-secret" }
               : { type: "apiKey", value: "api-secret" },
           )
@@ -439,6 +439,7 @@ describe("OpenAPI.fromSpec", () => {
   })
 
   test("resolves bearer authentication without exposing it as input", async () => {
+    const contexts: Array<Parameters<OpenAPI.AuthResolver>[0]> = []
     const client = recordingClient(() => json({ ok: true }))
     const spec = {
       ...singleOperation({}),
@@ -449,7 +450,12 @@ describe("OpenAPI.fromSpec", () => {
       OpenAPI.fromSpec({
         baseUrl,
         spec,
-        auth: { resolve: () => Effect.succeed({ type: "bearer", token: "secret" }) },
+        auth: {
+          resolve: (context) => {
+            contexts.push(context)
+            return Effect.succeed({ type: "bearer", token: "secret" })
+          },
+        },
       }).tools,
       "test",
     )
@@ -459,6 +465,20 @@ describe("OpenAPI.fromSpec", () => {
 
     expect(inputTypeScript(tool)).toBe("{}")
     expect(client.requests[0]!.headers.authorization).toBe("Bearer secret")
+    expect(contexts).toEqual([
+      {
+        name: "bearer",
+        definition: { type: "http", scheme: "bearer" },
+        scopes: [],
+        operation: {
+          id: "test",
+          method: "GET",
+          path: "/test",
+          summary: undefined,
+          description: undefined,
+        },
+      },
+    ])
   })
 
   test("applies authentication carriers without prototype or collision loss", async () => {
@@ -510,8 +530,8 @@ describe("OpenAPI.fromSpec", () => {
         },
       },
       auth: {
-        resolve: ({ schemeName }) =>
-          Effect.succeed(schemeName === "bearer" ? { type: "bearer", token: "secret" } : undefined),
+        resolve: ({ name }) =>
+          Effect.succeed(name === "bearer" ? { type: "bearer", token: "secret" } : undefined),
       },
     })
     const alternativeTool = toolAt(alternative.tools, "test")
@@ -592,8 +612,8 @@ describe("OpenAPI.fromSpec", () => {
           components: { securitySchemes: { bearer: { type: "http", scheme: "bearer" } } },
         },
         auth: {
-          resolve: ({ schemeName }) => {
-            resolutions.push(schemeName)
+          resolve: ({ name }) => {
+            resolutions.push(name)
             return Effect.succeed({ type: "bearer", token: "secret" })
           },
         },

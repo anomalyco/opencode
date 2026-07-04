@@ -115,7 +115,7 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
     alternatives: for (const requirement of plan.security) {
       const names = Object.keys(requirement)
       if (names.length === 0) return none
-      const credentials: Array<readonly [SecurityScheme, Credential]> = []
+      const credentials: Array<readonly [string, SecurityScheme, Credential]> = []
       for (const name of names) {
         const scheme = own(plan.schemes, name)
         if (scheme === undefined || plan.auth === undefined) {
@@ -123,8 +123,8 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
           continue alternatives
         }
         const credential = yield* plan.auth.resolve({
-          schemeName: name,
-          scheme,
+          name,
+          definition: scheme,
           scopes: requirement[name] ?? [],
           operation: plan.operation,
         })
@@ -132,7 +132,7 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
           unavailable.push(name)
           continue alternatives
         }
-        credentials.push([scheme, credential])
+        credentials.push([name, scheme, credential])
       }
       const applied = applyCredentials(credentials)
       return applied instanceof ToolError ? yield* Effect.fail(applied) : applied
@@ -146,7 +146,7 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
   })
 
 const applyCredentials = (
-  credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>,
+  credentials: ReadonlyArray<readonly [string, SecurityScheme, Credential]>,
 ): AppliedAuth | ToolError => {
   const headers = new Map<string, string>()
   const query = new Map<string, string>()
@@ -155,7 +155,7 @@ const applyCredentials = (
     if (target.has(name)) return toolError(`Authentication resolves multiple credentials for ${carrier} '${name}'.`)
     target.set(name, value)
   }
-  for (const [scheme, credential] of credentials) {
+  for (const [name, definition, credential] of credentials) {
     if (credential.type === "bearer") {
       const duplicate = add("header", "authorization", `Bearer ${credential.token}`)
       if (duplicate !== undefined) return duplicate
@@ -177,14 +177,14 @@ const applyCredentials = (
       continue
     }
     // apiKey: the carrier comes from the scheme declaration.
-    const name = scheme.parameterName
-    if (scheme.type !== "apiKey" || name === undefined || scheme.in === undefined) {
+    if (definition.type !== "apiKey") {
       return toolError(
-        `Security scheme '${scheme.name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
+        `Security scheme '${name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
       )
     }
-    if (scheme.in === "cookie") return toolError(`Cookie authentication '${scheme.name}' is not supported.`)
-    const duplicate = add(scheme.in, scheme.in === "header" ? name.toLowerCase() : name, credential.value)
+    if (definition.in === "cookie") return toolError(`Cookie authentication '${name}' is not supported.`)
+    const parameter = definition.in === "header" ? definition.name.toLowerCase() : definition.name
+    const duplicate = add(definition.in, parameter, credential.value)
     if (duplicate !== undefined) return duplicate
   }
   return { headers: Object.fromEntries(headers), query: Object.fromEntries(query) }
