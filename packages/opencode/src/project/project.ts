@@ -1,5 +1,7 @@
+import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
+import { Global } from "@opencode-ai/core/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -146,6 +148,7 @@ const layer = Layer.effect(
     const migrateProjectId = Effect.fn("Project.migrateProjectId")(function* (
       oldID: ProjectV2.ID | undefined,
       newID: ProjectV2.ID,
+      worktree: string,
     ) {
       if (!oldID) return
       if (oldID === ProjectV2.ID.global) return
@@ -163,6 +166,14 @@ const layer = Layer.effect(
                   .values({
                     ...oldProject,
                     id: newID,
+                    // A legacy id may have been shared by several distinct
+                    // clones, so the old row's worktree may belong to a
+                    // different checkout; the minted identity belongs to the
+                    // directory being opened. Sandboxes are cleared for the
+                    // same reason and re-validated as directories are opened
+                    // (same rationale as the directory clearing below).
+                    worktree: AbsolutePath.make(worktree),
+                    sandboxes: [],
                     time_updated: Date.now(),
                   })
                   .run()
@@ -190,6 +201,18 @@ const layer = Layer.effect(
           { behavior: "immediate" },
         )
         .pipe(Effect.orDie)
+
+      // Snapshot and managed-worktree storage are keyed by project id on
+      // disk; carry them over so history survives re-identification. Legacy
+      // ids can be arbitrary cached file content, so only ids that are plain
+      // hash/uuid shapes may be used as a path segment.
+      if (/^[0-9a-f-]+$/i.test(oldID)) {
+        for (const store of ["snapshot", "worktree"]) {
+          yield* fs
+            .rename(path.join(Global.Path.data, store, oldID), path.join(Global.Path.data, store, newID))
+            .pipe(Effect.ignore)
+        }
+      }
     })
 
     const saveProjectDirectory = Effect.fn("Project.saveProjectDirectory")(function* (input: {
@@ -217,8 +240,38 @@ const layer = Layer.effect(
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 
       // Phase 2: upsert
-      const projectID = ProjectV2.ID.make(data.id)
-      yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
+      const resolvedID = ProjectV2.ID.make(data.id)
+      let projectID = resolvedID
+      if (data.vcs?.type === "git" && resolvedID !== ProjectV2.ID.global && !ProjectV2.isStableID(resolvedID)) {
+        // Legacy derived ids (remote hash, root commit) collapse independent
+        // clones of the same repo into one project. Mint a per-clone identity
+        // and persist it to the repo-local cache, which linked worktrees share
+        // through the git common dir and which survives folder renames. Only
+        // adopt the minted id once it is durably written so a read-only .git
+        // does not fragment identity on every boot.
+        const minted = ProjectV2.ID.make(crypto.randomUUID())
+        const persisted = yield* projectV2.commit({ store: data.vcs.store, id: minted })
+        if (persisted) {
+          // Re-resolve so concurrent mints for the same repo (e.g. a clone
+          // and its linked worktree booting together) converge on whichever
+          // identity landed in the cache file.
+          const settled = yield* projectV2.resolve(AbsolutePath.make(directory))
+          projectID = ProjectV2.isStableID(settled.id) ? ProjectV2.ID.make(settled.id) : minted
+          yield* migrateProjectId(resolvedID, projectID, data.directory)
+        }
+      }
+      if (projectID === resolvedID) {
+        // Not minted (already stable, global, or the identity write failed):
+        // preserve the legacy cached-id migration.
+        yield* migrateProjectId(
+          data.previous ? ProjectV2.ID.make(data.previous) : undefined,
+          projectID,
+          data.directory,
+        )
+      } else if (data.previous && data.previous !== resolvedID) {
+        // Stale cached ids from older schemes follow the mint as well.
+        yield* migrateProjectId(ProjectV2.ID.make(data.previous), projectID, data.directory)
+      }
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
         ? fromRow(row)
@@ -237,6 +290,16 @@ const layer = Layer.effect(
         worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
+      }
+      if (projectID !== ProjectV2.ID.global && result.worktree !== data.directory) {
+        // A renamed or moved clone keeps its identity through the repo-local
+        // cache file but leaves the stored worktree pointing at a dead path;
+        // adopt the directory it now resolves from.
+        const worktreeExists = yield* fs.exists(result.worktree).pipe(Effect.orDie)
+        if (!worktreeExists) {
+          result.worktree = data.directory
+          result.sandboxes = result.sandboxes.filter((sandbox) => sandbox !== result.worktree)
+        }
       }
       if (
         projectID !== ProjectV2.ID.global &&
@@ -289,10 +352,15 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
 
       if (projectID !== ProjectV2.ID.global) {
+        // Adopt sessions recorded against this exact directory, wherever they
+        // are currently parented: global sessions created before the project
+        // existed, and sessions carried off by a sibling clone that shared a
+        // legacy id (whole-project migration moves them in bulk; each clone
+        // reclaims its own directory's sessions when it is next opened).
         yield* db
           .update(SessionTable)
           .set({ project_id: projectID })
-          .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, data.directory)))
+          .where(and(ne(SessionTable.project_id, projectID), eq(SessionTable.directory, data.directory)))
           .run()
           .pipe(Effect.orDie)
       }
@@ -303,9 +371,6 @@ const layer = Layer.effect(
       })
 
       yield* emitUpdated(result)
-      if (projectID !== ProjectV2.ID.global && data.vcs?.type === "git") {
-        yield* projectV2.commit({ store: data.vcs.store, id: data.id })
-      }
       return { project: result, sandbox: data.vcs ? data.directory : worktree }
     })
 

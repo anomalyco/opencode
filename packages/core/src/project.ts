@@ -17,6 +17,16 @@ export type ID = ProjectSchema.ID
 export const Vcs = ProjectSchema.Vcs
 export type Vcs = ProjectSchema.Vcs
 
+const STABLE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Whether an id is a stable minted repo identity (uuid) rather than a legacy
+ * derived id (remote hash, root commit, cached value) or the global sentinel.
+ */
+export function isStableID(id: string) {
+  return STABLE_ID_PATTERN.test(id)
+}
+
 export class Info extends Schema.Class<Info>("Project.Info")({
   id: ID,
 }) {}
@@ -38,15 +48,17 @@ export interface Interface {
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
   /**
-   * Temporary bridge method for writing the resolved project ID to the repo-local cache.
+   * Temporary bridge method for writing a project's minted identity to the
+   * repo-local cache (`<commonDir>/opencode`) as versioned JSON.
    *
    * This exists while the old opencode project service and this core project
    * service work together: core resolves the ID, while the old service still owns
-   * database migration and persistence. The old service should call this after it
-   * finishes migrating from `resolve().previous` to `resolve().id`; once project
-   * persistence moves into core, this separate bridge method can go away.
+   * minting, database migration, and persistence. Returns whether the write
+   * landed so callers only adopt a minted identity that is durably stored;
+   * once project persistence moves into core, this separate bridge method can
+   * go away.
    */
-  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<void>
+  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectV2") {}
@@ -62,12 +74,28 @@ const layer = Layer.effect(
       return yield* projectDirectories.list(input.projectID)
     })
 
+    const parse = (content: string): { repoID?: ID; legacy?: ID } => {
+      try {
+        const parsed: unknown = JSON.parse(content)
+        if (parsed && typeof parsed === "object") {
+          const repoID = "repoID" in parsed ? parsed.repoID : undefined
+          // Forward-compatible read: honor the repoID of any structured
+          // version, ignore structured content we do not understand.
+          if (typeof repoID === "string" && isStableID(repoID)) return { repoID: ID.make(repoID) }
+          return {}
+        }
+      } catch {}
+      // Bare string contents predate the versioned format.
+      return { legacy: ID.make(content) }
+    }
+
     const cached = Effect.fnUntraced(function* (dir: string) {
-      return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
+      const content = yield* fs.readFileString(path.join(dir, "opencode")).pipe(
         Effect.map((value) => value.trim()),
-        Effect.map((value) => (value ? ID.make(value) : undefined)),
         Effect.catch(() => Effect.succeed(undefined)),
       )
+      if (!content) return { repoID: undefined, legacy: undefined }
+      return parse(content)
     })
 
     const remote = Effect.fnUntraced(function* (repo: Git.Repository) {
@@ -111,18 +139,31 @@ const layer = Layer.effect(
       const repo = yield* git.repo.discover(input)
       if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
 
-      const previous = yield* cached(repo.commonDirectory)
+      const vcs = { type: "git" as const, store: repo.commonDirectory }
+      const stored = yield* cached(repo.commonDirectory)
+      // A minted identity persisted in the versioned cache file is
+      // authoritative: it is what keeps independent clones of the same
+      // remote distinct while linked worktrees (shared common dir) and
+      // renamed checkouts keep resolving to the same project.
+      if (stored.repoID) return { id: stored.repoID, directory: repo.worktree, vcs }
+
+      const previous = stored.legacy
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
       return {
         previous,
         id: id ?? ID.global,
         directory: repo.worktree,
-        vcs: { type: "git" as const, store: repo.commonDirectory },
+        vcs,
       }
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
+      return yield* fs
+        .writeFileString(path.join(input.store, "opencode"), JSON.stringify({ version: 1, repoID: input.id }) + "\n")
+        .pipe(
+          Effect.map(() => true),
+          Effect.catch(() => Effect.succeed(false)),
+        )
     })
 
     return Service.of({ directories, resolve, commit })
