@@ -389,7 +389,7 @@ async function paginate<R extends { nextCursor?: string }, T>(
   const collected: T[] = []
   const seen = new Set<string>()
   let cursor: string | undefined
-  for (let page = 0; page < 1_000; page++) {
+  while (true) {
     const result = await list(cursor)
     collected.push(...items(result))
     if (result.nextCursor === undefined) return collected
@@ -398,7 +398,6 @@ async function paginate<R extends { nextCursor?: string }, T>(
     seen.add(result.nextCursor)
     cursor = result.nextCursor
   }
-  throw new Error("MCP list exceeded 1000 pages")
 }
 
 const isOutputSchemaError = (error: Error) =>
