@@ -55,7 +55,7 @@ const registryLayer = Layer.effect(
     type Registration = {
       readonly identity: object
       readonly tool: AnyTool
-      readonly member: string
+      readonly name: string
       readonly group?: string
       readonly deferred: boolean
     }
@@ -143,14 +143,14 @@ const registryLayer = Layer.effect(
           Effect.gen(function* () {
             const token = {}
             for (const entry of entries)
-              local.set(entry.name, [
-                ...(local.get(entry.name) ?? []),
+              local.set(entry.key, [
+                ...(local.get(entry.key) ?? []),
                 {
                   token,
                   registration: {
                     identity: {},
                     tool: entry.tool,
-                    member: entry.member,
+                    name: entry.name,
                     group: entry.group,
                     deferred: options?.deferred ?? false,
                   },
@@ -160,9 +160,9 @@ const registryLayer = Layer.effect(
               Effect.sync(() => {
                 for (const entry of entries) {
                   const registrations =
-                    local.get(entry.name)?.filter((registration) => registration.token !== token) ?? []
-                  if (registrations.length > 0) local.set(entry.name, registrations)
-                  else local.delete(entry.name)
+                    local.get(entry.key)?.filter((registration) => registration.token !== token) ?? []
+                  if (registrations.length > 0) local.set(entry.key, registrations)
+                  else local.delete(entry.key)
                 }
               }),
             )

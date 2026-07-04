@@ -188,11 +188,11 @@ export const validateName = (name: string) =>
 
 export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>, group?: string) =>
   Object.entries(tools).map(([name, tool]) => {
-    const member = name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    const normalized = name.replace(/[^a-zA-Z0-9_-]/g, "_")
     const parent = group?.replace(/[^a-zA-Z0-9_-]/g, "_")
     return {
-      name: parent === undefined ? member : `${parent}_${member}`,
-      member,
+      key: parent === undefined ? normalized : `${parent}_${normalized}`,
+      name: normalized,
       group: parent,
       tool,
     }
