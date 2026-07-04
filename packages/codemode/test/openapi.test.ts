@@ -37,31 +37,50 @@ const nonEmptyString = (value: unknown): string | undefined =>
 const toolPathEntries = (spec: Document) => {
   const used = new Set<string>()
   const namespaces = new Set<string>()
-  return operations(spec).map((item) => {
-    const { path, method, operation } = item
-    const raw = nonEmptyString(operation.operationId)
-    const segments = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split("."))
-      .map(
-        (segment) =>
-          segment
-            .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
-            .replace(/^_+|_+$/g, "")
-            .replace(/^([0-9])/, "_$1") || "operation",
-      )
-      .map((segment) => (["__proto__", "constructor", "prototype"].includes(segment) ? `${segment}_2` : segment))
-    const key = segments.join(".")
-    const prefixUsed = segments.slice(0, -1).some((_, index) => used.has(segments.slice(0, index + 1).join(".")))
-    const name = used.has(key) || namespaces.has(key) || prefixUsed ? `${segments.join("_")}_2` : key
-    used.add(name)
-    for (const index of name.split(".").slice(0, -1).keys())
-      namespaces.add(
-        name
-          .split(".")
-          .slice(0, index + 1)
-          .join("."),
-      )
-    return { ...item, name }
-  })
+  return operations(spec)
+    .filter((item) => item.operation["x-websocket"] !== true)
+    .map((item) => {
+      const { path, method, operation } = item
+      const raw = nonEmptyString(operation.operationId)
+      const segments = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split("."))
+        .map(
+          (segment) =>
+            segment
+              .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
+              .replace(/^_+|_+$/g, "")
+              .replace(/^([0-9])/, "_$1") || "operation",
+        )
+        .map((segment) => (["__proto__", "constructor", "prototype"].includes(segment) ? `${segment}_2` : segment))
+      const key = segments.join(".")
+      const prefixUsed = segments.slice(0, -1).some((_, index) => used.has(segments.slice(0, index + 1).join(".")))
+      const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
+      const collapsed =
+        conflict >= 0 && conflict + 1 < segments.length
+          ? segments.flatMap((segment, index) => {
+              if (index === conflict) {
+                const next = segments[index + 1] ?? ""
+                return [`${segment}${next.charAt(0).toUpperCase()}${next.slice(1)}`]
+              }
+              return index === conflict + 1 ? [] : [segment]
+            })
+          : undefined
+      const collapsedKey = collapsed?.join(".")
+      const name =
+        collapsedKey !== undefined && !used.has(collapsedKey) && !namespaces.has(collapsedKey)
+          ? collapsedKey
+          : used.has(key) || namespaces.has(key) || prefixUsed
+            ? `${segments.join("_")}_2`
+            : key
+      used.add(name)
+      for (const index of name.split(".").slice(0, -1).keys())
+        namespaces.add(
+          name
+            .split(".")
+            .slice(0, index + 1)
+            .join("."),
+        )
+      return { ...item, name }
+    })
 }
 
 const toolAt = (tools: unknown, name: string) =>
@@ -106,7 +125,11 @@ describe("OpenAPI.fromSpec", () => {
 
     const entries = toolPathEntries(spec)
     expect(entries.every((entry) => toolAt(result.tools, entry.name) !== undefined)).toBe(true)
-    expect(result.skipped).toStrictEqual([])
+    expect(result.skipped).toContainEqual({
+      method: "GET",
+      path: "/api/pty/{ptyID}/connect",
+      reason: "WebSocket operations are not supported",
+    })
     expect(toolAt(result.tools, "v2.health.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.create")).not.toBeUndefined()
@@ -122,6 +145,13 @@ describe("OpenAPI.fromSpec", () => {
     expect(Tool.isDefinition(switchAgent)).toBe(true)
     if (!Tool.isDefinition(switchAgent)) throw new Error("v2.session.switchAgent was not generated")
     expect(inputTypeScript(switchAgent)).toBe("{ sessionID: string; agent: string }")
+
+    const contextEntryPut = toolAt(result.tools, "v2.session.contextEntry.put")
+    expect(Tool.isDefinition(contextEntryPut)).toBe(true)
+    if (!Tool.isDefinition(contextEntryPut)) throw new Error("v2.session.contextEntry.put was not generated")
+    expect(inputTypeScript(contextEntryPut)).toBe("{ sessionID: string; key: string; value: unknown }")
+    expect(toolAt(result.tools, "v2_session_context_entry_put_2")).toBeUndefined()
+    expect(toolAt(result.tools, "v2.pty.connect")).toBeUndefined()
 
     for (const item of entries) {
       const tool = toolAt(result.tools, item.name)

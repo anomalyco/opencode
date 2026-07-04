@@ -59,6 +59,12 @@ export const fromSpec = (options: Options): Result => {
         description: nonEmptyString(operationValue.description),
       }
       if (options.operations !== undefined && !options.operations(operation)) continue
+      // TODO: Represent bidirectional streams as an explicit host capability before
+      // exposing WebSocket operations as callable CodeMode tools.
+      if (operationValue["x-websocket"] === true) {
+        skipped.push({ method: operation.method, path, reason: "WebSocket operations are not supported" })
+        continue
+      }
 
       if (typeof base !== "string") {
         skipped.push({ method: operation.method, path, reason: base.reason })
@@ -100,11 +106,7 @@ export const fromSpec = (options: Options): Result => {
   return { tools, skipped }
 }
 
-const setTool = (
-  tools: Tools,
-  path: ReadonlyArray<string>,
-  definition: Definition<HttpClient.HttpClient>,
-): void => {
+const setTool = (tools: Tools, path: ReadonlyArray<string>, definition: Definition<HttpClient.HttpClient>): void => {
   const [head, ...rest] = path
   if (head === undefined) return
   if (rest.length === 0) {

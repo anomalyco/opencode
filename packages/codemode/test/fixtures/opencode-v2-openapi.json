@@ -8005,6 +8005,7 @@
           "pty"
         ],
         "operationId": "v2.pty.connect",
+        "x-websocket": true,
         "parameters": [
           {
             "name": "ptyID",

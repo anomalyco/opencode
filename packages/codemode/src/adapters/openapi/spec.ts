@@ -16,6 +16,18 @@ const parameterLocationSet = new Set<string>(parameterLocations)
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
 const blockedOperationNames = new Set(["__proto__", "constructor", "prototype"])
+const schemaShapeKeys = new Set([
+  "$ref",
+  "type",
+  "enum",
+  "const",
+  "anyOf",
+  "oneOf",
+  "allOf",
+  "properties",
+  "items",
+  "additionalProperties",
+])
 export const maxErrorBodyChars = 1_024
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -60,7 +72,9 @@ const projectSchema = (value: unknown, depth = 0): JsonSchema => {
   const description = nonEmptyString(value.description)
   const format = nonEmptyString(value.format)
   const allOf = Array.isArray(value.allOf)
-    ? value.allOf.map((item) => projectSchema(item, depth + 1)).filter((item) => Object.keys(item).length > 0)
+    ? value.allOf
+        .map((item) => projectSchema(item, depth + 1))
+        .filter((item) => Object.keys(item).some((key) => schemaShapeKeys.has(key)))
     : []
   const projected: JsonSchema = {
     ...(type === undefined ? {} : { type }),
@@ -273,6 +287,17 @@ export const operationPath = (
     .filter((segment) => segment !== "")
   const segments = base.length === 0 ? ["operation"] : base
   if (isOperationPathAvailable(segments, used, namespaces)) return segments
+  const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
+  if (conflict >= 0 && conflict + 1 < segments.length) {
+    const collapsed = segments.flatMap((segment, index) => {
+      if (index === conflict) {
+        const next = segments[index + 1] ?? ""
+        return [`${segment}${next.charAt(0).toUpperCase()}${next.slice(1)}`]
+      }
+      return index === conflict + 1 ? [] : [segment]
+    })
+    if (isOperationPathAvailable(collapsed, used, namespaces)) return collapsed
+  }
   const fallback = [segments.join("_")]
   const next = (index: number): string => {
     const candidate = `${fallback[0]}_${index}`
