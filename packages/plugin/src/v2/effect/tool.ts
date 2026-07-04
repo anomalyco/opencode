@@ -186,18 +186,17 @@ export const validateName = (name: string) =>
     ? Effect.void
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
-const normalizeName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
-
-export const registrationName = (name: string, group?: string) =>
-  group === undefined ? normalizeName(name) : `${normalizeName(group)}_${normalizeName(name)}`
-
 export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>, group?: string) =>
-  Object.entries(tools).map(([name, tool]) => ({
-    name: registrationName(name, group),
-    member: normalizeName(name),
-    group: group === undefined ? undefined : normalizeName(group),
-    tool,
-  }))
+  Object.entries(tools).map(([name, tool]) => {
+    const member = name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    const parent = group?.replace(/[^a-zA-Z0-9_-]/g, "_")
+    return {
+      name: parent === undefined ? member : `${parent}_${member}`,
+      member,
+      group: parent,
+      tool,
+    }
+  })
 
 export const withPermission = <Input extends SchemaType<any>, Output extends SchemaType<any>>(
   tool: Definition<Input, Output>,

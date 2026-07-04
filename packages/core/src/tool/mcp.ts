@@ -13,7 +13,8 @@ import { ToolRegistry } from "./registry"
 /**
  * Registry and permission action name for an MCP tool.
  */
-export const name = (server: string, tool: string) => Tool.registrationName(tool, server)
+export const name = (server: string, tool: string) =>
+  `${server.replace(/[^a-zA-Z0-9_-]/g, "_")}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
 const toContent = (part: MCP.ToolResultContent): Tool.Content =>
   part.type === "text" ? { type: "text", text: part.text } : { type: "file", data: part.data, mime: part.mimeType }
