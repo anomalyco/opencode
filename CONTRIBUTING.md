@@ -69,6 +69,13 @@ Then run it with:
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
+> [!NOTE]
+> The build embeds a snapshot of the model catalog from [models.dev](https://models.dev). If that service is unreachable in your environment (VPN, firewall, etc.), the build falls back to an empty snapshot. To use a local cached copy instead:
+>
+> ```bash
+> MODELS_DEV_API_JSON=packages/opencode/test/tool/fixtures/models-api.json ./packages/opencode/script/build.ts --single
+> ```
+
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
   - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
