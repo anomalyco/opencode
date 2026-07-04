@@ -14,58 +14,18 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     // Local validation before auth resolution, which may refresh tokens.
     const url = buildUrl(plan, value)
     if (url instanceof ToolError) return yield* Effect.fail(url)
-    for (const field of plan.fields) {
-      if (!field.required || field.location === "path") continue
-      const item = own(value, field.inputName)
-      if (item === undefined) {
-        const label = field.location === "body" ? "body field" : `${field.location} parameter`
-        return yield* Effect.fail(toolError(`Missing required ${label} '${field.inputName}'.`))
-      }
-    }
+    const required = validateRequiredFields(plan, value)
+    if (required !== undefined) return yield* Effect.fail(required)
 
     let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
-    for (const field of plan.fields) {
-      if (field.location !== "query") continue
-      const item = own(value, field.inputName)
-      if (item === undefined) continue
-      const serialized = serializeQuery(request, field, item)
-      if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
-      request = serialized
-    }
+    const query = applyQueryParameters(request, plan, value)
+    if (query instanceof ToolError) return yield* Effect.fail(query)
+    request = query
     // Host headers first, then declared header params. Auth is resolved and applied
     // only after the full model-controlled request has validated.
-    request = HttpClientRequest.setHeaders(request, plan.headers)
-    for (const field of plan.fields) {
-      if (field.location !== "header") continue
-      const item = own(value, field.inputName)
-      if (item === undefined) continue
-      const serialized = serializeSimple(field, item, String)
-      if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
-      request = HttpClientRequest.setHeader(request, field.name, serialized)
-    }
-    if (plan.body?.mode === "value") {
-      const field = plan.fields.find((field) => field.location === "body")
-      const body = field === undefined ? undefined : own(value, field.inputName)
-      if (body !== undefined) {
-        request = yield* HttpClientRequest.bodyJson(request, body).pipe(
-          Effect.mapError((cause) => toolError(`Invalid JSON body for ${plan.operation.method} ${plan.operation.path}.`, cause)),
-        )
-        request = HttpClientRequest.setHeader(request, "content-type", plan.body.mediaType)
-      }
-    }
-    if (plan.body?.mode === "object") {
-      const entries = plan.fields.flatMap((field) => {
-        if (field.location !== "body") return []
-        const item = own(value, field.inputName)
-        return item === undefined ? [] : [[field.name, item] as const]
-      })
-      if (plan.body.required || entries.length > 0) {
-        request = yield* HttpClientRequest.bodyJson(request, Object.fromEntries(entries)).pipe(
-          Effect.mapError((cause) => toolError(`Invalid JSON body for ${plan.operation.method} ${plan.operation.path}.`, cause)),
-        )
-        request = HttpClientRequest.setHeader(request, "content-type", plan.body.mediaType)
-      }
-    }
+    const headers = applyHeaderParameters(request, plan, value)
+    if (headers instanceof ToolError) return yield* Effect.fail(headers)
+    request = yield* applyRequestBody(headers, plan, value)
 
     const auth = yield* resolveAuth(plan)
     for (const [name, item] of Object.entries(auth.query)) {
@@ -105,6 +65,81 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     }
     return parsed
   })
+
+const validateRequiredFields = (plan: Plan, input: Readonly<Record<string, unknown>>): ToolError | undefined => {
+  const field = plan.fields.find(
+    (field) => field.required && field.location !== "path" && own(input, field.inputName) === undefined,
+  )
+  if (field === undefined) return
+  const label = field.location === "body" ? "body field" : `${field.location} parameter`
+  return toolError(`Missing required ${label} '${field.inputName}'.`)
+}
+
+const applyQueryParameters = (
+  request: HttpClientRequest.HttpClientRequest,
+  plan: Plan,
+  input: Readonly<Record<string, unknown>>,
+): HttpClientRequest.HttpClientRequest | ToolError => {
+  let current = request
+  for (const field of plan.fields) {
+    if (field.location !== "query") continue
+    const item = own(input, field.inputName)
+    if (item === undefined) continue
+    const serialized = serializeQuery(current, field, item)
+    if (serialized instanceof ToolError) return serialized
+    current = serialized
+  }
+  return current
+}
+
+const applyHeaderParameters = (
+  request: HttpClientRequest.HttpClientRequest,
+  plan: Plan,
+  input: Readonly<Record<string, unknown>>,
+): HttpClientRequest.HttpClientRequest | ToolError => {
+  let current = HttpClientRequest.setHeaders(request, plan.headers)
+  for (const field of plan.fields) {
+    if (field.location !== "header") continue
+    const item = own(input, field.inputName)
+    if (item === undefined) continue
+    const serialized = serializeSimple(field, item, String)
+    if (serialized instanceof ToolError) return serialized
+    current = HttpClientRequest.setHeader(current, field.name, serialized)
+  }
+  return current
+}
+
+const applyRequestBody = (
+  request: HttpClientRequest.HttpClientRequest,
+  plan: Plan,
+  input: Readonly<Record<string, unknown>>,
+): Effect.Effect<HttpClientRequest.HttpClientRequest, ToolError> => {
+  if (plan.body?.mode === "value") {
+    const field = plan.fields.find((field) => field.location === "body")
+    const body = field === undefined ? undefined : own(input, field.inputName)
+    return body === undefined ? Effect.succeed(request) : setJsonBody(request, body, plan, plan.body)
+  }
+  if (plan.body?.mode !== "object") return Effect.succeed(request)
+  const entries = plan.fields.flatMap((field) => {
+    if (field.location !== "body") return []
+    const item = own(input, field.inputName)
+    return item === undefined ? [] : [[field.name, item] as const]
+  })
+  return plan.body.required || entries.length > 0
+    ? setJsonBody(request, Object.fromEntries(entries), plan, plan.body)
+    : Effect.succeed(request)
+}
+
+const setJsonBody = (
+  request: HttpClientRequest.HttpClientRequest,
+  value: unknown,
+  plan: Plan,
+  body: NonNullable<Plan["body"]>,
+): Effect.Effect<HttpClientRequest.HttpClientRequest, ToolError> =>
+  HttpClientRequest.bodyJson(request, value).pipe(
+    Effect.map((next) => HttpClientRequest.setHeader(next, "content-type", body.mediaType)),
+    Effect.mapError((cause) => toolError(`Invalid JSON body for ${plan.operation.method} ${plan.operation.path}.`, cause)),
+  )
 
 const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
   Effect.gen(function* () {
