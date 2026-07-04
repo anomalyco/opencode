@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import * as TestClock from "effect/testing/TestClock"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
@@ -25,12 +27,12 @@ const locationLayer = Layer.succeed(
     ),
   ),
 )
+const builtInsNode = LayerNode.group([SystemContextBuiltIns.node, SystemContextRegistry.node])
 const it = testEffect(
-  SystemContextBuiltIns.locationLayer.pipe(
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ config: "/global" })),
-    Layer.provide(locationLayer),
-  ),
+  AppNodeBuilder.build(builtInsNode, [
+    [Location.node, locationLayer],
+    [Global.node, Global.layerWith({ config: "/global" })],
+  ]),
 )
 const instructionFS = Layer.effect(
   FSUtil.Service,
@@ -43,13 +45,13 @@ const instructionFS = Layer.effect(
       }),
     ),
   ),
-).pipe(Layer.provide(FSUtil.defaultLayer))
+).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 const itWithInstructions = testEffect(
-  SystemContextBuiltIns.locationLayer.pipe(
-    Layer.provide(instructionFS),
-    Layer.provide(Global.layerWith({ config: "/global" })),
-    Layer.provide(locationLayer),
-  ),
+  AppNodeBuilder.build(builtInsNode, [
+    [Location.node, locationLayer],
+    [FSUtil.node, instructionFS],
+    [Global.node, Global.layerWith({ config: "/global" })],
+  ]),
 )
 
 describe("SystemContextBuiltIns", () => {

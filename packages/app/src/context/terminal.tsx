@@ -2,9 +2,10 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { useSDK } from "./sdk"
+import { useSDK, type DirectorySDK } from "./sdk"
 import type { Platform } from "./platform"
-import { useServer } from "./server"
+import { useServerSDK } from "./server-sdk"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
@@ -143,7 +144,7 @@ export function clearWorkspaceTerminals(
 }
 
 function createWorkspaceTerminalSession(
-  sdk: ReturnType<typeof useSDK>,
+  sdk: DirectorySDK,
   dir: string,
   scope: ServerScopeValue,
   legacySessionID?: string,
@@ -202,7 +203,7 @@ function createWorkspaceTerminalSession(
   })
   onCleanup(unsub)
 
-  const update = (client: ReturnType<typeof useSDK>["client"], pty: Partial<LocalPTY> & { id: string }) => {
+  const update = (client: DirectorySDK["client"], pty: Partial<LocalPTY> & { id: string }) => {
     const index = store.all.findIndex((x) => x.id === pty.id)
     const previous = index >= 0 ? store.all[index] : undefined
     if (index >= 0) {
@@ -223,7 +224,7 @@ function createWorkspaceTerminalSession(
       })
   }
 
-  const clone = async (client: ReturnType<typeof useSDK>["client"], id: string) => {
+  const clone = async (client: DirectorySDK["client"], id: string) => {
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
@@ -374,10 +375,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   gate: false,
   init: () => {
     const sdk = useSDK()
-    const server = useServer()
+    const serverSDK = useServerSDK()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
-    const scope = server.scope()
+    const scope = () => serverSDK().scope
+    const directory = createMemo(() => base64Encode(sdk().directory))
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))
@@ -412,7 +414,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk, dir, serverScope, legacySessionID),
+        value: createWorkspaceTerminalSession(sdk(), dir, serverScope, legacySessionID),
         dispose,
       }))
 
@@ -421,11 +423,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope))
+    const workspace = createMemo(() => loadWorkspace(directory(), params.id, scope()))
 
     createEffect(
       on(
-        () => ({ dir: params.dir, id: params.id, scope }),
+        () => ({ dir: directory(), id: params.id, scope: scope() }),
         (next, prev) => {
           if (!prev?.dir) return
           if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return

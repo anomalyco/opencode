@@ -124,7 +124,7 @@ describe("Gemini route", () => {
                 type: "content",
                 value: [
                   { type: "text", text: "Image read successfully" },
-                  { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "pixel.png" },
+                  { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" },
                 ],
               },
             }),
@@ -163,7 +163,7 @@ describe("Gemini route", () => {
               name: "read",
               result: {
                 type: "content",
-                value: [{ type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" }],
+                value: [{ type: "file", uri: "data:image/jpeg;base64,/9j/", mime: "image/jpeg" }],
               },
             }),
           ],
@@ -347,10 +347,10 @@ describe("Gemini route", () => {
         { type: "step-start", index: 0 },
         { type: "reasoning-start", id: "reasoning-0" },
         { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-start", id: "text-0" },
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
-        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
@@ -399,6 +399,9 @@ describe("Gemini route", () => {
         providerMetadata: { google: { thoughtSignature: "thought_sig" } },
       })
       expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+      expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
+        response.events.findIndex((event) => event.type === "tool-call"),
+      )
 
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
         LLM.request({

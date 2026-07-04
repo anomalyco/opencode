@@ -1,6 +1,4 @@
-import { Installation } from "@/installation"
 import { Server } from "@/server/server"
-import * as Log from "@opencode-ai/core/util/log"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
@@ -10,34 +8,17 @@ import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 
-ensureProcessMetadata("worker")
-
-await Log.init({
-  print: process.argv.includes("--print-logs"),
-  dev: Installation.isLocal(),
-  level: (() => {
-    if (Installation.isLocal()) return "DEBUG"
-    return "INFO"
-  })(),
-})
-
 Heap.start()
 
-process.on("unhandledRejection", (e) => {
-  Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
-  })
-})
+const onUnhandledRejection = (_error: unknown) => {}
 
-process.on("uncaughtException", (e) => {
-  Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
-  })
-})
+const onUncaughtException = (_error: Error) => {}
+
+process.on("unhandledRejection", onUnhandledRejection)
+process.on("uncaughtException", onUncaughtException)
 
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
@@ -89,10 +70,10 @@ export const rpc = {
     )
   },
   async shutdown() {
-    Log.Default.info("worker shutting down")
-
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
+    process.off("unhandledRejection", onUnhandledRejection)
+    process.off("uncaughtException", onUncaughtException)
   },
 }
 

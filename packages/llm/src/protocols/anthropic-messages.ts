@@ -9,18 +9,20 @@ import {
   Usage,
   type CacheHint,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
+  type ToolContent,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { isContextOverflow } from "../provider-error"
 import * as Cache from "./utils/cache"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "anthropic-messages"
@@ -256,10 +258,10 @@ const signatureFromMetadata = (metadata: ProviderMetadata | undefined): string |
   return typeof anthropic.signature === "string" ? anthropic.signature : undefined
 }
 
-const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
+const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
   name: tool.name,
   description: tool.description,
-  input_schema: tool.inputSchema,
+  input_schema: inputSchema,
   cache_control: cacheControl(breakpoints, tool.cache),
 })
 
@@ -321,10 +323,10 @@ const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: Me
 // Tool results may carry structured text/images. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
-  item: ToolResultContentPart,
+  item: ToolContent,
 ) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  const media = yield* ProviderShared.validateMedia(
+  const media = yield* ProviderShared.validateToolFile(
     "Anthropic Messages",
     item,
     new Set<string>(ProviderShared.IMAGE_MIMES),
@@ -344,7 +346,7 @@ const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultConte
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
-  const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+  const content: ReadonlyArray<ToolContent> = part.result.value
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
@@ -504,6 +506,8 @@ const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (re
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
+  const outputLimit = request.model.defaults?.limits?.output ?? request.model.route.defaults.limits?.output ?? 4096
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -511,7 +515,13 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const tools =
     request.tools.length === 0 || request.toolChoice?.type === "none"
       ? undefined
-      : request.tools.map((tool) => lowerTool(breakpoints, tool))
+      : request.tools.map((tool) =>
+          lowerTool(
+            breakpoints,
+            tool,
+            ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
+          ),
+        )
   const system =
     request.system.length === 0
       ? undefined
@@ -533,7 +543,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? request.model.route.defaults.limits?.output ?? 4096,
+    max_tokens: generation?.maxTokens ?? outputLimit,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,

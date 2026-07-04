@@ -1,9 +1,11 @@
 export * as TodoWriteTool from "./todowrite"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
 import { SessionTodo } from "../session/todo"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -20,7 +22,7 @@ export type Output = typeof Output.Type
 
 export const toModelOutput = (output: Output) => JSON.stringify(output.todos, null, 2)
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const todos = yield* SessionTodo.Service
@@ -33,7 +35,7 @@ export const layer = Layer.effectDiscard(
             "Create and maintain a structured task list for the current coding session. Use it to track progress during multi-step work and keep todo statuses current.",
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* permission.assert({
@@ -52,3 +54,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/todowrite",
+  layer,
+  deps: [ToolRegistry.node, PermissionV2.node, SessionTodo.node],
+})

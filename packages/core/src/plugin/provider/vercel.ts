@@ -1,11 +1,11 @@
 import { Effect } from "effect"
-import { PluginV2 } from "../../plugin"
+import { define } from "../internal"
 
-export const VercelPlugin = PluginV2.define({
-  id: PluginV2.ID.make("vercel"),
-  effect: Effect.gen(function* () {
-    return {
-      "catalog.transform": Effect.fn(function* (evt) {
+export const VercelPlugin = define({
+  id: "vercel",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
           if (item.provider.api.package !== "@ai-sdk/vercel") continue
@@ -15,11 +15,13 @@ export const VercelPlugin = PluginV2.define({
           })
         }
       }),
-      "aisdk.sdk": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.sdk(
+      Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/vercel") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/vercel"))
         evt.sdk = mod.createVercel(evt.options)
       }),
-    }
+    )
   }),
 })

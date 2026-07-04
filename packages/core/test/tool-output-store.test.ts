@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Cause, Effect, Exit, Fiber, Layer, Option } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@opencode-ai/core/config"
@@ -28,14 +30,14 @@ const withStore = <A, E, R>(
             }),
           )
         : Layer.empty
-      const store = ToolOutputStore.layer.pipe(
-        Layer.provide(FSUtil.defaultLayer),
-        Layer.provide(global),
-        Layer.provide(configured),
-      )
+
+      const store = AppNodeBuilder.build(LayerNode.group([ToolOutputStore.node, FSUtil.node]), [
+        [Global.node, global],
+        [Config.node, configured],
+      ])
       return Effect.gen(function* () {
         return yield* body({ root: tmp.path, store: yield* ToolOutputStore.Service, fs: yield* FSUtil.Service })
-      }).pipe(Effect.provide(Layer.mergeAll(store, FSUtil.defaultLayer)))
+      }).pipe(Effect.provide(store))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   )
@@ -90,7 +92,7 @@ describe("ToolOutputStore", () => {
           toolCallID: "call-file",
           output: {
             structured: { caption: "pixel" },
-            content: [{ type: "file", source: { type: "data", data }, mime: "image/png", name: "pixel.png" }],
+            content: [{ type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "pixel.png" }],
           },
         })
         expect(result.outputPaths).toEqual([])
@@ -98,7 +100,7 @@ describe("ToolOutputStore", () => {
         expect(result.output.content).toHaveLength(1)
         expect(result.output.content[0]).toEqual({
           type: "file",
-          source: { type: "data", data },
+          uri: `data:image/png;base64,${data}`,
           mime: "image/png",
           name: "pixel.png",
         })
@@ -112,7 +114,7 @@ describe("ToolOutputStore", () => {
         const text = "x".repeat(ToolOutputStore.MAX_BYTES + 1)
         const media = {
           type: "file" as const,
-          source: { type: "data" as const, data: "aGVsbG8=" },
+          uri: "data:image/png;base64,aGVsbG8=",
           mime: "image/png",
           name: "pixel.png",
         }
@@ -185,11 +187,11 @@ describe("ToolOutputStore", () => {
             writeFileString: () => Effect.never,
           })
         }),
-      ).pipe(Layer.provide(FSUtil.defaultLayer))
-      const store = ToolOutputStore.layer.pipe(
-        Layer.provide(blockedFilesystem),
-        Layer.provide(Global.layerWith({ data: root.path })),
-      )
+      ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+      const store = AppNodeBuilder.build(ToolOutputStore.nodeWithoutConfig, [
+        [Global.node, Global.layerWith({ data: root.path })],
+        [FSUtil.node, blockedFilesystem],
+      ])
       const exit = yield* Effect.gen(function* () {
         const service = yield* ToolOutputStore.Service
         const fiber = yield* service

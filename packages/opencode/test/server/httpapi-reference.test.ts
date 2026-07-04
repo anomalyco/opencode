@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { Server } from "../../src/server/server"
-import * as Log from "@opencode-ai/core/util/log"
 import { Global } from "@opencode-ai/core/global"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-
-void Log.init({ print: false })
+import { Effect } from "effect"
+import { pollWithTimeout } from "../lib/effect"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -14,12 +13,12 @@ afterEach(async () => {
 })
 
 describe("reference HttpApi", () => {
-  test("lists presentation-safe references resolved in the server workspace", async () => {
+  test("lists usable references resolved in the server workspace", async () => {
     await using tmp = await tmpdir({
       config: {
         formatter: false,
         lsp: false,
-        reference: {
+        references: {
           docs: "./docs",
           effect: { repository: "Effect-TS/effect", branch: "main" },
           bad: "not-a-repo",
@@ -27,29 +26,37 @@ describe("reference HttpApi", () => {
       },
     })
 
-    const response = await Server.Default().app.request("/reference", {
-      headers: { "x-opencode-directory": tmp.path },
-    })
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual([
+    const body = await Effect.runPromise(
+      pollWithTimeout(
+        Effect.promise(async () => {
+          const response = await Server.Default().app.request("/api/reference", {
+            headers: { "x-opencode-directory": tmp.path },
+          })
+          expect(response.status).toBe(200)
+          const body = await response.json()
+          return body.data.length === 0 ? undefined : body
+        }),
+        "references were not loaded",
+      ),
+    )
+    expect(body).toMatchObject({ location: { directory: tmp.path } })
+    expect(body.data).toEqual([
       {
         name: "docs",
-        kind: "local",
         path: path.join(tmp.path, "docs"),
+        source: {
+          type: "local",
+          path: path.join(tmp.path, "docs"),
+        },
       },
       {
         name: "effect",
-        kind: "git",
-        repository: "Effect-TS/effect",
         path: path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"),
-        branch: "main",
-      },
-      {
-        name: "bad",
-        kind: "invalid",
-        repository: "not-a-repo",
-        message: "Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand",
+        source: {
+          type: "git",
+          repository: "Effect-TS/effect",
+          branch: "main",
+        },
       },
     ])
   })

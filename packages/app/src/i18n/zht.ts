@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜尋資料夾",
   "dialog.directory.empty": "找不到資料夾",
+  "dialog.directory.action.selectFile": "選擇檔案",
+  "dialog.directory.action.selectFolder": "選擇資料夾",
+  "dialog.directory.root": "根目錄",
+  "dialog.directory.parent": "上層目錄",
+  "dialog.directory.readError": "無法讀取此資料夾",
 
   "dialog.server.title": "伺服器",
   "dialog.server.description": "切換此應用程式連線的 OpenCode 伺服器。",
@@ -645,8 +650,6 @@ export const dict = {
   "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",
   "settings.general.row.editToolPartsExpanded.title": "展開 edit 工具區塊",
   "settings.general.row.editToolPartsExpanded.description": "在時間軸中預設展開 edit、write 和 patch 工具區塊",
-  "settings.general.row.showSessionProgressBar.title": "顯示工作階段進度列",
-  "settings.general.row.showSessionProgressBar.description": "當代理程式正在運作時，在工作階段頂部顯示動畫進度列",
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上停用 X11 後備模式。需要重新啟動。",
   "settings.general.row.wayland.tooltip": "在混合更新率螢幕的 Linux 系統上，原生 Wayland 可能更穩定。",

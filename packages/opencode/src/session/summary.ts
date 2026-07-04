@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -70,7 +71,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sessions = yield* Session.Service
@@ -144,19 +145,16 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(Snapshot.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-  ),
-)
-
 export const DiffInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
 })
 export type DiffInput = Schema.Schema.Type<typeof DiffInput>
+
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+})
 
 export * as SessionSummary from "./summary"

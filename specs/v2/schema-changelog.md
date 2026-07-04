@@ -1,12 +1,37 @@
 # V2 Schema Changelog
 
+## 2026-06-26: Add Finite Session History
+
+- Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.
+- Page public durable Session events after an optional exclusive aggregate sequence, with an explicit `hasMore` exhaustion signal.
+- Keep aggregate gaps legal, cap pages at 100 events, and preserve the existing durable replay-and-tail `sessions.events()` stream unchanged.
+- Add no migration or durable-event version; this is a finite read API over the existing event manifest.
+
+## 2026-06-22: Simplify Session Input Promotion
+
+- Keep `session.next.prompt.admitted.1` as the durable, client-visible record of pending Session input.
+- Replace `session.next.prompt.promoted.1` with the existing `session.next.prompted.1` event when input becomes model-visible.
+- Preserve the prompt endpoint, admission receipt, idempotency, steer/queue ordering, and atomic user-message projection.
+- Reset experimental V2 events, projections, inputs, Context Epochs, and synchronized workspace state while preserving canonical V1 `session`, `message`, and `part` rows.
+
+## 2026-06-22: Reset Unpublished Compaction Event
+
+- Replace the unpublished `session.next.compaction.ended.1` payload with the current checkpoint payload and remove its legacy decoder.
+- Reset experimental events, sequences, Session inputs, projected Session messages, Context Epochs, synchronized workspace rows, and Session workspace links.
+- Preserve canonical V1 `session`, `message`, and `part` rows.
+
+## 2026-06-22: Make Session Interruption Process-Local
+
+- Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.
+- No canonical V1 data requires migration; experimental V2 event history containing the retired event is disposable.
+
 ## 2026-06-05: Execute Automatic Session Compaction
 
 - Trigger automatic compaction before provider turns using the complete estimated request and absolute model-aware headroom.
 - Preserve the existing structured summary contract and update prior summaries with newly compacted history.
 - Store token-bounded recent history as plain serialized text inside the checkpoint instead of replaying provider-native messages.
 - Keep compaction starts durable and progress deltas live-only; activate history cutover only from a durable completed summary.
-- Version the completed event as `session.next.compaction.ended.2` rather than changing the existing synchronized v1 payload in place.
+- Store the completed event with the current checkpoint payload containing stable message identity, reason, summary, and recent context.
 - Reload the replacement Context Epoch and continue the original pending turn after compaction.
 - Preserve full durable history; compaction changes only the active model representation.
 - Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
@@ -65,26 +90,6 @@ Compatibility:
 - The `session.next.*` lifecycle event family predates this branch; this branch refines its experimental V2 durability and replay contracts.
 - Durable replay cursors are per-aggregate event sequences; ephemeral deltas are intentionally absent after reconnect.
 
-### Deterministic IDs From External Keys
-
-Affected schema:
-
-- Session and Event ID construction helpers.
-
-Change:
-
-- Add deterministic `SessionSchema.ID.fromExternal(...)` and `EventV2.ID.fromExternal(...)` constructors for trusted external keys.
-
-Reason:
-
-- Embedded adapters need stable local identities when the same external conversation or stimulus is delivered more than once.
-- Deterministic IDs let durable admission and event publication retain their idempotency boundaries across retries.
-
-Compatibility:
-
-- Existing generated Session and Event IDs retain their current prefixes and generation behavior.
-- Deterministic constructors are additive internal helpers; public ID schemas remain strings with their existing prefixes.
-
 ### Durable Step Settlement Ownership
 
 Affected schema:
@@ -120,7 +125,7 @@ Change:
 Reason:
 
 - Prompt admission and model-visible promotion must be separate durable operations.
-- Steering must promote at safe provider-turn boundaries while queued prompts remain separate FIFO activities.
+- Steering must promote at safe provider-turn boundaries while queued prompts remain pending in FIFO order until continuation would otherwise end.
 
 Compatibility:
 
@@ -696,6 +701,22 @@ Compatibility:
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
 
+## 2026-06-18: Remove Bash Description Input
+
+Affected schema:
+
+- V1 and Core V2 model-facing `bash` tool parameters.
+
+Change:
+
+- Remove the V1 required and V2 optional `description` parameter.
+- Derive shell presentation from the command or a generic shell label instead of model-authored description metadata.
+
+Compatibility:
+
+- Existing persisted tool calls may still contain `description`, but new tool definitions no longer expose or require it.
+- Shell command execution behavior is unchanged.
+
 ## 2026-06-04: Add Durable Session Context Snapshots
 
 Affected schema:
@@ -800,3 +821,23 @@ Change:
 Compatibility:
 
 - Existing Context Epoch rows backfill the default `build` agent and reconcile to another selected agent at the next safe provider-turn boundary.
+
+## 2026-06-22: Simplify Session Context Rebaselining
+
+Affected schema:
+
+- Remove `session_context_epoch.agent`, `session_context_epoch.replacement_seq`, and `session_context_epoch.revision`.
+- No synchronized event, public HTTP API, or generated SDK schema changes.
+
+Change:
+
+- Sample the effective agent and model once for each provider turn; selection changes apply to the next turn.
+- Preserve the immutable baseline and admit ordinary System Context changes as chronological `ContextUpdated` messages.
+- Rebuild the baseline directly after completed compaction instead of maintaining pending replacement state.
+- Preserve the old baseline and its effective chronological updates while a post-compaction baseline cannot be rendered completely.
+- Rely on the process-local Session execution lane instead of optimistic concurrency state between Context Epoch writers.
+
+Compatibility:
+
+- Existing Context Epoch rows migrate in place by dropping the obsolete selection and pending-replacement columns.
+- Model and agent switches no longer discard earlier chronological System Context updates by forcing a new baseline.

@@ -2,17 +2,20 @@
  * Model-facing V2 exact-edit leaf. Relative paths resolve within the active
  * Location. Absolute paths inside that Location are accepted, while explicit
  * absolute external paths retain mutation capability through a separate
- * external_directory approval before edit approval. Named project references
- * are read-oriented and deliberately are not accepted by mutation tools.
+ * external_directory approval before edit approval.
  */
 export * as EditTool from "./edit"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
+import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -21,7 +24,7 @@ export const name = "edit"
 export const Input = Schema.Struct({
   path: Schema.String.annotate({
     description:
-      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval. Named project references are read-oriented and are not accepted.",
+      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
   }),
   oldString: Schema.String.annotate({ description: "Exact text to replace" }),
   newString: Schema.String.annotate({ description: "Replacement text, which must differ from oldString" }),
@@ -31,10 +34,7 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Struct({
-  operation: Schema.Literal("write"),
-  target: Schema.String,
-  resource: Schema.String,
-  existed: Schema.Boolean,
+  files: Schema.Array(FileDiff.Info),
   replacements: Schema.Number,
 })
 export type Output = typeof Output.Type
@@ -72,7 +72,7 @@ const previewLines = (value: string, prefix: "+" | "-") => {
 
 export const toModelOutput = (output: Output, oldString: string, newString: string) =>
   [
-    `Edited file successfully: ${output.resource}`,
+    `Edited file successfully: ${output.files[0]?.file}`,
     `Replacements: ${output.replacements}`,
     "```diff",
     ...previewLines(oldString, "-"),
@@ -87,7 +87,7 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
 // TODO: Add snapshots / undo after design exists.
 // TODO: Add LSP notification and diagnostics after V2 LSP runtime exists.
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
@@ -100,11 +100,11 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.withPermission(
           Tool.make({
             description:
-              "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
+              "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
             input: Input,
             output: Output,
             toModelOutput: ({ input, output }) => [
-              toolText({ type: "text", text: toModelOutput(output, input.oldString, input.newString) }),
+              { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
             ],
             execute: (input, context) => {
               const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -180,6 +180,13 @@ export const layer = Layer.effectDiscard(
                   input.replaceAll === true
                     ? source.text.replaceAll(oldString, newString)
                     : source.text.replace(oldString, newString)
+                const counts = diffLines(source.text, replaced).reduce(
+                  (result, item) => ({
+                    additions: result.additions + (item.added ? (item.count ?? 0) : 0),
+                    deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+                  }),
+                  { additions: 0, deletions: 0 },
+                )
                 const next = splitBom(replaced)
                 const result = yield* unableToEdit(
                   files.writeIfUnchanged({
@@ -188,7 +195,17 @@ export const layer = Layer.effectDiscard(
                     content: joinBom(next.text, source.bom || next.bom),
                   }),
                 )
-                return { ...result, replacements } satisfies Output
+                return {
+                  files: [
+                    {
+                      file: result.resource,
+                      patch: createTwoFilesPatch(result.resource, result.resource, source.text, replaced),
+                      status: "modified" as const,
+                      ...counts,
+                    },
+                  ],
+                  replacements,
+                } satisfies Output
               })
             },
           }),
@@ -198,3 +215,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/edit",
+  layer,
+  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, FSUtil.node, PermissionV2.node],
+})

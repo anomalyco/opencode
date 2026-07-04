@@ -87,13 +87,6 @@ delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 process.env["OPENCODE_DB"] = ":memory:"
 
 // Now safe to import from src/
-const { Log } = await import("@opencode-ai/core/util/log")
 const { initProjectors } = await import("../src/server/projectors")
-
-void Log.init({
-  print: false,
-  dev: true,
-  level: "DEBUG",
-})
 
 initProjectors()

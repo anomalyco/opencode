@@ -65,34 +65,19 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: bun turbo test:ci --log-order=stream --log-prefix=task
+        run: GITHUB_ACTIONS=false bun turbo test
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Check generated client
+        if: runner.os == 'Linux'
+        working-directory: packages/client
+        run: bun run check:generated
 
       - name: Run HttpApi exerciser gates
         if: runner.os == 'Linux'
         working-directory: packages/opencode
         run: bun run test:httpapi
-
-      - name: Publish unit reports
-        if: always()
-        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
-        with:
-          report_paths: packages/*/.artifacts/unit/junit.xml
-          check_name: "unit results (${{ matrix.settings.name }})"
-          detailed_summary: true
-          include_time_in_summary: true
-          fail_on_failure: false
-
-      - name: Upload unit artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-          path: packages/*/.artifacts/unit/junit.xml
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
@@ -119,7 +104,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "24"
+          # Playwright 1.59 hangs while extracting Chromium with Node 24.16.
+          node-version: "24.15"
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -151,7 +137,6 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
@@ -162,6 +147,5 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
           path: |
-            packages/app/e2e/junit-*.xml
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report

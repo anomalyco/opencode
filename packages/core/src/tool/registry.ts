@@ -1,6 +1,6 @@
 export * as ToolRegistry from "./registry"
 
-import { ToolOutput, type ToolCall, type ToolDefinition, type ToolSettlement } from "@opencode-ai/llm"
+import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/llm"
 import { Context, Effect, Layer, Scope } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
@@ -11,6 +11,7 @@ import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
 import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
+import { makeLocationNode } from "../effect/app-node"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -30,7 +31,9 @@ export interface Materialization {
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement, ToolOutputStore.Error>
 }
 
-export interface Settlement extends ToolSettlement {
+export interface Settlement {
+  readonly result: ToolResultValue
+  readonly output?: ToolOutput
   readonly outputPaths?: ReadonlyArray<string>
 }
 
@@ -121,7 +124,7 @@ const registryLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Tools.Service,
   Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
@@ -131,7 +134,14 @@ function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
   return rule?.resource === "*" && rule.effect === "deny"
 }
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(ApplicationTools.layer),
-  Layer.provide(ToolOutputStore.defaultLayer),
-)
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [ApplicationTools.node, ToolOutputStore.node],
+})
+
+export const toolsNode = makeLocationNode({
+  service: Tools.Service,
+  layer,
+  deps: [ApplicationTools.node, ToolOutputStore.node],
+})

@@ -1,5 +1,6 @@
 export * as Image from "./image"
 
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Config } from "./config"
 import { FileSystem } from "./filesystem"
@@ -34,13 +35,16 @@ export class SizeError extends Schema.TaggedErrorClass<SizeError>()("Image.SizeE
 export interface Interface {
   readonly normalize: (
     resource: string,
-    content: FileSystem.BinaryContent,
-  ) => Effect.Effect<FileSystem.BinaryContent, ResizerUnavailableError | DecodeError | SizeError>
+    content: FileSystem.Content & { readonly encoding: "base64" },
+  ) => Effect.Effect<
+    FileSystem.Content & { readonly encoding: "base64" },
+    ResizerUnavailableError | DecodeError | SizeError
+  >
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -50,7 +54,10 @@ export const layer = Layer.effect(
         catch: () => new ResizerUnavailableError(),
       }).pipe(Effect.flatMap((adapter) => adapter.make)),
     )
-    const normalize = Effect.fn("Image.normalize")(function* (resource: string, content: FileSystem.BinaryContent) {
+    const normalize = Effect.fn("Image.normalize")(function* (
+      resource: string,
+      content: FileSystem.Content & { readonly encoding: "base64" },
+    ) {
       const image = Object.assign(
         {},
         ...(yield* config.entries()).flatMap((entry) =>
@@ -70,3 +77,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
+
+export const node = makeLocationNode({ service: Service, layer, deps: [Config.node] })
