@@ -9,6 +9,7 @@ import type {
   SessionMessageAssistantTool,
   V2Event,
 } from "@opencode-ai/sdk/v2"
+import { Event } from "@opencode-ai/schema/event"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
@@ -41,6 +42,7 @@ type StreamInput = {
   footer: FooterApi
   trace?: Trace
   signal?: AbortSignal
+  onCatalogRefresh?: () => void
 }
 
 export type SessionTurnInput = {
@@ -81,6 +83,8 @@ type Wait = {
 // callID correlates the live shell events once shell.started is observed, and
 // abort cancels the blocking request when the user interrupts the turn.
 type ShellWait = {
+  eventID: string
+  messageID: string
   callID?: string
   resolve: () => void
   abort: () => void
@@ -232,7 +236,7 @@ function streamPartKey(messageID: string, partID: string) {
 function shellCommit(
   callID: string,
   command: string,
-  next: { text: string; phase: "start" | "progress"; toolState: "running" | "completed" },
+  next: Pick<StreamCommit, "text" | "phase" | "toolState" | "toolError">,
 ): StreamCommit {
   return {
     kind: "tool",
@@ -243,6 +247,41 @@ function shellCommit(
     ...next,
   }
 }
+
+function shellTerminal(
+  callID: string,
+  command: string,
+  shell: { status: string; exit?: number | string },
+  output: { output: string; cursor: number; size: number; truncated: boolean },
+) {
+  const incomplete = output.truncated || output.cursor < output.size
+  const text = `${output.output}${incomplete ? `${output.output.endsWith("\n") || !output.output ? "" : "\n"}[output truncated]` : ""}`
+  const error =
+    shell.status === "exited" && shell.exit === 0
+      ? undefined
+      : shell.status === "exited"
+        ? `Shell exited with code ${shell.exit ?? "unknown"}`
+        : `Shell ${shell.status}`
+  if (!error)
+    return [shellCommit(callID, command, { text, phase: "progress", toolState: "completed" })]
+  return [
+    ...(text ? [shellCommit(callID, command, { text, phase: "progress", toolState: "running" })] : []),
+    shellCommit(callID, command, { text: error, phase: "final", toolState: "error", toolError: error }),
+  ]
+}
+
+function messageIDFromEvent(id: string) {
+  return id.replace(/^evt_/, "msg_")
+}
+
+const catalogEvents = new Set([
+  "catalog.updated",
+  "integration.updated",
+  "agent.updated",
+  "command.updated",
+  "skill.updated",
+  "reference.updated",
+])
 
 // session.shell resolves after the command settled server-side; the matching
 // live shell.ended event usually lands within the same tick, but hold the turn
@@ -407,6 +446,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     if (message.type === "shell") {
       state.shellCommands.set(message.shell.id, message.shell.command)
+      if (state.shellWait?.messageID === message.id) state.shellWait.callID = message.shell.id
       const completed = message.time.completed !== undefined
       if (!render) {
         // Suppressed history: mark settled shells rendered so live redelivery
@@ -430,13 +470,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
       if (completed && message.output && !state.shellEnded.has(message.shell.id)) {
         state.shellEnded.add(message.shell.id)
-        write([
-          shellCommit(message.shell.id, message.shell.command, {
-            text: message.output.output,
-            phase: "progress",
-            toolState: "completed",
-          }),
-        ])
+        write(shellTerminal(message.shell.id, message.shell.command, message.shell, message.output))
       }
       if (completed && state.shellWait?.callID === message.shell.id) state.shellWait.resolve()
       return
@@ -522,6 +556,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   const apply = (event: RunV2Event) => {
+    if (catalogEvents.has(event.type)) {
+      if (input.directory && event.location?.directory && event.location.directory !== input.directory) return
+      input.onCatalogRefresh?.()
+      return
+    }
     const source = sessionID(event)
     if (source !== input.sessionID) {
       if (source) subagents.foreign(source, event)
@@ -540,8 +579,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.skill.activated") {
-      const messageID = event.id.replace(/^evt_/, "msg_")
-      if (state.wait) state.wait.promoted = true
+      const messageID = messageIDFromEvent(event.id)
+      if (state.wait?.messageID === messageID) state.wait.promoted = true
       if (state.skillMessages.has(messageID)) return
       state.skillMessages.add(messageID)
       write([skillCommit(messageID, event.data.name)])
@@ -550,7 +589,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (event.type === "session.shell.started") {
       state.shellCommands.set(event.data.shell.id, event.data.shell.command)
       const wait = state.shellWait
-      if (wait && wait.callID === undefined) wait.callID = event.data.shell.id
+      if (wait?.eventID === event.id) wait.callID = event.data.shell.id
       if (state.shellStarted.has(event.data.shell.id)) return
       state.shellStarted.add(event.data.shell.id)
       write(
@@ -580,19 +619,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
       if (!state.shellEnded.has(event.data.shell.id)) {
         state.shellEnded.add(event.data.shell.id)
-        commits.push(
-          shellCommit(event.data.shell.id, command, {
-            text: event.data.output.output,
-            phase: "progress",
-            toolState: "completed",
-          }),
-        )
+        commits.push(...shellTerminal(event.data.shell.id, command, event.data.shell, event.data.output))
       }
       const wait = state.shellWait
-      // An unset callID means shell.started has not been observed yet (event
-      // delivery lag); mini serializes its own shells, so adopt this ended.
-      const owned = wait !== undefined && (wait.callID === undefined || wait.callID === event.data.shell.id)
-      write(commits, owned || state.wait ? undefined : { phase: "idle", status: "" })
+      const owned = wait?.callID === event.data.shell.id
+      write(commits, owned || state.wait || state.shellWait ? undefined : { phase: "idle", status: "" })
       if (owned) wait.resolve()
       return
     }
@@ -828,6 +859,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           })()
           void consume.catch(() => {})
           await hydrate({ render: state.initial ? input.replay === true : true, reuseVisibleWait: !state.initial })
+          input.onCatalogRefresh?.()
           state.initial = false
           booting = false
           for (const event of buffered.splice(0)) apply(event)
@@ -867,13 +899,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const output = new Promise<void>((resolve) => {
       rendered = resolve
     })
-    const active: ShellWait = { resolve: rendered, abort: () => abort.abort() }
+    const eventID = Event.ID.create()
+    const active: ShellWait = {
+      eventID,
+      messageID: messageIDFromEvent(eventID),
+      resolve: rendered,
+      abort: () => abort.abort(),
+    }
     state.shellWait = active
-    input.trace?.write("send.shell", { sessionID: input.sessionID, command: next.prompt.text })
+    input.trace?.write("send.shell", { sessionID: input.sessionID, id: eventID, command: next.prompt.text })
     write([], { phase: "running", status: "running shell" })
     try {
       await input.sdk.v2.session.shell(
-        { sessionID: input.sessionID, command: next.prompt.text },
+        { sessionID: input.sessionID, id: eventID, command: next.prompt.text },
         { throwOnError: true, signal: abort.signal },
       )
       await Promise.race([output, wait(SHELL_OUTPUT_GRACE_MS, abort.signal)])

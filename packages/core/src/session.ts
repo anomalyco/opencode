@@ -585,11 +585,15 @@ const layer = Layer.effect(
         const skills = yield* SkillV2.Service.pipe(Effect.provide(locations.get(session.location)))
         const skill = (yield* skills.list()).find((item) => item.name === input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
-        yield* events.publish(SessionEvent.Skill.Activated, {
-          sessionID: input.sessionID,
-          name: skill.name,
-          text: skill.content,
-        })
+        yield* events.publish(
+          SessionEvent.Skill.Activated,
+          {
+            sessionID: input.sessionID,
+            name: skill.name,
+            text: skill.content,
+          },
+          { id: input.id ? EventV2.ID.make(input.id.replace(/^msg_/, "evt_")) : undefined },
+        )
         if (input.resume !== false)
           yield* execution
             .resume(input.sessionID)

@@ -294,8 +294,6 @@ export function createRoutes(
       HttpServer.layerServices,
     ]),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
-    Layer.provideMerge(Observability.layer),
-
     Layer.provide(formLocationLayer),
     Layer.provide(sessionLocationLayer),
     Layer.provide(locationLayer),
@@ -312,6 +310,7 @@ export function createRoutes(
     Layer.provide(locationServiceMapV2),
 
     Layer.provide(AppNodeBuilderV1.build(app)),
+    Layer.provideMerge(Observability.layer),
   )
 }
 

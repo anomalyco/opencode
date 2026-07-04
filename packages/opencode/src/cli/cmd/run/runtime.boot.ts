@@ -174,6 +174,10 @@ export async function resolveModelInfo(
   return runtime.runPromise((svc) => svc.resolveModelInfo(sdk, directory, model)).catch(() => emptyModelInfo())
 }
 
+export function resolveModelInfoStrict(sdk: RunInput["sdk"], directory: string, model: RunInput["model"]) {
+  return runtime.runPromise((svc) => svc.resolveModelInfo(sdk, directory, model))
+}
+
 // Fetches session messages to determine if this is the first turn and build prompt history.
 export async function resolveSessionInfo(
   sdk: RunInput["sdk"],

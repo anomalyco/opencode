@@ -110,6 +110,39 @@ function tool(input: { id: string; messageID: string; tool: string; state: Recor
   }
 }
 
+function shellInfo(id: string, status: "running" | "exited", completed?: number) {
+  return {
+    id,
+    status,
+    command: "pwd",
+    cwd: "/tmp/demo",
+    shell: "/bin/sh",
+    file: `/tmp/${id}.log`,
+    ...(status === "exited" ? { exit: 0 } : {}),
+    metadata: {},
+    time: { started: 1, ...(completed === undefined ? {} : { completed }) },
+  }
+}
+
+function shellStarted(id = "call-1") {
+  return {
+    type: "session.shell.started",
+    properties: { sessionID: "session-1", shell: shellInfo(id, "running") },
+  }
+}
+
+function shellEnded(id = "call-1") {
+  const output = "/tmp/demo\n"
+  return {
+    type: "session.shell.ended",
+    properties: {
+      sessionID: "session-1",
+      shell: shellInfo(id, "exited", 2),
+      output: { output, cursor: Buffer.byteLength(output), size: Buffer.byteLength(output), truncated: false },
+    },
+  }
+}
+
 describe("run session data", () => {
   test("buffers delayed assistant text until the role is known", () => {
     let data = createSessionData()
@@ -328,15 +361,7 @@ describe("run session data", () => {
 
   test("renders direct shell mode from first-class shell events", () => {
     let data = createSessionData()
-    const started = reduce(data, {
-      type: "session.shell.started",
-      properties: {
-        sessionID: "session-1",
-        timestamp: 1,
-        callID: "call-1",
-        command: "pwd",
-      },
-    })
+    const started = reduce(data, shellStarted())
 
     expect(started.commits).toEqual([
       expect.objectContaining({
@@ -352,15 +377,7 @@ describe("run session data", () => {
     ])
 
     data = started.data
-    const ended = reduce(data, {
-      type: "session.shell.ended",
-      properties: {
-        sessionID: "session-1",
-        timestamp: 2,
-        callID: "call-1",
-        output: "/tmp/demo\n",
-      },
-    })
+    const ended = reduce(data, shellEnded())
 
     expect(ended.commits).toEqual([
       expect.objectContaining({
@@ -379,15 +396,7 @@ describe("run session data", () => {
   })
 
   test("suppresses legacy bash part updates once shell events claim the call", () => {
-    let data = reduce(createSessionData(), {
-      type: "session.shell.started",
-      properties: {
-        sessionID: "session-1",
-        timestamp: 1,
-        callID: "call-1",
-        command: "pwd",
-      },
-    }).data
+    let data = reduce(createSessionData(), shellStarted()).data
 
     expect(
       reduce(
@@ -408,15 +417,7 @@ describe("run session data", () => {
       ).commits,
     ).toEqual([])
 
-    data = reduce(data, {
-      type: "session.shell.ended",
-      properties: {
-        sessionID: "session-1",
-        timestamp: 2,
-        callID: "call-1",
-        output: "/tmp/demo\n",
-      },
-    }).data
+    data = reduce(data, shellEnded()).data
 
     expect(
       reduce(
@@ -462,15 +463,7 @@ describe("run session data", () => {
     ).data
 
     expect(
-      reduce(data, {
-        type: "session.shell.started",
-        properties: {
-          sessionID: "session-1",
-          timestamp: 1,
-          callID: "call-1",
-          command: "pwd",
-        },
-      }).commits,
+      reduce(data, shellStarted()).commits,
     ).toEqual([])
 
     data = reduce(
@@ -496,15 +489,7 @@ describe("run session data", () => {
     ).data
 
     expect(
-      reduce(data, {
-        type: "session.shell.ended",
-        properties: {
-          sessionID: "session-1",
-          timestamp: 2,
-          callID: "call-1",
-          output: "/tmp/demo\n",
-        },
-      }).commits,
+      reduce(data, shellEnded()).commits,
     ).toEqual([])
   })
 

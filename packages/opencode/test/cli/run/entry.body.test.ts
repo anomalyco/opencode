@@ -50,6 +50,23 @@ function structured(next: StreamCommit) {
 }
 
 describe("run entry body", () => {
+  test("renders a failed direct shell as an error instead of completed success", () => {
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "Shell exited with code 7",
+          phase: "final",
+          source: "tool",
+          tool: "bash",
+          toolState: "error",
+          toolError: "Shell exited with code 7",
+          shell: { callID: "sh_failed", command: "false" },
+        }),
+      ),
+    ).toEqual({ type: "text", content: "✖ bash failed: Shell exited with code 7" })
+  })
+
   test("renders assistant, reasoning, and user entries in their display formats", () => {
     expect(
       entryBody(
