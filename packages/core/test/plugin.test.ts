@@ -121,9 +121,9 @@ describe("PluginV2", () => {
         effect: (ctx) =>
           Effect.gen(function* () {
             yield* ctx.tool.register({ plain: tool("Plain") }).pipe(Effect.orDie)
-            yield* ctx.tool.register({ lookup: tool("Lookup") }, { group: "context7" }).pipe(Effect.orDie)
+            yield* ctx.tool.register({ "look/up": tool("Lookup") }, { group: "context 7" }).pipe(Effect.orDie)
             yield* ctx.tool
-              .register({ search: tool("Search") }, { group: "context7", deferred: true })
+              .register({ search: tool("Search") }, { group: "context 7", deferred: true })
               .pipe(Effect.orDie)
           }),
       })
@@ -132,7 +132,7 @@ describe("PluginV2", () => {
 
       expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toEqual([
         "plain",
-        "context7_lookup",
+        "context_7_look_up",
       ])
     }),
   )

@@ -32,11 +32,14 @@ export const layer = Layer.effectDiscard(
         const groups = new Map<string, Record<string, Tool.AnyTool>>()
         for (const tool of yield* mcp.tools()) {
           const group = groups.get(tool.server) ?? {}
+          const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
           group[tool.name] = Tool.make({
             description: tool.description ?? "",
-            jsonSchema: (tool.inputSchema as JsonSchema.JsonSchema | undefined) ?? {
+            jsonSchema: {
+              ...schema,
               type: "object",
-              properties: {},
+              properties: schema.properties ?? {},
+              additionalProperties: false,
             },
             execute: (input) =>
               Effect.gen(function* () {
