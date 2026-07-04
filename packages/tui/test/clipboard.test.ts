@@ -10,7 +10,7 @@ test("uses osascript on macOS", () => {
 })
 
 test("falls back through X11 clipboard commands", () => {
-  expect(copyCommand("linux", true, (name) => name === "xclip")).toEqual(["xclip", "-selection", "clipboard"])
+  expect(copyCommand("linux", true, (name) => name === "xclip")).toEqual(["xclip", "-selection", "clipboard", "-i"])
   expect(copyCommand("linux", false, (name) => name === "xsel")).toEqual(["xsel", "--clipboard", "--input"])
 })
 

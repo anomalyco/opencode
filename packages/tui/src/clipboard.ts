@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process"
+import fs from "node:fs"
 import { readFile, rm } from "node:fs/promises"
 import { platform, release, tmpdir } from "node:os"
 import path from "node:path"
@@ -23,7 +24,12 @@ function command(command: string, args: string[] = [], input?: string) {
 function writeOsc52(text: string) {
   if (!process.stdout.isTTY) return
   const sequence = `\x1b]52;c;${Buffer.from(text).toString("base64")}\x07`
-  process.stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
+  const payload = process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence
+  try {
+    fs.writeSync(process.stdout.fd, payload)
+  } catch {
+    // Terminal not available
+  }
 }
 
 export async function read() {
@@ -80,7 +86,7 @@ export function copyCommand(
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
   if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
-  if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
+  if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard", "-i"]
   if (os === "linux" && has("xsel")) return ["xsel", "--clipboard", "--input"]
   if (os === "win32" && has("powershell.exe")) {
     return [
@@ -102,17 +108,17 @@ function getCopyMethod() {
     if (native?.[0] === "osascript") {
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
+        await command("osascript", ["-e", `set the clipboard to "${escaped}"`])
       }
     }
     if (native) {
       return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
+        await command(native[0], native.slice(1), text)
       }
     }
     return async (text: string) => {
       const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
+      await clipboardy.write(text)
     }
   })())
 }
