@@ -209,6 +209,50 @@ describe("OpenAPI.fromSpec", () => {
     expect(toolAt(result.tools, "v2.pty.connectToken")).not.toBeUndefined()
   })
 
+  test("preserves operation path sanitization and collision handling", () => {
+    const response = { responses: { 200: { description: "Success" } } }
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        openapi: "3.1.0",
+        paths: {
+          "/first": { get: { ...response, operationId: "group.item" } },
+          "/second": { get: { ...response, operationId: "group.item" } },
+          "/third": { get: { ...response, operationId: "group..other" } },
+        },
+      },
+    })
+
+    expect(Tool.isDefinition(toolAt(result.tools, "group.item"))).toBe(true)
+    expect(Tool.isDefinition(toolAt(result.tools, "group_item_2"))).toBe(true)
+    expect(Tool.isDefinition(toolAt(result.tools, "group.operation.other"))).toBe(true)
+  })
+
+  test("lets operation parameters override matching path parameters", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          openapi: "3.1.0",
+          paths: {
+            "/test": {
+              parameters: [{ name: "limit", in: "query", schema: { type: "string" } }],
+              get: {
+                operationId: "test",
+                parameters: [{ name: "limit", in: "query", required: true, schema: { type: "number" } }],
+                responses: { 200: { description: "Success" } },
+              },
+            },
+          },
+        },
+      }).tools,
+      "test",
+    )
+
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    expect(inputTypeScript(tool)).toBe("{ limit: number }")
+  })
+
   test("normalizes OpenAPI 3.0 schemas with Effect", () => {
     const result = OpenAPI.fromSpec({
       baseUrl,
@@ -241,6 +285,39 @@ describe("OpenAPI.fromSpec", () => {
     const properties = isRecord(input.properties) ? input.properties : {}
     const value = isRecord(properties.value) ? properties.value : {}
     expect(value.minLength).toBe(2)
+  })
+
+  test("preserves schema-local definitions alongside component definitions", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          openapi: "3.1.0",
+          paths: {
+            "/test": {
+              get: {
+                operationId: "test",
+                responses: {
+                  200: {
+                    description: "Success",
+                    content: {
+                      "application/json": {
+                        schema: { $ref: "#/$defs/Local", $defs: { Local: { type: "string" } } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          components: { schemas: { Global: { type: "number" } } },
+        },
+      }).tools,
+      "test",
+    )
+
+    if (!Tool.isDefinition(tool) || !isRecord(tool.output)) throw new Error("test output was not generated")
+    expect(tool.output.$defs).toMatchObject({ Local: { type: "string" }, Global: { type: "number" } })
   })
 
   test("documents that the opencode fixture is unauthenticated", async () => {

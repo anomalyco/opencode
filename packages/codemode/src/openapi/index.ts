@@ -8,13 +8,12 @@ import {
   methods,
   nonEmptyString,
   operationInput,
+  operationOutput,
   operationPath,
   operationSecurityRequirements,
-  outputSchema,
   securityRequirements,
   securitySchemes,
   specServerUrl,
-  unsupportedOperationReason,
   validateBaseUrl,
 } from "./spec.js"
 import type { Operation, Options, Result, Skipped, Tools } from "./types.js"
@@ -60,11 +59,9 @@ export const fromSpec = (options: Options): Result => {
         summary: nonEmptyString(operationValue.summary),
         description: nonEmptyString(operationValue.description),
       }
-      // TODO: Represent streaming transports as explicit host capabilities before
-      // exposing them as callable CodeMode tools.
-      const unsupported = unsupportedOperationReason(document, operationValue)
-      if (unsupported !== undefined) {
-        skipped.push({ method: operation.method, path, reason: unsupported })
+      const output = operationOutput(document, operationValue, definitions)
+      if (!output.ok) {
+        skipped.push({ method: operation.method, path, reason: output.reason })
         continue
       }
 
@@ -108,7 +105,7 @@ export const fromSpec = (options: Options): Result => {
         Tool.make({
           description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
           input: inputSchema(input.fields, definitions),
-          output: outputSchema(document, operationValue, definitions),
+          output: output.value,
           run: (input) => invoke(plan, input),
         }),
       )

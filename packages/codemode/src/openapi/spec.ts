@@ -14,7 +14,6 @@ export const methods = new Set(["get", "put", "post", "delete", "options", "head
 const parameterLocations = ["path", "query", "header"] as const
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const blockedNames = new Set(["__proto__", "constructor", "prototype"])
-export const maxErrorBodyChars = 1_024
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -49,10 +48,9 @@ const projectSchema = (document: Document, value: unknown): JsonSchema => {
   const normalized = nonEmptyString(document.openapi)?.startsWith("3.0")
     ? fromSchemaOpenApi3_0(value)
     : fromSchemaOpenApi3_1(value)
-  const schema: JsonSchema = {}
-  Object.assign(schema, normalized.schema)
-  if (Object.keys(normalized.definitions).length > 0) Object.assign(schema, { $defs: normalized.definitions })
-  return schema
+  return Object.keys(normalized.definitions).length === 0
+    ? normalized.schema
+    : { ...normalized.schema, $defs: normalized.definitions }
 }
 
 export const componentDefinitions = (document: Document): Readonly<Record<string, JsonSchema>> => {
@@ -61,8 +59,11 @@ export const componentDefinitions = (document: Document): Readonly<Record<string
   return Object.fromEntries(Object.entries(schemas).map(([name, value]) => [name, projectSchema(document, value)]))
 }
 
-const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>): JsonSchema =>
-  Object.keys(definitions).length === 0 ? schema : { ...schema, $defs: definitions }
+const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>): JsonSchema => {
+  if (Object.keys(definitions).length === 0) return schema
+  const local = isRecord(schema.$defs) ? schema.$defs : {}
+  return { ...schema, $defs: { ...definitions, ...local } }
+}
 
 const isJsonMediaType = (mediaType: string): boolean => {
   const normalized = mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
@@ -96,11 +97,13 @@ const isFlattenableObjectBody = (
   schema.anyOf === undefined &&
   schema.oneOf === undefined
 
-export const operationInput = (
+type PlannedField = Omit<InputField, "inputName">
+
+const operationParameters = (
   document: Document,
   pathItem: Record<string, unknown>,
   operation: Record<string, unknown>,
-): Parsed<OperationInput> => {
+): Parsed<ReadonlyArray<PlannedField>> => {
   // Operation-level parameters override path-level ones sharing (location, name).
   const declared = new Map<
     string,
@@ -115,7 +118,7 @@ export const operationInput = (
       return { ok: false, reason: "parameter declaration is missing name or location" }
     declared.set(`${location}:${name}`, { name, location, parameter: resolved })
   }
-  const unordered: Array<Omit<InputField, "inputName">> = []
+  const unordered: Array<PlannedField> = []
   for (const item of declared.values()) {
     const name = item.name
     const location = item.location
@@ -167,37 +170,53 @@ export const operationInput = (
       },
     })
   }
-  const fields: Array<Omit<InputField, "inputName">> = parameterLocations.flatMap((location) =>
-    unordered.filter((field) => field.location === location),
-  )
+  return {
+    ok: true,
+    value: parameterLocations.flatMap((location) => unordered.filter((field) => field.location === location)),
+  }
+}
+
+const operationBody = (
+  document: Document,
+  operation: Record<string, unknown>,
+): Parsed<{ readonly fields: ReadonlyArray<PlannedField>; readonly body: Body | undefined }> => {
   const resolved = resolve(document, operation.requestBody)
-  const body: Parsed<Body | undefined> = (() => {
-    if (!isRecord(resolved)) return { ok: true, value: undefined }
-    const content = isRecord(resolved.content) ? resolved.content : {}
-    const selected = jsonContent(content)
-    if (selected === undefined)
-      return {
-        ok: false,
-        reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})`,
-      }
-    const schema = resolve(document, selected.schema)
-    const required = resolved.required === true
-    if (!isFlattenableObjectBody(schema, required)) {
-      fields.push({
-        name: "body",
-        location: "body",
-        required,
-        schema: projectSchema(document, selected.schema),
-        style: undefined,
-        explode: undefined,
-      })
-      return { ok: true, value: { required, mode: "value", mediaType: selected.mediaType } } as const
+  if (!isRecord(resolved)) return { ok: true, value: { fields: [], body: undefined } }
+  const content = isRecord(resolved.content) ? resolved.content : {}
+  const selected = jsonContent(content)
+  if (selected === undefined) {
+    return {
+      ok: false,
+      reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})`,
     }
-    const requiredProperties = new Set(
-      Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
-    )
-    fields.push(
-      ...Object.entries(schema.properties).map(([name, value]) => ({
+  }
+  const schema = resolve(document, selected.schema)
+  const required = resolved.required === true
+  if (!isFlattenableObjectBody(schema, required)) {
+    return {
+      ok: true,
+      value: {
+        fields: [
+          {
+            name: "body",
+            location: "body",
+            required,
+            schema: projectSchema(document, selected.schema),
+            style: undefined,
+            explode: undefined,
+          },
+        ],
+        body: { required, mode: "value", mediaType: selected.mediaType },
+      },
+    }
+  }
+  const requiredProperties = new Set(
+    Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
+  )
+  return {
+    ok: true,
+    value: {
+      fields: Object.entries(schema.properties).map(([name, value]) => ({
         name,
         location: "body" as const,
         required: required && requiredProperties.has(name),
@@ -205,10 +224,21 @@ export const operationInput = (
         style: undefined,
         explode: undefined,
       })),
-    )
-    return { ok: true, value: { required, mode: "object", mediaType: selected.mediaType } } as const
-  })()
-  if (!body.ok) return body
+      body: { required, mode: "object", mediaType: selected.mediaType },
+    },
+  }
+}
+
+export const operationInput = (
+  document: Document,
+  pathItem: Record<string, unknown>,
+  operation: Record<string, unknown>,
+): Parsed<OperationInput> => {
+  const parameters = operationParameters(document, pathItem, operation)
+  if (!parameters.ok) return parameters
+  const requestBody = operationBody(document, operation)
+  if (!requestBody.ok) return requestBody
+  const fields = [...parameters.value, ...requestBody.value.fields]
 
   const conflicts = new Set(
     [...Map.groupBy(fields, (field) => field.name)]
@@ -230,7 +260,7 @@ export const operationInput = (
         used.add(inputName)
         return { ...field, inputName }
       }),
-      body: body.value,
+      body: requestBody.value.body,
     },
   }
 }
@@ -250,61 +280,53 @@ export const inputSchema = (
   )
 }
 
-const successResponses = (
+const successfulResponses = (
   document: Document,
   operation: Record<string, unknown>,
-): ReadonlyArray<Record<string, unknown>> => {
-  if (!isRecord(operation.responses)) return []
+): Parsed<ReadonlyArray<Record<string, unknown>>> => {
+  if (!isRecord(operation.responses)) return { ok: true, value: [] }
   const entries = Object.entries(operation.responses)
-  return [
+  const selected = [
     ...entries.filter(([status]) => /^2\d\d$/.test(status)).sort(([a], [b]) => a.localeCompare(b)),
     ...entries.filter(([status]) => status.toUpperCase() === "2XX"),
   ]
-    .map(([, ref]) => resolve(document, ref))
-    .filter(isRecord)
+  const responses: Array<Record<string, unknown>> = []
+  for (const [, value] of selected) {
+    const resolved = resolve(document, value)
+    if (!isRecord(resolved) || nonEmptyString(resolved.$ref) !== undefined) {
+      return { ok: false, reason: "successful response declaration is invalid or unresolved" }
+    }
+    responses.push(resolved)
+  }
+  return { ok: true, value: responses }
 }
 
-const unresolvedResponse = (document: Document, operation: Record<string, unknown>): string | undefined => {
-  if (!isRecord(operation.responses)) return undefined
-  const unresolved = Object.entries(operation.responses)
-    .filter(([status]) => /^2\d\d$/i.test(status) || status.toUpperCase() === "2XX")
-    .map(([, value]) => resolve(document, value))
-    .some((value) => !isRecord(value) || nonEmptyString(value.$ref) !== undefined)
-  return unresolved ? "successful response declaration is invalid or unresolved" : undefined
-}
-
-export const unsupportedOperationReason = (
+export const operationOutput = (
   document: Document,
   operation: Record<string, unknown>,
-): string | undefined => {
-  if (operation["x-websocket"] === true) return "WebSocket operations are not supported"
-  const unresolved = unresolvedResponse(document, operation)
-  if (unresolved !== undefined) return unresolved
-  const streams = successResponses(document, operation).some(
+  definitions: Readonly<Record<string, JsonSchema>>,
+): Parsed<JsonSchema | undefined> => {
+  if (operation["x-websocket"] === true) return { ok: false, reason: "WebSocket operations are not supported" }
+  const responses = successfulResponses(document, operation)
+  if (!responses.ok) return responses
+  const streams = responses.value.some(
     (response) =>
       isRecord(response.content) &&
       Object.keys(response.content).some(
         (mediaType) => mediaType.split(";")[0]?.trim().toLowerCase() === "text/event-stream",
       ),
   )
-  if (streams) return "SSE operations are not supported"
-  const binary = successResponses(document, operation).some(
+  if (streams) return { ok: false, reason: "SSE operations are not supported" }
+  const binary = responses.value.some(
     (response) =>
       isRecord(response.content) &&
       Object.entries(response.content).some(([mediaType, value]) => isBinaryMediaType(document, mediaType, value)),
   )
-  return binary ? "binary responses are not supported" : undefined
-}
+  if (binary) return { ok: false, reason: "binary responses are not supported" }
 
-export const outputSchema = (
-  document: Document,
-  operation: Record<string, unknown>,
-  definitions: Readonly<Record<string, JsonSchema>>,
-): JsonSchema | undefined => {
-  const successes = successResponses(document, operation)
   const outcomes: Array<JsonSchema> = []
-  for (const response of successes) {
-    if (response.content !== undefined && !isRecord(response.content)) return undefined
+  for (const response of responses.value) {
+    if (response.content !== undefined && !isRecord(response.content)) return { ok: true, value: undefined }
     const content = isRecord(response.content) ? response.content : {}
     if (Object.keys(content).length === 0) {
       outcomes.push({ type: "null" })
@@ -315,12 +337,15 @@ export const outputSchema = (
         outcomes.push({ type: "string" })
         continue
       }
-      if (!isRecord(value) || value.schema === undefined) return undefined
+      if (!isRecord(value) || value.schema === undefined) return { ok: true, value: undefined }
       outcomes.push(projectSchema(document, value.schema))
     }
   }
-  if (outcomes.length === 0) return undefined
-  return withDefinitions(outcomes.length === 1 ? outcomes[0] ?? {} : { anyOf: outcomes }, definitions)
+  if (outcomes.length === 0) return { ok: true, value: undefined }
+  return {
+    ok: true,
+    value: withDefinitions(outcomes.length === 1 ? outcomes[0] ?? {} : { anyOf: outcomes }, definitions),
+  }
 }
 
 const sanitizeOperationSegment = (raw: string): string => {
@@ -340,10 +365,9 @@ export const operationPath = (
   namespaces: ReadonlySet<string>,
 ): ReadonlyArray<string> => {
   const raw = nonEmptyString(operation.operationId)
-  const base = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split("."))
-    .map(sanitizeOperationSegment)
-    .filter((segment) => segment !== "")
-  const segments = base.length === 0 ? ["operation"] : base
+  const segments = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split(".")).map(
+    sanitizeOperationSegment,
+  )
   if (isOperationPathAvailable(segments, used, namespaces)) return segments
   const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
   if (conflict >= 0 && conflict + 1 < segments.length) {
@@ -356,9 +380,9 @@ export const operationPath = (
     })
     if (isOperationPathAvailable(collapsed, used, namespaces)) return collapsed
   }
-  const fallback = [segments.join("_")]
+  const fallback = segments.join("_")
   const next = (index: number): string => {
-    const candidate = `${fallback[0]}_${index}`
+    const candidate = `${fallback}_${index}`
     return isOperationPathAvailable([candidate], used, namespaces) ? candidate : next(index + 1)
   }
   return [next(2)]
@@ -399,30 +423,21 @@ export const validateBaseUrl = (value: string): Parsed<string> => {
 export const securityRequirements = (value: unknown): Parsed<ReadonlyArray<SecurityRequirement>> => {
   if (value === undefined) return { ok: true, value: [] }
   if (!Array.isArray(value)) return { ok: false, reason: "security declaration is not an array" }
-  if (value.some((requirement) => !isRecord(requirement))) {
-    return { ok: false, reason: "security requirement is not an object" }
+  const requirements: Array<SecurityRequirement> = []
+  for (const item of value) {
+    if (!isRecord(item)) return { ok: false, reason: "security requirement is not an object" }
+    const requirement = Object.create(null) as Record<string, ReadonlyArray<string>>
+    for (const [name, scopes] of Object.entries(item)) {
+      if (!Array.isArray(scopes)) return { ok: false, reason: "security requirement scopes are not string arrays" }
+      const parsed = scopes.filter((scope): scope is string => typeof scope === "string")
+      if (parsed.length !== scopes.length) {
+        return { ok: false, reason: "security requirement scopes are not string arrays" }
+      }
+      requirement[name] = parsed
+    }
+    requirements.push(requirement)
   }
-  const requirements = value.filter(isRecord)
-  if (
-    requirements.some((requirement) =>
-      Object.values(requirement).some(
-        (scopes) => !Array.isArray(scopes) || scopes.some((scope) => typeof scope !== "string"),
-      ),
-    )
-  ) {
-    return { ok: false, reason: "security requirement scopes are not string arrays" }
-  }
-  return {
-    ok: true,
-    value: requirements.map((requirement) =>
-      Object.fromEntries(
-        Object.entries(requirement).map(([name, scopes]) => [
-          name,
-          Array.isArray(scopes) ? scopes.filter((scope): scope is string => typeof scope === "string") : [],
-        ]),
-      ),
-    ),
-  }
+  return { ok: true, value: requirements }
 }
 
 export const operationSecurityRequirements = (
@@ -458,23 +473,22 @@ export const securitySchemes = (document: Document): Readonly<Record<string, Sec
   const components = isRecord(document.components) ? document.components : {}
   const declared = isRecord(components.securitySchemes) ? components.securitySchemes : {}
   return Object.fromEntries(
-    Object.entries(declared).flatMap(([name, value]) => {
+    Object.entries(declared).flatMap<readonly [string, SecurityScheme]>(([name, value]) => {
       const resolved = resolve(document, value)
       if (!isRecord(resolved)) return []
       const type = nonEmptyString(resolved.type)
-      if (type !== "apiKey" && type !== "http" && type !== "oauth2" && type !== "openIdConnect") return []
-      const carrier = nonEmptyString(resolved.in)
-      const parameter = nonEmptyString(resolved.name)
-      const scheme = nonEmptyString(resolved.scheme)?.toLowerCase()
-      const definition: SecurityScheme | undefined = (() => {
-        if (type === "apiKey") {
-          if (parameter === undefined || (carrier !== "header" && carrier !== "query" && carrier !== "cookie")) return
-          return { type, name: parameter, in: carrier }
-        }
-        if (type === "http") return scheme === undefined ? undefined : { type, scheme }
-        return { type }
-      })()
-      return definition === undefined ? [] : [[name, definition] as const]
+      if (type === "apiKey") {
+        const carrier = nonEmptyString(resolved.in)
+        const parameter = nonEmptyString(resolved.name)
+        if (parameter === undefined || (carrier !== "header" && carrier !== "query" && carrier !== "cookie")) return []
+        return [[name, { type, name: parameter, in: carrier }] as const]
+      }
+      if (type === "http") {
+        const scheme = nonEmptyString(resolved.scheme)?.toLowerCase()
+        return scheme === undefined ? [] : [[name, { type, scheme }] as const]
+      }
+      if (type === "oauth2" || type === "openIdConnect") return [[name, { type }] as const]
+      return []
     }),
   )
 }
