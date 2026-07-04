@@ -76,8 +76,8 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
-  FormCreatePayload2,
-  FormReply2,
+  FormCreatePayloadV2,
+  FormReply,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -92,8 +92,8 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
-  InstructionEntryKey2,
-  LocationRef2,
+  InstructionEntryKeyV2,
+  LocationRefV2,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -114,7 +114,7 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
-  ModelRef2,
+  ModelRef,
   MoveSessionDestination,
   OutputFormat,
   Part as Part2,
@@ -131,8 +131,8 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
-  PermissionV2Reply2,
-  PermissionV2Source2,
+  PermissionV2Reply,
+  PermissionV2SourceV2,
   ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
@@ -145,9 +145,9 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
-  PromptAgentAttachment2,
-  PromptInputFileAttachment2,
-  PromptInputV2,
+  PromptAgentAttachment,
+  PromptInput,
+  PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
   ProviderListErrors,
@@ -179,7 +179,7 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
-  QuestionV2Reply2,
+  QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -460,7 +460,7 @@ import type {
   VcsDiffResponses,
   VcsGetErrors,
   VcsGetResponses,
-  VcsMode2,
+  VcsMode,
   VcsStatusErrors,
   VcsStatusResponses,
   WorktreeCreateErrors,
@@ -5292,7 +5292,7 @@ export class Entry extends HeyApiClient {
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      key: InstructionEntryKey2
+      key: InstructionEntryKeyV2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5326,7 +5326,7 @@ export class Entry extends HeyApiClient {
   public put<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      key: InstructionEntryKey2
+      key: InstructionEntryKeyV2
       value?: unknown
     },
     options?: Options<never, ThrowOnError>,
@@ -5395,7 +5395,7 @@ export class Form extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      formCreatePayload: FormCreatePayload2
+      formCreatePayloadV2: FormCreatePayloadV2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5405,7 +5405,7 @@ export class Form extends HeyApiClient {
         {
           args: [
             { in: "path", key: "sessionID" },
-            { key: "formCreatePayload", map: "body" },
+            { key: "formCreatePayloadV2", map: "body" },
           ],
         },
       ],
@@ -5493,7 +5493,7 @@ export class Form extends HeyApiClient {
     parameters: {
       sessionID: string
       formID: string
-      formReply: FormReply2
+      formReply: FormReply
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5593,7 +5593,7 @@ export class Permission2 extends HeyApiClient {
       metadata?: {
         [key: string]: unknown
       }
-      source?: PermissionV2Source2
+      source?: PermissionV2SourceV2
       agent?: string | null
     },
     options?: Options<never, ThrowOnError>,
@@ -5674,7 +5674,7 @@ export class Permission2 extends HeyApiClient {
     parameters: {
       sessionID: string
       requestID: string
-      reply?: PermissionV2Reply2
+      reply?: PermissionV2Reply
       message?: string | null
     },
     options?: Options<never, ThrowOnError>,
@@ -5742,7 +5742,7 @@ export class Question2 extends HeyApiClient {
     parameters: {
       sessionID: string
       requestID: string
-      questionV2Reply: QuestionV2Reply2
+      questionV2Reply: QuestionV2Reply
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5863,8 +5863,8 @@ export class Session3 extends HeyApiClient {
     parameters?: {
       id?: string | null
       agent?: string | null
-      model?: ModelRef2 | null
-      location?: LocationRef2 | null
+      model?: ModelRef | null
+      location?: LocationRefV2 | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6006,7 +6006,7 @@ export class Session3 extends HeyApiClient {
   public switchModel<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      model?: ModelRef2
+      model?: ModelRef
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6081,7 +6081,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       sessionID: string
       id?: string | null
-      prompt?: PromptInputV2
+      prompt?: PromptInput
       delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
@@ -6125,9 +6125,9 @@ export class Session3 extends HeyApiClient {
       command?: string
       arguments?: string | null
       agent?: string | null
-      model?: ModelRef2 | null
-      files?: Array<PromptInputFileAttachment2>
-      agents?: Array<PromptAgentAttachment2>
+      model?: ModelRef | null
+      files?: Array<PromptInputFileAttachment>
+      agents?: Array<PromptAgentAttachment>
       delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
@@ -6559,7 +6559,7 @@ export class Generate extends HeyApiClient {
         workspace?: string | null
       } | null
       prompt?: string
-      model?: ModelRef2 | null
+      model?: ModelRef | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8013,7 +8013,7 @@ export class Vcs2 extends HeyApiClient {
         directory?: string | null
         workspace?: string | null
       } | null
-      mode: VcsMode2
+      mode: VcsMode
       context?: string | null
     },
     options?: Options<never, ThrowOnError>,

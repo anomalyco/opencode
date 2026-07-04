@@ -98,28 +98,30 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const fragments = (
     name: string,
-    ended: (id: string, value: string, state?: Record<string, unknown>) => Effect.Effect<void>,
+    ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
     single = false,
   ) => {
-    const chunks = new Map<string, string[]>()
+    const chunks = new Map<string, { readonly ordinal: number; readonly values: string[] }>()
+    let nextOrdinal = 0
     const start = (id: string) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
         if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
-        chunks.set(id, [])
-        return Effect.void
+        const ordinal = nextOrdinal++
+        chunks.set(id, { ordinal, values: [] })
+        return Effect.succeed(ordinal)
       })
     const append = (id: string, value: string) =>
       Effect.suspend(() => {
         const current = chunks.get(id)
         if (!current) return Effect.die(new Error(`${name} delta before start: ${id}`))
-        current.push(value)
-        return Effect.void
+        current.values.push(value)
+        return Effect.succeed(current.ordinal)
       })
     const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* ended(id, current.join(""), state)
+      yield* ended(id, current.values.join(""), current.ordinal, state)
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -130,11 +132,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const text = fragments(
     "text",
-    (_textID, value) =>
+    (_textID, value, ordinal) =>
       Effect.gen(function* () {
         yield* events.publish(SessionEvent.Text.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal,
           text: value,
         })
       }),
@@ -142,11 +145,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   )
   const reasoning = fragments(
     "reasoning",
-    (_reasoningID, value, state) =>
+    (_reasoningID, value, ordinal, state) =>
       Effect.gen(function* () {
         yield* events.publish(SessionEvent.Reasoning.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal,
           text: value,
           state,
         })
@@ -259,17 +263,19 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "text-start":
         retryEvidence = true
-        yield* text.start(event.id)
+        const startedTextOrdinal = yield* text.start(event.id)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
+          ordinal: startedTextOrdinal,
         })
         return
       case "text-delta":
-        yield* text.append(event.id, event.text)
+        const deltaTextOrdinal = yield* text.append(event.id, event.text)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal: deltaTextOrdinal,
           delta: event.text,
         })
         return
@@ -278,18 +284,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "reasoning-start":
         retryEvidence = true
-        yield* reasoning.start(event.id)
+        const startedReasoningOrdinal = yield* reasoning.start(event.id)
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
+          ordinal: startedReasoningOrdinal,
           state: providerState(event.providerMetadata),
         })
         return
       case "reasoning-delta":
-        yield* reasoning.append(event.id, event.text)
+        const deltaReasoningOrdinal = yield* reasoning.append(event.id, event.text)
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal: deltaReasoningOrdinal,
           delta: event.text,
         })
         return

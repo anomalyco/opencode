@@ -977,7 +977,7 @@ Compatibility:
 
 ## 2026-07-03: Simplify Assistant Fragments And Provider State
 
-- Remove provider block IDs from current Session text and reasoning event payloads and projected content. A Session assistant step allows at most one open fragment of each kind; UI references use assistant message ID, kind, and ordinal. Tool correlation continues to use `callID`.
+- Remove provider block IDs from current Session text and reasoning event payloads and projected content. A Session assistant step allows at most one open fragment of each kind; events carry a Session-assigned kind-specific ordinal so live updates and hydrated projections share the stable `(assistantMessageID, kind, ordinal)` reference. Tool correlation continues to use `callID`.
 - Replace nested `providerMetadata` with opaque, provider-un-nested `state` at the Session boundary. Reasoning uses `state`; tool calls use `state`, settlements use `resultState`, and projected tools expose `providerState` and `providerResultState`. Replay re-nests state under the selected provider only for the same successful model.
 - Flatten `executed` on tool events and projected tools, and remove the redundant tool name from `session.tool.called` because `session.tool.input.started` owns it.
 - Rename `session.revert.committed.messageID` to `to`, paired with `session.forked.from`.

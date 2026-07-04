@@ -58,10 +58,12 @@ const executionNode = makeGlobalNode({
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID,
           assistantMessageID,
+          ordinal: 0,
         })
         yield* events.publish(SessionEvent.Text.Ended, {
           sessionID,
           assistantMessageID,
+          ordinal: 0,
           text: childText,
         })
         yield* events.publish(SessionEvent.Step.Ended, {

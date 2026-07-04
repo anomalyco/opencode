@@ -200,6 +200,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
+        ordinal: 0,
         delta: "answer",
       },
     })
@@ -709,12 +710,24 @@ describe("V2 mini transport", () => {
     })
     const replay = transport.replayOnResize({ localRows: () => [], reset: () => resetting })
     events.push({
+      id: "evt_text_started",
+      created: 0,
+      type: "session.text.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        ordinal: 0,
+      },
+    })
+    events.push({
       id: "evt_text",
       created: 0,
       type: "session.text.delta",
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
+        ordinal: 0,
         delta: "answer",
       },
     })
@@ -800,6 +813,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
+        ordinal: 0,
         text: "considering",
       },
     })
@@ -1804,6 +1818,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
+        ordinal: 0,
         delta: "child answer",
       },
     })

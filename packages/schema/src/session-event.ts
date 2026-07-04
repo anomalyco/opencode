@@ -248,6 +248,7 @@ export namespace Text {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
     },
   })
   export type Started = typeof Started.Type
@@ -258,6 +259,7 @@ export namespace Text {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
       delta: Schema.String,
     },
   })
@@ -269,6 +271,7 @@ export namespace Text {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
       text: Schema.String,
     },
   })
@@ -282,6 +285,7 @@ export namespace Reasoning {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
       state: SessionMessage.ProviderState.pipe(optional),
     },
   })
@@ -293,6 +297,7 @@ export namespace Reasoning {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
       delta: Schema.String,
     },
   })
@@ -304,6 +309,7 @@ export namespace Reasoning {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
+      ordinal: NonNegativeInt,
       text: Schema.String,
       state: SessionMessage.ProviderState.pipe(optional),
     },

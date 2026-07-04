@@ -145,10 +145,11 @@ describe("public event manifest", () => {
   test("keeps simplified session fragment and tool payloads on durable version 1", () => {
     const sessionID = SessionID.make("ses_test")
     const assistantMessageID = SessionMessage.ID.make("msg_test")
-    const text = SessionEvent.Text.Started.data.make({ sessionID, assistantMessageID })
+    const text = SessionEvent.Text.Started.data.make({ sessionID, assistantMessageID, ordinal: 0 })
     const reasoning = SessionEvent.Reasoning.Ended.data.make({
       sessionID,
       assistantMessageID,
+      ordinal: 0,
       text: "thought",
       state: { signature: "sig" },
     })

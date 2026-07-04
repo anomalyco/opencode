@@ -30,6 +30,7 @@ type OpenApiDocument = {
 
 const document = (await Bun.file("./openapi.json").json()) as OpenApiDocument
 const v2Document = (await Bun.file("./openapi-v2.json").json()) as OpenApiDocument
+normalizeComponentNames(v2Document)
 deduplicateEquivalentComponent(v2Document, "Shell", "Shell1")
 renameCollidingComponents(document, v2Document)
 document.paths = { ...document.paths, ...v2Document.paths }
@@ -61,7 +62,7 @@ if (schemas) {
   visit({ ...document, components: { ...document.components, schemas: undefined } })
   for (const name of Object.keys(schemas)) {
     if (
-      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1$/.test(
+      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+$/.test(
         name,
       ) &&
       !reachable.has(name)
@@ -101,7 +102,7 @@ await createClient({
 const generatedTypesPath = "./src/v2/gen/types.gen.ts"
 const generatedTypes = await Bun.file(generatedTypesPath).text()
 if (
-  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1 =/.test(
+  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+ =/.test(
     generatedTypes,
   )
 ) {
@@ -227,6 +228,10 @@ function renameCollidingComponents(target: OpenApiDocument, source: OpenApiDocum
   const renames = new Map<string, string>()
   for (const name of Object.keys(sourceSchemas)) {
     if (!Object.hasOwn(targetSchemas, name)) continue
+    if (JSON.stringify(normalizeSchema(sourceSchemas[name])) === JSON.stringify(normalizeSchema(targetSchemas[name]))) {
+      delete sourceSchemas[name]
+      continue
+    }
     let renamed = `${name}V2`
     let index = 2
     while (Object.hasOwn(targetSchemas, renamed) || Object.hasOwn(sourceSchemas, renamed)) {
@@ -244,6 +249,40 @@ function renameCollidingComponents(target: OpenApiDocument, source: OpenApiDocum
     ),
   }
   source.paths = rewriteRefs(source.paths, renames) as Record<string, unknown> | undefined
+}
+
+function normalizeComponentNames(document: OpenApiDocument) {
+  let schemas = document.components?.schemas
+  if (!schemas) return
+
+  for (const name of Object.keys(schemas)) {
+    if (!Object.hasOwn(schemas, name)) continue
+    const next = componentTypeName(name)
+    if (next === name) continue
+    if (schemas[next] !== undefined) {
+      if (JSON.stringify(normalizeSchema(schemas[name])) !== JSON.stringify(normalizeSchema(schemas[next]))) continue
+      const renames = new Map([[name, next]])
+      schemas = rewriteRefs(schemas, renames) as Record<string, unknown>
+      delete schemas[name]
+      document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
+      continue
+    }
+    const renames = new Map([[name, next]])
+    schemas = rewriteRefs(schemas, renames) as Record<string, unknown>
+    schemas[next] = schemas[name]
+    delete schemas[name]
+    document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
+  }
+  document.components = { ...document.components, schemas }
+}
+
+function componentTypeName(name: string) {
+  if (!name.includes(".")) return name
+  return name
+    .split(".")
+    .filter((part) => !/^\d+$/.test(part))
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join("")
 }
 
 function deduplicateEquivalentComponent(document: OpenApiDocument, canonical: string, duplicate: string) {

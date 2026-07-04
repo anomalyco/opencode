@@ -110,16 +110,6 @@ export function legacyTool(input: {
   }
 }
 
-export function nextFragmentID(kind: "text" | "reasoning", ordinals: Map<string, number>, messageID: string) {
-  const ordinal = ordinals.get(messageID) ?? 0
-  ordinals.set(messageID, ordinal + 1)
-  return `${kind}:${ordinal}`
-}
-
-export function currentFragmentID(kind: "text" | "reasoning", ordinals: Map<string, number>, messageID: string) {
-  return `${kind}:${Math.max(0, (ordinals.get(messageID) ?? 1) - 1)}`
-}
-
 export function toolCommit(part: ToolPart, phase: "start" | "progress" | "final"): StreamCommit {
   const status = part.state.status
   const text =
@@ -172,8 +162,6 @@ type ChildState = {
   projectedText: Map<string, string>
   reasoning: Map<string, string>
   projectedReasoning: Map<string, string>
-  textOrdinals: Map<string, number>
-  reasoningOrdinals: Map<string, number>
   tools: Map<string, ToolTrack>
   finishedTools: Set<string>
   messageIDs: Set<string>
@@ -262,8 +250,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       projectedText: new Map(),
       reasoning: new Map(),
       projectedReasoning: new Map(),
-      textOrdinals: new Map(),
-      reasoningOrdinals: new Map(),
       tools: new Map(),
       finishedTools: new Set(),
       messageIDs: new Set(),
@@ -347,8 +333,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     child.projectedText.clear()
     child.reasoning.clear()
     child.projectedReasoning.clear()
-    child.textOrdinals.clear()
-    child.reasoningOrdinals.clear()
     child.finishedTools.clear()
     child.messageIDs.clear()
     child.callIDs.clear()
@@ -396,8 +380,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         }
         childTool(child, item, message.id)
       }
-      child.textOrdinals.set(message.id, textOrdinal)
-      child.reasoningOrdinals.set(message.id, reasoningOrdinal)
       if (message.error) {
         setFrame(child, `error:${message.id}`, {
           kind: "error",
@@ -497,11 +479,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.text.started") {
-      nextFragmentID("text", child.textOrdinals, event.data.assistantMessageID)
       return
     }
     if (event.type === "session.text.delta") {
-      const id = currentFragmentID("text", child.textOrdinals, event.data.assistantMessageID)
+      const id = `text:${event.data.ordinal}`
       const key = fragmentKey(event.data.assistantMessageID, id)
       const projected = child.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -524,7 +505,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.text.ended") {
-      const id = currentFragmentID("text", child.textOrdinals, event.data.assistantMessageID)
+      const id = `text:${event.data.ordinal}`
       const key = fragmentKey(event.data.assistantMessageID, id)
       child.text.set(key, event.data.text)
       child.projectedText.delete(key)
@@ -541,11 +522,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.reasoning.started") {
-      nextFragmentID("reasoning", child.reasoningOrdinals, event.data.assistantMessageID)
       return
     }
     if (event.type === "session.reasoning.delta") {
-      const id = currentFragmentID("reasoning", child.reasoningOrdinals, event.data.assistantMessageID)
+      const id = `reasoning:${event.data.ordinal}`
       const key = fragmentKey(event.data.assistantMessageID, id)
       const projected = child.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -568,7 +548,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.reasoning.ended") {
-      const id = currentFragmentID("reasoning", child.reasoningOrdinals, event.data.assistantMessageID)
+      const id = `reasoning:${event.data.ordinal}`
       const key = fragmentKey(event.data.assistantMessageID, id)
       child.reasoning.set(key, event.data.text)
       child.projectedReasoning.delete(key)
@@ -657,14 +637,8 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "session.step.ended") {
-      child.textOrdinals.delete(event.data.assistantMessageID)
-      child.reasoningOrdinals.delete(event.data.assistantMessageID)
-      return
-    }
+    if (event.type === "session.step.ended") return
     if (event.type === "session.step.failed") {
-      child.textOrdinals.delete(event.data.assistantMessageID)
-      child.reasoningOrdinals.delete(event.data.assistantMessageID)
       setFrame(child, `error:step:${event.data.assistantMessageID}`, {
         kind: "error",
         source: "system",

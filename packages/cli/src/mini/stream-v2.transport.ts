@@ -11,7 +11,7 @@ import type {
 import { Event } from "@opencode-ai/schema/event"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
-import { createSubagentTracker, currentFragmentID, legacyTool, nextFragmentID, toolCommit } from "./stream-v2.subagent"
+import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
 import type {
   FooterApi,
   FooterView,
@@ -112,8 +112,6 @@ type State = {
   projectedText: Map<string, string>
   reasoning: Map<string, string>
   projectedReasoning: Map<string, string>
-  textOrdinals: Map<string, number>
-  reasoningOrdinals: Map<string, number>
   tools: Map<string, ToolState>
   finishedTools: Set<string>
   skillMessages: Set<string>
@@ -331,8 +329,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     projectedText: new Map(),
     reasoning: new Map(),
     projectedReasoning: new Map(),
-    textOrdinals: new Map(),
-    reasoningOrdinals: new Map(),
     tools: new Map(),
     finishedTools: new Set(),
     skillMessages: new Set(),
@@ -523,8 +519,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
       if (render) renderTool(message.id, item)
     }
-    state.textOrdinals.set(message.id, textOrdinal)
-    state.reasoningOrdinals.set(message.id, reasoningOrdinal)
     if (render && message.error && !state.errors.has(message.id)) {
       state.errors.add(message.id)
       write([
@@ -634,11 +628,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.text.started") {
-      nextFragmentID("text", state.textOrdinals, event.data.assistantMessageID)
       return
     }
     if (event.type === "session.text.delta") {
-      const id = currentFragmentID("text", state.textOrdinals, event.data.assistantMessageID)
+      const id = `text:${event.data.ordinal}`
       const key = streamPartKey(event.data.assistantMessageID, id)
       const projected = state.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -661,7 +654,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.text.ended") {
-      const id = currentFragmentID("text", state.textOrdinals, event.data.assistantMessageID)
+      const id = `text:${event.data.ordinal}`
       const key = streamPartKey(event.data.assistantMessageID, id)
       const previous = state.text.get(key) ?? ""
       if (event.data.text.length > previous.length)
@@ -680,11 +673,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.reasoning.started") {
-      nextFragmentID("reasoning", state.reasoningOrdinals, event.data.assistantMessageID)
       return
     }
     if (event.type === "session.reasoning.delta") {
-      const id = currentFragmentID("reasoning", state.reasoningOrdinals, event.data.assistantMessageID)
+      const id = `reasoning:${event.data.ordinal}`
       const key = streamPartKey(event.data.assistantMessageID, id)
       const projected = state.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
@@ -708,7 +700,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.reasoning.ended") {
-      const id = currentFragmentID("reasoning", state.reasoningOrdinals, event.data.assistantMessageID)
+      const id = `reasoning:${event.data.ordinal}`
       const key = streamPartKey(event.data.assistantMessageID, id)
       const previous = state.reasoning.get(key) ?? ""
       if (input.thinking && event.data.text.length > previous.length)
@@ -805,8 +797,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.ended") {
-      state.textOrdinals.delete(event.data.assistantMessageID)
-      state.reasoningOrdinals.delete(event.data.assistantMessageID)
       const total =
         event.data.tokens.input +
         event.data.tokens.output +
@@ -820,8 +810,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.failed") {
-      state.textOrdinals.delete(event.data.assistantMessageID)
-      state.reasoningOrdinals.delete(event.data.assistantMessageID)
       state.errors.add(event.data.assistantMessageID)
       if (state.wait) state.wait.failureRendered = true
       write([{ kind: "error", source: "system", text: errorMessage(event.data.error), phase: "start" }])
@@ -1115,8 +1103,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         state.projectedText.clear()
         state.reasoning.clear()
         state.projectedReasoning.clear()
-        state.textOrdinals.clear()
-        state.reasoningOrdinals.clear()
         state.tools.clear()
         state.finishedTools.clear()
         state.skillMessages.clear()

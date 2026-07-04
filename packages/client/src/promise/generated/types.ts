@@ -1395,7 +1395,7 @@ export type SessionLogOutput =
           readonly type: "session.text.started"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly assistantMessageID: string }
+          readonly data: { readonly sessionID: string; readonly assistantMessageID: string; readonly ordinal: number }
         }
       | {
           readonly id: string
@@ -1404,7 +1404,12 @@ export type SessionLogOutput =
           readonly type: "session.text.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly assistantMessageID: string; readonly text: string }
+          readonly data: {
+            readonly sessionID: string
+            readonly assistantMessageID: string
+            readonly ordinal: number
+            readonly text: string
+          }
         }
       | {
           readonly id: string
@@ -1416,6 +1421,7 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: string
             readonly assistantMessageID: string
+            readonly ordinal: number
             readonly state?: { readonly [x: string]: unknown }
           }
         }
@@ -1429,6 +1435,7 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: string
             readonly assistantMessageID: string
+            readonly ordinal: number
             readonly text: string
             readonly state?: { readonly [x: string]: unknown }
           }
@@ -4655,7 +4662,7 @@ export type EventSubscribeOutput =
       readonly type: "session.text.started"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly assistantMessageID: string }
+      readonly data: { readonly sessionID: string; readonly assistantMessageID: string; readonly ordinal: number }
     }
   | {
       readonly id: string
@@ -4663,7 +4670,12 @@ export type EventSubscribeOutput =
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.text.delta"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly assistantMessageID: string; readonly delta: string }
+      readonly data: {
+        readonly sessionID: string
+        readonly assistantMessageID: string
+        readonly ordinal: number
+        readonly delta: string
+      }
     }
   | {
       readonly id: string
@@ -4672,7 +4684,12 @@ export type EventSubscribeOutput =
       readonly type: "session.text.ended"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly assistantMessageID: string; readonly text: string }
+      readonly data: {
+        readonly sessionID: string
+        readonly assistantMessageID: string
+        readonly ordinal: number
+        readonly text: string
+      }
     }
   | {
       readonly id: string
@@ -4684,6 +4701,7 @@ export type EventSubscribeOutput =
       readonly data: {
         readonly sessionID: string
         readonly assistantMessageID: string
+        readonly ordinal: number
         readonly state?: { readonly [x: string]: unknown }
       }
     }
@@ -4693,7 +4711,12 @@ export type EventSubscribeOutput =
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.reasoning.delta"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly assistantMessageID: string; readonly delta: string }
+      readonly data: {
+        readonly sessionID: string
+        readonly assistantMessageID: string
+        readonly ordinal: number
+        readonly delta: string
+      }
     }
   | {
       readonly id: string
@@ -4705,6 +4728,7 @@ export type EventSubscribeOutput =
       readonly data: {
         readonly sessionID: string
         readonly assistantMessageID: string
+        readonly ordinal: number
         readonly text: string
         readonly state?: { readonly [x: string]: unknown }
       }

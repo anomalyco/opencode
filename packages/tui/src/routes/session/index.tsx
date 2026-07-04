@@ -1219,15 +1219,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
-      <Show when={props.message.retry}>
-        {(retry) => (
-          <box paddingLeft={3} marginTop={1}>
-            <text fg={theme.textMuted}>
-              Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
-            </text>
-          </box>
-        )}
-      </Show>
+      <AssistantRetry retry={props.message.retry} />
       <box paddingLeft={3} marginTop={props.message.error && !interrupted() ? 1 : 0}>
         <text>
           <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
@@ -1565,15 +1557,7 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
-      <Show when={props.message.retry}>
-        {(retry) => (
-          <box paddingLeft={3} marginTop={1}>
-            <text fg={theme.textMuted}>
-              Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
-            </text>
-          </box>
-        )}
-      </Show>
+      <AssistantRetry retry={props.message.retry} />
       <Switch>
         <Match when={props.last || final() || props.message.error}>
           <box paddingLeft={3}>
@@ -1590,6 +1574,21 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
         </Match>
       </Switch>
     </>
+  )
+}
+
+function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.retry}>
+      {(retry) => (
+        <box paddingLeft={3} marginTop={1}>
+          <text fg={theme.textMuted}>
+            Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
+          </text>
+        </box>
+      )}
+    </Show>
   )
 }
 

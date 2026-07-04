@@ -597,6 +597,7 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Text.Started, {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
+        ordinal: 0,
       })
 
       const rows = yield* db

@@ -101,6 +101,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         assistantMessageID,
+        ordinal: 0,
       },
     } satisfies SessionEvent.Event),
   )
@@ -114,6 +115,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         assistantMessageID,
+        ordinal: 0,
         text: "hello assistant",
       },
     } satisfies SessionEvent.Event),
