@@ -101,7 +101,7 @@ describe("SessionProjector", () => {
       })
       yield* events.publish(SessionEvent.RevertEvent.Committed, {
         sessionID,
-        messageID: boundary,
+        to: boundary,
       })
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
@@ -530,7 +530,6 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Text.Started, {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
-        textID: "text-stale",
       })
 
       const rows = yield* db
@@ -549,7 +548,7 @@ describe("SessionProjector", () => {
           type: "assistant",
           agent: "build",
           model,
-          content: [SessionMessage.AssistantText.make({ type: "text", id: "text-stale", text: "" })],
+          content: [SessionMessage.AssistantText.make({ type: "text", text: "" })],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
         SessionMessage.Assistant.make({

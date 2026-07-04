@@ -200,7 +200,6 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
-        textID: "txt_1",
         delta: "answer",
       },
     })
@@ -693,7 +692,7 @@ describe("V2 mini transport", () => {
             type: "assistant",
             agent: "build",
             model: { providerID: "test", id: "model" },
-            content: [{ type: "text", id: "txt_1", text: "the answer" }],
+            content: [{ type: "text", text: "the answer" }],
             time: { created: 2, completed: 3 },
           },
         ],
@@ -712,7 +711,6 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
-        textID: "txt_1",
         delta: "answer",
       },
     })
@@ -725,7 +723,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("scopes repeated text and reasoning ids by assistant message", async () => {
+  test("scopes text and reasoning ordinals by assistant message", async () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })
@@ -738,8 +736,8 @@ describe("V2 mini transport", () => {
             agent: "build",
             model: { providerID: "test", id: "model" },
             content: [
-              { type: "reasoning", id: "reasoning-0", text: "second thought" },
-              { type: "text", id: "text-0", text: "second answer" },
+              { type: "reasoning", text: "second thought" },
+              { type: "text", text: "second answer" },
             ],
             time: { created: 4, completed: 5 },
           },
@@ -749,8 +747,8 @@ describe("V2 mini transport", () => {
             agent: "build",
             model: { providerID: "test", id: "model" },
             content: [
-              { type: "reasoning", id: "reasoning-0", text: "first thought" },
-              { type: "text", id: "text-0", text: "first answer" },
+              { type: "reasoning", text: "first thought" },
+              { type: "text", text: "first answer" },
             ],
             time: { created: 2, completed: 3 },
           },
@@ -798,7 +796,6 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
-        reasoningID: "reasoning_1",
         text: "considering",
       },
     })
@@ -1750,7 +1747,6 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
-        textID: "txt_child",
         delta: "child answer",
       },
     })
@@ -2193,6 +2189,18 @@ describe("V2 mini transport", () => {
     })
     // Parent's background subagent tool.success adopts the child mid-discovery.
     events.push({
+      id: "evt_parent_input",
+      created: 0,
+      type: "session.tool.input.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_parent_a",
+        callID: "call_sub",
+        name: "subagent",
+      },
+    })
+    events.push({
       id: "evt_parent_call",
       created: 0,
       type: "session.tool.called",
@@ -2201,9 +2209,8 @@ describe("V2 mini transport", () => {
         sessionID: "ses_1",
         assistantMessageID: "msg_parent_a",
         callID: "call_sub",
-        tool: "subagent",
         input: { agent: "explore", description: "Find things", prompt: "go", background: true },
-        provider: { executed: true },
+        executed: true,
       },
     })
     events.push({
@@ -2217,7 +2224,7 @@ describe("V2 mini transport", () => {
         callID: "call_sub",
         structured: { sessionID: "ses_child", status: "running", output: "" },
         content: [],
-        provider: { executed: true },
+        executed: true,
       },
     })
     // The settled event arrives after adoption, so it applies directly.

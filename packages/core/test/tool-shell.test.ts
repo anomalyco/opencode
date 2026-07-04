@@ -75,7 +75,6 @@ const executionNode = makeGlobalNode({
         const session = yield* store.get(id)
         if (!session) return
         const assistantMessageID = SessionMessage.ID.create()
-        const textID = "text_shell_test"
         yield* events.publish(SessionEvent.Step.Started, {
           sessionID: id,
           assistantMessageID,
@@ -85,12 +84,10 @@ const executionNode = makeGlobalNode({
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: id,
           assistantMessageID,
-          textID,
         })
         yield* events.publish(SessionEvent.Text.Ended, {
           sessionID: id,
           assistantMessageID,
-          textID,
           text: "ok",
         })
         yield* events.publish(SessionEvent.Step.Ended, {

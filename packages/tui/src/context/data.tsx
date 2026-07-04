@@ -54,6 +54,7 @@ type Data = {
     // session ID in that family, including the key itself once its info arrives.
     family: Record<string, string[]>
     status: Record<string, DataSessionStatus>
+    compaction: Record<string, string>
     message: Record<string, SessionMessage[]>
     input: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
@@ -90,6 +91,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         info: {},
         family: {},
         status: {},
+        compaction: {},
         message: {},
         input: {},
         permission: {},
@@ -149,14 +151,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             item.type === "tool" && (callID === undefined || item.id === callID),
         )
       },
-      latestText(assistant: SessionMessageAssistant | undefined, textID: string) {
-        return assistant?.content.findLast(
-          (item): item is SessionMessageAssistantText => item.type === "text" && item.id === textID,
-        )
+      latestText(assistant: SessionMessageAssistant | undefined) {
+        return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
       },
-      latestReasoning(assistant: SessionMessageAssistant | undefined, reasoningID: string) {
+      latestReasoning(assistant: SessionMessageAssistant | undefined) {
         return assistant?.content.findLast(
-          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && item.id === reasoningID,
+          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
         )
       },
     }
@@ -398,26 +398,19 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
               type: "text",
-              id: event.data.textID,
               text: "",
             })
           })
           break
         case "session.text.delta":
           message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestText(
-              message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.textID,
-            )
+            const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
             if (match) match.text += event.data.delta
           })
           break
         case "session.text.ended":
           message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestText(
-              message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.textID,
-            )
+            const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
             if (match) match.text = event.data.text
           })
           break
@@ -458,7 +451,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             )
             if (!match) return
             match.time.ran = event.created
-            match.provider = event.data.provider
+            match.executed = event.data.executed
+            match.providerState = event.data.state
             match.state = { status: "running", input: event.data.input, structured: {}, content: [] }
           })
           break
@@ -487,11 +481,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               content: [...event.data.content],
               result: event.data.result,
             }
-            match.provider = {
-              executed: event.data.provider.executed || match.provider?.executed === true,
-              metadata: match.provider?.metadata,
-              resultMetadata: event.data.provider.metadata,
-            }
+            match.executed = event.data.executed || match.executed === true
+            match.providerResultState = event.data.resultState
             match.time.completed = event.created
           })
           break
@@ -510,11 +501,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               content: match.state.status === "running" ? match.state.content : [],
               result: event.data.result,
             }
-            match.provider = {
-              executed: event.data.provider.executed || match.provider?.executed === true,
-              metadata: match.provider?.metadata,
-              resultMetadata: event.data.provider.metadata,
-            }
+            match.executed = event.data.executed || match.executed === true
+            match.providerResultState = event.data.resultState
             match.time.completed = event.created
           })
           break
@@ -522,41 +510,36 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
               type: "reasoning",
-              id: event.data.reasoningID,
               text: "",
-              providerMetadata: event.data.providerMetadata,
+              state: event.data.state,
               time: { created: event.created },
             })
           })
           break
         case "session.reasoning.delta":
           message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestReasoning(
-              message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.reasoningID,
-            )
+            const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
             if (match) match.text += event.data.delta
           })
           break
         case "session.reasoning.ended":
           message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestReasoning(
-              message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.reasoningID,
-            )
+            const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
             if (match) {
               match.text = event.data.text
               match.time = { created: match.time?.created ?? event.created, completed: event.created }
-              if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
+              if (event.data.state !== undefined) match.state = event.data.state
             }
           })
           break
         case "session.retried":
         case "session.compaction.started":
           setSessionStatus(event.data.sessionID, "running")
+          setStore("session", "compaction", event.data.sessionID, "")
           break
         case "session.execution.settled":
           setSessionStatus(event.data.sessionID, "idle")
+          setStore("session", "compaction", event.data.sessionID, undefined!)
           break
         case "session.revert.staged":
           if (store.session.info[event.data.sessionID])
@@ -582,8 +565,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.delta":
+          setStore("session", "compaction", event.data.sessionID, (text) => (text ?? "") + event.data.text)
           break
         case "session.compaction.ended":
+          setStore("session", "compaction", event.data.sessionID, undefined!)
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
@@ -709,6 +694,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           has(sessionID: string, inputID: string) {
             return store.session.input[sessionID]?.includes(inputID) ?? false
           },
+        },
+        compaction(sessionID: string) {
+          return store.session.compaction[sessionID]
         },
         async refresh(sessionID: string) {
           setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))

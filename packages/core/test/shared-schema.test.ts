@@ -183,7 +183,7 @@ test("Core reuses the canonical shared schemas", async () => {
 test("shared record schemas construct and decode plain objects", () => {
   const made = Prompt.make({ text: "hello" })
   const decoded = Schema.decodeUnknownSync(Prompt)({ text: "hello" })
-  const content = Schema.decodeUnknownSync(SessionMessage.AssistantText)({ type: "text", id: "part_1", text: "hi" })
+  const content = Schema.decodeUnknownSync(SessionMessage.AssistantText)({ type: "text", text: "hi" })
 
   expect(Object.getPrototypeOf(made)).toBe(Object.prototype)
   expect(Object.getPrototypeOf(decoded)).toBe(Object.prototype)

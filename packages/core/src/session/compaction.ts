@@ -217,7 +217,13 @@ const make = (dependencies: Dependencies) => {
       .pipe(
         Stream.runForEach((event) => {
           if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          if (LLMEvent.is.textDelta(event)) {
+            chunks.push(event.text)
+            return dependencies.events.publish(SessionEvent.Compaction.Delta, {
+              sessionID: input.sessionID,
+              text: event.text,
+            })
+          }
           return Effect.void
         }),
         Effect.as(true),

@@ -2,7 +2,7 @@ export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { ProviderMetadata, ToolContent } from "./llm.js"
+import { ToolContent } from "./llm.js"
 import { Model } from "./model.js"
 import { FileAttachment, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema.js"
@@ -31,6 +31,11 @@ const Base = {
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
+
+export const ProviderState = Schema.Record(Schema.String, Schema.Unknown).annotate({
+  identifier: "Session.Message.ProviderState",
+})
+export type ProviderState = typeof ProviderState.Type
 
 export interface AgentSelected extends Schema.Schema.Type<typeof AgentSelected> {}
 export const AgentSelected = Schema.Struct({
@@ -137,11 +142,9 @@ export const AssistantTool = Schema.Struct({
   type: Schema.Literal("tool"),
   id: Schema.String,
   name: Schema.String,
-  provider: Schema.Struct({
-    executed: Schema.Boolean,
-    metadata: ProviderMetadata.pipe(optional),
-    resultMetadata: ProviderMetadata.pipe(optional),
-  }).pipe(optional),
+  executed: Schema.Boolean.pipe(optional),
+  providerState: ProviderState.pipe(optional),
+  providerResultState: ProviderState.pipe(optional),
   state: ToolState,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
@@ -154,16 +157,14 @@ export const AssistantTool = Schema.Struct({
 export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> {}
 export const AssistantText = Schema.Struct({
   type: Schema.Literal("text"),
-  id: Schema.String,
   text: Schema.String,
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
 
 export interface AssistantReasoning extends Schema.Schema.Type<typeof AssistantReasoning> {}
 export const AssistantReasoning = Schema.Struct({
   type: Schema.Literal("reasoning"),
-  id: Schema.String,
   text: Schema.String,
-  providerMetadata: ProviderMetadata.pipe(optional),
+  state: ProviderState.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),

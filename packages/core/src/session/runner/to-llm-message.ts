@@ -43,6 +43,11 @@ const textAttachment = (file: FileAttachment) =>
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
+const providerMetadata = (
+  provider: string,
+  state: Record<string, unknown> | undefined,
+): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
+
 const toolInput = (tool: SessionMessage.AssistantTool) =>
   tool.state.status === "pending"
     ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
@@ -53,7 +58,7 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     id: tool.id,
     name: tool.name,
     input: toolInput(tool),
-    providerExecuted: tool.provider?.executed,
+    providerExecuted: tool.executed,
     providerMetadata,
   })
 
@@ -62,14 +67,14 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     // TODO: Materialize remote and managed URIs before provider-history lowering.
     // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
     const result =
-      tool.provider?.executed === true && tool.state.result !== undefined
+      tool.executed === true && tool.state.result !== undefined
         ? tool.state.result
         : ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content })
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
       result,
-      providerExecuted: tool.provider?.executed,
+      providerExecuted: tool.executed,
       providerMetadata,
     })
   }
@@ -78,11 +83,11 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
       id: tool.id,
       name: tool.name,
       result:
-        tool.provider?.executed === true && tool.state.result !== undefined
+        tool.executed === true && tool.state.result !== undefined
           ? tool.state.result
           : { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
       resultType: "error",
-      providerExecuted: tool.provider?.executed,
+      providerExecuted: tool.executed,
       providerMetadata,
     })
   }
@@ -100,17 +105,22 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
+              providerMetadata: reuseProviderMetadata ? providerMetadata(model.provider, item.state) : undefined,
             },
           ]
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
-    const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
-    if (item.provider?.executed !== true) return [call]
+    const call = toolCall(
+      item,
+      reuseProviderMetadata ? providerMetadata(model.provider, item.providerState) : undefined,
+    )
+    if (item.executed !== true) return [call]
     const result = toolResult(
       item,
-      reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
+      reuseProviderMetadata
+        ? providerMetadata(model.provider, item.providerResultState ?? item.providerState)
+        : undefined,
     )
     return result ? [call, result] : [call]
   })
@@ -120,9 +130,14 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
   const results = message.content
-    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
+    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
-      toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
+      toolResult(
+        item,
+        reuseProviderMetadata
+          ? providerMetadata(model.provider, item.providerResultState ?? item.providerState)
+          : undefined,
+      ),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)

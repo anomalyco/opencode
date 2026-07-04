@@ -3,7 +3,7 @@ export * as SessionEvent from "./session-event.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
-import { ProviderMetadata, ToolContent } from "./llm.js"
+import { ToolContent } from "./llm.js"
 import { Delivery } from "./session-delivery.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, RelativePath } from "./schema.js"
@@ -244,7 +244,6 @@ export namespace Text {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      textID: Schema.String,
     },
   })
   export type Started = typeof Started.Type
@@ -255,7 +254,6 @@ export namespace Text {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      textID: Schema.String,
       delta: Schema.String,
     },
   })
@@ -267,7 +265,6 @@ export namespace Text {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      textID: Schema.String,
       text: Schema.String,
     },
   })
@@ -281,8 +278,7 @@ export namespace Reasoning {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      reasoningID: Schema.String,
-      providerMetadata: ProviderMetadata.pipe(optional),
+      state: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
@@ -293,7 +289,6 @@ export namespace Reasoning {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      reasoningID: Schema.String,
       delta: Schema.String,
     },
   })
@@ -305,9 +300,8 @@ export namespace Reasoning {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      reasoningID: Schema.String,
       text: Schema.String,
-      providerMetadata: ProviderMetadata.pipe(optional),
+      state: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Ended = typeof Ended.Type
@@ -357,12 +351,9 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
-      provider: Schema.Struct({
-        executed: Schema.Boolean,
-        metadata: ProviderMetadata.pipe(optional),
-      }),
+      executed: Schema.Boolean,
+      state: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Called = typeof Called.Type
@@ -391,10 +382,8 @@ export namespace Tool {
       content: Schema.Array(ToolContent),
       outputPaths: Schema.Array(Schema.String).pipe(optional),
       result: Schema.Unknown.pipe(optional),
-      provider: Schema.Struct({
-        executed: Schema.Boolean,
-        metadata: ProviderMetadata.pipe(optional),
-      }),
+      executed: Schema.Boolean,
+      resultState: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Success = typeof Success.Type
@@ -406,10 +395,8 @@ export namespace Tool {
       ...ToolBase,
       error: UnknownError,
       result: Schema.Unknown.pipe(optional),
-      provider: Schema.Struct({
-        executed: Schema.Boolean,
-        metadata: ProviderMetadata.pipe(optional),
-      }),
+      executed: Schema.Boolean,
+      resultState: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Failed = typeof Failed.Type
@@ -481,7 +468,7 @@ export namespace RevertEvent {
   export const Committed = Event.durable({
     type: "session.revert.committed",
     ...options,
-    schema: { ...Base, messageID: SessionMessage.ID },
+    schema: { ...Base, to: SessionMessage.ID },
   })
 }
 

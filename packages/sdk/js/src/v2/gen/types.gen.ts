@@ -1025,7 +1025,6 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          textID: string
         }
       }
     | {
@@ -1034,7 +1033,6 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          textID: string
           delta: string
         }
       }
@@ -1044,7 +1042,6 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          textID: string
           text: string
         }
       }
@@ -1054,8 +1051,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          reasoningID: string
-          providerMetadata?: LlmProviderMetadata
+          state?: SessionMessageProviderState
         }
       }
     | {
@@ -1064,7 +1060,6 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          reasoningID: string
           delta: string
         }
       }
@@ -1074,9 +1069,8 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           assistantMessageID: string
-          reasoningID: string
           text: string
-          providerMetadata?: LlmProviderMetadata
+          state?: SessionMessageProviderState
         }
       }
     | {
@@ -1116,14 +1110,11 @@ export type GlobalEvent = {
           sessionID: string
           assistantMessageID: string
           callID: string
-          tool: string
           input: {
             [key: string]: unknown
           }
-          provider: {
-            executed: boolean
-            metadata?: LlmProviderMetadata
-          }
+          executed: boolean
+          state?: SessionMessageProviderState
         }
       }
     | {
@@ -1152,10 +1143,8 @@ export type GlobalEvent = {
           content: Array<LlmToolContent>
           outputPaths?: Array<string>
           result?: unknown
-          provider: {
-            executed: boolean
-            metadata?: LlmProviderMetadata
-          }
+          executed: boolean
+          resultState?: SessionMessageProviderState
         }
       }
     | {
@@ -1167,10 +1156,8 @@ export type GlobalEvent = {
           callID: string
           error: SessionErrorUnknown
           result?: unknown
-          provider: {
-            executed: boolean
-            metadata?: LlmProviderMetadata
-          }
+          executed: boolean
+          resultState?: SessionMessageProviderState
         }
       }
     | {
@@ -1228,7 +1215,7 @@ export type GlobalEvent = {
         type: "session.revert.committed"
         properties: {
           sessionID: string
-          messageID: string
+          to: string
         }
       }
     | {
@@ -3291,10 +3278,8 @@ export type SessionErrorUnknown = {
   message: string
 }
 
-export type LlmProviderMetadata = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState = {
+  [key: string]: unknown
 }
 
 export type ToolTextContent = {
@@ -3902,7 +3887,6 @@ export type SyncEventSessionTextStarted = {
     data: {
       sessionID: string
       assistantMessageID: string
-      textID: string
     }
   }
 }
@@ -3918,7 +3902,6 @@ export type SyncEventSessionTextEnded = {
     data: {
       sessionID: string
       assistantMessageID: string
-      textID: string
       text: string
     }
   }
@@ -3935,8 +3918,7 @@ export type SyncEventSessionReasoningStarted = {
     data: {
       sessionID: string
       assistantMessageID: string
-      reasoningID: string
-      providerMetadata?: LlmProviderMetadata
+      state?: SessionMessageProviderState
     }
   }
 }
@@ -3952,9 +3934,8 @@ export type SyncEventSessionReasoningEnded = {
     data: {
       sessionID: string
       assistantMessageID: string
-      reasoningID: string
       text: string
-      providerMetadata?: LlmProviderMetadata
+      state?: SessionMessageProviderState
     }
   }
 }
@@ -4005,14 +3986,11 @@ export type SyncEventSessionToolCalled = {
       sessionID: string
       assistantMessageID: string
       callID: string
-      tool: string
       input: {
         [key: string]: unknown
       }
-      provider: {
-        executed: boolean
-        metadata?: LlmProviderMetadata
-      }
+      executed: boolean
+      state?: SessionMessageProviderState
     }
   }
 }
@@ -4055,10 +4033,8 @@ export type SyncEventSessionToolSuccess = {
       content: Array<LlmToolContent>
       outputPaths?: Array<string>
       result?: unknown
-      provider: {
-        executed: boolean
-        metadata?: LlmProviderMetadata
-      }
+      executed: boolean
+      resultState?: SessionMessageProviderState
     }
   }
 }
@@ -4077,10 +4053,8 @@ export type SyncEventSessionToolFailed = {
       callID: string
       error: SessionErrorUnknown
       result?: unknown
-      provider: {
-        executed: boolean
-        metadata?: LlmProviderMetadata
-      }
+      executed: boolean
+      resultState?: SessionMessageProviderState
     }
   }
 }
@@ -4172,7 +4146,7 @@ export type SyncEventSessionRevertCommitted = {
     aggregateID: string
     data: {
       sessionID: string
-      messageID: string
+      to: string
     }
   }
 }
@@ -4402,15 +4376,13 @@ export type SessionMessageShell = {
 
 export type SessionMessageAssistantText = {
   type: "text"
-  id: string
   text: string
 }
 
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
-  id: string
   text: string
-  providerMetadata?: LlmProviderMetadata
+  state?: SessionMessageProviderState
   time?: {
     created: number
     completed?: number
@@ -4464,11 +4436,9 @@ export type SessionMessageAssistantTool = {
   type: "tool"
   id: string
   name: string
-  provider?: {
-    executed: boolean
-    metadata?: LlmProviderMetadata
-    resultMetadata?: LlmProviderMetadata
-  }
+  executed?: boolean
+  providerState?: SessionMessageProviderState
+  providerResultState?: SessionMessageProviderState
   state:
     | SessionMessageToolStatePending
     | SessionMessageToolStateRunning
@@ -4879,7 +4849,6 @@ export type SessionTextStarted = {
   data: {
     sessionID: string
     assistantMessageID: string
-    textID: string
   }
 }
 
@@ -4899,7 +4868,6 @@ export type SessionTextEnded = {
   data: {
     sessionID: string
     assistantMessageID: string
-    textID: string
     text: string
   }
 }
@@ -4920,8 +4888,7 @@ export type SessionReasoningStarted = {
   data: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
-    providerMetadata?: LlmProviderMetadata
+    state?: SessionMessageProviderState
   }
 }
 
@@ -4941,9 +4908,8 @@ export type SessionReasoningEnded = {
   data: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
     text: string
-    providerMetadata?: LlmProviderMetadata
+    state?: SessionMessageProviderState
   }
 }
 
@@ -5006,14 +4972,11 @@ export type SessionToolCalled = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    tool: string
     input: {
       [key: string]: unknown
     }
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata
-    }
+    executed: boolean
+    state?: SessionMessageProviderState
   }
 }
 
@@ -5064,10 +5027,8 @@ export type SessionToolSuccess = {
     content: Array<LlmToolContent>
     outputPaths?: Array<string>
     result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata
-    }
+    executed: boolean
+    resultState?: SessionMessageProviderState
   }
 }
 
@@ -5090,10 +5051,8 @@ export type SessionToolFailed = {
     callID: string
     error: SessionErrorUnknown
     result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata
-    }
+    executed: boolean
+    resultState?: SessionMessageProviderState
   }
 }
 
@@ -5209,7 +5168,7 @@ export type SessionRevertCommitted = {
   location?: LocationRef
   data: {
     sessionID: string
-    messageID: string
+    to: string
   }
 }
 
@@ -5740,7 +5699,6 @@ export type SessionTextDelta = {
   data: {
     sessionID: string
     assistantMessageID: string
-    textID: string
     delta: string
   }
 }
@@ -5756,7 +5714,6 @@ export type SessionReasoningDelta = {
   data: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
     delta: string
   }
 }
@@ -6931,7 +6888,6 @@ export type EventSessionTextStarted = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    textID: string
   }
 }
 
@@ -6941,7 +6897,6 @@ export type EventSessionTextDelta = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    textID: string
     delta: string
   }
 }
@@ -6952,7 +6907,6 @@ export type EventSessionTextEnded = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    textID: string
     text: string
   }
 }
@@ -6963,8 +6917,7 @@ export type EventSessionReasoningStarted = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
-    providerMetadata?: LlmProviderMetadata
+    state?: SessionMessageProviderState
   }
 }
 
@@ -6974,7 +6927,6 @@ export type EventSessionReasoningDelta = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
     delta: string
   }
 }
@@ -6985,9 +6937,8 @@ export type EventSessionReasoningEnded = {
   properties: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
     text: string
-    providerMetadata?: LlmProviderMetadata
+    state?: SessionMessageProviderState
   }
 }
 
@@ -7031,14 +6982,11 @@ export type EventSessionToolCalled = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    tool: string
     input: {
       [key: string]: unknown
     }
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata
-    }
+    executed: boolean
+    state?: SessionMessageProviderState
   }
 }
 
@@ -7069,10 +7017,8 @@ export type EventSessionToolSuccess = {
     content: Array<LlmToolContent>
     outputPaths?: Array<string>
     result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata
-    }
+    executed: boolean
+    resultState?: SessionMessageProviderState
   }
 }
 
@@ -7085,10 +7031,8 @@ export type EventSessionToolFailed = {
     callID: string
     error: SessionErrorUnknown
     result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata
-    }
+    executed: boolean
+    resultState?: SessionMessageProviderState
   }
 }
 
@@ -7153,7 +7097,7 @@ export type EventSessionRevertCommitted = {
   type: "session.revert.committed"
   properties: {
     sessionID: string
-    messageID: string
+    to: string
   }
 }
 
@@ -8081,21 +8025,17 @@ export type SessionMessageShell2 = {
 
 export type SessionMessageAssistantText2 = {
   type: "text"
-  id: string
   text: string
 }
 
-export type LlmProviderMetadata2 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState2 = {
+  [key: string]: unknown
 }
 
 export type SessionMessageAssistantReasoning2 = {
   type: "reasoning"
-  id: string
   text: string
-  providerMetadata?: LlmProviderMetadata2
+  state?: SessionMessageProviderState2
   time?: {
     created: number
     completed?: number
@@ -8168,11 +8108,9 @@ export type SessionMessageAssistantTool2 = {
   type: "tool"
   id: string
   name: string
-  provider?: {
-    executed: boolean
-    metadata?: LlmProviderMetadata2
-    resultMetadata?: LlmProviderMetadata2
-  }
+  executed?: boolean
+  providerState?: SessionMessageProviderState2
+  providerResultState?: SessionMessageProviderState2
   state:
     | SessionMessageToolStatePending2
     | SessionMessageToolStateRunning2
@@ -8604,7 +8542,6 @@ export type SessionTextStarted2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    textID: string
   }
 }
 
@@ -8624,15 +8561,12 @@ export type SessionTextEnded2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    textID: string
     text: string
   }
 }
 
-export type LlmProviderMetadata3 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState3 = {
+  [key: string]: unknown
 }
 
 export type SessionReasoningStarted2 = {
@@ -8651,15 +8585,12 @@ export type SessionReasoningStarted2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
-    providerMetadata?: LlmProviderMetadata3
+    state?: SessionMessageProviderState3
   }
 }
 
-export type LlmProviderMetadata4 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState4 = {
+  [key: string]: unknown
 }
 
 export type SessionReasoningEnded2 = {
@@ -8678,9 +8609,8 @@ export type SessionReasoningEnded2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
     text: string
-    providerMetadata?: LlmProviderMetadata4
+    state?: SessionMessageProviderState4
   }
 }
 
@@ -8726,10 +8656,8 @@ export type SessionToolInputEnded2 = {
   }
 }
 
-export type LlmProviderMetadata5 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState5 = {
+  [key: string]: unknown
 }
 
 export type SessionToolCalled2 = {
@@ -8749,14 +8677,11 @@ export type SessionToolCalled2 = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    tool: string
     input: {
       [key: string]: unknown
     }
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata5
-    }
+    executed: boolean
+    state?: SessionMessageProviderState5
   }
 }
 
@@ -8784,10 +8709,8 @@ export type SessionToolProgress2 = {
   }
 }
 
-export type LlmProviderMetadata6 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState6 = {
+  [key: string]: unknown
 }
 
 export type SessionToolSuccess2 = {
@@ -8813,17 +8736,13 @@ export type SessionToolSuccess2 = {
     content: Array<LlmToolContent2>
     outputPaths?: Array<string>
     result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata6
-    }
+    executed: boolean
+    resultState?: SessionMessageProviderState6
   }
 }
 
-export type LlmProviderMetadata7 = {
-  [key: string]: {
-    [key: string]: unknown
-  }
+export type SessionMessageProviderState7 = {
+  [key: string]: unknown
 }
 
 export type SessionToolFailed2 = {
@@ -8845,10 +8764,8 @@ export type SessionToolFailed2 = {
     callID: string
     error: SessionErrorUnknown2
     result?: unknown
-    provider: {
-      executed: boolean
-      metadata?: LlmProviderMetadata7
-    }
+    executed: boolean
+    resultState?: SessionMessageProviderState7
   }
 }
 
@@ -8977,7 +8894,7 @@ export type SessionRevertCommitted2 = {
   location?: LocationRef2
   data: {
     sessionID: string
-    messageID: string
+    to: string
   }
 }
 
@@ -10256,7 +10173,6 @@ export type SessionTextDelta2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    textID: string
     delta: string
   }
 }
@@ -10272,7 +10188,6 @@ export type SessionReasoningDelta2 = {
   data: {
     sessionID: string
     assistantMessageID: string
-    reasoningID: string
     delta: string
   }
 }

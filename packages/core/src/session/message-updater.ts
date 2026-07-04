@@ -99,11 +99,11 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.id === callID),
     )
 
-  const latestText = (assistant: DraftAssistant | undefined, textID: string) =>
-    assistant?.content.findLast((item): item is DraftText => item.type === "text" && item.id === textID)
+  const latestText = (assistant: DraftAssistant | undefined) =>
+    assistant?.content.findLast((item): item is DraftText => item.type === "text")
 
-  const latestReasoning = (assistant: DraftAssistant | undefined, reasoningID: string) =>
-    assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && item.id === reasoningID)
+  const latestReasoning = (assistant: DraftAssistant | undefined) =>
+    assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && !item.time?.completed)
 
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
     Effect.gen(function* () {
@@ -250,20 +250,18 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.text.started": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(
-            castDraft(SessionMessage.AssistantText.make({ type: "text", id: event.data.textID, text: "" })),
-          )
+          draft.content.push(castDraft(SessionMessage.AssistantText.make({ type: "text", text: "" })))
         })
       },
       "session.text.delta": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestText(draft, event.data.textID)
+          const match = latestText(draft)
           if (match) match.text += event.data.delta
         })
       },
       "session.text.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestText(draft, event.data.textID)
+          const match = latestText(draft)
           if (match) match.text = event.data.text
         })
       },
@@ -293,7 +291,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match) {
-            match.provider = event.data.provider
+            match.executed = event.data.executed
+            match.providerState = event.data.state
             match.time.ran = event.created
             match.state = castDraft(
               SessionMessage.ToolStateRunning.make({
@@ -319,11 +318,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "running") {
-            match.provider = {
-              executed: event.data.provider.executed || match.provider?.executed === true,
-              metadata: match.provider?.metadata,
-              resultMetadata: event.data.provider.metadata,
-            }
+            match.executed = event.data.executed || match.executed === true
+            match.providerResultState = event.data.resultState
             match.time.completed = event.created
             match.state = castDraft(
               SessionMessage.ToolStateCompleted.make({
@@ -342,11 +338,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && (match.state.status === "pending" || match.state.status === "running")) {
-            match.provider = {
-              executed: event.data.provider.executed || match.provider?.executed === true,
-              metadata: match.provider?.metadata,
-              resultMetadata: event.data.provider.metadata,
-            }
+            match.executed = event.data.executed || match.executed === true
+            match.providerResultState = event.data.resultState
             match.time.completed = event.created
             match.state = castDraft(
               SessionMessage.ToolStateError.make({
@@ -367,9 +360,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             castDraft(
               SessionMessage.AssistantReasoning.make({
                 type: "reasoning",
-                id: event.data.reasoningID,
                 text: "",
-                providerMetadata: event.data.providerMetadata,
+                state: event.data.state,
                 time: { created: event.created },
               }),
             ),
@@ -378,17 +370,17 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.reasoning.delta": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestReasoning(draft, event.data.reasoningID)
+          const match = latestReasoning(draft)
           if (match) match.text += event.data.delta
         })
       },
       "session.reasoning.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestReasoning(draft, event.data.reasoningID)
+          const match = latestReasoning(draft)
           if (match) {
             match.text = event.data.text
             match.time = { created: match.time?.created ?? event.created, completed: event.created }
-            if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
+            if (event.data.state !== undefined) match.state = event.data.state
           }
         })
       },

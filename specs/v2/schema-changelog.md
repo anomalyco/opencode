@@ -952,3 +952,17 @@ Compatibility:
 Compatibility:
 
 - V2 durable events and projections are experimental and are reset by `20260703190000_reset_v2_shell_event_payloads`; existing V2 event rows, event sequences, projected session messages, and admitted inputs are wiped.
+
+## 2026-07-03: Simplify Assistant Fragments And Provider State
+
+- Remove provider block IDs from current Session text and reasoning event payloads and projected content. A Session assistant step allows at most one open fragment of each kind; UI references use assistant message ID, kind, and ordinal. Tool correlation continues to use `callID`.
+- Replace nested `providerMetadata` with opaque, provider-un-nested `state` at the Session boundary. Reasoning uses `state`; tool calls use `state`, settlements use `resultState`, and projected tools expose `providerState` and `providerResultState`. Replay re-nests state under the selected provider only for the same successful model.
+- Flatten `executed` on tool events and projected tools, and remove the redundant tool name from `session.tool.called` because `session.tool.input.started` owns it.
+- Rename `session.revert.committed.messageID` to `to`, paired with `session.forked.from`.
+- Publish live-only `session.compaction.delta` events for accepted summary chunks while `session.compaction.ended.1` remains the durable full summary.
+- OpenAI Responses closes output text on `response.output_text.done` or its message `response.output_item.done` boundary. Provider documentation and recorded stream shapes show sequential output items, not valid overlapping text or reasoning blocks of the same kind.
+
+Compatibility:
+
+- All changed durable definitions remain version 1. `20260703200000_reset_v2_event_fragments` wipes experimental V2 events, sequences, projected messages, and admitted inputs.
+- Promise, Effect, and legacy JavaScript SDK surfaces are regenerated from the simplified schemas.

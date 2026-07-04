@@ -514,6 +514,40 @@ test("tracks session status from active sessions and execution events", async ()
       },
     })
     await wait(() => data.session.status("session-failed") === "idle")
+
+    emitEvent(events, {
+      id: "evt_compaction_started",
+      created: 0,
+      type: "session.compaction.started",
+      durable: durable("session-live", 2),
+      data: { sessionID: "session-live", reason: "auto" },
+    })
+    emitEvent(events, {
+      id: "evt_compaction_delta_1",
+      created: 0,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-live", text: "Live " },
+    })
+    emitEvent(events, {
+      id: "evt_compaction_delta_2",
+      created: 0,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-live", text: "summary" },
+    })
+    await wait(() => data.session.compaction("session-live") === "Live summary")
+
+    emitEvent(events, {
+      id: "evt_compaction_ended",
+      created: 0,
+      type: "session.compaction.ended",
+      durable: durable("session-live", 3),
+      data: { sessionID: "session-live", reason: "auto", text: "Live summary", recent: "recent" },
+    })
+    await wait(() => data.session.compaction("session-live") === undefined)
+    expect(data.session.message.get("session-live", "msg_compaction_ended")).toMatchObject({
+      type: "compaction",
+      summary: "Live summary",
+    })
   } finally {
     app.renderer.destroy()
   }
@@ -1020,9 +1054,9 @@ test("settles pending tools when a live failure arrives", async () => {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
-        tool: "bash",
         input: {},
-        provider: { executed: false, metadata: { fake: { call: true } } },
+        executed: false,
+        state: { call: true },
       },
     })
     emitEvent(events, {
@@ -1035,7 +1069,8 @@ test("settles pending tools when a live failure arrives", async () => {
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
         error: { type: "unknown", message: "aborted" },
-        provider: { executed: false, metadata: { fake: { result: true } } },
+        executed: false,
+        resultState: { result: true },
       },
     })
 
@@ -1061,11 +1096,9 @@ test("settles pending tools when a live failure arrives", async () => {
     expect(tool.state.input).toEqual({})
     expect(tool.state.structured).toEqual({})
     expect(tool.state.content).toEqual([])
-    expect(tool.provider).toEqual({
-      executed: false,
-      metadata: { fake: { call: true } },
-      resultMetadata: { fake: { result: true } },
-    })
+    expect(tool.executed).toBe(false)
+    expect(tool.providerState).toEqual({ call: true })
+    expect(tool.providerResultState).toEqual({ result: true })
     expect(sync.session.message.list("session-1").map((message) => message.type)).toEqual([
       "agent-switched",
       "model-switched",
