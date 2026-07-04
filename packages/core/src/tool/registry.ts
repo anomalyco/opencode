@@ -25,6 +25,10 @@ export interface Interface {
   readonly materialize: (input: MaterializeInput) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  /**
+   * Internal only. This is probably the wrong API: it mixes tool registration with CodeMode projection.
+   * Keep it out of PluginContext until the tool catalog has a proper projection mechanism.
+   */
   readonly codeMode: {
     readonly register: (tools: CodeModeTools) => Effect.Effect<void, RegistrationError, Scope.Scope>
   }
