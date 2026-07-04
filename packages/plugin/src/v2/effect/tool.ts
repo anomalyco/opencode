@@ -235,7 +235,11 @@ export interface ToolExecuteAfterEvent {
   outputPaths?: ReadonlyArray<string>
 }
 
+export type ExecuteTools = Readonly<Record<string, Readonly<Record<string, AnyTool>>>>
+
 export interface ToolDomain {
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  readonly execute: Hooks<{ before: ToolExecuteBeforeEvent; after: ToolExecuteAfterEvent }>
+  readonly execute: Hooks<{ before: ToolExecuteBeforeEvent; after: ToolExecuteAfterEvent }> & {
+    readonly register: (tools: ExecuteTools) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  }
 }

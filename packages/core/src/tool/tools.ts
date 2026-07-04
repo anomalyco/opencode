@@ -7,6 +7,9 @@ export interface Interface {
   readonly register: (
     tools: Readonly<Record<string, Tool.AnyTool>>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
+  readonly execute: {
+    readonly register: (tools: Tool.ExecuteTools) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
+  }
 }
 
 /** Narrow registration-only Location capability. */

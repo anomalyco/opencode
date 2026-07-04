@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
@@ -10,6 +10,7 @@ import { MCP } from "@opencode-ai/core/mcp/index"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
+import { Tool } from "@opencode-ai/core/tool/tool"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
@@ -131,11 +132,22 @@ describe("MCP tool plugin", () => {
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const events = yield* EventV2.Service
+      yield* registry.execute.register({
+        user: {
+          custom: Tool.make({
+            description: "User tool",
+            input: Schema.Struct({}),
+            output: Schema.Struct({ ok: Schema.Boolean }),
+            execute: () => Effect.succeed({ ok: true }),
+          }),
+        },
+      })
       yield* waitForTool(registry, "execute")
 
       const initial = yield* toolDefinitions(registry)
       expect(initial.map((definition) => definition.name)).toEqual(["execute"])
       expect(initial[0].description).toContain('tools.context7["resolve-library-id"]')
+      expect(initial[0].description).toContain("tools.user.custom")
 
       catalog = [item("github", "search_issues")]
       yield* events.publish(McpEvent.ToolsChanged, { server: MCP.ServerName.make("github") })
@@ -147,6 +159,7 @@ describe("MCP tool plugin", () => {
       const refreshed = yield* toolDefinitions(registry)
       expect(refreshed.map((definition) => definition.name)).toEqual(["execute"])
       expect(refreshed[0].description).not.toContain("resolve-library-id")
+      expect(refreshed[0].description).toContain("tools.user.custom")
     }),
   )
 
@@ -176,7 +189,7 @@ describe("MCP tool plugin", () => {
         expect(calls).toEqual([{ server: "$codemode", name: "foo.bar", args: { query: "react" } }])
         expect(assertions[0]?.action).toBe("mcp:$codemode:foo.bar")
         expect(settlement.output?.structured).toMatchObject({
-          toolCalls: [{ tool: "$codemode.foo.bar", status: "completed", input: { query: "react" } }],
+          toolCalls: [{ tool: "_codemode.foo_bar", status: "completed", input: { query: "react" } }],
         })
       }),
     )

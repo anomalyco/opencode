@@ -250,6 +250,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     tool: {
       register: (input) => tools.register(input),
       execute: {
+        register: (input) => tools.execute.register(input),
         before: (callback) =>
           toolHooks.hook.before((event) => {
             const output = {
