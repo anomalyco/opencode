@@ -8717,24 +8717,6 @@ export type SessionSkillActivated2 = {
   }
 }
 
-export type Shell1V2 = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number | "NaN" | "Infinity" | "-Infinity"
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    started: number | "NaN" | "Infinity" | "-Infinity"
-    completed?: number | "NaN" | "Infinity" | "-Infinity"
-  }
-}
-
 export type SessionShellStarted2 = {
   id: string
   created: number
@@ -8750,7 +8732,7 @@ export type SessionShellStarted2 = {
   location?: LocationRef2
   data: {
     sessionID: string
-    shell: Shell1V2
+    shell: ShellV2
   }
 }
 
@@ -8769,7 +8751,7 @@ export type SessionShellEnded2 = {
   location?: LocationRef2
   data: {
     sessionID: string
-    shell: Shell1V2
+    shell: ShellV2
     output: {
       output: string
       cursor: number
@@ -10751,7 +10733,7 @@ export type ShellCreated2 = {
   type: "shell.created"
   location?: LocationRef2
   data: {
-    info: Shell1V2
+    info: ShellV2
   }
 }
 
