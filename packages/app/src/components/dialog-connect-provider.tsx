@@ -17,7 +17,13 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 
-export function DialogConnectProvider(props: { provider: string; directory?: Accessor<string | undefined> }) {
+export function DialogConnectProvider(props: {
+  provider: string
+  directory?: Accessor<string | undefined>
+  onBack?: () => void
+  content?: boolean
+  bind?: (value: { back: () => void }) => void
+}) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
@@ -25,6 +31,10 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
   const providers = useProviders(props.directory)
 
   const all = () => {
+    if (props.onBack) {
+      props.onBack()
+      return
+    }
     void import("./dialog-select-provider").then((x) => {
       dialog.show(() => <x.DialogSelectProvider directory={props.directory} />)
     })
@@ -598,6 +608,74 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
     )
   }
 
+  const content = (
+    <div class="flex flex-col gap-6 px-2.5 pb-3">
+      <div class="px-2.5 flex gap-4 items-center">
+        <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
+        <div class="text-16-medium text-text-strong">
+          <Switch>
+            <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
+              {language.t("provider.connect.title.anthropicProMax")}
+            </Match>
+            <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
+          </Switch>
+        </div>
+      </div>
+      <div class="px-2.5 pb-10 flex flex-col gap-6">
+        <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
+          <Switch>
+            <Match when={loading()}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-2">
+                  <Spinner />
+                  <span>{language.t("provider.connect.status.inProgress")}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={store.methodIndex === undefined}>
+              <MethodSelection />
+            </Match>
+            <Match when={store.state === "pending"}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-2">
+                  <Spinner />
+                  <span>{language.t("provider.connect.status.inProgress")}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={store.state === "prompt"}>
+              <AuthPromptsView />
+            </Match>
+            <Match when={store.state === "error"}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-2">
+                  <Icon name="circle-ban-sign" class="text-icon-critical-base" />
+                  <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={method()?.type === "api"}>
+              <ApiAuthView />
+            </Match>
+            <Match when={method()?.type === "oauth"}>
+              <Switch>
+                <Match when={store.authorization?.method === "code"}>
+                  <OAuthCodeView />
+                </Match>
+                <Match when={store.authorization?.method === "auto"}>
+                  <OAuthAutoView />
+                </Match>
+              </Switch>
+            </Match>
+          </Switch>
+        </div>
+      </div>
+    </div>
+  )
+
+  props.bind?.({ back: goBack })
+  if (props.content) return content
+
   return (
     <Dialog
       title={
@@ -610,68 +688,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
         />
       }
     >
-      <div class="flex flex-col gap-6 px-2.5 pb-3">
-        <div class="px-2.5 flex gap-4 items-center">
-          <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">
-            <Switch>
-              <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
-                {language.t("provider.connect.title.anthropicProMax")}
-              </Match>
-              <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
-            </Switch>
-          </div>
-        </div>
-        <div class="px-2.5 pb-10 flex flex-col gap-6">
-          <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
-            <Switch>
-              <Match when={loading()}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-2">
-                    <Spinner />
-                    <span>{language.t("provider.connect.status.inProgress")}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={store.methodIndex === undefined}>
-                <MethodSelection />
-              </Match>
-              <Match when={store.state === "pending"}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-2">
-                    <Spinner />
-                    <span>{language.t("provider.connect.status.inProgress")}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={store.state === "prompt"}>
-                <AuthPromptsView />
-              </Match>
-              <Match when={store.state === "error"}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-2">
-                    <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                    <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={method()?.type === "api"}>
-                <ApiAuthView />
-              </Match>
-              <Match when={method()?.type === "oauth"}>
-                <Switch>
-                  <Match when={store.authorization?.method === "code"}>
-                    <OAuthCodeView />
-                  </Match>
-                  <Match when={store.authorization?.method === "auto"}>
-                    <OAuthAutoView />
-                  </Match>
-                </Switch>
-              </Match>
-            </Switch>
-          </div>
-        </div>
-      </div>
+      {content}
     </Dialog>
   )
 }
