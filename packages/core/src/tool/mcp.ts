@@ -77,7 +77,7 @@ export const layer = Layer.effectDiscard(
           groups.set(tool.server, group)
         }
         const next = yield* Scope.fork(scope)
-        yield* Effect.forEach(groups, ([group, record]) => tools.register(record, { group, deferred: true }), {
+        yield* Effect.forEach(groups, ([group, record]) => tools.register(record, { group }), {
           discard: true,
         }).pipe(Scope.provide(next), Effect.orDie)
         if (current) yield* Scope.close(current, Exit.void)
