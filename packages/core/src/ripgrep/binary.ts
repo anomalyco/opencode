@@ -1,5 +1,6 @@
 import path from "path"
 import { Context, Effect, Layer, Stream } from "effect"
+import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -53,39 +54,37 @@ export namespace RipgrepBinary {
         config: (typeof PLATFORM)[keyof typeof PLATFORM],
         target: string,
       ) {
+        if (config.extension === "zip") {
+          yield* Effect.tryPromise(async () => {
+            const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archive).arrayBuffer()])))
+            const entries = await zipFileReader.getEntries()
+            const entry = entries.find((e) => e.filename.endsWith("rg.exe"))
+            if (!entry) throw new Error("rg.exe not found in zip archive")
+            const blob = await entry.getData(new BlobWriter())
+            await Bun.write(target, blob)
+            await zipFileReader.close()
+          })
+          if (process.platform !== "win32") yield* fs.chmod(target, 0o755)
+          return
+        }
+
         const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
 
-        if (config.extension === "zip") {
-          const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
-          const result = yield* run(shell, [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
-          ])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
-            )
-        }
-
-        if (config.extension === "tar.gz") {
-          const result = yield* run("tar", ["-xzf", archive, "-C", dir])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
-            )
-        }
+        const result = yield* run("tar", ["-xzf", archive, "-C", dir])
+        if (result.code !== 0)
+          throw new Error(
+            result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+          )
 
         const extracted = path.join(
           dir,
           `ripgrep-${VERSION}-${config.platform}`,
-          process.platform === "win32" ? "rg.exe" : "rg",
+          "rg",
         )
         if (!(yield* fs.isFile(extracted))) throw new Error(`ripgrep archive did not contain executable: ${extracted}`)
 
         yield* fs.copyFile(extracted, target)
-        if (process.platform !== "win32") yield* fs.chmod(target, 0o755)
+        yield* fs.chmod(target, 0o755)
       }, Effect.scoped)
 
       return Service.of({
