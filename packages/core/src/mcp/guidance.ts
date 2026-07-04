@@ -6,7 +6,6 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { McpTool } from "../tool/mcp"
-import { ToolRegistry } from "../tool/registry"
 import { MCP } from "./index"
 import { SystemContext } from "../system-context/index"
 
@@ -21,7 +20,7 @@ const entries = (servers: ReadonlyArray<Summary>) =>
     `  <server name="${server.server}">`,
     ...(Flag.CODEMODE_ENABLED
       ? [
-          `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.codeModeGroup(server.server))}]\`.`,
+          `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.group(server.server))}]\`.`,
         ]
       : []),
     ...server.instructions.split("\n").map((line) => `    ${line}`),
@@ -66,16 +65,16 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
-    const registry = yield* ToolRegistry.Service
 
     return Service.of({
       load: Effect.fn("McpGuidance.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return SystemContext.empty
+        if (Flag.CODEMODE_ENABLED && PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny")
+          return SystemContext.empty
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
-        if (Flag.CODEMODE_ENABLED && !(yield* registry.executeAvailable(agent.permissions))) return SystemContext.empty
         // Instructions are useful only when this agent can reach at least one server tool.
         const visible = instructions
           .filter((item) => {
@@ -103,4 +102,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node, ToolRegistry.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node] })
