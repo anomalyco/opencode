@@ -1393,14 +1393,14 @@ export function MessageTimeline(props: {
                     <button
                       type="button"
                       data-slot="session-title-parent"
-                      class="min-w-0 max-w-[40%] truncate px-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
+                      class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
                       onClick={navigateParent}
                     >
                       {parentTitle()}
                     </button>
                     <span
                       data-slot="session-title-separator"
-                      class="-translate-y-[0.5px] px-1 text-[11px] font-medium text-v2-text-text-faint"
+                      class="-translate-y-[0.5px] pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
                       aria-hidden="true"
                     >
                       /
