@@ -154,6 +154,7 @@ describe("PluginV2", () => {
       expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toEqual([
         "plain",
         "context_7_look_up",
+        "execute",
       ])
     }),
   )

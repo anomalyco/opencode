@@ -79,12 +79,17 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const permission = yield* Deferred.make<void>()
     decision = Deferred.await(permission)
     const registry = yield* ToolRegistry.Service
-    yield* waitForTool(registry, "demo_search")
+    yield* waitForTool(registry, "execute")
 
     const fiber = yield* settleTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_permission"),
       ...toolIdentity,
-      call: { type: "tool-call", id: "call_mcp_permission", name: "demo_search", input: {} },
+      call: {
+        type: "tool-call",
+        id: "call_mcp_permission",
+        name: "execute",
+        input: { code: "return await tools.demo.search({})" },
+      },
     }).pipe(Effect.forkScoped)
     expect(yield* Deferred.await(assertion)).toEqual({
       action: "demo_search",
@@ -113,15 +118,23 @@ it.effect("does not call MCP when permission is rejected", () =>
     assertion = yield* Deferred.make<PermissionV2.AssertInput>()
     decision = Effect.fail(new PermissionV2.RejectedError())
     const registry = yield* ToolRegistry.Service
-    yield* waitForTool(registry, "demo_search")
+    yield* waitForTool(registry, "execute")
 
-    expect(
-      yield* settleTool(registry, {
-        sessionID: SessionV2.ID.make("ses_mcp_rejected"),
-        ...toolIdentity,
-        call: { type: "tool-call", id: "call_mcp_rejected", name: "demo_search", input: {} },
-      }),
-    ).toEqual({ result: { type: "error", value: "Unable to execute demo_search" } })
+    const settlement = yield* settleTool(registry, {
+      sessionID: SessionV2.ID.make("ses_mcp_rejected"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_rejected",
+        name: "execute",
+        input: { code: "return await tools.demo.search({})" },
+      },
+    })
+    expect(settlement.result).toEqual({ type: "text", value: "Unable to execute demo_search" })
+    expect(settlement.output?.structured).toEqual({
+      toolCalls: [{ tool: "demo.search", status: "error" }],
+      error: true,
+    })
     expect(calls).toBe(0)
   }),
 )
