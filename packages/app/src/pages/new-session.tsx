@@ -93,7 +93,7 @@ export default function NewSessionPage() {
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
       <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
-        <div class="@container relative flex flex-col min-h-0 h-full bg-background-stronger flex-1">
+        <div class="@container relative flex flex-col min-h-0 h-full flex-1">
           <div class="flex-1 min-h-0 overflow-hidden rounded-[10px]">
             <NewSessionDesignView>
               <div class={NEW_SESSION_CONTENT_WIDTH}>

@@ -48,6 +48,7 @@ import {
 const statsUnfurlPath = "banner.png"
 const geoMapWidth = 960
 const geoMapHeight = 430
+const shortMonths = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type IsoCountryCode = readonly [string, string, string]
 type WorldCountryProperties = GeoJsonProperties & { name?: string }
@@ -119,8 +120,7 @@ export default function StatsModel() {
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
   const modelHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
     { href: "#overview", label: i18n.t("nav.overview") },
-    { href: "#usage", label: i18n.t("nav.usage") },
-    { href: "#users", label: i18n.t("nav.users") },
+    { href: "#momentum", label: i18n.t("model.momentum") },
     { href: "#efficiency", label: i18n.t("nav.efficiency") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
     { href: "#peers", label: i18n.t("nav.peers") },
@@ -181,9 +181,8 @@ export default function StatsModel() {
                   catalogData={catalog() ?? null}
                   labName={labName()}
                 />
-                <ModelOverview data={stats() ?? null} />
-                <ModelUsageSection data={stats()?.usage ?? []} />
-                <ModelUsersSection data={stats()?.usage ?? []} />
+                <ModelOverview catalog={catalogEntry() ?? null} />
+                <ModelMomentumSection data={stats() ?? null} />
                 <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
@@ -423,15 +422,59 @@ function ChevronDownIcon() {
   )
 }
 
-function ModelOverview(props: { data: StatsModelData | null }) {
+function ModelOverview(props: { catalog: ModelCatalogEntry | null }) {
   const i18n = useI18n()
+  const language = useLanguage()
+  const specs = createMemo(() => [
+    {
+      label: i18n.t("model.context"),
+      value: formatCatalogLimit(props.catalog?.limit?.context, i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.output"),
+      value: formatCatalogLimit(props.catalog?.limit?.output, i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.knowledge"),
+      value: formatCatalogMonth(props.catalog?.knowledge, language.tag(language.locale()), i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.release"),
+      value: formatCatalogMonth(props.catalog?.releaseDate, language.tag(language.locale()), i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.inputs"),
+      value: formatCatalogModalities(
+        props.catalog?.modalities.input ?? [],
+        language.tag(language.locale()),
+        i18n.t("home.unknown"),
+      ),
+    },
+  ])
   return (
-    <section id="model-overview" data-section="model-panel">
-      <SectionTitle
-        href="#model-overview"
-        title={i18n.t("nav.overview")}
-        description={i18n.t("model.overviewDescription")}
-      />
+    <section id="model-overview" data-section="model-specs" aria-label={i18n.t("nav.overview")}>
+      <For each={specs()}>
+        {(spec) => (
+          <div data-component="model-spec">
+            <span>{spec.label}</span>
+            <strong>{spec.value}</strong>
+          </div>
+        )}
+      </For>
+    </section>
+  )
+}
+
+function ModelMomentumSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
+  const language = useLanguage()
+  return (
+    <section id="momentum" data-section="model-momentum">
+      <h2 data-slot="model-momentum-title">
+        <a href="#momentum">{i18n.t("model.momentum")}.</a>
+        <span>{i18n.t("model.overviewDescription")}</span>
+      </h2>
+      <div data-slot="model-momentum-pattern" aria-hidden="true" />
       <Show
         when={props.data}
         fallback={
@@ -439,189 +482,83 @@ function ModelOverview(props: { data: StatsModelData | null }) {
         }
       >
         {(data) => (
-          <div data-component="model-metric-grid">
-            <MetricCard
-              label={i18n.t("model.tokens")}
-              value={formatTokens(data().totals.tokens)}
-              detail={i18n.t("model.lastTwoMonths")}
-            />
-            <MetricCard
-              label={i18n.t("model.uniqueUsers")}
-              value={formatUsers(data().totals.uniqueUsers)}
-              detail={i18n.t("model.lastTwoMonths")}
-            />
-            <MetricCard
-              label={i18n.t("model.sessions")}
-              value={formatInteger(data().totals.sessions)}
-              detail={i18n.t("model.completedSessions")}
-            />
-            <MetricCard
-              label={i18n.t("model.tokenShare")}
-              value={formatPercent(data().tokenShare)}
-              detail={i18n.t("model.totalModels", { count: data().totalModels })}
-            />
-            <MetricCard
-              label={i18n.t("model.momentum")}
-              value={formatChange(data().tokenChange)}
-              detail={i18n.t("model.vsPreviousWindow")}
-              state={data().tokenChange < 0 ? "negative" : "positive"}
-            />
-          </div>
+          <>
+            <MomentumChart data={data()} locale={language.tag(language.locale())} />
+            <div data-slot="model-momentum-metrics">
+              <MomentumMetric label={i18n.t("model.uniqueUsers")} value={formatUsers(data().totals.uniqueUsers)} />
+              <MomentumMetric
+                label={capitalizeLabel(i18n.t("model.completedSessions"))}
+                value={formatInteger(data().totals.sessions)}
+              />
+              <MomentumMetric label={i18n.t("model.tokenShare")} value={formatPercent(data().tokenShare)} />
+              <MomentumMetric
+                label="Rank"
+                value={formatRankLabel(data().rank)}
+                watermark={formatRankLabel(data().rank)}
+              />
+            </div>
+          </>
         )}
       </Show>
     </section>
   )
 }
 
-function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
-  const i18n = useI18n()
+function MomentumChart(props: { data: StatsModelData; locale: string }) {
+  const chart = createMemo(() => momentumChart(props.data.usage, props.data.updatedAt))
+  const changeState = createMemo(() => (props.data.tokenChange < 0 ? "negative" : "positive"))
   return (
-    <section id="usage" data-section="model-panel">
-      <SectionTitle href="#usage" title={i18n.t("nav.usage")} description={i18n.t("model.usageDescription")} />
-      <Show
-        when={props.data.some((item) => item.tokens > 0)}
-        fallback={
-          <ModelEmptyState title={i18n.t("model.noUsageTitle")} description={i18n.t("model.noUsageDescription")} />
-        }
-      >
-        <ModelColumnChart data={props.data} metric="tokens" ariaLabel={i18n.t("model.dailyTokenChart")} />
-      </Show>
-    </section>
-  )
-}
-
-function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
-  const i18n = useI18n()
-  return (
-    <section id="users" data-section="model-panel">
-      <SectionTitle href="#users" title={i18n.t("model.uniqueUsers")} description={i18n.t("model.usersDescription")} />
-      <Show
-        when={props.data.some((item) => item.users > 0)}
-        fallback={
-          <ModelEmptyState title={i18n.t("model.noUsersTitle")} description={i18n.t("model.noUsersDescription")} />
-        }
-      >
-        <ModelColumnChart data={props.data} metric="users" ariaLabel={i18n.t("model.dailyUserChart")} />
-      </Show>
-    </section>
-  )
-}
-
-function ModelColumnChart(props: { data: ModelUsagePoint[]; metric: "tokens" | "users"; ariaLabel: string }) {
-  const i18n = useI18n()
-  const [activeIndex, setActiveIndex] = createSignal<number>()
-  const max = createMemo(() => Math.max(0, ...props.data.map((item) => modelUsageMetricValue(item, props.metric))) || 1)
-  const activePoint = createMemo(() => {
-    const index = activeIndex()
-    if (index === undefined) return undefined
-    return props.data[index]
-  })
-
-  return (
-    <div
-      data-component="model-usage-chart"
-      data-metric={props.metric}
-      data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
-      role="img"
-      aria-label={props.ariaLabel}
-      style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
-      onPointerLeave={(event) => {
-        if (event.pointerType === "touch") return
-        setActiveIndex(undefined)
-      }}
-    >
-      <div data-slot="model-usage-axis" aria-hidden="true">
-        <For each={props.data}>
-          {(point, index) => (
-            <div
-              data-active={activeIndex() === index() ? "true" : undefined}
-              data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
-            >
-              <span data-slot="model-usage-label">
-                <span data-slot="model-usage-total">{formatModelUsageValue(point, props.metric)}</span>
-                <span data-slot="model-usage-date">{point.date}</span>
-              </span>
-            </div>
-          )}
-        </For>
+    <div data-component="model-momentum-chart" role="img" aria-label="Recent model token momentum">
+      <div data-slot="model-momentum-summary">
+        <div data-slot="model-momentum-total">
+          <strong>{formatTokens(props.data.totals.tokens)} tokens</strong>
+          <span data-state={changeState()}>{formatChange(props.data.tokenChange)}</span>
+        </div>
+        <p>
+          <span>{formatMomentumDate(chart().startDate, props.locale, props.data.updatedAt)}</span>
+          <span aria-hidden="true">→</span>
+          <span>{formatMomentumDate(chart().endDate, props.locale, props.data.updatedAt)}</span>
+        </p>
       </div>
-      <div data-slot="model-usage-bars">
-        <For each={props.data}>
-          {(point, index) => (
-            <div
-              data-slot="model-usage-column"
-              role="button"
-              tabIndex={0}
-              aria-label={`${point.date} ${formatModelUsageValue(point, props.metric)} ${modelUsageLabel(props.metric, i18n)}`}
-              data-active={activeIndex() === index() ? "true" : undefined}
-              data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
-              onPointerDown={(event) => {
-                if (event.pointerType !== "touch") return
-                setActiveIndex(index())
-              }}
-              onPointerEnter={() => setActiveIndex(index())}
-              onPointerMove={(event) => {
-                if (event.pointerType === "touch") return
-                setActiveIndex(index())
-              }}
-              onClick={() => setActiveIndex(index())}
-              onFocus={() => setActiveIndex(index())}
-              onBlur={() => setActiveIndex(undefined)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return
-                event.preventDefault()
-                setActiveIndex(index())
-              }}
-            >
-              <div
-                data-slot="model-usage-bar"
-                style={
-                  {
-                    "--model-usage-fill": `${modelUsageHeight(modelUsageMetricValue(point, props.metric), max())}%`,
-                  } as JSX.CSSProperties
-                }
+      <div data-slot="model-momentum-plot">
+        <svg viewBox="0 0 1200 370" preserveAspectRatio="none" aria-hidden="true">
+          <path data-slot="model-momentum-line-muted" d={chart().previousPath} />
+          <path data-slot="model-momentum-line-active" d={chart().currentPath} />
+          <For each={chart().markers}>
+            {(marker) => (
+              <rect
+                data-slot="model-momentum-marker"
+                data-active={marker.active ? "true" : undefined}
+                x={marker.x - 3}
+                y={marker.y - 3}
+                width="6"
+                height="6"
               />
-              <Show when={activeIndex() === index() && activePoint()}>
-                {(active) => (
-                  <div
-                    data-component="chart-tooltip"
-                    data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
-                  >
-                    <strong>{active().date}</strong>
-                    <span>
-                      {formatModelUsageValue(active(), props.metric)} {modelUsageLabel(props.metric, i18n)}
-                    </span>
-                    <div data-slot="tooltip-divider" />
-                    <p>
-                      <span data-slot="tooltip-label">
-                        <i /> {i18n.t("chart.daily")} {modelUsageLabel(props.metric, i18n)}
-                      </span>
-                      <b>{formatModelUsageValue(active(), props.metric)}</b>
-                    </p>
-                  </div>
-                )}
-              </Show>
-            </div>
-          )}
+            )}
+          </For>
+        </svg>
+        <span data-slot="model-momentum-end" data-state={changeState()} style={chart().endStyle}>
+          <i />
+          {formatChange(props.data.tokenChange)}
+        </span>
+      </div>
+      <div data-slot="model-momentum-months" aria-hidden="true">
+        <For each={momentumMonthLabels(chart().startDate, props.locale, props.data.updatedAt)}>
+          {(month) => <span style={{ left: `${month.x}%` }}>{month.label}</span>}
         </For>
       </div>
     </div>
   )
 }
 
-function modelUsageMetricValue(point: ModelUsagePoint, metric: "tokens" | "users") {
-  if (metric === "users") return point.users
-  return point.tokens
-}
-
-function formatModelUsageValue(point: ModelUsagePoint, metric: "tokens" | "users") {
-  if (metric === "users") return formatUsers(point.users)
-  return formatTokens(point.tokens)
-}
-
-function modelUsageLabel(metric: "tokens" | "users", i18n: ReturnType<typeof useI18n>) {
-  if (metric === "users") return i18n.t("format.users")
-  return i18n.t("format.tokens")
+function MomentumMetric(props: { label: string; value: string; watermark?: string }) {
+  return (
+    <div data-component="model-momentum-metric">
+      <Show when={props.watermark}>{(watermark) => <em aria-hidden="true">{watermark()}</em>}</Show>
+      <span>{props.label}</span>
+      <strong>{props.value}</strong>
+    </div>
+  )
 }
 
 function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
@@ -979,19 +916,111 @@ function formatGeoShare(value: number) {
   return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
 }
 
-function modelUsageHeight(tokens: number, max: number) {
-  if (tokens <= 0) return 0
-  return Math.max(2, Math.min(100, (tokens / max) * 100))
+function momentumChart(data: ModelUsagePoint[], updatedAt: string | null) {
+  const fallbackDate = updatedAt ? formatMomentumDateLabel(updatedAt) : "JAN 1"
+  const points =
+    data.length > 1 ? data : [data[0] ?? emptyUsagePoint(fallbackDate), data[0] ?? emptyUsagePoint(fallbackDate)]
+  const max = Math.max(1, ...points.map((point) => point.tokens))
+  const split = Math.max(1, Math.floor((points.length - 1) / 2))
+  const coordinates = points.map((point, index) => ({
+    date: point.date,
+    tokens: point.tokens,
+    x: (index / Math.max(1, points.length - 1)) * 1200,
+    y: 364 - (point.tokens / max) * 364,
+  }))
+  const end = coordinates[coordinates.length - 1]
+  return {
+    startDate: coordinates[0].date,
+    endDate: end.date,
+    previousPath: smoothLinePath(coordinates.slice(0, split + 1)),
+    currentPath: smoothLinePath(coordinates.slice(split)),
+    markers: [
+      { ...coordinates[0], active: false },
+      { ...coordinates[split], active: true },
+      { ...end, active: true },
+    ],
+    endStyle: {
+      "--momentum-end-x": `${Math.min(94, Math.max(0, ((end.x + 8) / 1200) * 100))}%`,
+      "--momentum-end-y": `${Math.min(96, Math.max(0, ((end.y - 7) / 370) * 100))}%`,
+    } as JSX.CSSProperties,
+  }
 }
 
-function isModelUsageDense(count: number) {
-  return count > 20
+function emptyUsagePoint(date: string): ModelUsagePoint {
+  return { date, tokens: 0, users: 0, sessions: 0, cost: 0 }
 }
 
-function isModelUsageLabelHidden(index: number, count: number) {
-  if (count <= 16) return false
-  const interval = Math.ceil(count / 8)
-  return index !== count - 1 && index % interval !== 0
+function smoothLinePath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return ""
+  if (points.length === 1) return `M${formatSparklinePoint(points[0].x)} ${formatSparklinePoint(points[0].y)}`
+  return points
+    .map((point, index) => {
+      if (index === 0) return `M${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`
+      const previous = points[index - 1]
+      const next = points[index + 1] ?? point
+      const beforePrevious = points[index - 2] ?? previous
+      const controlStart = {
+        x: previous.x + (point.x - beforePrevious.x) / 6,
+        y: previous.y + (point.y - beforePrevious.y) / 6,
+      }
+      const controlEnd = {
+        x: point.x - (next.x - previous.x) / 6,
+        y: point.y - (next.y - previous.y) / 6,
+      }
+      return `C${formatSparklinePoint(controlStart.x)} ${formatSparklinePoint(controlStart.y)} ${formatSparklinePoint(controlEnd.x)} ${formatSparklinePoint(controlEnd.y)} ${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`
+    })
+    .join(" ")
+}
+
+function momentumMonthLabels(startDate: string, locale: string, updatedAt: string | null) {
+  const start = parseMomentumDate(startDate, updatedAt)
+  const first = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1))
+  return Array.from({ length: 5 }, (_, index) => {
+    const date = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + index, 1))
+    return {
+      label: new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }).format(date).toUpperCase(),
+      x: index === 4 ? 98 : index * 24.5,
+    }
+  })
+}
+
+function formatMomentumDate(date: string, locale: string, updatedAt: string | null) {
+  return new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  })
+    .format(parseMomentumDate(date, updatedAt))
+    .toUpperCase()
+}
+
+function parseMomentumDate(date: string, updatedAt: string | null): Date {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(date)
+  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])))
+
+  const label = /^([A-Za-z]{3})\s+(\d{1,2})$/.exec(date.trim())
+  const month = label ? shortMonths.findIndex((item) => item.toLowerCase() === label[1].toLowerCase()) : -1
+  if (!label || month < 0) return new Date(Date.UTC(1970, 0, 1))
+
+  const anchor = updatedAt ? parseMomentumDate(updatedAt, null) : new Date(Date.UTC(1970, 0, 1))
+  const year = month > anchor.getUTCMonth() + 1 ? anchor.getUTCFullYear() - 1 : anchor.getUTCFullYear()
+  return new Date(Date.UTC(year, month, Number(label[2])))
+}
+
+function formatMomentumDateLabel(date: string) {
+  const parsed = parseMomentumDate(date, null)
+  if (parsed.getUTCFullYear() === 1970) return "JAN 1"
+  return `${shortMonths[parsed.getUTCMonth()]} ${parsed.getUTCDate()}`
+}
+
+function formatRankLabel(rank: number | null) {
+  if (rank === null) return "--"
+  return `#${String(rank).padStart(2, "0")}`
+}
+
+function capitalizeLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function formatRankMove(change: number) {
@@ -1048,6 +1077,28 @@ function formatTokens(value: number) {
   if (value >= 1_000_000) return `${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return String(Math.round(value))
+}
+
+function formatCatalogLimit(value: number | undefined, unknown: string) {
+  return value === undefined ? unknown : formatTokens(value)
+}
+
+function formatCatalogMonth(value: string | undefined, locale: string, unknown: string) {
+  if (!value) return unknown
+  const match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(value)
+  if (!match) return value
+  return new Intl.DateTimeFormat(locale, {
+    month: match[2] ? "short" : undefined,
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(Number(match[1]), match[2] ? Number(match[2]) - 1 : 0, 1)))
+}
+
+function formatCatalogModalities(values: string[], locale: string, unknown: string) {
+  if (values.length === 0) return unknown
+  const labels = values.map((value) => value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()))
+  if (labels.length === 1) return labels[0] ?? unknown
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(labels)
 }
 
 function formatInteger(value: number) {

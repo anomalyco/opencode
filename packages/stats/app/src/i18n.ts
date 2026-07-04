@@ -198,7 +198,7 @@ const en = {
   "model.knowledge": "Knowledge",
   "model.release": "Release",
   "model.inputs": "Inputs",
-  "model.overviewDescription": "Recent OpenCode Go tokens, unique users, and market position.",
+  "model.overviewDescription": "Recent tokens, unique users, and market position.",
   "model.noSummaryTitle": "No usage summary",
   "model.noSummaryDescription": "This model has no OpenCode Go usage rows yet.",
   "model.tokens": "Tokens",
