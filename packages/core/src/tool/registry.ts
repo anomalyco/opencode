@@ -14,6 +14,8 @@ import { definition, permission, registrationEntries, RegistrationError, settle,
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "../effect/app-node"
+import { SessionError } from "@opencode-ai/schema/session-error"
+import { toSessionError } from "../session/to-session-error"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -45,6 +47,7 @@ export interface Settlement {
   readonly result: ToolResultValue
   readonly output?: ToolOutput
   readonly outputPaths?: ReadonlyArray<string>
+  readonly error?: SessionError.Error
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
@@ -86,7 +89,10 @@ const registryLayer = Layer.effect(
       ).pipe(
         Effect.map((output) => ({ output })),
         Effect.catchTag("LLM.ToolFailure", (failure) =>
-          Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
+          Effect.succeed({
+            result: { type: "error" as const, value: failure.message },
+            error: toSessionError(failure),
+          }),
         ),
       )
       let settlement: Settlement
@@ -124,6 +130,7 @@ const registryLayer = Layer.effect(
         result: afterEvent.result,
         ...(afterEvent.output !== undefined ? { output: afterEvent.output } : {}),
         ...(afterEvent.outputPaths !== undefined ? { outputPaths: afterEvent.outputPaths } : {}),
+        ...(settlement.error !== undefined ? { error: settlement.error } : {}),
       }
     })
 
@@ -135,9 +142,13 @@ const registryLayer = Layer.effect(
             type: "error" as const,
             value: `Stale tool call: ${input.call.name}`,
           },
+          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}`, name: input.call.name },
         }
       if (registration.identity !== advertised)
-        return { result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` } }
+        return {
+          result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` },
+          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}`, name: input.call.name },
+        }
       return yield* settleTool(input, registration.tool)
     })
 
@@ -215,7 +226,10 @@ const registryLayer = Layer.effect(
             if (input.call.name === "execute" && execute) return settleTool(input, execute)
             const registration = direct.get(input.call.name)
             if (registration) return settleWith(input, registration.identity)
-            return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
+            return Effect.succeed({
+              result: { type: "error", value: `Unknown tool: ${input.call.name}` },
+              error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}`, name: input.call.name },
+            })
           },
         }
       }),

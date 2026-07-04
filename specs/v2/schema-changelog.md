@@ -13,6 +13,19 @@ Compatibility:
 - Existing changelog entries retain the names that were accurate when those changes occurred.
 - Behavior is unchanged: this is a vocabulary and contract rename only.
 
+## 2026-07-03: Add Execution Lifecycle, Retry, And Structured Session Errors
+
+- Replace live-only `session.execution.settled` and unused `session.retried` with durable v1 `session.execution.started`, `session.execution.succeeded`, `session.execution.failed`, `session.execution.interrupted`, and `session.retry.scheduled` events.
+- Add the closed, dot-cased `SessionError` wire union and browser-safe `FinishReason` contract.
+- Project retry state onto the current assistant and classify content-filter finishes as failed steps.
+- Reuse one projected assistant across pre-output retry steps; each provider call remains a distinct step and consumes agent allowance.
+
+Compatibility:
+
+- Experimental V2 event, sequence, input, and message-projection rows are reset. Durable event contracts restart at v1.
+- Execution lifecycle events are historical observations of one process-local coordinator busy period. Unmatched starts never establish current liveness or recovery work; `/api/session/active` remains the current-process liveness authority.
+- Scheduled retries are historical UI state after a crash and never trigger provider recovery.
+
 ## 2026-07-03: Require Durable Envelope On Durable Events
 
 - Make the wire `durable` envelope required on durable event definitions.

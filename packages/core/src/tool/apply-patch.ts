@@ -75,12 +75,12 @@ export const Plugin = {
               toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
-                const fail = (path: string) => {
+                const fail = (path: string, error?: unknown) => {
                   const prefix =
                     applied.length === 0
                       ? `Unable to apply patch at ${path}`
                       : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
-                  return new ToolFailure({ message: prefix })
+                  return new ToolFailure({ message: prefix, error })
                 }
                 return Effect.gen(function* () {
                   const source = {
@@ -152,7 +152,7 @@ export const Plugin = {
                         before,
                         after: update.content,
                       })
-                    }).pipe(Effect.mapError(() => fail(hunk.path)))
+                    }).pipe(Effect.mapError((error) => fail(hunk.path, error)))
                   }
 
                   const patchFiles = prepared.map(patchFile)
@@ -182,11 +182,11 @@ export const Plugin = {
                           content: change.content,
                         })
                         applied.push({ type: change.type, resource: result.resource, target: result.target })
-                      }).pipe(Effect.mapError(() => fail(change.path))),
+                      }).pipe(Effect.mapError((error) => fail(change.path, error))),
                     { discard: true },
                   )
                   return { applied, files: patchFiles }
-                }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))
+                }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))))
               },
             }),
             "edit",

@@ -102,7 +102,7 @@ export const Plugin = {
                 Effect.mapError((error) =>
                   error instanceof ToolFailure
                     ? error
-                    : new ToolFailure({ message: `Unable to find files matching ${input.pattern}` }),
+                    : new ToolFailure({ message: `Unable to find files matching ${input.pattern}`, error }),
                 ),
               ),
           }),

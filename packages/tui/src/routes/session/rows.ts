@@ -138,6 +138,14 @@ export function createSessionRows(sessionID: Accessor<string>) {
       }),
     )
 
+  const removeFooter = (messageID: string) =>
+    setRows(
+      produce((draft) => {
+        const index = draft.findIndex((row) => row.type === "assistant-footer" && row.messageID === messageID)
+        if (index !== -1) draft.splice(index, 1)
+      }),
+    )
+
   const latestFragmentRef = (messageID: string, kind: "text" | "reasoning") => {
     const message = data.session.message.get(sessionID(), messageID)
     const ordinal = message?.type === "assistant" ? message.content.filter((part) => part.type === kind).length - 1 : 0
@@ -189,6 +197,12 @@ export function createSessionRows(sessionID: Accessor<string>) {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.callID }, event.data.name)
     }),
+    data.on("session.retry.scheduled", (event) => {
+      if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
+    }),
+    data.on("session.step.started", (event) => {
+      if (event.data.sessionID === sessionID()) removeFooter(event.data.assistantMessageID)
+    }),
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
@@ -218,7 +232,7 @@ export function reduceSessionRows(messages: SessionMessage[], inputs = new Set<s
         if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
         append(rows, { messageID: message.id, partID }, part)
       })
-      if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error) {
+      if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error || message.retry) {
         completePrevious(rows)
         rows.push({ type: "assistant-footer", messageID: message.id })
       }

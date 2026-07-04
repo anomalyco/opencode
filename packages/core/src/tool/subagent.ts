@@ -107,7 +107,7 @@ export const Plugin = {
                   .get(context.sessionID)
                   .pipe(
                     Effect.mapError(
-                      () => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` }),
+                      (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                     ),
                   )
                 const agent = yield* agents.resolve(input.agent)
@@ -128,7 +128,7 @@ export const Plugin = {
                   })
                   .pipe(
                     Effect.mapError(
-                      () => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` }),
+                      (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                     ),
                   )
 

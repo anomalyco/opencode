@@ -10,6 +10,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
+import { SessionError } from "@opencode-ai/schema/session-error"
 import { Cause, Effect, Exit, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
@@ -32,6 +33,7 @@ import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTitle } from "../title"
@@ -44,6 +46,9 @@ import { SessionRunnerSystemPrompt } from "./system-prompt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+import { StepFailedError, UserInterruptedError } from "../error"
+import { toSessionError } from "../to-session-error"
+import { SessionRunnerRetry } from "./retry"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -54,10 +59,10 @@ import { llmClient } from "../../effect/app-node-platform"
  * - Session ownership and controls
  *   - [x] Coordinate one local active drain per Session; explicit resumes join and prompt wakeups coalesce.
  *   - [ ] Replace local ownership with durable multi-node ownership when clustered.
- *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
+ *   - [x] Publish durable historical execution lifecycle and bounded retry observations.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
  *   - [x] Honor optional agent step limits.
- *   - [ ] Bound provider retries and repeated identical tool calls.
+ *   - [ ] Bound repeated identical tool calls (provider retries are bounded).
  *
  * - Runtime context assembly
  *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
@@ -66,7 +71,7 @@ import { llmClient } from "../../effect/app-node-platform"
  *   - [x] Translate every projected V2 Session message variant into canonical
  *     `@opencode-ai/llm` messages.
  *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
- *   - [x] Stream exactly one `llm.stream(request)` physical attempt.
+ *   - [x] Stream exactly one `llm.stream(request)` call per attempt.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
  *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
  *   - [x] Persist reasoning, provider errors, and tool-call events incrementally as they arrive.
@@ -87,7 +92,7 @@ import { llmClient } from "../../effect/app-node-platform"
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
  *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
  *
- * Use `llm.stream(request)` for each physical attempt. Keep tool execution and continuation here.
+ * Use `llm.stream(request)` for each attempt. Keep tool execution and continuation here.
  * Durable continuation recovery remains a separate future slice with an explicit retry policy.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
@@ -137,14 +142,14 @@ const layer = Layer.effect(
             sessionID,
             assistantMessageID: message.id,
             callID: tool.id,
-            error: { type: "unknown", message: "Tool execution interrupted" },
+            error: { type: "tool.stale", message: "Tool execution interrupted", name: tool.name },
             executed: tool.executed === true,
           })
         }
       }
     })
 
-    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
+    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error | UserInterruptedError>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
     // Declining an interactive prompt halts the drain instead of becoming model-facing tool output.
@@ -173,6 +178,7 @@ const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      assistantMessageID?: SessionMessage.ID,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -186,7 +192,7 @@ const layer = Layer.effect(
         loadInstructions(agent, session.id),
         session.id,
       )
-      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
+      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | UserInterruptedError>()
       let needsContinuation = false
       let currentStep = step
       if (promotion) {
@@ -235,20 +241,21 @@ const layer = Layer.effect(
         model: resolved.ref,
         provider: model.provider,
         snapshot: startSnapshot,
+        assistantMessageID,
       })
       const publication = Semaphore.makeUnsafe(1)
       // Durable publishes are serialized so tool fibers and step settlement never interleave
       // mid-event.
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
-      const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
-        serialized(publisher.publish(event, outputPaths))
+      const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = [], error?: SessionError.Error) =>
+        serialized(publisher.publish(event, outputPaths, error))
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
-              if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
+              if (isContextOverflowFailure(event) && !publisher.hasRetryEvidence()) {
                 overflowFailure = event
                 return
               }
@@ -256,7 +263,12 @@ const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             if (!toolMaterialization) {
-              yield* serialized(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
+              yield* serialized(
+                publisher.failUnsettledTools({
+                  type: "tool.execution",
+                  message: "Tools are disabled after the maximum agent steps",
+                }),
+              )
               return
             }
             needsContinuation = true
@@ -279,6 +291,15 @@ const layer = Layer.effect(
                       output: settlement.output,
                     }),
                     settlement.outputPaths ?? [],
+                    settlement.error,
+                  ).pipe(
+                    Effect.andThen(
+                      settlement.error?.type === "permission.rejected"
+                        ? serialized(publisher.failAssistant(settlement.error)).pipe(
+                            Effect.andThen(Effect.fail(new UserInterruptedError())),
+                          )
+                        : Effect.void,
+                    ),
                   ),
                 ),
               ),
@@ -325,7 +346,7 @@ const layer = Layer.effect(
           // restart the step instead of surfacing the provider error.
           if (
             recoverOverflow &&
-            !publisher.hasAssistantStarted() &&
+            !publisher.hasRetryEvidence() &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
             (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, request })))
           )
@@ -337,8 +358,26 @@ const layer = Layer.effect(
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
-            yield* serialized(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* serialized(publisher.failAssistant(llmFailure.reason.message))
+            const error = toSessionError(llmFailure)
+            if (
+              SessionRunnerRetry.isRetryable(llmFailure) &&
+              !publisher.hasRetryEvidence() &&
+              (agent.info?.steps === undefined || currentStep < agent.info.steps)
+            ) {
+              return yield* new SessionRunnerRetry.RetryableFailure({
+                cause: llmFailure,
+                assistantMessageID: yield* publisher.startAssistant(),
+                error,
+                step: currentStep,
+              })
+            }
+            yield* serialized(
+              publisher.failUnsettledTools(
+                { type: "tool.result-missing", message: "Provider did not return a tool result" },
+                true,
+              ),
+            )
+            yield* serialized(publisher.failAssistant(error))
           }
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
@@ -348,26 +387,30 @@ const layer = Layer.effect(
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
           const toolsInterrupted = settled._tag === "Failure" && Cause.hasInterrupts(settled.cause)
           const userDeclined = settled._tag === "Failure" && isUserDeclined(settled.cause)
+          const settledError =
+            settled._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(settled.cause)) : undefined
+          const permissionRejected = settledError instanceof UserInterruptedError
 
-          if (userDeclined || streamInterrupted || toolsInterrupted) {
+          if (userDeclined || permissionRejected || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
-            yield* serialized(publisher.failUnsettledTools("Tool execution interrupted"))
-            yield* serialized(publisher.failAssistant("Step interrupted"))
+            yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
             if (userDeclined) return yield* Effect.interrupt
+            if (permissionRejected) return yield* new UserInterruptedError()
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
           // settles so the model may recover. A typed infrastructure failure (tool output
           // could not be persisted) also fails the assistant and then fails the drain.
-          const settledFailure = settled._tag === "Failure" && !toolsInterrupted ? settled.cause : undefined
+          const settledFailure =
+            settled._tag === "Failure" && !toolsInterrupted && !permissionRejected ? settled.cause : undefined
           const infraError =
             settledFailure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(settledFailure))
           if (settledFailure !== undefined) {
             const failure = infraError ?? Cause.squash(settledFailure)
-            const message = failure instanceof Error ? failure.message : String(failure)
-            yield* serialized(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
-            if (infraError !== undefined)
-              yield* serialized(publisher.failAssistant(`Tool execution failed: ${message}`))
+            const error = toSessionError(failure)
+            yield* serialized(publisher.failUnsettledTools(error))
+            if (infraError !== undefined) yield* serialized(publisher.failAssistant(error))
           }
 
           const stepSettlement = publisher.stepSettlement()
@@ -376,13 +419,21 @@ const layer = Layer.effect(
           if (stepSettlement && stepEndedCleanly) yield* publishStepEnd(stepSettlement)
           // A provider error orphans recorded local calls; a clean stream can still leave
           // hosted calls without results.
-          if (providerFailed) yield* serialized(publisher.failUnsettledTools("Tool execution interrupted"))
+          if (providerFailed)
+            yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
           if (stream._tag === "Success" && !providerFailed)
-            yield* serialized(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* serialized(
+              publisher.failUnsettledTools(
+                { type: "tool.result-missing", message: "Provider did not return a tool result" },
+                true,
+              ),
+            )
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && (toolsInterrupted || infraError !== undefined))
             return yield* Effect.failCause(settled.cause)
+          const stepFailure = publisher.stepFailure()
+          if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
           return {
             _tag: "Completed",
             needsContinuation: !providerFailed && needsContinuation,
@@ -403,8 +454,31 @@ const layer = Layer.effect(
       let recoverOverflow: typeof compaction.compactAfterOverflow | undefined = compaction.compactAfterOverflow
       let currentPromotion = promotion
       let currentStep = step
+      let assistantMessageID: SessionMessage.ID | undefined
       while (true) {
-        const attempt = yield* attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow)
+        const attempt = yield* Effect.suspend(() =>
+          attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
+        ).pipe(
+          Effect.tapError((error) =>
+            error instanceof SessionRunnerRetry.RetryableFailure
+              ? Effect.sync(() => {
+                  currentStep = error.step + 1
+                  assistantMessageID = error.assistantMessageID
+                  currentPromotion = undefined
+                })
+              : Effect.void,
+          ),
+          Effect.retryOrElse(SessionRunnerRetry.schedule(events, sessionID), (error) => {
+            if (!(error instanceof SessionRunnerRetry.RetryableFailure)) return Effect.fail(error)
+            return events
+              .publish(SessionEvent.Step.Failed, {
+                sessionID,
+                assistantMessageID: error.assistantMessageID,
+                error: error.error,
+              })
+              .pipe(Effect.andThen(Effect.fail(error.cause)))
+          }),
+        )
         if (attempt._tag === "Completed") return { needsContinuation: attempt.needsContinuation, step: attempt.step }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
         yield* Effect.yieldNow
@@ -413,8 +487,7 @@ const layer = Layer.effect(
       }
     })
 
-    // ExecutionSettled is published per execution (busy period) by SessionExecution, not per
-    // drain here.
+    // Execution lifecycle is published per busy period by SessionExecution, not per drain here.
     const drain = Effect.fn("SessionRunner.drain")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean

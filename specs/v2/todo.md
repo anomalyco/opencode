@@ -55,7 +55,7 @@ Next reviewed slices:
 
 ### Deferred durable continuation recovery
 
-Do not infer that ambiguous provider work is safe to retry from an advisory wake.
+Do not infer that ambiguous provider work is safe to retry from an advisory wake, an unmatched historical `session.execution.started` event, or a surviving `session.retry.scheduled` projection.
 The first inbox-driven runner intentionally omits outer physical-attempt markers
 until they have a concrete consumer and a complete recovery policy.
 

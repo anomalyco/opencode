@@ -1,5 +1,5 @@
 import { castDraft, produce, type WritableDraft } from "immer"
-import { Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 
@@ -111,6 +111,17 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       if (assistant) yield* adapter.updateAssistant(produce(assistant, recipe))
     })
 
+  const clearCurrentRetry = Effect.gen(function* () {
+    const assistant = yield* adapter.getCurrentAssistant()
+    if (assistant?.retry) {
+      yield* adapter.updateAssistant(
+        produce(assistant, (draft) => {
+          draft.retry = undefined
+        }),
+      )
+    }
+  })
+
   return Effect.gen(function* () {
     yield* SessionEvent.All.match(event, {
       "session.agent.selected": (event) => {
@@ -144,7 +155,10 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.forked": () => Effect.void,
       "session.prompt.promoted": () => Effect.void,
       "session.prompt.admitted": () => Effect.void,
-      "session.execution.settled": () => Effect.void,
+      "session.execution.started": () => Effect.void,
+      "session.execution.succeeded": () => clearCurrentRetry,
+      "session.execution.failed": () => clearCurrentRetry,
+      "session.execution.interrupted": () => clearCurrentRetry,
       "session.instructions.updated": (event) =>
         adapter.appendMessage(
           SessionMessage.System.make({
@@ -206,10 +220,26 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.step.started": (event) => {
         return Effect.gen(function* () {
+          const existing = yield* adapter.getAssistant(event.data.assistantMessageID)
+          if (existing) {
+            yield* adapter.updateAssistant(
+              produce(existing, (draft) => {
+                draft.agent = event.data.agent
+                draft.model = castDraft(event.data.model)
+                draft.retry = undefined
+                draft.error = undefined
+                draft.finish = undefined
+                draft.time.completed = undefined
+                if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
+              }),
+            )
+            return
+          }
           const currentAssistant = yield* adapter.getCurrentAssistant()
           if (currentAssistant) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
+                draft.retry = undefined
                 draft.time.completed = event.created
               }),
             )
@@ -245,7 +275,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = event.created
           draft.finish = "error"
-          draft.error = event.data.error
+          draft.error = castDraft(event.data.error)
+          draft.retry = undefined
         })
       },
       "session.text.started": (event) => {
@@ -384,7 +415,15 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.retried": () => Effect.void,
+      "session.retry.scheduled": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.retry = {
+            attempt: event.data.attempt,
+            at: DateTime.makeUnsafe(event.data.at),
+            error: castDraft(event.data.error),
+          }
+        })
+      },
       "session.compaction.started": () => Effect.void,
       "session.compaction.delta": () => Effect.void,
       "session.compaction.ended": (event) => {

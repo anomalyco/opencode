@@ -113,8 +113,9 @@ export const Plugin = {
                       error instanceof FileMutation.StaleContentError
                         ? new ToolFailure({
                             message: "File changed after permission approval. Read it again before editing.",
+                            error,
                           })
-                        : new ToolFailure({ message: `Unable to edit ${input.path}` }),
+                        : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
                     ),
                   )
 

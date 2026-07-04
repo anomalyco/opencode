@@ -270,7 +270,9 @@ export const Plugin = {
                   ...(warnings.length ? { warnings } : {}),
                 }
               }).pipe(
-                Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` })),
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
+                ),
               ),
           }),
         ),

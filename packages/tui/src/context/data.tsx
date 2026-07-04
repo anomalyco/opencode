@@ -273,7 +273,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "info", event.data.sessionID, "title", event.data.title)
           break
         case "session.prompt.promoted": {
-          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
             if (position === undefined) return
@@ -335,7 +334,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.shell.started":
-          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
@@ -346,7 +344,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.shell.ended":
-          setSessionStatus(event.data.sessionID, "idle")
           message.update(event.data.sessionID, (draft) => {
             const match = message.shell(draft, event.data.shell.id)
             if (!match) return
@@ -356,11 +353,24 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.step.started":
-          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
-            if (index.has(event.data.assistantMessageID)) return
+            const position = index.get(event.data.assistantMessageID)
+            const existing = position === undefined ? undefined : draft[position]
+            if (existing?.type === "assistant") {
+              existing.agent = event.data.agent
+              existing.model = event.data.model
+              existing.retry = undefined
+              existing.error = undefined
+              existing.finish = undefined
+              existing.time.completed = undefined
+              if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
+              return
+            }
             const currentAssistant = message.activeAssistant(draft)
-            if (currentAssistant) currentAssistant.time.completed = event.created
+            if (currentAssistant) {
+              currentAssistant.retry = undefined
+              currentAssistant.time.completed = event.created
+            }
             message.append(draft, index, {
               id: event.data.assistantMessageID,
               type: "assistant",
@@ -373,7 +383,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.step.ended":
-          setSessionStatus(event.data.sessionID, "running")
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
             if (!currentAssistant) return
@@ -392,6 +401,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             currentAssistant.time.completed = event.created
             currentAssistant.finish = "error"
             currentAssistant.error = event.data.error
+            currentAssistant.retry = undefined
           })
           break
         case "session.text.started":
@@ -532,17 +542,33 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             }
           })
           break
-        case "session.compaction.started":
+        case "session.retry.scheduled":
+          message.update(event.data.sessionID, (draft, index) => {
+            const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
+            if (!currentAssistant) return
+            currentAssistant.retry = {
+              attempt: event.data.attempt,
+              at: event.data.at,
+              error: event.data.error,
+            }
+          })
+          break
+        case "session.execution.started":
           setSessionStatus(event.data.sessionID, "running")
+          break
+        case "session.compaction.started":
           setStore("session", "compaction", event.data.sessionID, "")
           break
-        case "session.retried":
-          setSessionStatus(event.data.sessionID, "running")
-          break
-        case "session.execution.settled":
+        case "session.execution.succeeded":
+        case "session.execution.failed":
+        case "session.execution.interrupted":
           setSessionStatus(event.data.sessionID, "idle")
           if (store.session.compaction[event.data.sessionID] !== undefined)
             setStore("session", "compaction", event.data.sessionID, undefined)
+          message.update(event.data.sessionID, (draft) => {
+            const currentAssistant = message.activeAssistant(draft)
+            if (currentAssistant) currentAssistant.retry = undefined
+          })
           break
         case "session.revert.staged":
           if (store.session.info[event.data.sessionID])

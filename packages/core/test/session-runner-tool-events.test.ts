@@ -147,3 +147,37 @@ test("step finish records settlement without publishing step ended", async () =>
   expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
 })
+
+test("content-filter finish fails a contentless step", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "content-filter" })))
+
+  expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
+  expect(published.at(-1)?.data).toMatchObject({
+    error: { type: "provider.content-filter", message: "Provider blocked the response" },
+  })
+  expect(publisher.stepSettlement()).toBeUndefined()
+})
+
+test("content-filter finish preserves partial streamed text and never ends the step successfully", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Partial" }),
+        LLMEvent.stepFinish({ index: 0, reason: "content-filter" }),
+      ],
+      (event) => publisher.publish(event),
+      { discard: true },
+    ),
+  )
+
+  expect(published.some((event) => event.type === "session.step.ended.1")).toBe(false)
+  expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({ text: "Partial" })
+  expect(published.find((event) => event.type === "session.step.failed.1")?.data).toMatchObject({
+    error: { type: "provider.content-filter" },
+  })
+})

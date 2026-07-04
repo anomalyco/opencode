@@ -198,6 +198,17 @@ test("renders synthetic messages with descriptions", () => {
   ])
 })
 
+test("renders a footer for a pre-output retry assistant after replay", () => {
+  const message = assistant("assistant-retry", [])
+  message.retry = {
+    attempt: 2,
+    at: 2_000,
+    error: { type: "provider.transport", message: "Disconnected" },
+  }
+
+  expect(reduceSessionRows([message])).toEqual([{ type: "assistant-footer", messageID: "assistant-retry" }])
+})
+
 function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
   return {
     type: "assistant",

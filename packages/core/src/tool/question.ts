@@ -76,7 +76,7 @@ export const Plugin = {
                   source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
                 })
                 .pipe(
-                  Effect.mapError(() => new ToolFailure({ message: "Permission denied: question" })),
+                  Effect.mapError((error) => new ToolFailure({ message: "Permission denied: question", error })),
                   Effect.andThen(
                     forms
                       .ask({

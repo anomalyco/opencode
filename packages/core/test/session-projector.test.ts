@@ -437,6 +437,73 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("projects retry state and clears it at the next step or execution terminal", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const first = SessionMessage.ID.make("msg_retry_first")
+      const second = SessionMessage.ID.make("msg_retry_second")
+      yield* events.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: first, agent: "build", model })
+      yield* events.publish(SessionEvent.RetryScheduled, {
+        sessionID,
+        assistantMessageID: first,
+        attempt: 2,
+        at: 2_000,
+        error: { type: "provider.transport", message: "Disconnected" },
+      })
+
+      const decode = (row: typeof SessionMessageTable.$inferSelect) =>
+        Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type })
+      const firstRow = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, first))
+        .get()
+        .pipe(Effect.orDie)
+      const projected = firstRow ?? (yield* Effect.die(new Error("Missing retry projection")))
+      expect(decode(projected)).toMatchObject({
+        retry: { attempt: 2, at: DateTime.makeUnsafe(2_000), error: { type: "provider.transport" } },
+      })
+
+      yield* events.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: second, agent: "build", model })
+      yield* events.publish(SessionEvent.RetryScheduled, {
+        sessionID,
+        assistantMessageID: second,
+        attempt: 3,
+        at: 6_000,
+        error: { type: "provider.internal", message: "Unavailable" },
+      })
+      yield* events.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      expect(decode(rows[0])).not.toHaveProperty("retry")
+      expect(decode(rows[1])).not.toHaveProperty("retry")
+    }),
+  )
+
   it.effect("updates only the newest incomplete assistant projection", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

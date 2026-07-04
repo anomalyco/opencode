@@ -676,9 +676,23 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "session.execution.settled") {
+    if (event.type === "session.execution.started") {
+      child.status = "running"
+      touch(child, event.created)
+      input.emit()
+      return
+    }
+    if (
+      event.type === "session.execution.succeeded" ||
+      event.type === "session.execution.failed" ||
+      event.type === "session.execution.interrupted"
+    ) {
       child.status =
-        event.data.outcome === "success" ? "completed" : event.data.outcome === "interrupted" ? "cancelled" : "error"
+        event.type === "session.execution.succeeded"
+          ? "completed"
+          : event.type === "session.execution.interrupted"
+            ? "cancelled"
+            : "error"
       touch(child, event.created)
       input.emit()
     }

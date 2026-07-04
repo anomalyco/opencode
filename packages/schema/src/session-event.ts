@@ -4,15 +4,17 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
 import { ToolContent } from "./llm.js"
+import { FinishReason } from "./llm.js"
 import { Delivery } from "./session-delivery.js"
 import { Model } from "./model.js"
-import { NonNegativeInt, RelativePath } from "./schema.js"
+import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { FileAttachment, Prompt } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
 import { Revert } from "./revert.js"
 import { Shell as ShellSchema } from "./shell.js"
+import { SessionError } from "./session-error.js"
 
 export { FileAttachment }
 
@@ -41,16 +43,6 @@ const options = {
     version: 1,
   },
 } as const
-const stepSettlementOptions = {
-  durable: {
-    aggregate: "sessionID",
-    version: 1,
-  },
-} as const
-
-export const UnknownError = SessionMessage.UnknownError
-export type UnknownError = SessionMessage.UnknownError
-
 export const AgentSelected = Event.durable({
   type: "session.agent.selected",
   ...options,
@@ -120,15 +112,27 @@ export const PromptAdmitted = Event.durable({
 })
 export type PromptAdmitted = typeof PromptAdmitted.Type
 
-export const ExecutionSettled = Event.ephemeral({
-  type: "session.execution.settled",
-  schema: {
-    ...Base,
-    outcome: Schema.Literals(["success", "failure", "interrupted"]),
-    error: UnknownError.pipe(optional),
-  },
-})
-export type ExecutionSettled = typeof ExecutionSettled.Type
+export namespace Execution {
+  export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
+  export type Started = typeof Started.Type
+
+  export const Succeeded = Event.durable({ type: "session.execution.succeeded", ...options, schema: Base })
+  export type Succeeded = typeof Succeeded.Type
+
+  export const Failed = Event.durable({
+    type: "session.execution.failed",
+    ...options,
+    schema: { ...Base, error: SessionError.Error },
+  })
+  export type Failed = typeof Failed.Type
+
+  export const Interrupted = Event.durable({
+    type: "session.execution.interrupted",
+    ...options,
+    schema: { ...Base, reason: Schema.Literals(["user", "shutdown", "superseded"]) },
+  })
+  export type Interrupted = typeof Interrupted.Type
+}
 
 export const InstructionsUpdated = Event.durable({
   type: "session.instructions.updated",
@@ -204,11 +208,11 @@ export namespace Step {
 
   export const Ended = Event.durable({
     type: "session.step.ended",
-    ...stepSettlementOptions,
+    ...options,
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      finish: Schema.String,
+      finish: FinishReason,
       cost: Schema.Finite,
       tokens: Schema.Struct({
         input: Schema.Finite,
@@ -227,11 +231,11 @@ export namespace Step {
 
   export const Failed = Event.durable({
     type: "session.step.failed",
-    ...stepSettlementOptions,
+    ...options,
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      error: UnknownError,
+      error: SessionError.Error,
     },
   })
   export type Failed = typeof Failed.Type
@@ -393,7 +397,7 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      error: UnknownError,
+      error: SessionError.Error,
       result: Schema.Unknown.pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
@@ -402,28 +406,18 @@ export namespace Tool {
   export type Failed = typeof Failed.Type
 }
 
-export const RetryError = Schema.Struct({
-  message: Schema.String,
-  statusCode: Schema.Finite.pipe(optional),
-  isRetryable: Schema.Boolean,
-  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(optional),
-  responseBody: Schema.String.pipe(optional),
-  metadata: Schema.Record(Schema.String, Schema.String).pipe(optional),
-}).annotate({
-  identifier: "session.retry.error",
-})
-export interface RetryError extends Schema.Schema.Type<typeof RetryError> {}
-
-export const Retried = Event.durable({
-  type: "session.retried",
+export const RetryScheduled = Event.durable({
+  type: "session.retry.scheduled",
   ...options,
   schema: {
     ...Base,
-    attempt: Schema.Finite,
-    error: RetryError,
+    assistantMessageID: SessionMessage.ID,
+    attempt: PositiveInt,
+    at: NonNegativeInt,
+    error: SessionError.Error,
   },
 })
-export type Retried = typeof Retried.Type
+export type RetryScheduled = typeof RetryScheduled.Type
 
 export namespace Compaction {
   export const Started = Event.durable({
@@ -480,7 +474,10 @@ export const Definitions = Event.inventory(
   Forked,
   PromptPromoted,
   PromptAdmitted,
-  ExecutionSettled,
+  Execution.Started,
+  Execution.Succeeded,
+  Execution.Failed,
+  Execution.Interrupted,
   InstructionsUpdated,
   Synthetic,
   Skill.Activated,
@@ -502,7 +499,7 @@ export const Definitions = Event.inventory(
   Tool.Progress,
   Tool.Success,
   Tool.Failed,
-  Retried,
+  RetryScheduled,
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,

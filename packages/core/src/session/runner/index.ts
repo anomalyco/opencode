@@ -3,13 +3,19 @@ export * as SessionRunner from "./index"
 import type { LLMError } from "@opencode-ai/llm"
 import { Context, Effect } from "effect"
 import { SessionSchema } from "../schema"
-import type { MessageDecodeError } from "../error"
+import type { MessageDecodeError, StepFailedError, UserInterruptedError } from "../error"
 import { SessionRunnerModel } from "./model"
 import type { Instructions } from "../../instructions/index"
 import type { ToolOutputStore } from "../../tool-output-store"
 
 export type RunError =
-  LLMError | SessionRunnerModel.Error | MessageDecodeError | Instructions.InitializationBlocked | ToolOutputStore.Error
+  | LLMError
+  | SessionRunnerModel.Error
+  | MessageDecodeError
+  | StepFailedError
+  | UserInterruptedError
+  | Instructions.InitializationBlocked
+  | ToolOutputStore.Error
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
