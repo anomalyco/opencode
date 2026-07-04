@@ -1254,6 +1254,11 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+            const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+            const lastUserTextPart = lastUserMsg?.parts.find((p) => p.type === "text" && !("synthetic" in p && p.synthetic))
+            if (lastUserTextPart && !lastUserTextPart.text.includes("<system-reminder>"))
+              lastUserTextPart.text += `\n\n<system-reminder>${new Date(lastUser.info.time.created).toString()}</system-reminder>`
+
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
