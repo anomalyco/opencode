@@ -5,6 +5,7 @@ import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { FileSystem } from "../filesystem"
+import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
@@ -36,6 +37,7 @@ export const toModelOutput = (output: ModelOutput) => {
 export const Plugin = {
   id: "core-glob-tool",
   effect: Effect.fn("GlobTool.Plugin")(function* (ctx: PluginContext) {
+    const fs = yield* FSUtil.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
@@ -71,6 +73,13 @@ export const Plugin = {
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const cwd = path.resolve(location.directory, input.path ?? ".")
+              yield* fs
+                .stat(cwd)
+                .pipe(
+                  Effect.catchReason("PlatformError", "NotFound", () =>
+                    Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
+                  ),
+                )
               return yield* ripgrep
                 .glob({
                   cwd,
@@ -88,7 +97,11 @@ export const Plugin = {
                   ),
                 )
             }).pipe(
-              Effect.mapError(() => new ToolFailure({ message: `Unable to find files matching ${input.pattern}` })),
+              Effect.mapError((error) =>
+                error instanceof ToolFailure
+                  ? error
+                  : new ToolFailure({ message: `Unable to find files matching ${input.pattern}` }),
+              ),
             ),
         }),
       })
