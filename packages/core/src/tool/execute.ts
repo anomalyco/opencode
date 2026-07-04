@@ -63,7 +63,6 @@ const create = (items: CodeModeTools) => {
     }
 
     return CodeMode.make({
-      limits: { timeoutMs: 5 * 60_000, maxToolCalls: 100 },
       tools,
       onToolCallStart: (call) =>
         Effect.sync(() => {
