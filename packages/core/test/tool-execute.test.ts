@@ -29,13 +29,13 @@ const tool = new MCP.Tool({
 })
 
 function make(
-  items: ReadonlyArray<ExecuteTool.Item>,
+  items: ReadonlyArray<MCP.Tool>,
   callTool: MCP.Interface["callTool"],
   assert: PermissionV2.Interface["assert"] = () => Effect.void,
 ) {
   const mcp = MCP.Service.of({
     servers: () => Effect.succeed([]),
-    tools: () => Effect.succeed(items.map((item) => item.tool)),
+    tools: () => Effect.succeed([...items]),
     callTool,
     instructions: () => Effect.succeed([]),
     prompts: () => Effect.succeed([]),
@@ -65,7 +65,7 @@ describe("execute tool", () => {
       const assertions: PermissionV2.AssertInput[] = []
       yield* registry.register({
         execute: yield* make(
-          [{ action: "mcp:context7:resolve-library-id", tool }],
+          [tool],
           (input) =>
             Effect.sync(() => {
               calls.push({ server: input.server.toString(), name: input.name, args: input.args })
@@ -164,19 +164,16 @@ describe("execute tool", () => {
       yield* registry.register({
         execute: yield* make(
           [
-            {
-              action: "mcp:github:search_issues",
-              tool: new MCP.Tool({
-                server: MCP.ServerName.make("github"),
-                name: "search_issues",
-                description: "Search issues",
-                inputSchema: {
-                  type: "object",
-                  properties: { query: { type: "string" } },
-                  required: ["query"],
-                },
-              }),
-            },
+            new MCP.Tool({
+              server: MCP.ServerName.make("github"),
+              name: "search_issues",
+              description: "Search issues",
+              inputSchema: {
+                type: "object",
+                properties: { query: { type: "string" } },
+                required: ["query"],
+              },
+            }),
           ],
           () => Effect.die("callTool should not run when permission fails"),
           () =>

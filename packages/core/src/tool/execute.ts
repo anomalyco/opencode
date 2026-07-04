@@ -1,21 +1,10 @@
 export * as ExecuteTool from "./execute"
 
-import {
-  CodeMode,
-  Tool,
-  toolError,
-  type ExecuteResult,
-  type JsonSchema,
-  type ToolCallEnded,
-  type ToolCallStarted,
-  type ToolDefinition,
-} from "@opencode-ai/codemode"
+import { CodeMode, Tool, toolError, type ToolDefinition } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
 import { MCP } from "../mcp"
 import { PermissionV2 } from "../permission"
 import { make, type Context } from "./tool"
-
-const LIMITS = { timeoutMs: 5 * 60_000, maxToolCalls: 100 } as const
 
 export const Input = Schema.Struct({
   code: Schema.String.annotate({ description: "Code to execute using the available MCP tools" }),
@@ -39,22 +28,9 @@ export const Output = Schema.Struct({
   attachments: Schema.Array(Attachment),
 })
 
-const Structured = Schema.Struct({
-  output: Output.fields.output,
-  toolCalls: Output.fields.toolCalls,
-  error: Output.fields.error,
-})
-
 type ExecuteCall = typeof Call.Type
 
-export interface Item {
-  readonly action: string
-  readonly tool: MCP.Tool
-  readonly namespace?: string
-  readonly member?: string
-}
-
-const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Item>) {
+const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<MCP.Tool>) {
   const mcp = yield* MCP.Service
   const permission = yield* PermissionV2.Service
 
@@ -62,23 +38,26 @@ const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Ite
     const tools: Record<string, Record<string, ToolDefinition>> = Object.create(null)
     const names = new Map<string, string>()
     for (const item of items) {
-      const namespace = item.namespace ?? item.tool.server.toString()
-      const member = item.member ?? item.tool.name
+      const namespace = item.server.toString().replace(/[^A-Za-z0-9_-]/g, "_")
+      const member = item.name.replace(/[^A-Za-z0-9_-]/g, "_")
       tools[namespace] ??= Object.create(null)
       tools[namespace][member] = Tool.make({
-        description: item.tool.description ?? item.tool.name,
-        input: jsonSchema(item.tool.inputSchema),
+        description: item.description ?? item.name,
+        input:
+          typeof item.inputSchema === "object" && item.inputSchema !== null && !Array.isArray(item.inputSchema)
+            ? { ...item.inputSchema }
+            : { type: "object", properties: {} },
         run: (input) => {
           if (!context) return Effect.die(new Error("Execute tool context is unavailable"))
-          const args = recordInput(input)
+          const args = typeof input === "object" && input !== null && !Array.isArray(input) ? { ...input } : {}
           return permission
             .assert({
               sessionID: context.sessionID,
               agent: context.agent,
-              action: item.action,
+              action: `mcp:${item.server}:${item.name}`,
               resources: ["*"],
               save: ["*"],
-              metadata: { server: item.tool.server, tool: item.tool.name, arguments: args },
+              metadata: { server: item.server, tool: item.name, arguments: args },
               source: {
                 type: "tool",
                 messageID: context.assistantMessageID,
@@ -89,33 +68,43 @@ const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Ite
               Effect.mapError((error) =>
                 toolError(error instanceof PermissionV2.CorrectedError ? error.feedback : "Permission denied"),
               ),
-              Effect.flatMap(() => mcp.callTool({ server: item.tool.server, name: item.tool.name, args })),
+              Effect.flatMap(() => mcp.callTool({ server: item.server, name: item.name, args })),
               Effect.catchTags({
                 "MCP.NotFoundError": (error) => Effect.fail(toolError(`MCP server "${error.server}" is not available`)),
                 "MCP.ToolCallError": (error) => Effect.fail(toolError(error.message)),
               }),
               Effect.flatMap((result) => {
-                if (result.isError)
-                  return Effect.fail(toolError(errorText(result.content) || "MCP tool returned an error"))
-                for (const part of result.content) {
-                  if (part.type === "media") attachments.push({ data: part.data, mime: part.mimeType })
-                }
-                return Effect.succeed(projectResult(result))
+                const text = result.content
+                  .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                  .join("\n")
+                  .trim()
+                if (result.isError) return Effect.fail(toolError(text || "MCP tool returned an error"))
+                attachments.push(
+                  ...result.content.flatMap((part) =>
+                    part.type === "media" ? [{ data: part.data, mime: part.mimeType }] : [],
+                  ),
+                )
+                if (result.structured !== undefined) return Effect.succeed(result.structured)
+                const media = result.content.filter((part) => part.type === "media").length
+                if (media === 0) return Effect.succeed(text)
+                return Effect.succeed(
+                  [text, `[${media} media attachment${media === 1 ? "" : "s"}]`].filter(Boolean).join("\n"),
+                )
               }),
             )
         },
       })
-      names.set(`${namespace}.${member}`, `${item.tool.server}.${item.tool.name}`)
+      names.set(`${namespace}.${member}`, `${item.server}.${item.name}`)
     }
 
     return CodeMode.make({
-      limits: LIMITS,
+      limits: { timeoutMs: 5 * 60_000, maxToolCalls: 100 },
       tools,
-      onToolCallStart: (call: ToolCallStarted) =>
+      onToolCallStart: (call) =>
         Effect.sync(() => {
           calls[call.index] = { tool: names.get(call.name) ?? call.name, status: "running", input: call.input }
         }),
-      onToolCallEnd: (call: ToolCallEnded) =>
+      onToolCallEnd: (call) =>
         Effect.sync(() => {
           calls[call.index] = {
             tool: names.get(call.name) ?? call.name,
@@ -130,7 +119,11 @@ const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Ite
     description: createRuntime([], []).instructions(),
     input: Input,
     output: Output,
-    structured: Structured,
+    structured: Schema.Struct({
+      output: Output.fields.output,
+      toolCalls: Output.fields.toolCalls,
+      error: Output.fields.error,
+    }),
     toStructuredOutput: ({ output }) => ({
       output: output.output,
       toolCalls: output.toolCalls,
@@ -145,8 +138,13 @@ const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Ite
         const calls: ExecuteCall[] = []
         const attachments: Array<typeof Attachment.Type> = []
         const result = yield* createRuntime(calls, attachments, context).execute(input.code)
+        const logs = result.logs?.length ? `\n\nLogs:\n${result.logs.join("\n")}` : ""
         return {
-          output: formatResult(result),
+          output: !result.ok
+            ? `${result.error.message}${logs}`
+            : typeof result.value === "string"
+              ? result.value + logs
+              : `${JSON.stringify(result.value, null, 2) ?? "null"}${logs}`,
           toolCalls: calls,
           ...(result.ok ? {} : { error: true as const }),
           attachments,
@@ -156,37 +154,3 @@ const create = Effect.fn("ExecuteTool.make")(function* (items: ReadonlyArray<Ite
 })
 
 export { create as make }
-
-function recordInput(input: unknown): Record<string, unknown> {
-  return isRecord(input) ? input : {}
-}
-
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null && !Array.isArray(input)
-}
-
-function jsonSchema(input: unknown): JsonSchema {
-  return isRecord(input) ? (input as JsonSchema) : { type: "object", properties: {} }
-}
-
-function errorText(content: ReadonlyArray<MCP.ToolResultContent>) {
-  return content
-    .flatMap((part) => (part.type === "text" ? [part.text] : []))
-    .join("\n")
-    .trim()
-}
-
-function projectResult(result: MCP.ToolResult) {
-  if (result.structured !== undefined) return result.structured
-  const text = errorText(result.content)
-  const media = result.content.filter((part) => part.type === "media").length
-  if (media === 0) return text
-  return [text, `[${media} media attachment${media === 1 ? "" : "s"}]`].filter(Boolean).join("\n")
-}
-
-function formatResult(result: ExecuteResult) {
-  const logs = result.logs?.length ? `\n\nLogs:\n${result.logs.join("\n")}` : ""
-  if (!result.ok) return `${result.error.message}${logs}`
-  if (typeof result.value === "string") return result.value + logs
-  return `${JSON.stringify(result.value, null, 2) ?? "null"}${logs}`
-}

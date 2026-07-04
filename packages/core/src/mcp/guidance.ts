@@ -5,7 +5,6 @@ import { AgentV2 } from "../agent"
 import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
 import { SystemContext } from "../system-context/index"
-import { McpTool } from "../tool/mcp"
 import { MCP } from "./index"
 
 const Summary = Schema.Struct({
@@ -75,8 +74,7 @@ export const layer = Layer.effect(
               owned.length === 0 ||
               owned.some(
                 (tool) =>
-                  PermissionV2.evaluate(McpTool.permissionAction(tool.server, tool.name), "*", agent.permissions)
-                    .effect !== "deny",
+                  PermissionV2.evaluate(`mcp:${tool.server}:${tool.name}`, "*", agent.permissions).effect !== "deny",
               )
             )
           })

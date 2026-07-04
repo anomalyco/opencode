@@ -160,14 +160,7 @@ describe("MCP tool plugin", () => {
         const registry = yield* ToolRegistry.Service
         yield* waitForTool(registry, "execute")
         const definition = (yield* toolDefinitions(registry))[0]
-        const path = definition.description.match(/tools\.(mcp__codemode_[a-f0-9]{8})\.(mcp_foo_bar_[a-f0-9]{8})/)
-        expect(path).not.toBeNull()
-        const namespace = path?.[1]
-        const member = path?.[2]
-        if (!namespace || !member) {
-          yield* Effect.die("MCP aliases were not advertised")
-          return
-        }
+        expect(definition.description).toContain("tools._codemode.foo_bar")
 
         const settlement = yield* settleTool(registry, {
           sessionID,
@@ -176,7 +169,7 @@ describe("MCP tool plugin", () => {
             type: "tool-call",
             id: "call_mcp_aliased",
             name: "execute",
-            input: { code: `return await tools.${namespace}.${member}({ query: "react" })` },
+            input: { code: 'return await tools._codemode.foo_bar({ query: "react" })' },
           },
         })
 
