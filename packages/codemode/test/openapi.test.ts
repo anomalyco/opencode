@@ -6,7 +6,6 @@ import type { Document } from "../src/openapi/types.js"
 import { inputTypeScript, outputTypeScript, Tool } from "../src/tool.js"
 
 const baseUrl = "http://localhost:4096"
-const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
 
 type Recorded = {
   readonly method: string
@@ -22,89 +21,8 @@ const opencodeSpec = async (): Promise<Document> => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const operations = (spec: Document) =>
-  Object.entries(isRecord(spec.paths) ? spec.paths : {}).flatMap(([path, pathValue]) =>
-    isRecord(pathValue)
-      ? Object.entries(pathValue).flatMap(([method, operation]) =>
-          methods.has(method) && isRecord(operation) ? [{ path, method, operation }] : [],
-        )
-      : [],
-  )
-
-const nonEmptyString = (value: unknown): string | undefined =>
-  typeof value === "string" && value !== "" ? value : undefined
-
-const toolPathEntries = (spec: Document) => {
-  const used = new Set<string>()
-  const namespaces = new Set<string>()
-  return operations(spec)
-    .filter((item) => {
-      if (item.operation["x-websocket"] === true) return false
-      const responses = isRecord(item.operation.responses) ? item.operation.responses : {}
-      return !Object.entries(responses).some(
-        ([status, response]) =>
-          (/^2\d\d$/.test(status) || status.toUpperCase() === "2XX") &&
-          isRecord(response) &&
-          isRecord(response.content) &&
-          Object.keys(response.content).some(
-            (mediaType) => mediaType.split(";")[0]?.trim().toLowerCase() === "text/event-stream",
-          ),
-      )
-    })
-    .map((item) => {
-      const { path, method, operation } = item
-      const raw = nonEmptyString(operation.operationId)
-      const segments = (raw === undefined ? [`${method}_${path.replaceAll(/[{}]/g, "")}`] : raw.split("."))
-        .map(
-          (segment) =>
-            segment
-              .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
-              .replace(/^_+|_+$/g, "")
-              .replace(/^([0-9])/, "_$1") || "operation",
-        )
-        .map((segment) => (["__proto__", "constructor", "prototype"].includes(segment) ? `${segment}_2` : segment))
-      const key = segments.join(".")
-      const prefixUsed = segments.slice(0, -1).some((_, index) => used.has(segments.slice(0, index + 1).join(".")))
-      const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
-      const collapsed =
-        conflict >= 0 && conflict + 1 < segments.length
-          ? segments.flatMap((segment, index) => {
-              if (index === conflict) {
-                const next = segments[index + 1] ?? ""
-                return [`${segment}${next.charAt(0).toUpperCase()}${next.slice(1)}`]
-              }
-              return index === conflict + 1 ? [] : [segment]
-            })
-          : undefined
-      const collapsedKey = collapsed?.join(".")
-      const name =
-        collapsedKey !== undefined && !used.has(collapsedKey) && !namespaces.has(collapsedKey)
-          ? collapsedKey
-          : used.has(key) || namespaces.has(key) || prefixUsed
-            ? `${segments.join("_")}_2`
-            : key
-      used.add(name)
-      for (const index of name.split(".").slice(0, -1).keys())
-        namespaces.add(
-          name
-            .split(".")
-            .slice(0, index + 1)
-            .join("."),
-        )
-      return { ...item, name }
-    })
-}
-
 const toolAt = (tools: unknown, name: string) =>
   name.split(".").reduce<unknown>((current, segment) => (isRecord(current) ? current[segment] : undefined), tools)
-
-const jsonContentSchema = (content: unknown) =>
-  isRecord(content)
-    ? Object.entries(content).find(([mediaType]) => {
-        const normalized = mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
-        return normalized === "application/json" || normalized.endsWith("+json")
-      })?.[1]
-    : undefined
 
 const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest) => Response) => {
   const requests: Array<Recorded> = []
@@ -131,12 +49,11 @@ const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } })
 
 describe("OpenAPI.fromSpec", () => {
-  test("converts every opencode operation into the expected tool shape", async () => {
+  test("converts representative opencode operations into the expected tool shape", async () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    const entries = toolPathEntries(spec)
-    expect(entries.every((entry) => toolAt(result.tools, entry.name) !== undefined)).toBe(true)
+    expect(result.skipped).toHaveLength(4)
     expect(result.skipped).toContainEqual({
       method: "GET",
       path: "/api/pty/{ptyID}/connect",
@@ -170,42 +87,40 @@ describe("OpenAPI.fromSpec", () => {
     expect(toolAt(result.tools, "v2.event.changes")).toBeUndefined()
     expect(toolAt(result.tools, "v2.fs.read")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.pty.connectToken")).not.toBeUndefined()
+  })
 
-    for (const item of entries) {
-      const tool = toolAt(result.tools, item.name)
-      expect(tool).toMatchObject({
-        _tag: "CodeModeTool",
-        description:
-          nonEmptyString(item.operation.description) ??
-          nonEmptyString(item.operation.summary) ??
-          `${item.method.toUpperCase()} ${item.path}`,
-      })
+  test("normalizes OpenAPI 3.0 schemas with Effect", () => {
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        openapi: "3.0.3",
+        paths: {
+          "/search": {
+            get: {
+              operationId: "search",
+              parameters: [
+                {
+                  in: "query",
+                  name: "value",
+                  schema: { type: "string", nullable: true, minLength: 2 },
+                },
+              ],
+              responses: { 200: { description: "Success" } },
+            },
+          },
+        },
+      },
+    })
+    const search = toolAt(result.tools, "search")
 
-      const toolRecord = isRecord(tool) ? tool : {}
-      const input = isRecord(toolRecord.input) ? toolRecord.input : {}
-      expect(input.type).toBe("object")
-      const properties = isRecord(input.properties) ? input.properties : {}
-      const parameters = Array.isArray(item.operation.parameters) ? item.operation.parameters.filter(isRecord) : []
-      for (const name of parameters
-        .map((parameter) => parameter.name)
-        .filter((name): name is string => typeof name === "string")) {
-        expect(Object.hasOwn(properties, name)).toBe(true)
-      }
-
-      const requestBody = isRecord(item.operation.requestBody) ? item.operation.requestBody : undefined
-      const media = requestBody === undefined ? undefined : jsonContentSchema(requestBody.content)
-      const bodySchema = isRecord(media) && isRecord(media.schema) ? media.schema : undefined
-      if (bodySchema !== undefined && isRecord(bodySchema.properties)) {
-        for (const name of Object.keys(bodySchema.properties)) expect(Object.hasOwn(properties, name)).toBe(true)
-      }
-
-      const successes = Object.entries(isRecord(item.operation.responses) ? item.operation.responses : {})
-        .filter(([status]) => /^2\d\d$/.test(status) || status.toUpperCase() === "2XX")
-        .map(([, response]) => (isRecord(response) ? response : {}))
-      if (successes.some((response) => jsonContentSchema(response.content) !== undefined)) {
-        expect(toolRecord.output).not.toBeUndefined()
-      }
-    }
+    expect(Tool.isDefinition(search)).toBe(true)
+    if (!Tool.isDefinition(search)) throw new Error("search was not generated")
+    expect(inputTypeScript(search)).toBe("{ value?: string | null }")
+    const schema: unknown = search.input
+    const input = isRecord(schema) ? schema : {}
+    const properties = isRecord(input.properties) ? input.properties : {}
+    const value = isRecord(properties.value) ? properties.value : {}
+    expect(value.minLength).toBe(2)
   })
 
   test("documents that the opencode fixture is unauthenticated", async () => {

@@ -1,3 +1,4 @@
+import { fromSchemaOpenApi3_0, fromSchemaOpenApi3_1 } from "effect/JsonSchema"
 import type { JsonSchema } from "../tool.js"
 import type {
   Body,
@@ -16,18 +17,6 @@ const parameterLocationSet = new Set<string>(parameterLocations)
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
 const blockedOperationNames = new Set(["__proto__", "constructor", "prototype"])
-const schemaShapeKeys = new Set([
-  "$ref",
-  "type",
-  "enum",
-  "const",
-  "anyOf",
-  "oneOf",
-  "allOf",
-  "properties",
-  "items",
-  "additionalProperties",
-])
 export const maxErrorBodyChars = 1_024
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -55,68 +44,21 @@ export const resolve = (document: Document, value: unknown): unknown => {
   return target ?? value
 }
 
-const projectSchema = (value: unknown, depth = 0): JsonSchema => {
-  if (depth > 24 || !isRecord(value)) return {}
-  const ref = nonEmptyString(value.$ref)
-  if (ref !== undefined) {
-    // `#/components/schemas/X` becomes `#/$defs/X`, the only ref form the
-    // signature renderer resolves. `~` is unescaped to match the `$defs` key;
-    // `/` must stay escaped because the renderer takes the last `/` segment.
-    const name = ref.match(/^#\/components\/schemas\/(.+)$/)?.[1]
-    return { $ref: name === undefined ? ref : `#/$defs/${name.replaceAll("~0", "~")}` }
-  }
-
-  const type = Array.isArray(value.type)
-    ? value.type.filter((item): item is string => typeof item === "string")
-    : nonEmptyString(value.type)
-  const description = nonEmptyString(value.description)
-  const format = nonEmptyString(value.format)
-  const allOf = Array.isArray(value.allOf)
-    ? value.allOf
-        .map((item) => projectSchema(item, depth + 1))
-        .filter((item) => Object.keys(item).some((key) => schemaShapeKeys.has(key)))
-    : []
-  const projected: JsonSchema = {
-    ...(type === undefined ? {} : { type }),
-    ...(Array.isArray(value.enum) ? { enum: value.enum } : {}),
-    ...(value.const === undefined ? {} : { const: value.const }),
-    ...(Array.isArray(value.anyOf) ? { anyOf: value.anyOf.map((item) => projectSchema(item, depth + 1)) } : {}),
-    ...(Array.isArray(value.oneOf) ? { oneOf: value.oneOf.map((item) => projectSchema(item, depth + 1)) } : {}),
-    ...(allOf.length === 0 ? {} : { allOf }),
-    ...(isRecord(value.properties)
-      ? {
-          properties: Object.fromEntries(
-            Object.entries(value.properties).map(([key, item]) => [key, projectSchema(item, depth + 1)]),
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.required)
-      ? { required: value.required.filter((item): item is string => typeof item === "string") }
-      : {}),
-    ...(isRecord(value.items) ? { items: projectSchema(value.items, depth + 1) } : {}),
-    ...(typeof value.additionalProperties === "boolean"
-      ? { additionalProperties: value.additionalProperties }
-      : isRecord(value.additionalProperties)
-        ? { additionalProperties: projectSchema(value.additionalProperties, depth + 1) }
-        : {}),
-    ...(description === undefined ? {} : { description }),
-    ...(value.default === undefined ? {} : { default: value.default }),
-    ...(format === undefined ? {} : { format }),
-    ...(value.deprecated === true ? { deprecated: true } : {}),
-    ...(typeof value.minItems === "number" ? { minItems: value.minItems } : {}),
-    ...(typeof value.maxItems === "number" ? { maxItems: value.maxItems } : {}),
-  }
-  // OpenAPI 3.0 nullable -> union with null, matching what 3.1 expresses via type arrays.
-  if (value.nullable !== true) return projected
-  if (Array.isArray(projected.type)) return { ...projected, type: [...projected.type, "null"] }
-  if (typeof projected.type === "string") return { ...projected, type: [projected.type, "null"] }
-  return { anyOf: [projected, { type: "null" }] }
+const projectSchema = (document: Document, value: unknown): JsonSchema => {
+  if (!isRecord(value)) return {}
+  const normalized = nonEmptyString(document.openapi)?.startsWith("3.0")
+    ? fromSchemaOpenApi3_0(value)
+    : fromSchemaOpenApi3_1(value)
+  const schema: JsonSchema = {}
+  Object.assign(schema, normalized.schema)
+  if (Object.keys(normalized.definitions).length > 0) Object.assign(schema, { $defs: normalized.definitions })
+  return schema
 }
 
 export const componentDefinitions = (document: Document): Readonly<Record<string, JsonSchema>> => {
   const components = isRecord(document.components) ? document.components : {}
   const schemas = isRecord(components.schemas) ? components.schemas : {}
-  return Object.fromEntries(Object.entries(schemas).map(([name, value]) => [name, projectSchema(value)]))
+  return Object.fromEntries(Object.entries(schemas).map(([name, value]) => [name, projectSchema(document, value)]))
 }
 
 const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>): JsonSchema =>
@@ -160,7 +102,7 @@ export const operationInput = (
     const location = nonEmptyString(resolved.in)
     if (name === undefined || location === undefined || !parameterLocationSet.has(location)) continue
     if (location === "header" && ignoredHeaderParameters.has(name.toLowerCase())) continue
-    const base = projectSchema(resolved.schema)
+    const base = projectSchema(document, resolved.schema)
     const description = nonEmptyString(resolved.description)
     merged.set(`${location}:${name}`, {
       name,
@@ -185,7 +127,7 @@ export const operationInput = (
     const schema = resolve(document, source)
     const required = resolved.required === true
     if (!isFlattenableObjectBody(schema, required)) {
-      fields.push({ name: "body", location: "body", required, schema: projectSchema(source) })
+      fields.push({ name: "body", location: "body", required, schema: projectSchema(document, source) })
       return { required, mode: "value" } as const
     }
     const requiredProperties = new Set(
@@ -196,7 +138,7 @@ export const operationInput = (
         name,
         location: "body" as const,
         required: required && requiredProperties.has(name),
-        schema: projectSchema(value),
+        schema: projectSchema(document, value),
       })),
     )
     return { required, mode: "object" } as const
@@ -276,7 +218,7 @@ export const outputSchema = (
   const successes = successResponses(document, operation)
   for (const response of successes) {
     const schema = jsonContentSchema(isRecord(response.content) ? response.content : {})
-    if (schema !== undefined) return withDefinitions(projectSchema(schema), definitions)
+    if (schema !== undefined) return withDefinitions(projectSchema(document, schema), definitions)
   }
   // Declared non-JSON content (e.g. text/plain) returns the raw body -> unknown.
   const declaresContent = successes.some(

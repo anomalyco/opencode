@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, JsonPointer, Schema } from "effect"
 
 /**
  * JSON Schema subset accepted for render-only tool schemas.
@@ -138,7 +138,8 @@ const renderSchema = (
 ): string => {
   if (depth > MAX_RENDER_DEPTH) return "unknown"
   if (schema.$ref) {
-    const name = schema.$ref.split("/").pop()
+    const segment = schema.$ref.split("/").pop()
+    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
     if (!name || !ctx.definitions[name]) return name ?? "unknown"
     if (seen.has(name)) return name // recursive type: reference by name rather than loop
     return renderSchema(ctx.definitions[name], ctx, depth, new Set([...seen, name]))
@@ -170,11 +171,12 @@ const renderSchema = (
     return alternatives.map((item) => renderSchema(item, ctx, depth + 1, seen)).join(" | ")
   }
   if (schema.allOf) {
+    const base = renderSchema({ ...schema, allOf: undefined }, ctx, depth + 1, seen)
     // Parenthesize union members so `A & (B | null)` does not render as `A & B | null`.
-    return schema.allOf
-      .map((item) => renderSchema(item, ctx, depth + 1, seen))
+    const members = [base, ...schema.allOf.map((item) => renderSchema(item, ctx, depth + 1, seen))]
+      .filter((rendered) => rendered !== "unknown")
       .map((rendered) => (rendered.includes(" | ") ? `(${rendered})` : rendered))
-      .join(" & ")
+    return members.length === 0 ? "unknown" : members.join(" & ")
   }
   if (Array.isArray(schema.type)) {
     return schema.type.map((item) => renderSchema({ type: item }, ctx, depth + 1, seen)).join(" | ")
