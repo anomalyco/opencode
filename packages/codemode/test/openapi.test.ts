@@ -230,6 +230,7 @@ describe("OpenAPI.fromSpec", () => {
                 { name: "keys", in: "path", required: true, schema: { type: "array", items: { type: "string" } } },
                 { name: "tags", in: "query", style: "form", explode: false, schema: { type: "array" } },
                 { name: "filter", in: "query", style: "form", explode: true, schema: { type: "object" } },
+                { name: "constructor", in: "query", schema: { type: "string" } },
                 { name: "meta", in: "header", style: "simple", explode: true, schema: { type: "object" } },
               ],
               responses: { 200: { description: "Success" } },
@@ -243,7 +244,13 @@ describe("OpenAPI.fromSpec", () => {
 
     await Effect.runPromise(
       tool
-        .run({ keys: ["a!", "b*"], tags: ["x", "y"], filter: { state: "open", page: 2 }, meta: { a: "b", c: "d" } })
+        .run({
+          keys: ["a!", "b*"],
+          tags: ["x", "y"],
+          filter: { state: "open", page: 2 },
+          constructor_2: "safe",
+          meta: { a: "b", c: "d" },
+        })
         .pipe(Effect.provide(client.layer)),
     )
 
@@ -252,7 +259,11 @@ describe("OpenAPI.fromSpec", () => {
     expect(url.searchParams.get("tags")).toBe("x,y")
     expect(url.searchParams.get("state")).toBe("open")
     expect(url.searchParams.get("page")).toBe("2")
+    expect(url.searchParams.get("constructor")).toBe("safe")
     expect(client.requests[0]!.headers.meta).toBe("a=b,c=d")
+    await expect(
+      Effect.runPromise(tool.run({ keys: [undefined] }).pipe(Effect.provide(client.layer))),
+    ).rejects.toThrow("unsupported nested value")
   })
 
   test("skips unsupported parameter encodings and malformed security", () => {
@@ -339,6 +350,43 @@ describe("OpenAPI.fromSpec", () => {
     expect(client.requests[0]!.headers.authorization).toBe("Bearer secret")
   })
 
+  test("applies authentication carriers without prototype or collision loss", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const authenticated = (security: ReadonlyArray<Record<string, ReadonlyArray<string>>>, schemes: Record<string, unknown>) =>
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: { ...singleOperation({}), security, components: { securitySchemes: schemes } },
+        auth: { resolve: () => Effect.succeed({ type: "apiKey", value: "secret" }) },
+      })
+    const prototype = toolAt(
+      authenticated([{ key: [] }], { key: { type: "apiKey", in: "query", name: "__proto__" } }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(prototype)) throw new Error("prototype auth tool was not generated")
+
+    await Effect.runPromise(prototype.run({}).pipe(Effect.provide(client.layer)))
+    expect(new URL(client.requests[0]!.url).searchParams.get("__proto__")).toBe("secret")
+
+    const duplicate = toolAt(
+      authenticated(
+        [{ first: [], second: [] }],
+        {
+          first: { type: "apiKey", in: "header", name: "x-key" },
+          second: { type: "apiKey", in: "header", name: "x-key" },
+        },
+      ).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(duplicate)) throw new Error("duplicate auth tool was not generated")
+    await expect(Effect.runPromise(duplicate.run({}).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+      "multiple credentials",
+    )
+
+    const cookie = authenticated([{ key: [] }], { key: { type: "apiKey", in: "cookie", name: "session" } })
+    expect(cookie.tools).toEqual({})
+    expect(cookie.skipped[0]?.reason).toBe("cookie authentication 'key' is not supported")
+  })
+
   test("preserves JSON media types and rejects unencodable bodies", async () => {
     const client = recordingClient(() => json({ ok: true }))
     const tool = toolAt(
@@ -387,6 +435,21 @@ describe("OpenAPI.fromSpec", () => {
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(chunked.layer)))).rejects.toThrow(
       "response exceeds 1 MiB",
     )
+  })
+
+  test("keeps non-JSON responses raw and unions every success output", async () => {
+    const spec = singleOperation({
+      responses: {
+        200: { description: "Text", content: { "text/plain": { schema: { type: "string" } } } },
+        204: { description: "Empty" },
+      },
+    })
+    const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec }).tools, "test")
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    const client = recordingClient(() => new Response("123", { headers: { "content-type": "text/plain" } }))
+
+    expect(outputTypeScript(tool)).toBe("string | null")
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))).resolves.toBe("123")
   })
 
   test("fails missing required parameters before auth and network", async () => {

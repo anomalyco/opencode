@@ -14,7 +14,7 @@ export const methods = new Set(["get", "put", "post", "delete", "options", "head
 const parameterLocations = ["path", "query", "header"] as const
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
-const blockedOperationNames = new Set(["__proto__", "constructor", "prototype"])
+const blockedNames = new Set(["__proto__", "constructor", "prototype"])
 export const maxErrorBodyChars = 1_024
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -38,7 +38,7 @@ export const resolve = (document: Document, value: unknown): unknown => {
     .slice(2)
     .split("/")
     .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
-    .reduce<unknown>((current, segment) => (isRecord(current) ? current[segment] : undefined), document)
+    .reduce<unknown>((current, segment) => (isRecord(current) ? own(current, segment) : undefined), document)
   return target ?? value
 }
 
@@ -195,7 +195,8 @@ export const operationInput = (
   const used = new Set<string>()
   return {
     fields: fields.map((field) => {
-      const base = conflicts.has(field.name) ? `${field.location}_${field.name}` : field.name
+      const visibleName = blockedNames.has(field.name) ? `${field.name}_2` : field.name
+      const base = conflicts.has(field.name) ? `${field.location}_${visibleName}` : visibleName
       const next = (index: number): string => {
         const candidate = index === 1 ? base : `${base}_${index}`
         return used.has(candidate) ? next(index + 1) : candidate
@@ -258,17 +259,25 @@ export const outputSchema = (
   definitions: Readonly<Record<string, JsonSchema>>,
 ): JsonSchema | undefined => {
   const successes = successResponses(document, operation)
+  const outcomes: Array<JsonSchema> = []
   for (const response of successes) {
-    const selected = jsonContent(isRecord(response.content) ? response.content : {})
-    if (selected !== undefined) return withDefinitions(projectSchema(document, selected.schema), definitions)
+    if (response.content !== undefined && !isRecord(response.content)) return undefined
+    const content = isRecord(response.content) ? response.content : {}
+    if (Object.keys(content).length === 0) {
+      outcomes.push({ type: "null" })
+      continue
+    }
+    for (const [mediaType, value] of Object.entries(content)) {
+      if (!isJsonMediaType(mediaType)) {
+        outcomes.push({ type: "string" })
+        continue
+      }
+      if (!isRecord(value) || value.schema === undefined) return undefined
+      outcomes.push(projectSchema(document, value.schema))
+    }
   }
-  // Declared non-JSON content (e.g. text/plain) returns the raw body -> unknown.
-  const declaresContent = successes.some(
-    (response) => isRecord(response.content) && Object.keys(response.content).length > 0,
-  )
-  if (declaresContent) return undefined
-  // No-content success (e.g. 204) -> null.
-  return successes.length > 0 ? { type: "null" } : undefined
+  if (outcomes.length === 0) return undefined
+  return withDefinitions(outcomes.length === 1 ? outcomes[0] ?? {} : { anyOf: outcomes }, definitions)
 }
 
 const sanitizeOperationSegment = (raw: string): string => {
@@ -277,7 +286,7 @@ const sanitizeOperationSegment = (raw: string): string => {
       .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .replace(/^([0-9])/, "_$1") || "operation"
-  return blockedOperationNames.has(base) ? `${base}_2` : base
+  return blockedNames.has(base) ? `${base}_2` : base
 }
 
 export const operationPath = (

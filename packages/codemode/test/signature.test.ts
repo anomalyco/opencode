@@ -196,6 +196,12 @@ describe("pretty signature rendering", () => {
     expect(jsonSchemaToTypeScript({ $ref: "https://example.com/schema.json" })).toBe("unknown")
     expect(
       jsonSchemaToTypeScript({
+        $ref: "#/$defs/User/properties/id",
+        $defs: { User: { type: "object" }, id: { type: "string" } },
+      }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
         type: ["object", "null"],
         properties: { name: { type: "string" } },
       }),

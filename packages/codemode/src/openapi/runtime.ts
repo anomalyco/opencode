@@ -47,8 +47,6 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
       if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
       request = HttpClientRequest.setHeader(request, field.name, serialized)
     }
-    const cookiePairs = Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`)
-    if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
     request = HttpClientRequest.setHeaders(request, auth.headers)
     if (plan.body?.mode === "value") {
       const field = plan.fields.find((field) => field.location === "body")
@@ -83,8 +81,10 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
         ),
       )
     const text = yield* readResponseBody(response, plan)
-    const decoded = text === "" ? Option.some(null) : decodeJson(text)
-    const parsed = Option.getOrElse(decoded, () => text)
+    const mediaType = response.headers["content-type"]?.split(";")[0]?.trim().toLowerCase()
+    const json = mediaType === "application/json" || mediaType?.endsWith("+json") === true
+    const decoded = text === "" ? Option.some(null) : json ? decodeJson(text) : Option.none()
+    const parsed = json ? Option.getOrElse(decoded, () => text) : text === "" ? null : text
     if (response.status < 200 || response.status >= 300) {
       const rendered = typeof parsed === "string" ? parsed : (JSON.stringify(parsed) ?? "")
       const summary =
@@ -97,8 +97,7 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
         toolError(`${plan.operation.method} ${plan.operation.path} failed with HTTP ${response.status}: ${summary}`),
       )
     }
-    const mediaType = response.headers["content-type"]?.split(";")[0]?.trim().toLowerCase()
-    if ((mediaType === "application/json" || mediaType?.endsWith("+json")) && Option.isNone(decoded)) {
+    if (json && Option.isNone(decoded)) {
       return yield* Effect.fail(
         toolError(`${plan.operation.method} ${plan.operation.path} returned malformed JSON.`),
       )
@@ -108,7 +107,7 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
 
 const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
   Effect.gen(function* () {
-    const none: AppliedAuth = { headers: {}, query: {}, cookies: {} }
+    const none: AppliedAuth = { headers: {}, query: {} }
     if (plan.security.length === 0) return none
 
     const unavailable: Array<string> = []
@@ -148,22 +147,32 @@ const resolveAuth = (plan: Plan): Effect.Effect<AppliedAuth, unknown> =>
 const applyCredentials = (
   credentials: ReadonlyArray<readonly [SecurityScheme, Credential]>,
 ): AppliedAuth | ToolError => {
-  const headers: Record<string, string> = {}
-  const query: Record<string, string> = {}
-  const cookies: Record<string, string> = {}
+  const headers = new Map<string, string>()
+  const query = new Map<string, string>()
+  const add = (carrier: "header" | "query", name: string, value: string): ToolError | undefined => {
+    const target = carrier === "header" ? headers : query
+    if (target.has(name)) return toolError(`Authentication resolves multiple credentials for ${carrier} '${name}'.`)
+    target.set(name, value)
+  }
   for (const [scheme, credential] of credentials) {
     if (credential.type === "bearer") {
-      headers["authorization"] = `Bearer ${credential.token}`
+      const duplicate = add("header", "authorization", `Bearer ${credential.token}`)
+      if (duplicate !== undefined) return duplicate
       continue
     }
     if (credential.type === "basic") {
       // Buffer instead of btoa: btoa throws on non-Latin-1 credentials.
-      headers["authorization"] =
-        `Basic ${Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")}`
+      const duplicate = add(
+        "header",
+        "authorization",
+        `Basic ${Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")}`,
+      )
+      if (duplicate !== undefined) return duplicate
       continue
     }
     if (credential.type === "header") {
-      headers[credential.name.toLowerCase()] = credential.value
+      const duplicate = add("header", credential.name.toLowerCase(), credential.value)
+      if (duplicate !== undefined) return duplicate
       continue
     }
     // apiKey: the carrier comes from the scheme declaration.
@@ -173,11 +182,11 @@ const applyCredentials = (
         `Security scheme '${scheme.name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
       )
     }
-    if (scheme.in === "header") headers[name.toLowerCase()] = credential.value
-    if (scheme.in === "query") query[name] = credential.value
-    if (scheme.in === "cookie") cookies[name] = credential.value
+    if (scheme.in === "cookie") return toolError(`Cookie authentication '${scheme.name}' is not supported.`)
+    const duplicate = add(scheme.in, scheme.in === "header" ? name.toLowerCase() : name, credential.value)
+    if (duplicate !== undefined) return duplicate
   }
-  return { headers, query, cookies }
+  return { headers: Object.fromEntries(headers), query: Object.fromEntries(query) }
 }
 
 const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string | ToolError => {
@@ -213,7 +222,7 @@ const serializeSimple = (
   encode: (value: string) => string,
 ): string | ToolError => {
   const scalar = (item: unknown): string | ToolError =>
-    item === null || typeof item === "object"
+    typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean"
       ? toolError(`Parameter '${field.inputName}' contains an unsupported nested value.`)
       : encode(String(item))
   if (Array.isArray(value)) {

@@ -9,6 +9,7 @@ import {
   nonEmptyString,
   operationInput,
   operationPath,
+  own,
   outputSchema,
   securityRequirements,
   securitySchemes,
@@ -82,6 +83,18 @@ export const fromSpec = (options: Options): Result => {
         operationValue.security === undefined ? defaultSecurity : securityRequirements(operationValue.security)
       if ("reason" in security) {
         skipped.push({ method: operation.method, path, reason: security.reason })
+        continue
+      }
+      const cookieScheme = security
+        .flatMap((requirement) => Object.keys(requirement))
+        .map((name) => own(schemes, name))
+        .find((scheme) => scheme?.type === "apiKey" && scheme.in === "cookie")
+      if (cookieScheme !== undefined) {
+        skipped.push({
+          method: operation.method,
+          path,
+          reason: `cookie authentication '${cookieScheme.name}' is not supported`,
+        })
         continue
       }
       const plan = {

@@ -149,8 +149,7 @@ const renderSchema = (
       ? ctx
       : { ...ctx, definitions: { ...ctx.definitions, ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) } }
   if (schema.$ref) {
-    if (!schema.$ref.startsWith("#/$defs/") && !schema.$ref.startsWith("#/definitions/")) return "unknown"
-    const segment = schema.$ref.split("/").pop()
+    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
     const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
     if (!name || !nested.definitions[name] || seen.has(name)) return "unknown"
     return intersection([
@@ -280,8 +279,7 @@ export const inputProperties = <R>(definition: Definition<R>): Array<InputProper
     const definitions = document.definitions ?? {}
     let schema = document.schema
     if (schema.$ref !== undefined) {
-      if (!schema.$ref.startsWith("#/$defs/") && !schema.$ref.startsWith("#/definitions/")) return []
-      const segment = schema.$ref.split("/").pop()
+      const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
       const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
       const resolved = name === undefined ? undefined : definitions[name]
       if (resolved === undefined) return []

@@ -116,5 +116,4 @@ export type Plan = {
 export type AppliedAuth = {
   readonly headers: Readonly<Record<string, string>>
   readonly query: Readonly<Record<string, string>>
-  readonly cookies: Readonly<Record<string, string>>
 }
