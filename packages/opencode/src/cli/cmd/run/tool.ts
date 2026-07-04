@@ -671,6 +671,10 @@ function scrollBashProgress(p: ToolProps<typeof BashTool>): string {
 }
 
 function scrollBashFinal(p: ToolProps<typeof BashTool>): string {
+  if (p.frame.status === "error") {
+    return fail(p.frame)
+  }
+
   const code = p.metadata.exit ?? num(p.frame.meta.exitCode) ?? num(p.frame.meta.exit_code)
   const time = span(p.frame.state)
   if (code === undefined) {
@@ -1425,6 +1429,11 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
 
     if (commit.phase === "progress") {
       return textBody(shellOutput(commit.shell.command, raw) ?? "")
+    }
+
+    if (commit.toolState === "error") {
+      const ctx = toolFrame(commit, raw)
+      return textBody(toolScroll("final", ctx))
     }
 
     return undefined

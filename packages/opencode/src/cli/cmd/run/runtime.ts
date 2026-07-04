@@ -17,7 +17,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageID } from "@/session/schema"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import { createRunDemo } from "./demo"
-import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
+import { resolveModelInfo, resolveModelInfoStrict, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
@@ -378,32 +378,89 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     state.localRows = [...state.localRows, { commit, after }].slice(-LOCAL_REPLAY_ROW_LIMIT)
   }
 
-  const loadCatalog = async (): Promise<void> => {
+  const applyCatalog = (catalog: {
+    agents: Awaited<ReturnType<typeof loadRunAgents>>
+    references: Awaited<ReturnType<typeof loadRunReferences>>
+    commands: Awaited<ReturnType<typeof loadRunCommands>>
+  }) => {
     if (footer.isClosed) {
       return
     }
-
-    const [agents, references, commands] = await Promise.all([
-      loadRunAgents(ctx.sdk, ctx.directory).catch(() => []),
-      loadRunReferences(ctx.sdk, ctx.directory).catch(() => []),
-      loadRunCommands(ctx.sdk, ctx.directory).catch(() => []),
-    ])
-    if (footer.isClosed) {
-      return
-    }
-
     footer.event({
       type: "catalog",
-      agents,
-      references,
-      commands,
+      agents: catalog.agents,
+      references: catalog.references,
+      commands: catalog.commands,
     })
   }
 
-  void footer
+  const fetchCatalog = async () => {
+    const [agents, references, commands] = await Promise.all([
+      loadRunAgents(ctx.sdk, ctx.directory),
+      loadRunReferences(ctx.sdk, ctx.directory),
+      loadRunCommands(ctx.sdk, ctx.directory),
+    ])
+    return { agents, references, commands }
+  }
+
+  const loadCatalog = async () => {
+    applyCatalog(
+      await Promise.all([
+        loadRunAgents(ctx.sdk, ctx.directory).catch(() => []),
+        loadRunReferences(ctx.sdk, ctx.directory).catch(() => []),
+        loadRunCommands(ctx.sdk, ctx.directory).catch(() => []),
+      ]).then(([agents, references, commands]) => ({ agents, references, commands })),
+    )
+  }
+
+  const applyModelInfo = (
+    info: Awaited<ReturnType<typeof resolveModelInfo>>,
+    current: string | undefined,
+    boot = false,
+  ) => {
+    state.providers = info.providers
+    state.variants = variantsFor(state.providers, state.model)
+    state.limits = info.limits
+    state.activeVariant = boot
+      ? resolveVariant(ctx.variant, current, savedVariant, state.variants)
+      : current && !state.variants.includes(current)
+        ? undefined
+        : current
+    if (footer.isClosed) return
+    footer.event({ type: "models", providers: info.providers })
+    footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
+    if (state.model)
+      footer.event({ type: "model", model: formatModelLabel(state.model, state.activeVariant, state.providers) })
+  }
+
+  let catalogRefresh: Promise<void> | undefined
+  let catalogRefreshQueued = false
+  const requestCatalogRefresh = () => {
+    catalogRefreshQueued = true
+    if (catalogRefresh || footer.isClosed) return
+    catalogRefresh = (async () => {
+      await Promise.all([modelTask, initialCatalog])
+      while (catalogRefreshQueued && !footer.isClosed) {
+        catalogRefreshQueued = false
+        const [catalog, info] = await Promise.allSettled([
+          fetchCatalog(),
+          resolveModelInfoStrict(ctx.sdk, ctx.directory, state.model),
+        ])
+        if (catalog.status === "fulfilled") applyCatalog(catalog.value)
+        if (info.status === "fulfilled") applyModelInfo(info.value, state.activeVariant)
+      }
+    })().finally(() => {
+      catalogRefresh = undefined
+      if (catalogRefreshQueued) requestCatalogRefresh()
+    })
+    void catalogRefresh.catch(() => {})
+  }
+
+  const initialCatalog = footer
     .idle()
     .then(loadCatalog)
     .catch(() => {})
+  void initialCatalog
 
   if (Flag.OPENCODE_SHOW_TTFD) {
     footer.append({
@@ -428,31 +485,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     void Promise.resolve(input.afterPaint(ctx)).catch(() => {})
   }
 
-  void modelTask.then((info) => {
-    state.providers = info.providers
-    state.variants = variantsFor(state.providers, state.model)
-    state.limits = info.limits
-
-    const next = resolveVariant(ctx.variant, session.variant, savedVariant, state.variants)
-    if (next !== state.activeVariant) {
-      state.activeVariant = next
-    }
-
-    if (footer.isClosed) {
-      return
-    }
-
-    footer.event({ type: "models", providers: info.providers })
-    footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
-    if (!state.model) {
-      return
-    }
-
-    footer.event({
-      type: "model",
-      model: formatModelLabel(state.model, state.activeVariant, state.providers),
-    })
-  })
+  void modelTask.then((info) => applyModelInfo(info, session.variant, true))
 
   const streamTask = deps.streamTransport ?? import("./stream-v2.transport")
   const ensureStream = () => {
@@ -484,6 +517,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         providers: () => state.providers,
         footer,
         trace: log,
+        onCatalogRefresh: requestCatalogRefresh,
       })
       if (footer.isClosed) {
         await handle.close()

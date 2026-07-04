@@ -27,7 +27,7 @@ import type { FooterSubagentDetail, FooterSubagentState, FooterSubagentTab, Stre
 
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
-const DISCOVERY_BUFFER_LIMIT = 64
+const CHILD_EVENT_BUFFER_LIMIT = 64
 const FAMILY_LIST_LIMIT = 100
 const FALLBACK_LABEL = "Subagent"
 
@@ -160,6 +160,7 @@ type ChildState = {
   tools: Map<string, ToolTrack>
   finishedTools: Set<string>
   messageIDs: Set<string>
+  prompts: Map<string, string>
   hydrated: boolean
 }
 
@@ -223,6 +224,8 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   // Foreign events buffered while a session.get discovery is in flight, so a
   // fast child (including its settled event) is not lost mid-discovery.
   const pendingEvents = new Map<string, V2Event[]>()
+  const hydrationEvents = new Map<string, V2Event[]>()
+  const hydrationOverflow = new Set<string>()
   const hydrations = new Map<string, Promise<void>>()
   let selected: string | undefined
 
@@ -244,6 +247,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       tools: new Map(),
       finishedTools: new Set(),
       messageIDs: new Set(),
+      prompts: new Map(),
       hydrated: false,
     }
     if (!existing) children.set(sessionID, child)
@@ -332,6 +336,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     child.callIDs.clear()
     for (const message of messages) {
       if (message.type === "user") {
+        child.prompts.delete(message.id)
         userFrame(child, message.id, message.text)
         continue
       }
@@ -382,16 +387,38 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   const hydrateChild = (child: ChildState): Promise<void> => {
     const existing = hydrations.get(child.sessionID)
     if (existing) return existing
+    const pendingPrompts = new Map(child.prompts)
+    const pendingTools = new Map(child.tools)
+    let retry = false
     const task = input.sdk.v2.session
       .messages({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" }, { throwOnError: true })
       .then((response) => {
+        const buffered = hydrationEvents.get(child.sessionID) ?? []
+        hydrationEvents.delete(child.sessionID)
+        if (hydrationOverflow.delete(child.sessionID)) {
+          child.hydrated = false
+          retry = true
+          notifyDetail(child)
+          return
+        }
+        for (const [id, prompt] of pendingPrompts) {
+          if (!child.prompts.has(id)) child.prompts.set(id, prompt)
+        }
         rebuild(child, response.data.data.toReversed())
+        for (const [id, tool] of pendingTools) {
+          if (!child.finishedTools.has(id) && !child.tools.has(id)) child.tools.set(id, tool)
+        }
+        for (const event of buffered) reduce(child, event)
         child.hydrated = true
         notifyDetail(child)
       })
-      .catch(() => {})
+      .catch(() => {
+        hydrationEvents.delete(child.sessionID)
+        hydrationOverflow.delete(child.sessionID)
+      })
       .finally(() => {
         hydrations.delete(child.sessionID)
+        if (retry) queueMicrotask(() => void hydrateChild(child))
       })
     hydrations.set(child.sessionID, task)
     return task
@@ -424,8 +451,14 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
+    if (event.type === "session.prompt.admitted") {
+      child.prompts.set(event.data.inputID, event.data.prompt.text)
+      return
+    }
     if (event.type === "session.prompt.promoted") {
-      if (userFrame(child, event.data.inputID, "")) {
+      const prompt = child.prompts.get(event.data.inputID) ?? ""
+      child.prompts.delete(event.data.inputID)
+      if (userFrame(child, event.data.inputID, prompt)) {
         touch(child, event.created)
         notifyDetail(child)
       }
@@ -511,10 +544,12 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.input.started") {
+      if (child.finishedTools.has(event.data.callID)) return
       child.tools.set(event.data.callID, { name: event.data.name, input: {}, started: event.created })
       return
     }
     if (event.type === "session.tool.called") {
+      if (child.finishedTools.has(event.data.callID)) return
       const current = child.tools.get(event.data.callID)
       child.tools.set(event.data.callID, {
         name: event.data.tool,
@@ -640,12 +675,18 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     foreign(sessionID, event) {
       const child = children.get(sessionID)
       if (child) {
+        if (hydrations.has(sessionID)) {
+          const buffered = hydrationEvents.get(sessionID) ?? []
+          if (buffered.length < CHILD_EVENT_BUFFER_LIMIT) buffered.push(event)
+          else hydrationOverflow.add(sessionID)
+          hydrationEvents.set(sessionID, buffered)
+        }
         reduce(child, event)
         return
       }
       discover(sessionID)
       const buffered = pendingEvents.get(sessionID)
-      if (buffered && buffered.length < DISCOVERY_BUFFER_LIMIT) buffered.push(event)
+      if (buffered && buffered.length < CHILD_EVENT_BUFFER_LIMIT) buffered.push(event)
     },
     async hydrate(next) {
       for (const message of next.messages) {
