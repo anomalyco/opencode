@@ -3,6 +3,7 @@ import { useLanguage } from "@/context/language"
 import { useLocal } from "@/context/local"
 import { useSettings } from "@/context/settings"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { getCursorPosition, setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"
 
@@ -26,9 +27,23 @@ export const useComposerCommands = () => {
 
   const chooseModel = async () => {
     const owner = sessionOwnership.capture()
+    const editor = document.querySelector<HTMLElement>('[data-component="prompt-input"]')
+    const selection = window.getSelection()
+    const cursor =
+      editor && selection?.rangeCount && editor.contains(selection.anchorNode) ? getCursorPosition(editor) : null
+    const restoreComposer = () => {
+      // Kobalte restores focus during its teardown effect; defer past it so the
+      // composer keeps focus and the caret returns to where the user left it.
+      requestAnimationFrame(() => {
+        const editor = document.querySelector<HTMLElement>('[data-component="prompt-input"]')
+        if (!editor) return
+        editor.focus()
+        if (cursor !== null) setCursorPosition(editor, cursor)
+      })
+    }
     const { DialogSelectModel } = await import("@/components/dialog-select-model")
     owner.run(() => {
-      void dialog.show(() => <DialogSelectModel model={local.model} />)
+      void dialog.show(() => <DialogSelectModel model={local.model} />, restoreComposer)
     })
   }
 
