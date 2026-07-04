@@ -9,6 +9,7 @@ import { Flag } from "../flag/flag"
 import { MCP } from "../mcp"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const Plugin = {
   id: "core-mcp-tools",
@@ -16,6 +17,7 @@ export const Plugin = {
     const mcp = yield* MCP.Service
     const events = yield* EventV2.Service
     const permission = yield* PermissionV2.Service
+    const tools = yield* Tools.Service
     const scope = yield* Scope.Scope
     const lock = Semaphore.makeUnsafe(1)
     let current: Scope.Closeable | undefined
@@ -100,7 +102,7 @@ export const Plugin = {
         const next = yield* Scope.fork(scope)
         yield* (
           Flag.OPENCODE_CODE_MODE
-            ? ctx.tool.execute.register(
+            ? tools.codeMode.register(
                 Object.fromEntries(
                   Array.from(new Set(items.map(([item]) => item.server))).map((server) => [
                     server,

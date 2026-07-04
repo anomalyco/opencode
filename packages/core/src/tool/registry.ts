@@ -8,16 +8,8 @@ import { SessionMessage } from "../session/message"
 import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
-import {
-  definition,
-  permission,
-  registrationEntries,
-  settle,
-  type AnyTool,
-  type ExecuteTools,
-  type RegistrationError,
-} from "./tool"
-import { Tools } from "./tools"
+import { definition, permission, registrationEntries, settle, type AnyTool, type RegistrationError } from "./tool"
+import { Tools, type CodeModeTools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "../effect/app-node"
 import { ExecuteTool } from "./execute"
@@ -33,8 +25,8 @@ export interface Interface {
   readonly materialize: (input: MaterializeInput) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  readonly execute: {
-    readonly register: (tools: ExecuteTools) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  readonly codeMode: {
+    readonly register: (tools: CodeModeTools) => Effect.Effect<void, RegistrationError, Scope.Scope>
   }
 }
 
@@ -64,7 +56,7 @@ const registryLayer = Layer.effect(
     type Registration = { readonly identity: object; readonly tool: AnyTool }
     type Stack = Array<{ readonly token: object; readonly registration: Registration }>
     const local = new Map<string, Stack>()
-    const execute = new Map<string, Stack>()
+    const codeMode = new Map<string, Stack>()
 
     const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, registration: Registration) {
       // Hooks fire only for hosted/local tools; provider-executed calls never reach settleWith.
@@ -153,8 +145,8 @@ const registryLayer = Layer.effect(
       )
     })
 
-    const executeRegistrations = (rules: PermissionV2.Ruleset) =>
-      Array.from(execute).flatMap(([path, entries]) => {
+    const codeModeRegistrations = (rules: PermissionV2.Ruleset) =>
+      Array.from(codeMode).flatMap(([path, entries]) => {
         const registration = entries.at(-1)?.registration
         const separator = path.indexOf("\u0000")
         const namespace = path.slice(0, separator)
@@ -165,10 +157,10 @@ const registryLayer = Layer.effect(
 
     return Service.of({
       register: (tools) => register(local, registrationEntries(tools)),
-      execute: {
+      codeMode: {
         register: (tools) =>
           register(
-            execute,
+            codeMode,
             Object.entries(tools).flatMap(([namespace, members]) =>
               Object.entries(members).map(
                 ([name, tool]) => [`${executeSegment(namespace)}\u0000${executeSegment(name)}`, tool] as const,
@@ -190,7 +182,7 @@ const registryLayer = Layer.effect(
           if (wrongEditTool || whollyDisabled(permission(registration.tool, name), rules)) registrations.delete(name)
         }
 
-        const children = executeRegistrations(rules)
+        const children = codeModeRegistrations(rules)
         const executeTools = new Map<string, Record<string, AnyTool>>()
         for (const child of children) {
           const members = executeTools.get(child.namespace) ?? {}
@@ -211,14 +203,14 @@ const registryLayer = Layer.effect(
               if (!registration)
                 return Effect.succeed({ result: { type: "error" as const, value: `Unknown tool: ${input.call.name}` } })
               if (registration === executeRegistration) {
-                const current = executeRegistrations(rules)
+                const current = codeModeRegistrations(rules)
                 if (
                   current.length !== children.length ||
                   current.some((item, index) => item.registration.identity !== children[index]?.registration.identity)
                 )
                   return Effect.succeed({ result: { type: "error" as const, value: "Stale tool call: execute" } })
               } else {
-                if (input.call.name === "execute" && executeRegistrations(rules).length > 0)
+                if (input.call.name === "execute" && codeModeRegistrations(rules).length > 0)
                   return Effect.succeed({ result: { type: "error" as const, value: "Stale tool call: execute" } })
                 if (local.get(input.call.name)?.at(-1)?.registration.identity !== registration.identity)
                   return Effect.succeed({
@@ -236,7 +228,9 @@ const registryLayer = Layer.effect(
 const layer = Layer.effect(
   Tools.Service,
   Service.use((registry) =>
-    Effect.succeed(Tools.Service.of({ register: registry.register, execute: { register: registry.execute.register } })),
+    Effect.succeed(
+      Tools.Service.of({ register: registry.register, codeMode: { register: registry.codeMode.register } }),
+    ),
   ),
 ).pipe(Layer.provideMerge(registryLayer))
 

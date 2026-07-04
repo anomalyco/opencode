@@ -163,14 +163,14 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("aggregates scoped execute tools and invalidates changed catalogs", () =>
+  it.effect("aggregates scoped CodeMode tools and invalidates changed catalogs", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const alpha = yield* Scope.make()
       const beta = yield* Scope.make()
-      yield* service.execute.register({ alpha: { one: make("hidden") } }).pipe(Scope.provide(alpha))
-      yield* service.execute.register({ ["__proto__"]: { constructor: make() } }).pipe(Scope.provide(alpha))
-      yield* service.execute.register({ beta: { two: make() } }).pipe(Scope.provide(beta))
+      yield* service.codeMode.register({ alpha: { one: make("hidden") } }).pipe(Scope.provide(alpha))
+      yield* service.codeMode.register({ ["__proto__"]: { constructor: make() } }).pipe(Scope.provide(alpha))
+      yield* service.codeMode.register({ beta: { two: make() } }).pipe(Scope.provide(beta))
 
       const materialized = yield* service.materialize({ model: testModel })
       expect(materialized.definitions.map((tool) => tool.name)).toEqual(["execute"])
@@ -263,7 +263,7 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       expect("definitions" in service).toBe(false)
       expect("settle" in service).toBe(false)
-      expect(typeof service.execute.register).toBe("function")
+      expect(typeof service.codeMode.register).toBe("function")
       expect(typeof service.materialize).toBe("function")
     }),
   )

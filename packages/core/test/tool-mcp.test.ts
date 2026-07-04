@@ -132,7 +132,7 @@ describe("MCP tool plugin", () => {
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const events = yield* EventV2.Service
-      yield* registry.execute.register({
+      yield* registry.codeMode.register({
         user: {
           custom: Tool.make({
             description: "User tool",

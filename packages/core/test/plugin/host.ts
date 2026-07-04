@@ -53,7 +53,6 @@ export function host(overrides: Overrides = {}): PluginContext {
     tool: overrides.tool ?? {
       register: () => Effect.die("unused tool.register"),
       execute: {
-        register: () => Effect.die("unused tool.execute.register"),
         before: () => Effect.die("unused tool.execute.before"),
         after: () => Effect.die("unused tool.execute.after"),
       },

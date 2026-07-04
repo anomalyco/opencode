@@ -51,7 +51,6 @@ export const registerToolPlugin = <R>(plugin: {
       tool: {
         register: tools.register,
         execute: {
-          register: tools.execute.register,
           before: () => Effect.die("registerToolPlugin does not support tool hooks"),
           after: () => Effect.die("registerToolPlugin does not support tool hooks"),
         },

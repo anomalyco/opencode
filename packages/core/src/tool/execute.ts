@@ -2,7 +2,8 @@ export * as ExecuteTool from "./execute"
 
 import { CodeMode, Tool, toolError, type ToolDefinition } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
-import { definition, make, settle, type Context, type ExecuteTools } from "./tool"
+import { definition, make, settle, type Context } from "./tool"
+import type { CodeModeTools } from "./tools"
 
 export const Input = Schema.Struct({
   code: Schema.String.annotate({ description: "Code to execute using the available tools" }),
@@ -29,7 +30,7 @@ export const Output = Schema.Struct({
 
 type ExecuteCall = typeof Call.Type
 
-const create = (items: ExecuteTools) => {
+const create = (items: CodeModeTools) => {
   const createRuntime = (calls: ExecuteCall[], attachments: Array<typeof Attachment.Type>, context?: Context) => {
     const tools: Record<string, Record<string, ToolDefinition>> = Object.create(null)
     for (const [namespace, members] of Object.entries(items)) {

@@ -3,6 +3,7 @@ export * as McpGuidance from "./guidance"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { makeLocationNode } from "../effect/app-node"
+import { Flag } from "../flag/flag"
 import { PermissionV2 } from "../permission"
 import { SystemContext } from "../system-context/index"
 import { MCP } from "./index"
@@ -61,6 +62,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       load: Effect.fn("McpGuidance.load")(function* (selection) {
+        if (Flag.OPENCODE_CODE_MODE) return SystemContext.empty
         const agent = selection.info
         if (!agent) return SystemContext.empty
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {

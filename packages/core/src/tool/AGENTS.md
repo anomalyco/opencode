@@ -28,10 +28,11 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins and plugin tools register top-level tools through `Tools.Service.register({ [name]: tool })`. Tools exposed
-only inside the aggregate `execute` tool register through `Tools.Service.execute.register({ [namespace]: tools })`.
-Both placements store the same canonical `Tool.AnyTool`; `execute` is derived during materialization rather than owned
-by any contributor.
+Built-ins and plugin tools register top-level tools through `Tools.Service.register({ [name]: tool })`. Core producers
+may temporarily register tools only inside the aggregate `execute` tool through the private
+`Tools.Service.codeMode.register({ [namespace]: tools })` bridge. Do not expose that bridge through `PluginContext`;
+it exists until the plugin tool catalog has a general projection mechanism. Both placements store the same canonical
+`Tool.AnyTool`; `execute` is derived during materialization rather than owned by any contributor.
 
 Registrations are scoped:
 
