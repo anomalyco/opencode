@@ -97,6 +97,30 @@ type RenderContext = {
   readonly pretty: boolean
 }
 
+const hasUnresolvedRef = (
+  schema: JsonSchema,
+  definitions: Readonly<Record<string, JsonSchema>>,
+  seen: ReadonlySet<string> = new Set(),
+  visited: ReadonlySet<JsonSchema> = new Set(),
+): boolean => {
+  if (visited.has(schema)) return false
+  const nextVisited = new Set([...visited, schema])
+  if (schema.$ref !== undefined) {
+    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
+    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
+    if (hasUnresolvedRef(definitions[name], definitions, new Set([...seen, name]), nextVisited)) return true
+  }
+  return [
+    ...(schema.anyOf ?? []),
+    ...(schema.oneOf ?? []),
+    ...(schema.allOf ?? []),
+    ...Object.values(schema.properties ?? {}),
+    ...(schema.items === undefined ? [] : [schema.items]),
+    ...(typeof schema.additionalProperties === "object" ? [schema.additionalProperties] : []),
+  ].some((item) => hasUnresolvedRef(item, definitions, seen, nextVisited))
+}
+
 /**
  * Schema constraints a TypeScript type cannot express natively but a model benefits from,
  * surfaced as JSDoc tags (`@deprecated`, `@default`, `@format`, `@minItems`, `@maxItems`).
@@ -189,10 +213,9 @@ const renderSchema = (
     ])
   }
   if (schema.allOf) {
-    return intersection([
-      renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen),
-      ...schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen)),
-    ])
+    const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
+    if (schema.allOf.some((item) => hasUnresolvedRef(item, nested.definitions))) return "unknown"
+    return intersection([renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen), ...members])
   }
   if (Array.isArray(schema.type)) {
     return schema.type.map((item) => renderSchema({ ...schema, type: item }, nested, depth + 1, seen)).join(" | ")

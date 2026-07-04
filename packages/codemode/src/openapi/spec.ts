@@ -31,15 +31,18 @@ export const own = <T>(record: Readonly<Record<string, T>>, key: string): T | un
   Object.hasOwn(record, key) ? record[key] : undefined
 
 export const resolve = (document: Document, value: unknown): unknown => {
-  if (!isRecord(value)) return value
-  const ref = nonEmptyString(value.$ref)
-  if (ref === undefined || !ref.startsWith("#/")) return value
-  const target = ref
-    .slice(2)
-    .split("/")
-    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
-    .reduce<unknown>((current, segment) => (isRecord(current) ? own(current, segment) : undefined), document)
-  return target ?? value
+  const next = (current: unknown, seen: ReadonlySet<string>): unknown => {
+    if (!isRecord(current)) return current
+    const ref = nonEmptyString(current.$ref)
+    if (ref === undefined || !ref.startsWith("#/") || seen.has(ref)) return current
+    const target = ref
+      .slice(2)
+      .split("/")
+      .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
+      .reduce<unknown>((item, segment) => (isRecord(item) ? own(item, segment) : undefined), document)
+    return target === undefined ? current : next(target, new Set([...seen, ref]))
+  }
+  return next(value, new Set())
 }
 
 const projectSchema = (document: Document, value: unknown): JsonSchema => {
@@ -65,6 +68,14 @@ const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string
 const isJsonMediaType = (mediaType: string): boolean => {
   const normalized = mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
   return normalized === "application/json" || normalized.endsWith("+json")
+}
+
+const isBinaryMediaType = (document: Document, mediaType: string, value: unknown): boolean => {
+  const normalized = mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
+  if (!isJsonMediaType(normalized) && !normalized.startsWith("text/")) return true
+  if (!isRecord(value)) return false
+  const schema = resolve(document, value.schema)
+  return isRecord(schema) && schema.format === "binary"
 }
 
 const jsonContent = (content: Record<string, unknown>): { readonly mediaType: string; readonly schema: unknown } | undefined => {
@@ -238,11 +249,22 @@ const successResponses = (
     .filter(isRecord)
 }
 
+const unresolvedResponse = (document: Document, operation: Record<string, unknown>): string | undefined => {
+  if (!isRecord(operation.responses)) return undefined
+  const unresolved = Object.entries(operation.responses)
+    .filter(([status]) => /^2\d\d$/i.test(status) || status.toUpperCase() === "2XX")
+    .map(([, value]) => resolve(document, value))
+    .some((value) => !isRecord(value) || nonEmptyString(value.$ref) !== undefined)
+  return unresolved ? "successful response declaration is invalid or unresolved" : undefined
+}
+
 export const unsupportedOperationReason = (
   document: Document,
   operation: Record<string, unknown>,
 ): string | undefined => {
   if (operation["x-websocket"] === true) return "WebSocket operations are not supported"
+  const unresolved = unresolvedResponse(document, operation)
+  if (unresolved !== undefined) return unresolved
   const streams = successResponses(document, operation).some(
     (response) =>
       isRecord(response.content) &&
@@ -250,7 +272,13 @@ export const unsupportedOperationReason = (
         (mediaType) => mediaType.split(";")[0]?.trim().toLowerCase() === "text/event-stream",
       ),
   )
-  return streams ? "SSE operations are not supported" : undefined
+  if (streams) return "SSE operations are not supported"
+  const binary = successResponses(document, operation).some(
+    (response) =>
+      isRecord(response.content) &&
+      Object.entries(response.content).some(([mediaType, value]) => isBinaryMediaType(document, mediaType, value)),
+  )
+  return binary ? "binary responses are not supported" : undefined
 }
 
 export const outputSchema = (
@@ -331,15 +359,26 @@ const isOperationPathAvailable = (
   return segments.slice(0, -1).every((_, index) => !used.has(segments.slice(0, index + 1).join(".")))
 }
 
-export const specServerUrl = (document: Document): string | Skip => {
-  const server = asArray(document.servers).find(isRecord)
+export const specServerUrl = (source: Record<string, unknown>): string | Skip => {
+  const server = asArray(source.servers).find(isRecord)
   const url = server === undefined ? undefined : nonEmptyString(server.url)
   if (url === undefined) return { reason: "spec declares no servers; pass baseUrl" }
-  // Templated or relative server URLs cannot be resolved by the adapter.
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url) || /\{[^{}]+\}/.test(url)) {
+  if (/\{[^{}]+\}/.test(url)) {
     return { reason: `server URL '${url}' is not an absolute URL; pass baseUrl` }
   }
-  return url
+  return validateBaseUrl(url)
+}
+
+export const validateBaseUrl = (value: string): string | Skip => {
+  if (!/^https?:\/\//i.test(value)) return { reason: `server URL '${value}' is not an absolute HTTP(S) URL` }
+  const url = URL.parse(value)
+  if (url === null || (url.protocol !== "http:" && url.protocol !== "https:")) {
+    return { reason: `server URL '${value}' is not an absolute HTTP(S) URL` }
+  }
+  if (url.search !== "" || url.hash !== "") {
+    return { reason: `server URL '${value}' contains an unsupported query string or fragment` }
+  }
+  return value
 }
 
 export const securityRequirements = (value: unknown): ReadonlyArray<SecurityRequirement> | Skip => {
@@ -378,6 +417,12 @@ export const securitySchemes = (document: Document): Readonly<Record<string, Sec
       const type = nonEmptyString(resolved.type)
       if (type === undefined || !schemeTypes.has(type)) return []
       const carrier = nonEmptyString(resolved.in)
+      const parameterName = nonEmptyString(resolved.name)
+      const scheme = nonEmptyString(resolved.scheme)?.toLowerCase()
+      if (type === "apiKey" && (parameterName === undefined || !["header", "query", "cookie"].includes(carrier ?? ""))) {
+        return []
+      }
+      if (type === "http" && scheme === undefined) return []
       return [
         [
           name,
@@ -385,8 +430,8 @@ export const securitySchemes = (document: Document): Readonly<Record<string, Sec
             name,
             type: type as SecurityScheme["type"],
             in: carrier === "header" || carrier === "query" || carrier === "cookie" ? carrier : undefined,
-            parameterName: nonEmptyString(resolved.name),
-            scheme: nonEmptyString(resolved.scheme)?.toLowerCase(),
+            parameterName,
+            scheme,
           },
         ] as const,
       ]

@@ -17,37 +17,32 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     for (const field of plan.fields) {
       if (!field.required || field.location === "path") continue
       const item = own(value, field.inputName)
-      if (item === undefined || (field.location !== "body" && item === null)) {
+      if (item === undefined) {
         const label = field.location === "body" ? "body field" : `${field.location} parameter`
         return yield* Effect.fail(toolError(`Missing required ${label} '${field.inputName}'.`))
       }
     }
 
-    const auth = yield* resolveAuth(plan)
-
     let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
     for (const field of plan.fields) {
       if (field.location !== "query") continue
       const item = own(value, field.inputName)
-      if (item === undefined || item === null) continue
+      if (item === undefined) continue
       const serialized = serializeQuery(request, field, item)
       if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
       request = serialized
     }
-    for (const [name, item] of Object.entries(auth.query)) {
-      request = HttpClientRequest.setUrlParam(request, name, item)
-    }
-    // Host headers first, then declared header params, then auth - auth must win.
+    // Host headers first, then declared header params. Auth is resolved and applied
+    // only after the full model-controlled request has validated.
     request = HttpClientRequest.setHeaders(request, plan.headers)
     for (const field of plan.fields) {
       if (field.location !== "header") continue
       const item = own(value, field.inputName)
-      if (item === undefined || item === null) continue
+      if (item === undefined) continue
       const serialized = serializeSimple(field, item, String)
       if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
       request = HttpClientRequest.setHeader(request, field.name, serialized)
     }
-    request = HttpClientRequest.setHeaders(request, auth.headers)
     if (plan.body?.mode === "value") {
       const field = plan.fields.find((field) => field.location === "body")
       const body = field === undefined ? undefined : own(value, field.inputName)
@@ -71,6 +66,12 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
         request = HttpClientRequest.setHeader(request, "content-type", plan.body.mediaType)
       }
     }
+
+    const auth = yield* resolveAuth(plan)
+    for (const [name, item] of Object.entries(auth.query)) {
+      request = HttpClientRequest.setUrlParam(request, name, item)
+    }
+    request = HttpClientRequest.setHeaders(request, auth.headers)
 
     const client = yield* HttpClient.HttpClient
     const response = yield* client
@@ -194,7 +195,7 @@ const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string 
   for (const field of plan.fields) {
     if (field.location !== "path") continue
     const item = own(input, field.inputName)
-    if (item === undefined || item === null) {
+    if (item === undefined) {
       return toolError(`Missing required path parameter '${field.inputName}'.`)
     }
     const fieldValue = serializeSimple(field, item, encodePathPart)
@@ -222,7 +223,7 @@ const serializeSimple = (
   encode: (value: string) => string,
 ): string | ToolError => {
   const scalar = (item: unknown): string | ToolError =>
-    typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean"
+    item !== null && typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean"
       ? toolError(`Parameter '${field.inputName}' contains an unsupported nested value.`)
       : encode(String(item))
   if (Array.isArray(value)) {
@@ -249,7 +250,7 @@ const serializeQuery = (
     if (!isRecord(value)) return toolError(`Deep-object parameter '${field.inputName}' must be an object.`)
     return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
       if (current instanceof ToolError) return current
-      if (item === null || typeof item === "object") {
+      if (item === undefined || (item !== null && typeof item === "object")) {
         return toolError(`Deep-object parameter '${field.inputName}' contains an unsupported nested value.`)
       }
       return HttpClientRequest.appendUrlParam(current, `${field.name}[${name}]`, String(item))
@@ -259,7 +260,7 @@ const serializeQuery = (
     const rendered = serializeSimple(field, value, String)
     if (rendered instanceof ToolError) return rendered
     if (!field.explode) return HttpClientRequest.appendUrlParam(request, field.name, rendered)
-    if (value.some((item) => item === null || typeof item === "object")) {
+    if (value.some((item) => item === undefined || (item !== null && typeof item === "object"))) {
       return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
     }
     return value.reduce(
@@ -270,7 +271,7 @@ const serializeQuery = (
   if (isRecord(value) && field.explode) {
     return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
       if (current instanceof ToolError) return current
-      if (item === null || typeof item === "object") {
+      if (item === undefined || (item !== null && typeof item === "object")) {
         return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
       }
       return HttpClientRequest.appendUrlParam(current, name, String(item))

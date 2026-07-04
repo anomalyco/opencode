@@ -15,6 +15,7 @@ import {
   securitySchemes,
   specServerUrl,
   unsupportedOperationReason,
+  validateBaseUrl,
 } from "./spec.js"
 import type { Operation, Options, Result, Skipped, Tools } from "./types.js"
 
@@ -42,7 +43,6 @@ export const fromSpec = (options: Options): Result => {
   const defaultSecurity = securityRequirements(document.security)
   const definitions = componentDefinitions(document)
   const paths = isRecord(document.paths) ? document.paths : {}
-  const base = options.baseUrl ?? specServerUrl(document)
   const used = new Set<string>()
   const namespaces = new Set<string>()
   const skipped: Array<Skipped> = []
@@ -69,6 +69,16 @@ export const fromSpec = (options: Options): Result => {
         continue
       }
 
+      const base =
+        options.baseUrl !== undefined
+          ? validateBaseUrl(options.baseUrl)
+          : specServerUrl(
+              operationValue.servers !== undefined
+                ? operationValue
+                : pathValue.servers !== undefined
+                  ? pathValue
+                  : document,
+            )
       if (typeof base !== "string") {
         skipped.push({ method: operation.method, path, reason: base.reason })
         continue
@@ -85,15 +95,22 @@ export const fromSpec = (options: Options): Result => {
         skipped.push({ method: operation.method, path, reason: security.reason })
         continue
       }
-      const cookieScheme = security
-        .flatMap((requirement) => Object.keys(requirement))
-        .map((name) => own(schemes, name))
-        .find((scheme) => scheme?.type === "apiKey" && scheme.in === "cookie")
-      if (cookieScheme !== undefined) {
+      const supportedSecurity = security.filter((requirement) =>
+        Object.keys(requirement).every((name) => {
+          const scheme = own(schemes, name)
+          return scheme !== undefined && !(scheme.type === "apiKey" && scheme.in === "cookie")
+        }),
+      )
+      if (security.length > 0 && supportedSecurity.length === 0) {
+        const names = [...new Set(security.flatMap((requirement) => Object.keys(requirement)))]
+        const cookieScheme = names.map((name) => own(schemes, name)).find((scheme) => scheme?.in === "cookie")
         skipped.push({
           method: operation.method,
           path,
-          reason: `cookie authentication '${cookieScheme.name}' is not supported`,
+          reason:
+            cookieScheme === undefined
+              ? `security requirement references missing or malformed scheme: ${names.join(", ")}`
+              : `cookie authentication '${cookieScheme.name}' is not supported`,
         })
         continue
       }
@@ -102,7 +119,7 @@ export const fromSpec = (options: Options): Result => {
         url: `${base.replace(/\/+$/, "")}${path}`,
         fields: input.fields,
         body: input.body,
-        security,
+        security: supportedSecurity,
         schemes,
         auth: options.auth,
         headers: options.headers ?? {},

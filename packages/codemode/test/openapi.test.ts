@@ -58,13 +58,18 @@ describe("OpenAPI.fromSpec", () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    expect(result.skipped).toHaveLength(4)
+    expect(result.skipped).toHaveLength(5)
     expect(result.skipped).toContainEqual({
       method: "GET",
       path: "/api/pty/{ptyID}/connect",
       reason: "WebSocket operations are not supported",
     })
     expect(result.skipped.filter((item) => item.reason === "SSE operations are not supported")).toHaveLength(3)
+    expect(result.skipped).toContainEqual({
+      method: "GET",
+      path: "/api/fs/read/*",
+      reason: "binary responses are not supported",
+    })
     expect(toolAt(result.tools, "v2.health.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.create")).not.toBeUndefined()
@@ -90,7 +95,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(toolAt(result.tools, "v2.session.log")).toBeUndefined()
     expect(toolAt(result.tools, "v2.event.subscribe")).toBeUndefined()
     expect(toolAt(result.tools, "v2.event.changes")).toBeUndefined()
-    expect(toolAt(result.tools, "v2.fs.read")).not.toBeUndefined()
+    expect(toolAt(result.tools, "v2.fs.read")).toBeUndefined()
     expect(toolAt(result.tools, "v2.pty.connectToken")).not.toBeUndefined()
   })
 
@@ -230,6 +235,7 @@ describe("OpenAPI.fromSpec", () => {
                 { name: "keys", in: "path", required: true, schema: { type: "array", items: { type: "string" } } },
                 { name: "tags", in: "query", style: "form", explode: false, schema: { type: "array" } },
                 { name: "filter", in: "query", style: "form", explode: true, schema: { type: "object" } },
+                { name: "nullable", in: "query", required: true, schema: { type: ["string", "null"] } },
                 { name: "constructor", in: "query", schema: { type: "string" } },
                 { name: "meta", in: "header", style: "simple", explode: true, schema: { type: "object" } },
               ],
@@ -248,6 +254,7 @@ describe("OpenAPI.fromSpec", () => {
           keys: ["a!", "b*"],
           tags: ["x", "y"],
           filter: { state: "open", page: 2 },
+          nullable: null,
           constructor_2: "safe",
           meta: { a: "b", c: "d" },
         })
@@ -259,6 +266,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(url.searchParams.get("tags")).toBe("x,y")
     expect(url.searchParams.get("state")).toBe("open")
     expect(url.searchParams.get("page")).toBe("2")
+    expect(url.searchParams.get("nullable")).toBe("null")
     expect(url.searchParams.get("constructor")).toBe("safe")
     expect(client.requests[0]!.headers.meta).toBe("a=b,c=d")
     await expect(
@@ -310,21 +318,14 @@ describe("OpenAPI.fromSpec", () => {
     ])
   })
 
-  test("does not treat prototype-named security requirements as anonymous", async () => {
-    const client = recordingClient(() => json({ ok: true }))
-    const tool = toolAt(
-      OpenAPI.fromSpec({
-        baseUrl,
-        spec: singleOperation({ security: [JSON.parse('{"__proto__":[]}')] }),
-      }).tools,
-      "test",
-    )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+  test("fails closed on prototype-named missing security schemes", () => {
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: singleOperation({ security: [JSON.parse('{"__proto__":[]}')] }),
+    })
 
-    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))).rejects.toThrow(
-      "requires authentication",
-    )
-    expect(client.requests).toHaveLength(0)
+    expect(result.tools).toEqual({})
+    expect(result.skipped[0]?.reason).toBe("security requirement references missing or malformed scheme: __proto__")
   })
 
   test("resolves bearer authentication without exposing it as input", async () => {
@@ -385,6 +386,117 @@ describe("OpenAPI.fromSpec", () => {
     const cookie = authenticated([{ key: [] }], { key: { type: "apiKey", in: "cookie", name: "session" } })
     expect(cookie.tools).toEqual({})
     expect(cookie.skipped[0]?.reason).toBe("cookie authentication 'key' is not supported")
+
+    const alternative = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        ...singleOperation({}),
+        security: [{ cookie: [] }, { bearer: [] }],
+        components: {
+          securitySchemes: {
+            cookie: { type: "apiKey", in: "cookie", name: "session" },
+            bearer: { type: "http", scheme: "bearer" },
+          },
+        },
+      },
+      auth: {
+        resolve: ({ schemeName }) =>
+          Effect.succeed(schemeName === "bearer" ? { type: "bearer", token: "secret" } : undefined),
+      },
+    })
+    const alternativeTool = toolAt(alternative.tools, "test")
+    if (!Tool.isDefinition(alternativeTool)) throw new Error("supported auth alternative was not generated")
+    await Effect.runPromise(alternativeTool.run({}).pipe(Effect.provide(client.layer)))
+    expect(client.requests.at(-1)?.headers.authorization).toBe("Bearer secret")
+  })
+
+  test("honors server precedence and rejects ambiguous base URLs", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const spec = {
+      ...singleOperation({ servers: [{ url: "https://operation.example/v1" }] }),
+      servers: [{ url: "https://document.example" }],
+    } satisfies Document
+    const tool = toolAt(OpenAPI.fromSpec({ spec }).tools, "test")
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    await Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))
+    expect(client.requests[0]?.url).toBe("https://operation.example/v1/test")
+
+    const invalid = OpenAPI.fromSpec({ spec, baseUrl: "https://example.com/api?tenant=one" })
+    expect(invalid.tools).toEqual({})
+    expect(invalid.skipped[0]?.reason).toContain("unsupported query string or fragment")
+
+    const malformed = OpenAPI.fromSpec({ spec, baseUrl: "https:/example.com" })
+    expect(malformed.tools).toEqual({})
+    expect(malformed.skipped[0]?.reason).toContain("not an absolute HTTP(S) URL")
+  })
+
+  test("resolves chained response refs before detecting unsupported transports", () => {
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        ...singleOperation({ responses: { 200: { $ref: "#/components/responses/First" } } }),
+        components: {
+          responses: {
+            First: { $ref: "#/components/responses/Stream" },
+            Stream: { content: { "text/event-stream": { schema: { type: "string" } } } },
+          },
+        },
+      },
+    })
+
+    expect(result.tools).toEqual({})
+    expect(result.skipped[0]?.reason).toBe("SSE operations are not supported")
+  })
+
+  test("resolves response schemas before detecting binary output", () => {
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        ...singleOperation({
+          responses: {
+            200: {
+              content: { "text/plain": { schema: { $ref: "#/components/schemas/File" } } },
+            },
+          },
+        }),
+        components: { schemas: { File: { type: "string", format: "binary" } } },
+      },
+    })
+
+    expect(result.tools).toEqual({})
+    expect(result.skipped[0]?.reason).toBe("binary responses are not supported")
+  })
+
+  test("validates composite parameters before resolving auth", async () => {
+    const resolutions: Array<string> = []
+    const client = recordingClient(() => json({ ok: true }))
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          ...singleOperation({
+            parameters: [{ name: "filter", in: "query", style: "form", explode: true, schema: { type: "object" } }],
+          }),
+          security: [{ bearer: [] }],
+          components: { securitySchemes: { bearer: { type: "http", scheme: "bearer" } } },
+        },
+        auth: {
+          resolve: ({ schemeName }) => {
+            resolutions.push(schemeName)
+            return Effect.succeed({ type: "bearer", token: "secret" })
+          },
+        },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    await expect(
+      Effect.runPromise(tool.run({ filter: { value: undefined } }).pipe(Effect.provide(client.layer))),
+    ).rejects.toThrow("unsupported nested value")
+    expect(resolutions).toEqual([])
+    expect(client.requests).toEqual([])
   })
 
   test("preserves JSON media types and rejects unencodable bodies", async () => {

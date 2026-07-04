@@ -51,7 +51,7 @@ export type AuthResolver = (context: {
 
 export type Options = {
   readonly spec: Document
-  /** Overrides the spec's `servers` (only the first entry is used). Required when the spec has no absolute server URL. */
+  /** Overrides all document, path, and operation `servers`. Required when no applicable absolute server URL exists. */
   readonly baseUrl?: string | undefined
   /** Host credential resolution, keyed by security scheme name. */
   readonly auth?: { readonly resolve: AuthResolver } | undefined

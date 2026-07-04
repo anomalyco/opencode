@@ -315,6 +315,22 @@ describe("union schemas render every alternative", () => {
     } as const
     expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
   })
+
+  test("allOf does not discard an unresolved constraint", () => {
+    expect(jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { $ref: "https://example.com/external.json" }] })).toBe(
+      "unknown",
+    )
+    expect(
+      jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }] }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        type: "string",
+        allOf: [{ $ref: "#/$defs/Constraint" }],
+        $defs: { Constraint: { description: "TypeScript-neutral constraint" } },
+      }),
+    ).toBe("string")
+  })
 })
 
 describe("pretty signatures in search results", () => {
