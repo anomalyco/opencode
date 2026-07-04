@@ -409,8 +409,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       else
         toast.show({
           variant: "error",
-          title: "MCP server failed to connect",
-          message: `${server.name}: ${status.error}`,
+          title: `MCP server failed: ${server.name}`,
+          message: "Open MCPs to view details.",
         })
     }
   })
