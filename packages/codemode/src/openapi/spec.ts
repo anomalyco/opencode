@@ -1,5 +1,6 @@
 import { fromSchemaOpenApi3_0, fromSchemaOpenApi3_1 } from "effect/JsonSchema"
 import type { JsonSchema } from "../tool.js"
+import { isBlockedMember } from "../tool-runtime.js"
 import type {
   Body,
   Document,
@@ -13,7 +14,6 @@ import type {
 export const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
 const parameterLocations = ["path", "query", "header"] as const
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
-const blockedNames = new Set(["__proto__", "constructor", "prototype"])
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -250,7 +250,7 @@ export const operationInput = (
     ok: true,
     value: {
       fields: fields.map((field) => {
-        const visibleName = blockedNames.has(field.name) ? `${field.name}_2` : field.name
+        const visibleName = isBlockedMember(field.name) ? `${field.name}_2` : field.name
         const base = conflicts.has(field.name) ? `${field.location}_${visibleName}` : visibleName
         const next = (index: number): string => {
           const candidate = index === 1 ? base : `${base}_${index}`
@@ -354,7 +354,7 @@ const sanitizeOperationSegment = (raw: string): string => {
       .replaceAll(/[^A-Za-z0-9_$]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .replace(/^([0-9])/, "_$1") || "operation"
-  return blockedNames.has(base) ? `${base}_2` : base
+  return isBlockedMember(base) ? `${base}_2` : base
 }
 
 export const operationPath = (
