@@ -743,20 +743,18 @@ You can control context compaction behavior through the `compaction` option.
 
 ### Watcher
 
-You can configure project file watching through the `watcher` option.
+You can configure file watcher ignore patterns through the `watcher` option.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
-    "enabled": true,
     "ignore": ["**/generated/**"]
   }
 }
 ```
 
-- `enabled` - Watch the current project for external file changes (default: `true`). Config files continue to hot reload when disabled.
-- `ignore` - Exclude additional paths using glob syntax. Common dependency, VCS, build, and cache directories are excluded from recursive project watching at any depth; Git `HEAD` is watched separately.
+Patterns follow glob syntax. Common dependency, VCS, build, and cache directories are ignored automatically at any depth.
 
 ---
 

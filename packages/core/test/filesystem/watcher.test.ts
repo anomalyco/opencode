@@ -4,7 +4,6 @@ import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigWatcher } from "@opencode-ai/core/config/watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -24,40 +23,29 @@ type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, EventV2.node])))
 
-const configLayer = (entries: readonly Config.Entry[] = []) =>
-  Layer.mock(Config.Service)({
-    entries: () => Effect.succeed([...entries]),
-  })
+const configLayer = Layer.succeed(
+  Config.Service,
+  Config.Service.of({
+    entries: () => Effect.succeed([]),
+  }),
+)
 
-function provide(
-  directory: string,
-  options: {
-    vcs?: Location.Interface["vcs"]
-    config?: readonly Config.Entry[]
-    watcher?: Layer.Layer<Watcher.Service>
-  } = {},
-) {
+function provide(directory: string, vcs?: Location.Interface["vcs"]) {
   const locationLayer = Layer.succeed(
     Location.Service,
-    Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs: options.vcs })),
+    Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs })),
   )
   return Effect.provide(
     AppNodeBuilder.build(LocationWatcher.node, [
-      [Config.node, configLayer(options.config)],
+      [Config.node, configLayer],
       [Location.node, locationLayer],
-      ...(options.watcher ? ([[Watcher.node, options.watcher]] as const) : []),
     ]),
   )
 }
 
 function withTmp<A, E, R>(
   f: (directory: string, vcs?: Location.Interface["vcs"]) => Effect.Effect<A, E, R>,
-  options?: {
-    git?: boolean
-    init?: (directory: string) => Promise<void>
-    config?: readonly Config.Entry[]
-    watcher?: Layer.Layer<Watcher.Service>
-  },
+  options?: { git?: boolean; init?: (directory: string) => Promise<void> },
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -73,11 +61,7 @@ function withTmp<A, E, R>(
       return { tmp, vcs: { type: "git" as const, store: AbsolutePath.make(path.join(tmp.path, ".git")) } }
     }),
     ({ tmp }) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(
-    Effect.flatMap(({ tmp, vcs }) =>
-      f(tmp.path, vcs).pipe(provide(tmp.path, { vcs, config: options?.config, watcher: options?.watcher })),
-    ),
-  )
+  ).pipe(Effect.flatMap(({ tmp, vcs }) => f(tmp.path, vcs).pipe(provide(tmp.path, vcs))))
 }
 
 function wait(check: (event: WatcherEvent) => boolean) {
@@ -232,27 +216,6 @@ describeWatcher("LocationWatcher", () => {
       }),
     ),
   )
-
-  it.live("can disable project file watching", () => {
-    let subscriptions = 0
-    return withTmp(() => Effect.sync(() => expect(subscriptions).toBe(0)), {
-      config: [
-        new Config.Document({
-          type: "document",
-          info: new Config.Info({ watcher: new ConfigWatcher.Info({ enabled: false }) }),
-        }),
-      ],
-      watcher: Layer.succeed(
-        Watcher.Service,
-        Watcher.Service.of({
-          subscribe: () => {
-            subscriptions++
-            return Stream.empty
-          },
-        }),
-      ),
-    })
-  })
 
   it.live("cleanup stops publishing events", () =>
     Effect.gen(function* () {
