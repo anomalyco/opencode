@@ -20,6 +20,8 @@ type Turn = {
 export type RunSession = {
   first: boolean
   turns: Turn[]
+  model?: NonNullable<RunInput["model"]>
+  variant?: string
 }
 
 function fileName(url: string, filename?: string) {
@@ -197,6 +199,13 @@ export async function resolveCurrentSession(
         },
       ]
     }),
+    ...(session.data.data.model && {
+      model: {
+        providerID: session.data.data.model.providerID,
+        modelID: session.data.data.model.id,
+      },
+      variant: session.data.data.model.variant,
+    }),
   }
 }
 
@@ -221,6 +230,10 @@ export function sessionHistory(session: RunSession, limit = LIMIT): RunPrompt[] 
 export function sessionVariant(session: RunSession, model: RunInput["model"]): string | undefined {
   if (!model) {
     return undefined
+  }
+
+  if (session.model?.providerID === model.providerID && session.model.modelID === model.modelID) {
+    return session.variant
   }
 
   for (let idx = session.turns.length - 1; idx >= 0; idx -= 1) {

@@ -15,7 +15,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageID } from "@/session/schema"
-import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
+import { loadRunAgents, loadRunCommands, loadRunReferences, waitForDefaultModel } from "./catalog.shared"
 import { createRunDemo } from "./demo"
 import { resolveModelInfo, resolveModelInfoStrict, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
@@ -181,13 +181,13 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const log = trace()
   const tuiConfigTask = resolveRunTuiConfig()
   const ctx = await input.boot()
-  const modelTask = resolveModelInfo(ctx.sdk, ctx.directory, ctx.model)
   const sessionTask =
     ctx.resume === true
       ? resolveSessionInfo(ctx.sdk, ctx.sessionID, ctx.model)
       : Promise.resolve({
           first: true,
           history: [],
+          model: undefined,
           variant: undefined,
         })
   const savedTask = resolveSavedVariant(ctx.model)
@@ -195,7 +195,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const state: RuntimeState = {
     shown: !session.first,
     aborting: false,
-    model: ctx.model,
+    model: ctx.model ?? session.model,
     providers: [],
     variants: [],
     limits: {},
@@ -206,6 +206,38 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     sessionTitle: ctx.sessionTitle,
     agent: ctx.agent,
   }
+  const modelTask = (async () => {
+    if (state.model) {
+      return {
+        model: state.model,
+        savedVariant,
+        boot: true,
+        info: await resolveModelInfo(ctx.sdk, ctx.directory, state.model),
+      }
+    }
+
+    const model = await waitForDefaultModel({ sdk: ctx.sdk, directory: ctx.directory })
+    const [fallbackSavedVariant, info] = await Promise.all([
+      resolveSavedVariant(model),
+      resolveModelInfo(ctx.sdk, ctx.directory, model),
+    ])
+    if (!model || state.model) {
+      return {
+        model: state.model,
+        savedVariant: undefined,
+        boot: false,
+        info,
+      }
+    }
+
+    state.model = model
+    return {
+      model,
+      savedVariant: fallbackSavedVariant,
+      boot: true,
+      info,
+    }
+  })()
   const ensureSession = () => {
     if (!input.resolveSession || state.sessionID) {
       return Promise.resolve()
@@ -345,9 +377,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       state.aborting = true
-      void (state.stream
-        ? state.stream.then((item) => item.handle.interruptActiveTurn())
-        : ctx.sdk.v2.session.interrupt({ sessionID: state.sessionID }))
+      void (
+        state.stream
+          ? state.stream.then((item) => item.handle.interruptActiveTurn())
+          : ctx.sdk.v2.session.interrupt({ sessionID: state.sessionID })
+      )
         .catch(() => {})
         .finally(() => {
           state.aborting = false
@@ -417,12 +451,13 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     info: Awaited<ReturnType<typeof resolveModelInfo>>,
     current: string | undefined,
     boot = false,
+    saved = savedVariant,
   ) => {
     state.providers = info.providers
     state.variants = variantsFor(state.providers, state.model)
     state.limits = info.limits
     state.activeVariant = boot
-      ? resolveVariant(ctx.variant, current, savedVariant, state.variants)
+      ? resolveVariant(ctx.variant, current, saved, state.variants)
       : current && !state.variants.includes(current)
         ? undefined
         : current
@@ -430,7 +465,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     footer.event({ type: "models", providers: info.providers })
     footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
     if (state.model)
-      footer.event({ type: "model", model: formatModelLabel(state.model, state.activeVariant, state.providers) })
+      footer.event({
+        type: "model",
+        model: formatModelLabel(state.model, state.activeVariant, state.providers),
+        selection: state.model,
+      })
   }
 
   let catalogRefresh: Promise<void> | undefined
@@ -485,7 +524,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     void Promise.resolve(input.afterPaint(ctx)).catch(() => {})
   }
 
-  void modelTask.then((info) => applyModelInfo(info, session.variant, true))
+  void modelTask.then((result) => {
+    const current = state.model
+    const boot =
+      result.boot &&
+      !!current &&
+      current.providerID === result.model?.providerID &&
+      current.modelID === result.model.modelID
+    applyModelInfo(result.info, boot ? session.variant : state.activeVariant, boot, result.savedVariant)
+  })
 
   const streamTask = deps.streamTransport ?? import("./stream-v2.transport")
   const ensureStream = () => {

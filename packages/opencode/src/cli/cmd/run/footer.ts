@@ -390,6 +390,10 @@ export class RunFooter implements FooterApi {
   }
 
   public event(next: FooterEvent): void {
+    if (next.type === "model") {
+      this.setCurrentModel(next.selection)
+    }
+
     if (next.type === "turn.duration") {
       const current = this.currentModel()
       this.flush()

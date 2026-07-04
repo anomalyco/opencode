@@ -303,6 +303,8 @@ describe("run session shared", () => {
 
     const out = await resolveCurrentSession(client, "ses_1")
 
+    expect(out.model).toEqual({ providerID: "openai", modelID: "gpt-5" })
+    expect(out.variant).toBe("high")
     expect(out.turns[0]?.prompt).toEqual({
       text: "Review @note.ts",
       parts: [

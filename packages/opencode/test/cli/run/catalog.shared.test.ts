@@ -1,12 +1,37 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpencodeClient } from "@opencode-ai/sdk/v2"
-import { loadRunReferences, runProviders } from "@/cli/cmd/run/catalog.shared"
+import { loadRunReferences, runProviders, waitForDefaultModel } from "@/cli/cmd/run/catalog.shared"
 
 afterEach(() => {
   mock.restore()
 })
 
 describe("run catalog shared", () => {
+  test("resolves the catalog-selected model for the footer", async () => {
+    const client = new OpencodeClient()
+    const selected = spyOn(client.v2.model, "default").mockImplementation(
+      () =>
+        Promise.resolve({
+          data: {
+            location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+            data: {
+              id: "gpt-5",
+              providerID: "openai",
+            },
+          },
+          error: undefined,
+          request: new Request("https://opencode.test"),
+          response: new Response(),
+        }) as never,
+    )
+
+    await expect(waitForDefaultModel({ sdk: client, directory: "/tmp" })).resolves.toEqual({
+      providerID: "openai",
+      modelID: "gpt-5",
+    })
+    expect(selected).toHaveBeenCalledWith({ location: { directory: "/tmp" } }, { throwOnError: true })
+  })
+
   test("loads visible project references from the current reference catalog", async () => {
     const client = new OpencodeClient()
     const list = spyOn(client.v2.reference, "list").mockImplementation(

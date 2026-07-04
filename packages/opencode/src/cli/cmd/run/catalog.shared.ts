@@ -4,7 +4,9 @@ import type { RunAgent, RunCommand, RunProvider, RunReference } from "./types"
 type CurrentAgent = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["agent"]["list"]>>["data"]>["data"][number]
 type CurrentCommand = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["command"]["list"]>>["data"]>["data"][number]
 type CurrentSkill = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["skill"]["list"]>>["data"]>["data"][number]
-type CurrentProvider = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["provider"]["list"]>>["data"]>["data"][number]
+type CurrentProvider = NonNullable<
+  Awaited<ReturnType<OpencodeClient["v2"]["provider"]["list"]>>["data"]
+>["data"][number]
 type CurrentModel = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["model"]["list"]>>["data"]>["data"][number]
 
 function location(directory: string) {
@@ -101,6 +103,22 @@ export async function waitForCatalogReady(input: {
       .then((result) => result.data?.data ?? [])
       .catch(() => undefined)
     if (models?.some((model) => model.providerID === input.model.providerID && model.id === input.model.modelID)) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+}
+
+export async function waitForDefaultModel(input: {
+  sdk: OpencodeClient
+  directory: string
+  timeoutMs?: number
+}): Promise<{ providerID: string; modelID: string } | undefined> {
+  const deadline = Date.now() + (input.timeoutMs ?? 5_000)
+  while (Date.now() < deadline) {
+    const model = await input.sdk.v2.model
+      .default(location(input.directory), { throwOnError: true })
+      .then((result) => result.data?.data)
+      .catch(() => undefined)
+    if (model) return { providerID: model.providerID, modelID: model.id }
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
 }

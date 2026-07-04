@@ -312,6 +312,7 @@ export type FooterEvent =
   | {
       type: "model"
       model: string
+      selection: NonNullable<RunInput["model"]>
     }
   | {
       type: "turn.send"

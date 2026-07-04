@@ -113,6 +113,7 @@ describe("run interactive runtime", () => {
   test("waits for provider metadata before eager replay transport bootstrap", async () => {
     const providersStarted = defer<void>()
     const providers = defer<void>()
+    const lifecycleModels: unknown[] = []
 
     const sdk = new OpencodeClient()
     const legacyProviders = spyOn(sdk.config, "providers").mockRejectedValue(new Error("legacy providers should stay unused"))
@@ -249,23 +250,23 @@ describe("run interactive runtime", () => {
         replay: true,
         replayLimit: 100,
         agent: "build",
-        model: {
-          providerID: "openai",
-          modelID: "gpt-5",
-        },
+        model: undefined,
         variant: undefined,
         files: [],
         thinking: true,
         backgroundSubagents: false,
       },
       {
-        createRuntimeLifecycle: async () => ({
-          footer: footer(),
-          onResize: () => () => {},
-          refreshTheme: () => {},
-          resetForReplay: () => Promise.resolve(),
-          close: () => Promise.resolve(),
-        }),
+        createRuntimeLifecycle: async (input) => {
+          lifecycleModels.push(input.model)
+          return {
+            footer: footer(),
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
         streamTransport: Promise.resolve({
           createSessionTransport: async (input: { providers?: () => RunProvider[]; footer: FooterApi }) => {
             transportProviders.push(input.providers?.() ?? [])
@@ -293,10 +294,105 @@ describe("run interactive runtime", () => {
 
     await task
 
+    expect(lifecycleModels).toEqual([{ providerID: "openai", modelID: "gpt-5" }])
     expect(transportProviders).toEqual([[provider]])
     expect(legacyProviders).not.toHaveBeenCalled()
     expect(legacyAgents).not.toHaveBeenCalled()
     expect(legacyCommands).not.toHaveBeenCalled()
+  })
+
+  test("paints before resolving the catalog-selected model", async () => {
+    const sdk = new OpencodeClient()
+    const defaultStarted = defer<void>()
+    const releaseDefault = defer<void>()
+    const lifecycleStarted = defer<void>()
+    const modelShown = defer<void>()
+    const events: FooterEvent[] = []
+    const api = footer(events)
+    const event = api.event
+    api.event = (value) => {
+      event(value)
+      if (value.type !== "model") return
+      modelShown.resolve()
+      api.close()
+    }
+
+    spyOn(sdk.v2.model, "default").mockImplementation(async () => {
+      defaultStarted.resolve()
+      await releaseDefault.promise
+      return ok({
+        location: { directory: "/tmp" },
+        data: { id: "gpt-5", providerID: "openai" },
+      }) as never
+    })
+    spyOn(sdk.v2.provider, "list").mockImplementation(() =>
+      ok({ location: { directory: "/tmp" }, data: [] }) as never,
+    )
+    spyOn(sdk.v2.model, "list").mockImplementation(() =>
+      ok({ location: { directory: "/tmp" }, data: [] }) as never,
+    )
+    spyOn(sdk.v2.agent, "list").mockImplementation(() =>
+      ok({ location: { directory: "/tmp" }, data: [] }) as never,
+    )
+    spyOn(sdk.v2.reference, "list").mockImplementation(() =>
+      ok({ location: { directory: "/tmp" }, data: [] }) as never,
+    )
+    spyOn(sdk.v2.command, "list").mockImplementation(() =>
+      ok({ location: { directory: "/tmp" }, data: [] }) as never,
+    )
+    spyOn(sdk.v2.skill, "list").mockImplementation(() =>
+      ok({ location: { directory: "/tmp" }, data: [] }) as never,
+    )
+
+    const task = runInteractiveMode(
+      {
+        sdk,
+        directory: "/tmp",
+        sessionID: "ses-fresh",
+        resume: false,
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+        thinking: false,
+        backgroundSubagents: false,
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          expect(input.model).toBeUndefined()
+          lifecycleStarted.resolve()
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => ({
+            runPromptTurn: async () => {},
+            interruptActiveTurn: async () => {},
+            selectSubagent: () => {},
+            replayOnResize: async () => false,
+            close: async () => {},
+          }),
+          formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        }),
+      },
+    )
+
+    await defaultStarted.promise
+    await lifecycleStarted.promise
+    releaseDefault.resolve()
+    await modelShown.promise
+    await task
+
+    expect(events.find((event) => event.type === "model")).toEqual({
+      type: "model",
+      model: "gpt-5 · openai",
+      selection: { providerID: "openai", modelID: "gpt-5" },
+    })
   })
 
   test("retains last-known-good state across failed coalesced refreshes and retries later", async () => {

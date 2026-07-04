@@ -26,6 +26,7 @@ export type ModelInfo = {
 export type SessionInfo = {
   first: boolean
   history: RunPrompt[]
+  model?: NonNullable<RunInput["model"]>
   variant: string | undefined
 }
 
@@ -141,7 +142,8 @@ const layer = Layer.effect(
       return {
         first: session.first,
         history: sessionHistory(session),
-        variant: pickVariant(model, session),
+        model: session.model,
+        variant: pickVariant(model ?? session.model, session),
       }
     })
 
