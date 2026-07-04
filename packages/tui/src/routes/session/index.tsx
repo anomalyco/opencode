@@ -1070,12 +1070,7 @@ function SessionMessageView(props: { message: SessionMessage }) {
       <Match when={props.message.type === "shell"}>
         <ShellMessage message={props.message as Extract<SessionMessage, { type: "shell" }>} />
       </Match>
-      <Match
-        when={
-          props.message.type === "agent-switched" ||
-          (props.message.type === "model-switched" && props.message.metadata?.["projection-pending"] !== true)
-        }
-      >
+      <Match when={props.message.type === "agent-switched" || props.message.type === "model-switched"}>
         <SessionSwitchMessageV2 message={props.message} />
       </Match>
       <Match

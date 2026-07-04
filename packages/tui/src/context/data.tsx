@@ -117,11 +117,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         index.set(item.id, messages.length)
         messages.push(item)
       },
-      replace(messages: SessionMessage[], index: Map<string, number>, item: SessionMessage) {
-        const position = index.get(item.id)
-        if (position === undefined) return message.append(messages, index, item)
-        messages[position] = item
-      },
       activeAssistant(messages: SessionMessage[]) {
         const item = messages.findLast((item) => item.type === "assistant" && !item.time.completed)
         return item?.type === "assistant" ? item : undefined
@@ -240,21 +235,24 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.model.selected":
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "model", event.data.model)
+          if (!store.session.message[event.data.sessionID]) break
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
               type: "model-switched",
               model: event.data.model,
-              metadata: { "projection-pending": true },
               time: { created: event.created },
             })
           })
           void sdk.api.session
             .message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
-            .then((item) =>
-              message.update(event.data.sessionID, (draft, index) => message.replace(draft, index, mutable(item))),
-            )
-            .catch(() => result.session.message.refresh(event.data.sessionID))
+            .then((item) => {
+              message.update(event.data.sessionID, (draft, index) => {
+                const position = index.get(item.id)
+                if (position === undefined) return message.append(draft, index, mutable(item))
+                draft[position] = mutable(item)
+              })
+            })
             .catch((error) => console.error("Failed to load projected model switch message", error))
           break
         case "session.renamed":
@@ -696,9 +694,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const messages = [
               ...loaded.map((message) => {
                 if (message.type === "user") return message
-                const live = liveByID.get(message.id)
-                if (live?.metadata?.["projection-pending"] === true) return message
-                return live ?? message
+                return liveByID.get(message.id) ?? message
               }),
               ...live.filter((message) => !loadedIDs.has(message.id)),
             ].toSorted((a, b) => a.time.created - b.time.created)
