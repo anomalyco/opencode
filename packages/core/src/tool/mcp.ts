@@ -6,6 +6,7 @@ import { Effect, Exit, type JsonSchema, Layer, Scope, Semaphore, Stream } from "
 import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { MCP } from "../mcp"
+import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 import { ToolRegistry } from "./registry"
@@ -21,6 +22,7 @@ export const layer = Layer.effectDiscard(
     const mcp = yield* MCP.Service
     const tools = yield* Tools.Service
     const events = yield* EventV2.Service
+    const permission = yield* PermissionV2.Service
     const scope = yield* Scope.Scope
     const lock = Semaphore.makeUnsafe(1)
     let current: Scope.Closeable | undefined
@@ -41,8 +43,21 @@ export const layer = Layer.effectDiscard(
               properties: schema.properties ?? {},
               additionalProperties: false,
             },
-            execute: (input) =>
+            execute: (input, context) =>
               Effect.gen(function* () {
+                yield* permission.assert({
+                  action: name(tool.server, tool.name),
+                  resources: ["*"],
+                  save: ["*"],
+                  metadata: {},
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: {
+                    type: "tool",
+                    messageID: context.assistantMessageID,
+                    callID: context.toolCallID,
+                  },
+                })
                 const result = yield* mcp
                   .callTool({
                     server: tool.server,
@@ -96,5 +111,5 @@ export const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "mcp-tools",
   layer,
-  deps: [ToolRegistry.toolsNode, MCP.node, EventV2.node],
+  deps: [ToolRegistry.toolsNode, MCP.node, EventV2.node, PermissionV2.node],
 })
