@@ -4,7 +4,6 @@ import type {
   Body,
   Document,
   InputField,
-  InputLocation,
   OperationInput,
   SecurityRequirement,
   SecurityScheme,
@@ -13,7 +12,6 @@ import type {
 
 export const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
 const parameterLocations = ["path", "query", "header"] as const
-const parameterLocationSet = new Set<string>(parameterLocations)
 const ignoredHeaderParameters = new Set(["accept", "content-type", "authorization"])
 const schemeTypes = new Set(["apiKey", "http", "oauth2", "openIdConnect"])
 const blockedOperationNames = new Set(["__proto__", "constructor", "prototype"])
@@ -69,9 +67,9 @@ const isJsonMediaType = (mediaType: string): boolean => {
   return normalized === "application/json" || normalized.endsWith("+json")
 }
 
-const jsonContentSchema = (content: Record<string, unknown>): unknown => {
+const jsonContent = (content: Record<string, unknown>): { readonly mediaType: string; readonly schema: unknown } | undefined => {
   const entry = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
-  return entry !== undefined && isRecord(entry[1]) ? entry[1].schema : undefined
+  return entry !== undefined && isRecord(entry[1]) ? { mediaType: entry[0], schema: entry[1].schema } : undefined
 }
 
 const isFlattenableObjectBody = (
@@ -94,20 +92,62 @@ export const operationInput = (
   operation: Record<string, unknown>,
 ): OperationInput | Skip => {
   // Operation-level parameters override path-level ones sharing (location, name).
-  const merged = new Map<string, Omit<InputField, "inputName">>()
+  const declared = new Map<
+    string,
+    { readonly name: string; readonly location: string; readonly parameter: Record<string, unknown> }
+  >()
   for (const raw of [...asArray(pathItem.parameters), ...asArray(operation.parameters)]) {
     const resolved = resolve(document, raw)
-    if (!isRecord(resolved)) continue
+    if (!isRecord(resolved)) return { reason: "parameter declaration is invalid or unresolved" }
     const name = nonEmptyString(resolved.name)
     const location = nonEmptyString(resolved.in)
-    if (name === undefined || location === undefined || !parameterLocationSet.has(location)) continue
+    if (name === undefined || location === undefined) return { reason: "parameter declaration is missing name or location" }
+    declared.set(`${location}:${name}`, { name, location, parameter: resolved })
+  }
+  const unordered: Array<Omit<InputField, "inputName">> = []
+  for (const item of declared.values()) {
+    const name = item.name
+    const location = item.location
+    const resolved = item.parameter
+    if (location === "cookie") return { reason: `cookie parameter '${name}' is not supported` }
+    if (location !== "path" && location !== "query" && location !== "header") {
+      return { reason: `parameter '${name}' uses unsupported location '${location}'` }
+    }
     if (location === "header" && ignoredHeaderParameters.has(name.toLowerCase())) continue
+    if (resolved.schema === undefined && resolved.content === undefined) {
+      return { reason: `parameter '${name}' declares neither schema nor content` }
+    }
+    if (resolved.content !== undefined) return { reason: `parameter '${name}' uses unsupported content encoding` }
+    if (resolved.style !== undefined && nonEmptyString(resolved.style) === undefined) {
+      return { reason: `parameter '${name}' has an invalid style` }
+    }
+    if (resolved.explode !== undefined && typeof resolved.explode !== "boolean") {
+      return { reason: `parameter '${name}' has an invalid explode value` }
+    }
+    if (resolved.allowReserved !== undefined && typeof resolved.allowReserved !== "boolean") {
+      return { reason: `parameter '${name}' has an invalid allowReserved value` }
+    }
+    if (resolved.allowReserved === true) return { reason: `parameter '${name}' uses unsupported allowReserved encoding` }
+    const declaredStyle = nonEmptyString(resolved.style) ?? (location === "query" ? "form" : "simple")
+    if (location === "query" && declaredStyle !== "form" && declaredStyle !== "deepObject") {
+      return { reason: `query parameter '${name}' uses unsupported style '${declaredStyle}'` }
+    }
+    if (location !== "query" && declaredStyle !== "simple") {
+      return { reason: `${location} parameter '${name}' uses unsupported style '${declaredStyle}'` }
+    }
+    const style = declaredStyle === "deepObject" ? "deepObject" : declaredStyle === "form" ? "form" : "simple"
+    const explode = typeof resolved.explode === "boolean" ? resolved.explode : style === "form"
+    if (style === "deepObject" && !explode) {
+      return { reason: `query parameter '${name}' uses deepObject with explode=false` }
+    }
     const base = projectSchema(document, resolved.schema)
     const description = nonEmptyString(resolved.description)
-    merged.set(`${location}:${name}`, {
+    unordered.push({
       name,
-      location: location as InputLocation,
+      location,
       required: resolved.required === true || location === "path",
+      style,
+      explode,
       schema: {
         ...base,
         ...(base.description === undefined && description !== undefined ? { description } : {}),
@@ -115,20 +155,20 @@ export const operationInput = (
     })
   }
   const fields: Array<Omit<InputField, "inputName">> = parameterLocations.flatMap((location) =>
-    [...merged.values()].filter((field) => field.location === location),
+    unordered.filter((field) => field.location === location),
   )
   const resolved = resolve(document, operation.requestBody)
   const body: Body | Skip | undefined = (() => {
     if (!isRecord(resolved)) return undefined
     const content = isRecord(resolved.content) ? resolved.content : {}
-    if (!Object.keys(content).some(isJsonMediaType))
+    const selected = jsonContent(content)
+    if (selected === undefined)
       return { reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})` }
-    const source = jsonContentSchema(content)
-    const schema = resolve(document, source)
+    const schema = resolve(document, selected.schema)
     const required = resolved.required === true
     if (!isFlattenableObjectBody(schema, required)) {
-      fields.push({ name: "body", location: "body", required, schema: projectSchema(document, source) })
-      return { required, mode: "value" } as const
+      fields.push({ name: "body", location: "body", required, schema: projectSchema(document, selected.schema), style: undefined, explode: undefined })
+      return { required, mode: "value", mediaType: selected.mediaType } as const
     }
     const requiredProperties = new Set(
       Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
@@ -139,9 +179,11 @@ export const operationInput = (
         location: "body" as const,
         required: required && requiredProperties.has(name),
         schema: projectSchema(document, value),
+        style: undefined,
+        explode: undefined,
       })),
     )
-    return { required, mode: "object" } as const
+    return { required, mode: "object", mediaType: selected.mediaType } as const
   })()
   if (body !== undefined && "reason" in body) return body
 
@@ -217,8 +259,8 @@ export const outputSchema = (
 ): JsonSchema | undefined => {
   const successes = successResponses(document, operation)
   for (const response of successes) {
-    const schema = jsonContentSchema(isRecord(response.content) ? response.content : {})
-    if (schema !== undefined) return withDefinitions(projectSchema(document, schema), definitions)
+    const selected = jsonContent(isRecord(response.content) ? response.content : {})
+    if (selected !== undefined) return withDefinitions(projectSchema(document, selected.schema), definitions)
   }
   // Declared non-JSON content (e.g. text/plain) returns the raw body -> unknown.
   const declaresContent = successes.some(
@@ -291,17 +333,31 @@ export const specServerUrl = (document: Document): string | Skip => {
   return url
 }
 
-export const securityRequirements = (value: unknown): ReadonlyArray<SecurityRequirement> =>
-  asArray(value)
-    .filter(isRecord)
-    .map((requirement) =>
-      Object.fromEntries(
-        Object.entries(requirement).map(([name, scopes]) => [
-          name,
-          asArray(scopes).filter((scope): scope is string => typeof scope === "string"),
-        ]),
+export const securityRequirements = (value: unknown): ReadonlyArray<SecurityRequirement> | Skip => {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) return { reason: "security declaration is not an array" }
+  if (value.some((requirement) => !isRecord(requirement))) {
+    return { reason: "security requirement is not an object" }
+  }
+  const requirements = value.filter(isRecord)
+  if (
+    requirements.some((requirement) =>
+      Object.values(requirement).some(
+        (scopes) => !Array.isArray(scopes) || scopes.some((scope) => typeof scope !== "string"),
       ),
     )
+  ) {
+    return { reason: "security requirement scopes are not string arrays" }
+  }
+  return requirements.map((requirement) =>
+    Object.fromEntries(
+      Object.entries(requirement).map(([name, scopes]) => [
+        name,
+        Array.isArray(scopes) ? scopes.filter((scope): scope is string => typeof scope === "string") : [],
+      ]),
+    ),
+  )
+}
 
 export const securitySchemes = (document: Document): Readonly<Record<string, SecurityScheme>> => {
   const components = isRecord(document.components) ? document.components : {}

@@ -5,6 +5,14 @@
 - Keep Code Mode unaware of host session, channel, and conversation models. The hosting application supplies trusted execution scope around it.
 - Tool schemas are the model-facing Interface. Keep arguments minimal and natural to the operation; never add unrelated IDs as ambient capability tokens.
 
+## OpenAPI
+
+- Generate an operation only when its transport semantics are supported; otherwise return a precise `skipped` reason.
+- Never guess parameter serialization or malformed security semantics. Unsupported serialization is skipped and malformed security fails closed.
+- Render unresolved schema constructs as `unknown`, never as invented TypeScript names.
+- Keep network reads bounded and map expected encoding, transport, and decoding failures to model-safe `ToolError` values.
+- Test supported behavior directly; do not reproduce adapter algorithms in tests.
+
 ## Future Design Notes
 
 - If a captured user-visible output channel returns (an earlier `output.text`/`output.file`/`output.image` API was removed from v1), keep `output` as its name, distinct from the program return value: `return` stays the structured result for the model, while `output.*` describes artifacts the host may render into a conversation or UI after execution. Keep this host-neutral and let applications decide how captured output is delivered. In v1, hosts collect media host-side (outside the sandbox) instead.

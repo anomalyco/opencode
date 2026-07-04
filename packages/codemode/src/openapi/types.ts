@@ -88,9 +88,11 @@ export type InputField = {
   readonly location: InputLocation
   readonly required: boolean
   readonly schema: JsonSchema
+  readonly style: "simple" | "form" | "deepObject" | undefined
+  readonly explode: boolean | undefined
 }
 
-export type Body = { readonly required: boolean; readonly mode: "object" | "value" }
+export type Body = { readonly required: boolean; readonly mode: "object" | "value"; readonly mediaType: string }
 
 export type OperationInput = {
   readonly fields: ReadonlyArray<InputField>

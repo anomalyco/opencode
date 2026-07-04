@@ -80,6 +80,10 @@ export const fromSpec = (options: Options): Result => {
 
       const security =
         operationValue.security === undefined ? defaultSecurity : securityRequirements(operationValue.security)
+      if ("reason" in security) {
+        skipped.push({ method: operation.method, path, reason: security.reason })
+        continue
+      }
       const plan = {
         operation,
         url: `${base.replace(/\/+$/, "")}${path}`,
@@ -121,5 +125,3 @@ const setTool = (tools: Tools, path: ReadonlyArray<string>, definition: Definiti
   }
   setTool(tools[head] as Tools, rest, definition)
 }
-
-export const OpenAPI = { fromSpec }

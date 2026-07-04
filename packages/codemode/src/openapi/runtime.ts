@@ -1,10 +1,11 @@
-import { Effect, Option, Schema } from "effect"
-import { HttpClient, HttpClientRequest, type HttpMethod } from "effect/unstable/http"
+import { Effect, Option, Schema, Stream } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse, type HttpMethod } from "effect/unstable/http"
 import { ToolError, toolError } from "../tool-error.js"
 import { isRecord, maxErrorBodyChars, own } from "./spec.js"
 import type { AppliedAuth, Credential, Plan, SecurityScheme } from "./types.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const maxResponseBodyBytes = 1024 * 1024
 
 export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -29,10 +30,9 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
       if (field.location !== "query") continue
       const item = own(value, field.inputName)
       if (item === undefined || item === null) continue
-      const rendered = Array.isArray(item) ? item.map(renderPrimitive) : [renderPrimitive(item)]
-      for (const one of rendered) {
-        request = HttpClientRequest.appendUrlParam(request, field.name, one)
-      }
+      const serialized = serializeQuery(request, field, item)
+      if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
+      request = serialized
     }
     for (const [name, item] of Object.entries(auth.query)) {
       request = HttpClientRequest.setUrlParam(request, name, item)
@@ -43,7 +43,9 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
       if (field.location !== "header") continue
       const item = own(value, field.inputName)
       if (item === undefined || item === null) continue
-      request = HttpClientRequest.setHeader(request, field.name, renderPrimitive(item))
+      const serialized = serializeSimple(field, item, String)
+      if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
+      request = HttpClientRequest.setHeader(request, field.name, serialized)
     }
     const cookiePairs = Object.entries(auth.cookies).map(([name, item]) => `${name}=${item}`)
     if (cookiePairs.length > 0) request = HttpClientRequest.setHeader(request, "cookie", cookiePairs.join("; "))
@@ -51,7 +53,12 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     if (plan.body?.mode === "value") {
       const field = plan.fields.find((field) => field.location === "body")
       const body = field === undefined ? undefined : own(value, field.inputName)
-      if (body !== undefined) request = HttpClientRequest.bodyJsonUnsafe(request, body)
+      if (body !== undefined) {
+        request = yield* HttpClientRequest.bodyJson(request, body).pipe(
+          Effect.mapError((cause) => toolError(`Invalid JSON body for ${plan.operation.method} ${plan.operation.path}.`, cause)),
+        )
+        request = HttpClientRequest.setHeader(request, "content-type", plan.body.mediaType)
+      }
     }
     if (plan.body?.mode === "object") {
       const entries = plan.fields.flatMap((field) => {
@@ -60,7 +67,10 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
         return item === undefined ? [] : [[field.name, item] as const]
       })
       if (plan.body.required || entries.length > 0) {
-        request = HttpClientRequest.bodyJsonUnsafe(request, Object.fromEntries(entries))
+        request = yield* HttpClientRequest.bodyJson(request, Object.fromEntries(entries)).pipe(
+          Effect.mapError((cause) => toolError(`Invalid JSON body for ${plan.operation.method} ${plan.operation.path}.`, cause)),
+        )
+        request = HttpClientRequest.setHeader(request, "content-type", plan.body.mediaType)
       }
     }
 
@@ -72,9 +82,9 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
           Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} failed: transport error`, cause)),
         ),
       )
-    // Best effort: an unreadable body degrades to the status-only error/null result.
-    const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
-    const parsed = text === "" ? null : Option.getOrElse(decodeJson(text), () => text)
+    const text = yield* readResponseBody(response, plan)
+    const decoded = text === "" ? Option.some(null) : decodeJson(text)
+    const parsed = Option.getOrElse(decoded, () => text)
     if (response.status < 200 || response.status >= 300) {
       const rendered = typeof parsed === "string" ? parsed : (JSON.stringify(parsed) ?? "")
       const summary =
@@ -85,6 +95,12 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
             : rendered
       return yield* Effect.fail(
         toolError(`${plan.operation.method} ${plan.operation.path} failed with HTTP ${response.status}: ${summary}`),
+      )
+    }
+    const mediaType = response.headers["content-type"]?.split(";")[0]?.trim().toLowerCase()
+    if ((mediaType === "application/json" || mediaType?.endsWith("+json")) && Option.isNone(decoded)) {
+      return yield* Effect.fail(
+        toolError(`${plan.operation.method} ${plan.operation.path} returned malformed JSON.`),
       )
     }
     return parsed
@@ -164,9 +180,6 @@ const applyCredentials = (
   return { headers, query, cookies }
 }
 
-const renderPrimitive = (value: unknown): string =>
-  typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)
-
 const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string | ToolError => {
   let url = plan.url
   for (const field of plan.fields) {
@@ -175,15 +188,119 @@ const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string 
     if (item === undefined || item === null) {
       return toolError(`Missing required path parameter '${field.inputName}'.`)
     }
-    const rendered = encodeURIComponent(renderPrimitive(item))
+    const fieldValue = serializeSimple(field, item, encodePathPart)
+    if (fieldValue instanceof ToolError) return fieldValue
     // '.'/'..' survive encoding and URL normalization collapses them, letting a
     // model-supplied value retarget the request to a different endpoint.
-    if (rendered === "" || rendered === "." || rendered === "..") {
+    if (fieldValue === "" || fieldValue === "." || fieldValue === "..") {
       return toolError(`Invalid path parameter '${field.inputName}'.`)
     }
-    url = url.replaceAll(`{${field.name}}`, rendered)
+    url = url.replaceAll(`{${field.name}}`, fieldValue)
   }
   const unresolved = url.match(/\{[^{}]+\}/)
   if (unresolved !== null) return toolError(`Unresolved path parameter ${unresolved[0]}.`)
   return url
 }
+
+const encodePathPart = (value: string): string =>
+  encodeURIComponent(value).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
+
+const serializeSimple = (
+  field: Plan["fields"][number],
+  value: unknown,
+  encode: (value: string) => string,
+): string | ToolError => {
+  const scalar = (item: unknown): string | ToolError =>
+    item === null || typeof item === "object"
+      ? toolError(`Parameter '${field.inputName}' contains an unsupported nested value.`)
+      : encode(String(item))
+  if (Array.isArray(value)) {
+    const items = value.map(scalar)
+    const invalid = items.find((item): item is ToolError => item instanceof ToolError)
+    return invalid ?? items.join(",")
+  }
+  if (!isRecord(value)) return scalar(value)
+  const entries = Object.entries(value).flatMap<string | ToolError>(([name, item]) => {
+    const rendered = scalar(item)
+    if (rendered instanceof ToolError) return [rendered]
+    return field.explode ? [`${encode(name)}=${rendered}`] : [encode(name), rendered]
+  })
+  const invalid = entries.find((item): item is ToolError => item instanceof ToolError)
+  return invalid ?? entries.join(",")
+}
+
+const serializeQuery = (
+  request: HttpClientRequest.HttpClientRequest,
+  field: Plan["fields"][number],
+  value: unknown,
+): HttpClientRequest.HttpClientRequest | ToolError => {
+  if (field.style === "deepObject") {
+    if (!isRecord(value)) return toolError(`Deep-object parameter '${field.inputName}' must be an object.`)
+    return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
+      if (current instanceof ToolError) return current
+      if (item === null || typeof item === "object") {
+        return toolError(`Deep-object parameter '${field.inputName}' contains an unsupported nested value.`)
+      }
+      return HttpClientRequest.appendUrlParam(current, `${field.name}[${name}]`, String(item))
+    }, request)
+  }
+  if (Array.isArray(value)) {
+    const rendered = serializeSimple(field, value, String)
+    if (rendered instanceof ToolError) return rendered
+    if (!field.explode) return HttpClientRequest.appendUrlParam(request, field.name, rendered)
+    if (value.some((item) => item === null || typeof item === "object")) {
+      return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
+    }
+    return value.reduce(
+      (current, item) => HttpClientRequest.appendUrlParam(current, field.name, String(item)),
+      request,
+    )
+  }
+  if (isRecord(value) && field.explode) {
+    return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
+      if (current instanceof ToolError) return current
+      if (item === null || typeof item === "object") {
+        return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
+      }
+      return HttpClientRequest.appendUrlParam(current, name, String(item))
+    }, request)
+  }
+  const rendered = serializeSimple(field, value, String)
+  return rendered instanceof ToolError ? rendered : HttpClientRequest.appendUrlParam(request, field.name, rendered)
+}
+
+const readResponseBody = (response: HttpClientResponse.HttpClientResponse, plan: Plan): Effect.Effect<string, ToolError> =>
+  Effect.gen(function* () {
+    const contentLength = response.headers["content-length"]
+    const parsedSize = contentLength === undefined ? undefined : Number.parseInt(contentLength, 10)
+    const declaredSize = parsedSize !== undefined && Number.isSafeInteger(parsedSize) && parsedSize >= 0 ? parsedSize : undefined
+    if (declaredSize !== undefined && declaredSize > maxResponseBodyBytes) {
+      return yield* Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 1 MiB.`))
+    }
+    let body = Buffer.allocUnsafe(Math.min(maxResponseBodyBytes, declaredSize ?? 64 * 1024))
+    let size = 0
+    yield* Stream.runForEach(response.stream, (chunk) => {
+      if (size + chunk.byteLength > maxResponseBodyBytes) {
+        return Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 1 MiB.`))
+      }
+      if (size + chunk.byteLength > body.byteLength) {
+        const grown = Buffer.allocUnsafe(Math.min(maxResponseBodyBytes, Math.max(size + chunk.byteLength, body.byteLength * 2)))
+        body.copy(grown, 0, 0, size)
+        body = grown
+      }
+      body.set(chunk, size)
+      size += chunk.byteLength
+      return Effect.void
+    }).pipe(
+      Effect.catch((cause) => {
+        if (cause instanceof ToolError) return Effect.fail(cause)
+        if (cause.reason._tag === "EmptyBodyError") return Effect.void
+        return Effect.fail(
+          toolError(`${plan.operation.method} ${plan.operation.path} failed while reading the response body.`, cause),
+        )
+      }),
+    )
+    return new TextDecoder().decode(body.subarray(0, size))
+  })

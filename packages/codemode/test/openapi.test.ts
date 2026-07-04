@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { CodeMode, OpenAPI } from "../src/index.js"
-import type { Document } from "../src/openapi/types.js"
 import { inputTypeScript, outputTypeScript, Tool } from "../src/tool.js"
 
 const baseUrl = "http://localhost:4096"
+type Document = OpenAPI.Document
 
 type Recorded = {
   readonly method: string
@@ -47,6 +47,11 @@ const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest)
 
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } })
+
+const singleOperation = (operation: Record<string, unknown>, method = "get"): Document => ({
+  openapi: "3.1.0",
+  paths: { "/test": { [method]: { operationId: "test", responses: { 200: { description: "Success" } }, ...operation } } },
+})
 
 describe("OpenAPI.fromSpec", () => {
   test("converts representative opencode operations into the expected tool shape", async () => {
@@ -195,6 +200,193 @@ describe("OpenAPI.fromSpec", () => {
       url: "http://localhost:4096/api/session",
       body: { id: "ses_456" },
     })
+  })
+
+  test("serializes deep-object query parameters from the opencode fixture", async () => {
+    const client = recordingClient(() => json({ directory: "/tmp" }))
+    const location = toolAt(OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools, "v2.location.get")
+    if (!Tool.isDefinition(location)) throw new Error("v2.location.get was not generated")
+
+    await Effect.runPromise(
+      location.run({ location: { directory: "/tmp", workspace: "workspace-1" } }).pipe(Effect.provide(client.layer)),
+    )
+
+    const url = new URL(client.requests[0]!.url)
+    expect(url.searchParams.get("location[directory]")).toBe("/tmp")
+    expect(url.searchParams.get("location[workspace]")).toBe("workspace-1")
+  })
+
+  test("serializes supported simple and form parameter shapes", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        openapi: "3.1.0",
+        paths: {
+          "/items/{keys}": {
+            get: {
+              operationId: "items",
+              parameters: [
+                { name: "keys", in: "path", required: true, schema: { type: "array", items: { type: "string" } } },
+                { name: "tags", in: "query", style: "form", explode: false, schema: { type: "array" } },
+                { name: "filter", in: "query", style: "form", explode: true, schema: { type: "object" } },
+                { name: "meta", in: "header", style: "simple", explode: true, schema: { type: "object" } },
+              ],
+              responses: { 200: { description: "Success" } },
+            },
+          },
+        },
+      },
+    })
+    const tool = toolAt(result.tools, "items")
+    if (!Tool.isDefinition(tool)) throw new Error("items was not generated")
+
+    await Effect.runPromise(
+      tool
+        .run({ keys: ["a!", "b*"], tags: ["x", "y"], filter: { state: "open", page: 2 }, meta: { a: "b", c: "d" } })
+        .pipe(Effect.provide(client.layer)),
+    )
+
+    const url = new URL(client.requests[0]!.url)
+    expect(url.pathname).toBe("/items/a%21,b%2A")
+    expect(url.searchParams.get("tags")).toBe("x,y")
+    expect(url.searchParams.get("state")).toBe("open")
+    expect(url.searchParams.get("page")).toBe("2")
+    expect(client.requests[0]!.headers.meta).toBe("a=b,c=d")
+  })
+
+  test("skips unsupported parameter encodings and malformed security", () => {
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        openapi: "3.1.0",
+        security: [{ bearer: [] }],
+        paths: {
+          "/cookie": {
+            get: {
+              operationId: "cookie",
+              parameters: [{ name: "session", in: "cookie", schema: { type: "string" } }],
+              responses: { 200: { description: "Success" } },
+            },
+          },
+          "/reserved": {
+            get: {
+              operationId: "reserved",
+              parameters: [{ name: "query", in: "query", allowReserved: true, schema: { type: "string" } }],
+              responses: { 200: { description: "Success" } },
+            },
+          },
+          "/invalid-style": {
+            get: {
+              operationId: "invalidStyle",
+              parameters: [{ name: "query", in: "query", style: 42, schema: { type: "string" } }],
+              responses: { 200: { description: "Success" } },
+            },
+          },
+          "/security": {
+            get: { operationId: "security", security: null, responses: { 200: { description: "Success" } } },
+          },
+        },
+      },
+    })
+
+    expect(result.tools).toEqual({})
+    expect(result.skipped.map((item) => item.reason)).toEqual([
+      "cookie parameter 'session' is not supported",
+      "parameter 'query' uses unsupported allowReserved encoding",
+      "parameter 'query' has an invalid style",
+      "security declaration is not an array",
+    ])
+  })
+
+  test("does not treat prototype-named security requirements as anonymous", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation({ security: [JSON.parse('{"__proto__":[]}')] }),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+      "requires authentication",
+    )
+    expect(client.requests).toHaveLength(0)
+  })
+
+  test("resolves bearer authentication without exposing it as input", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const spec = {
+      ...singleOperation({}),
+      security: [{ bearer: [] }],
+      components: { securitySchemes: { bearer: { type: "http", scheme: "bearer" } } },
+    } satisfies Document
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec,
+        auth: { resolve: () => Effect.succeed({ type: "bearer", token: "secret" }) },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    await Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))
+
+    expect(inputTypeScript(tool)).toBe("{}")
+    expect(client.requests[0]!.headers.authorization).toBe("Bearer secret")
+  })
+
+  test("preserves JSON media types and rejects unencodable bodies", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: { "application/merge-patch+json": { schema: { type: "object" } } },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    await Effect.runPromise(tool.run({ body: { name: "updated" } }).pipe(Effect.provide(client.layer)))
+    expect(client.requests[0]!.headers["content-type"]).toBe("application/merge-patch+json")
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    await expect(Effect.runPromise(tool.run({ body: cyclic }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+      "Invalid JSON body",
+    )
+  })
+
+  test("rejects oversized and malformed JSON responses", async () => {
+    const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: singleOperation({}) }).tools, "test")
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    const oversized = recordingClient(
+      () => new Response(null, { headers: { "content-length": String(1024 * 1024 + 1) } }),
+    )
+    const malformed = recordingClient(
+      () => new Response("{", { headers: { "content-type": "application/json" } }),
+    )
+    const chunked = recordingClient(() => new Response(new Uint8Array(1024 * 1024 + 1)))
+
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(oversized.layer)))).rejects.toThrow(
+      "response exceeds 1 MiB",
+    )
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(malformed.layer)))).rejects.toThrow(
+      "returned malformed JSON",
+    )
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(chunked.layer)))).rejects.toThrow(
+      "response exceeds 1 MiB",
+    )
   })
 
   test("fails missing required parameters before auth and network", async () => {
