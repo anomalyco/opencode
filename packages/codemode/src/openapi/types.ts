@@ -57,8 +57,6 @@ export type Options = {
   readonly auth?: { readonly resolve: AuthResolver } | undefined
   /** Static headers on every request. Not model-visible; declared header params may override them, auth always wins. */
   readonly headers?: Readonly<Record<string, string>> | undefined
-  /** Curate which operations become tools. Defaults to all. */
-  readonly operations?: ((operation: Operation) => boolean) | undefined
 }
 
 /** An operation that could not be represented as a tool, and why. */

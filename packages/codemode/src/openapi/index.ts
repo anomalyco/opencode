@@ -60,7 +60,6 @@ export const fromSpec = (options: Options): Result => {
         summary: nonEmptyString(operationValue.summary),
         description: nonEmptyString(operationValue.description),
       }
-      if (options.operations !== undefined && !options.operations(operation)) continue
       // TODO: Represent streaming transports as explicit host capabilities before
       // exposing them as callable CodeMode tools.
       const unsupported = unsupportedOperationReason(document, operationValue)
