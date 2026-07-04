@@ -1,10 +1,12 @@
 export * as McpGuidance from "./guidance"
 
 import { makeLocationNode } from "../effect/app-node"
+import { Flag } from "../flag/flag"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { McpTool } from "../tool/mcp"
+import { ToolRegistry } from "../tool/registry"
 import { MCP } from "./index"
 import { SystemContext } from "../system-context/index"
 
@@ -17,6 +19,11 @@ type Summary = typeof Summary.Type
 const entries = (servers: ReadonlyArray<Summary>) =>
   servers.flatMap((server) => [
     `  <server name="${server.server}">`,
+    ...(Flag.CODEMODE_ENABLED
+      ? [
+          `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.codeModeGroup(server.server))}]\`.`,
+        ]
+      : []),
     ...server.instructions.split("\n").map((line) => `    ${line}`),
     "  </server>",
   ])
@@ -59,6 +66,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
+    const registry = yield* ToolRegistry.Service
 
     return Service.of({
       load: Effect.fn("McpGuidance.load")(function* (selection) {
@@ -67,12 +75,13 @@ export const layer = Layer.effect(
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
-        // Hide a server only when every tool it contributes is wholly denied for this agent.
+        if (Flag.CODEMODE_ENABLED && !(yield* registry.executeAvailable(agent.permissions))) return SystemContext.empty
+        // Instructions are useful only when this agent can reach at least one server tool.
         const visible = instructions
           .filter((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
             return (
-              owned.length === 0 ||
+              (!Flag.CODEMODE_ENABLED && owned.length === 0) ||
               owned.some(
                 (tool) =>
                   PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
@@ -94,4 +103,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [MCP.node, ToolRegistry.node] })

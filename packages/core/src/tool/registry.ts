@@ -35,7 +35,7 @@ export interface MaterializeInput {
 }
 
 export interface Materialization {
-  readonly definitions: ReadonlyArray<ToolDefinition>
+  readonly definitions: ReadonlyArray<ReturnType<typeof definition>>
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement, ToolOutputStore.Error>
 }
 

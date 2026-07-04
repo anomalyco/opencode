@@ -1132,6 +1132,12 @@ Post-MVP (logged, not blocking an experimental flag):
 - [ ] Reviewer observation worth keeping: MCP server instructions (`sys.mcp`,
       `session/system.ts:110-126`) still inject prose referencing server-native tool
       names that are no longer directly callable under code mode.
+- [ ] Tool-tree path segments named `__proto__`, `constructor`, or `prototype` are included
+      in discovery but rejected by `ToolRuntime` resolution even when supplied as safe own
+      properties on null-prototype host records. Hosts should preserve registered names rather
+      than invent incompatible aliases. CodeMode should own a consistent policy: safely admit
+      these names as own tool-tree members, reject them before catalog generation with a clear
+      diagnostic, or define one canonical escaping contract.
 
 ### Backlog / loose ends (non-blocking, any order)
 

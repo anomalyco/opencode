@@ -90,6 +90,7 @@
     "@ff-labs/fff-bun": "0.9.4",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
+    "@opencode-ai/codemode": "workspace:*",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/effect-sqlite-node": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
