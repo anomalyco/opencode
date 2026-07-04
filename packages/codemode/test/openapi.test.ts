@@ -38,7 +38,19 @@ const toolPathEntries = (spec: Document) => {
   const used = new Set<string>()
   const namespaces = new Set<string>()
   return operations(spec)
-    .filter((item) => item.operation["x-websocket"] !== true)
+    .filter((item) => {
+      if (item.operation["x-websocket"] === true) return false
+      const responses = isRecord(item.operation.responses) ? item.operation.responses : {}
+      return !Object.entries(responses).some(
+        ([status, response]) =>
+          (/^2\d\d$/.test(status) || status.toUpperCase() === "2XX") &&
+          isRecord(response) &&
+          isRecord(response.content) &&
+          Object.keys(response.content).some(
+            (mediaType) => mediaType.split(";")[0]?.trim().toLowerCase() === "text/event-stream",
+          ),
+      )
+    })
     .map((item) => {
       const { path, method, operation } = item
       const raw = nonEmptyString(operation.operationId)
@@ -130,6 +142,7 @@ describe("OpenAPI.fromSpec", () => {
       path: "/api/pty/{ptyID}/connect",
       reason: "WebSocket operations are not supported",
     })
+    expect(result.skipped.filter((item) => item.reason === "SSE operations are not supported")).toHaveLength(3)
     expect(toolAt(result.tools, "v2.health.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "v2.session.create")).not.toBeUndefined()
@@ -152,6 +165,11 @@ describe("OpenAPI.fromSpec", () => {
     expect(inputTypeScript(contextEntryPut)).toBe("{ sessionID: string; key: string; value: unknown }")
     expect(toolAt(result.tools, "v2_session_context_entry_put_2")).toBeUndefined()
     expect(toolAt(result.tools, "v2.pty.connect")).toBeUndefined()
+    expect(toolAt(result.tools, "v2.session.log")).toBeUndefined()
+    expect(toolAt(result.tools, "v2.event.subscribe")).toBeUndefined()
+    expect(toolAt(result.tools, "v2.event.changes")).toBeUndefined()
+    expect(toolAt(result.tools, "v2.fs.read")).not.toBeUndefined()
+    expect(toolAt(result.tools, "v2.pty.connectToken")).not.toBeUndefined()
 
     for (const item of entries) {
       const tool = toolAt(result.tools, item.name)

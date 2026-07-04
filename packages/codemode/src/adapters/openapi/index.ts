@@ -13,6 +13,7 @@ import {
   securityRequirements,
   securitySchemes,
   specServerUrl,
+  unsupportedOperationReason,
 } from "./spec.js"
 import type { Operation, Options, Result, Skipped, Tools } from "./types.js"
 
@@ -59,10 +60,11 @@ export const fromSpec = (options: Options): Result => {
         description: nonEmptyString(operationValue.description),
       }
       if (options.operations !== undefined && !options.operations(operation)) continue
-      // TODO: Represent bidirectional streams as an explicit host capability before
-      // exposing WebSocket operations as callable CodeMode tools.
-      if (operationValue["x-websocket"] === true) {
-        skipped.push({ method: operation.method, path, reason: "WebSocket operations are not supported" })
+      // TODO: Represent streaming transports as explicit host capabilities before
+      // exposing them as callable CodeMode tools.
+      const unsupported = unsupportedOperationReason(document, operationValue)
+      if (unsupported !== undefined) {
+        skipped.push({ method: operation.method, path, reason: unsupported })
         continue
       }
 

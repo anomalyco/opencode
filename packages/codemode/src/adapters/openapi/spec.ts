@@ -239,19 +239,41 @@ export const inputSchema = (
   )
 }
 
-export const outputSchema = (
+const successResponses = (
   document: Document,
   operation: Record<string, unknown>,
-  definitions: Readonly<Record<string, JsonSchema>>,
-): JsonSchema | undefined => {
-  if (!isRecord(operation.responses)) return undefined
+): ReadonlyArray<Record<string, unknown>> => {
+  if (!isRecord(operation.responses)) return []
   const entries = Object.entries(operation.responses)
-  const successes = [
+  return [
     ...entries.filter(([status]) => /^2\d\d$/.test(status)).sort(([a], [b]) => a.localeCompare(b)),
     ...entries.filter(([status]) => status.toUpperCase() === "2XX"),
   ]
     .map(([, ref]) => resolve(document, ref))
     .filter(isRecord)
+}
+
+export const unsupportedOperationReason = (
+  document: Document,
+  operation: Record<string, unknown>,
+): string | undefined => {
+  if (operation["x-websocket"] === true) return "WebSocket operations are not supported"
+  const streams = successResponses(document, operation).some(
+    (response) =>
+      isRecord(response.content) &&
+      Object.keys(response.content).some(
+        (mediaType) => mediaType.split(";")[0]?.trim().toLowerCase() === "text/event-stream",
+      ),
+  )
+  return streams ? "SSE operations are not supported" : undefined
+}
+
+export const outputSchema = (
+  document: Document,
+  operation: Record<string, unknown>,
+  definitions: Readonly<Record<string, JsonSchema>>,
+): JsonSchema | undefined => {
+  const successes = successResponses(document, operation)
   for (const response of successes) {
     const schema = jsonContentSchema(isRecord(response.content) ? response.content : {})
     if (schema !== undefined) return withDefinitions(projectSchema(schema), definitions)
