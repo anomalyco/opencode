@@ -5,6 +5,7 @@ const directory = "C:/OpenCode/SettingsThemeSelectClose"
 
 test("theme setting selects hide their closing dropdown before applying theme colors", async ({ page }) => {
   await openSettings(page)
+  await expectSelectThemeColorsDoNotTransition(page)
 
   await chooseThemeSetting(page, "Dark", "Light")
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light")
@@ -52,6 +53,25 @@ async function chooseThemeSetting(page: Page, trigger: string, option: string) {
 async function expectThemeSelectClosedWithoutFlash(page: Page) {
   await page.waitForTimeout(40)
   expect(await page.evaluate(selectContentState)).toMatchObject({ visible: false })
+}
+
+async function expectSelectThemeColorsDoNotTransition(page: Page) {
+  const transitions = await page.locator('[data-component="select-v2"]').evaluateAll((elements) =>
+    elements.map((element) => {
+      const style = getComputedStyle(element)
+      return {
+        text: element.textContent?.trim(),
+        transitionProperty: style.transitionProperty,
+      }
+    }),
+  )
+  expect(
+    transitions.every(
+      (transition) =>
+        !transition.transitionProperty.includes("background") && !transition.transitionProperty.includes("box-shadow"),
+    ),
+    JSON.stringify(transitions, null, 2),
+  ).toBe(true)
 }
 
 function selectContentState() {
