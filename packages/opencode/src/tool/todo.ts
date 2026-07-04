@@ -2,9 +2,16 @@ import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
+import { StatusEnum, PriorityEnum } from "../util/schema"
+
+const TodoInfo = Schema.Struct({
+  content: Schema.String,
+  status: Schema.Literal(...StatusEnum.options),
+  priority: Schema.Literal(...PriorityEnum.options),
+})
 
 export const Parameters = Schema.Struct({
-  todos: Schema.mutable(Schema.Array(Todo.Info)).annotate({ description: "The updated todo list" }),
+  todos: Schema.mutable(Schema.Array(TodoInfo)).annotate({ description: "The updated todo list" }),
 })
 
 type Metadata = {
