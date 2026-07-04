@@ -26,6 +26,7 @@ import {
   spawnLocalServer,
   type SidecarListener,
 } from "./server"
+import { setupTrayAndLifecycle } from "./tray"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
 import {
   getLastFocusedWindow,
@@ -383,6 +384,7 @@ const main = Effect.gen(function* () {
       },
     })
   }
+  setupTrayAndLifecycle()
 })
 
 Effect.runFork(main)

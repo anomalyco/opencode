@@ -82,7 +82,7 @@ function iconsDir() {
   return app.isPackaged ? join(process.resourcesPath, "icons") : join(root, "../../resources/icons")
 }
 
-function iconPath() {
+export function iconPath() {
   const ext = process.platform === "win32" ? "ico" : "png"
   return join(iconsDir(), `icon.${ext}`)
 }
@@ -143,6 +143,16 @@ export function getLastFocusedWindow() {
 export function restoreMainWindows() {
   const ids = registry.persisted()
   return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
+}
+
+export function showMainWindow() {
+  const win = getLastFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) {
+    win.show()
+    win.focus()
+    return
+  }
+  createMainWindow()
 }
 
 export function setDockIcon() {
@@ -222,6 +232,15 @@ function registerWindow(win: BrowserWindow, id: string) {
   registry.register(id, win)
 
   win.on("focus", () => registry.focused(id))
+  // Closing the last window hides it to the tray/Dock so background work keeps
+  // running; other windows close normally. A real quit sets the quitting flag
+  // first, so the window closes normally then too.
+  win.on("close", (event) => {
+    if (registry.isQuitting()) return
+    if (BrowserWindow.getAllWindows().length > 1) return
+    event.preventDefault()
+    win.hide()
+  })
   // Windows never emits before-quit on OS shutdown/logoff, but each window
   // gets session-end before it closes; flag the quit so ids stay persisted.
   win.on("session-end", () => registry.setQuitting())
