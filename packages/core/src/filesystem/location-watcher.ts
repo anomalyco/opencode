@@ -36,19 +36,26 @@ const layer = Layer.effect(
     const configService = yield* Config.Service
     const config = (yield* configService.entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
-      .flatMap((item) => item.info.watcher?.ignore ?? [])
+      .flatMap((item) => (item.info.watcher ? [item.info.watcher] : []))
+    const enabled = config.findLast((item) => item.enabled !== undefined)?.enabled ?? true
+    const configuredIgnore = config.flatMap((item) => item.ignore ?? [])
     const publish = (update: { type: "create" | "update" | "delete"; path: string }) =>
       events.publish(FileSystem.Event.Changed, {
         file: update.path,
         event: update.type === "create" ? "add" : update.type === "update" ? "change" : "unlink",
       })
 
+    if (!enabled) {
+      yield* Effect.logInfo("location watcher disabled", { directory: location.directory })
+      return Service.of({})
+    }
+
     if (path.resolve(location.directory) !== path.resolve(os.homedir())) {
       yield* watcher
         .subscribe({
           path: location.directory,
           type: "directory",
-          ignore: [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)],
+          ignore: [...Ignore.PATTERNS, ...configuredIgnore, ...protecteds(location.directory)],
         })
         .pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
     } else {
@@ -58,12 +65,17 @@ const layer = Layer.effect(
     if (location.vcs?.type === "git") {
       const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
-      if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
-        const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
+      if (
+        vcs &&
+        !configuredIgnore.includes(".git") &&
+        !configuredIgnore.includes(vcs) &&
+        (!resolved || !configuredIgnore.includes(resolved))
+      ) {
+        const vcsIgnore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
           (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
         )
         yield* watcher
-          .subscribe({ path: vcs, type: "directory", ignore })
+          .subscribe({ path: vcs, type: "directory", ignore: vcsIgnore })
           .pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
       }
     }

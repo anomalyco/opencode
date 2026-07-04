@@ -45,7 +45,7 @@ const FILES = [
   "**/.nyc_output/**",
 ]
 
-export const PATTERNS = [...FILES, ...FOLDERS]
+export const PATTERNS = [...FILES, ...FOLDERS, `**/{${Array.from(FOLDERS).join(",")}}/**`]
 
 export function match(filepath: string, opts?: { extra?: string[]; whitelist?: string[] }) {
   for (const pattern of opts?.whitelist || []) {

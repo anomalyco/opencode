@@ -2,8 +2,9 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Duration, Effect, Fiber, Layer, Option, Stream } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigWatcher } from "@opencode-ai/core/config/watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -23,29 +24,40 @@ type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, EventV2.node])))
 
-const configLayer = Layer.succeed(
-  Config.Service,
-  Config.Service.of({
-    entries: () => Effect.succeed([]),
-  }),
-)
+const configLayer = (entries: readonly Config.Entry[] = []) =>
+  Layer.mock(Config.Service)({
+    entries: () => Effect.succeed([...entries]),
+  })
 
-function provide(directory: string, vcs?: Location.Interface["vcs"]) {
+function provide(
+  directory: string,
+  options: {
+    vcs?: Location.Interface["vcs"]
+    config?: readonly Config.Entry[]
+    watcher?: Layer.Layer<Watcher.Service>
+  } = {},
+) {
   const locationLayer = Layer.succeed(
     Location.Service,
-    Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs })),
+    Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs: options.vcs })),
   )
   return Effect.provide(
     AppNodeBuilder.build(LocationWatcher.node, [
-      [Config.node, configLayer],
+      [Config.node, configLayer(options.config)],
       [Location.node, locationLayer],
+      ...(options.watcher ? ([[Watcher.node, options.watcher]] as const) : []),
     ]),
   )
 }
 
 function withTmp<A, E, R>(
   f: (directory: string, vcs?: Location.Interface["vcs"]) => Effect.Effect<A, E, R>,
-  options?: { git?: boolean; init?: (directory: string) => Promise<void> },
+  options?: {
+    git?: boolean
+    init?: (directory: string) => Promise<void>
+    config?: readonly Config.Entry[]
+    watcher?: Layer.Layer<Watcher.Service>
+  },
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -61,7 +73,11 @@ function withTmp<A, E, R>(
       return { tmp, vcs: { type: "git" as const, store: AbsolutePath.make(path.join(tmp.path, ".git")) } }
     }),
     ({ tmp }) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap(({ tmp, vcs }) => f(tmp.path, vcs).pipe(provide(tmp.path, vcs))))
+  ).pipe(
+    Effect.flatMap(({ tmp, vcs }) =>
+      f(tmp.path, vcs).pipe(provide(tmp.path, { vcs, config: options?.config, watcher: options?.watcher })),
+    ),
+  )
 }
 
 function wait(check: (event: WatcherEvent) => boolean) {
@@ -149,12 +165,14 @@ describeWatcher("LocationWatcher", () => {
         const update = yield* watcher
           .subscribe({ path: target, type: "file" })
           .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
-        yield* Effect.yieldNow
-
         yield* fs.writeFileString(sibling, "sibling")
-        yield* fs.writeFileString(target, "target")
+        const writes = yield* Effect.suspend(() => fs.writeFileString(target, `target-${Math.random()}`)).pipe(
+          Effect.repeat(Schedule.spaced("10 millis")),
+          Effect.forkScoped,
+        )
+        const event = yield* Fiber.join(update).pipe(Effect.ensuring(Fiber.interrupt(writes)))
 
-        expect((yield* Fiber.join(update)).valueOrUndefined?.path).toBe(target)
+        expect(event.valueOrUndefined?.path).toBe(target)
       }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node))),
     ),
   )
@@ -196,6 +214,45 @@ describeWatcher("LocationWatcher", () => {
       }),
     ),
   )
+
+  it.live("ignores dependency, VCS, and build directories at any depth", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const afs = yield* FSUtil.Service
+        yield* ready(directory)
+        const roots = ["node_modules", ".git", "dist"].map((name) => path.join(directory, "nested", name))
+        const files = roots.map((root) => path.join(root, "package", "index.js"))
+        yield* noUpdate(
+          (event) => roots.some((root) => event.file === root || event.file.startsWith(`${root}${path.sep}`)),
+          Effect.forEach(files, (file) => afs.writeWithDirs(file, "ignored"), {
+            concurrency: "unbounded",
+            discard: true,
+          }),
+        )
+      }),
+    ),
+  )
+
+  it.live("can disable project file watching", () => {
+    let subscriptions = 0
+    return withTmp(() => Effect.sync(() => expect(subscriptions).toBe(0)), {
+      config: [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({ watcher: new ConfigWatcher.Info({ enabled: false }) }),
+        }),
+      ],
+      watcher: Layer.succeed(
+        Watcher.Service,
+        Watcher.Service.of({
+          subscribe: () => {
+            subscriptions++
+            return Stream.empty
+          },
+        }),
+      ),
+    })
+  })
 
   it.live("cleanup stops publishing events", () =>
     Effect.gen(function* () {
