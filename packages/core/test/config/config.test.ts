@@ -242,6 +242,72 @@ describe("Config", () => {
     ),
   )
 
+  it.live("substitutes environment variables and relative file contents", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = {
+          token: process.env.OPENCODE_TEST_MCP_TOKEN,
+          missing: process.env.OPENCODE_TEST_MISSING,
+        }
+        process.env.OPENCODE_TEST_MCP_TOKEN = "secret"
+        delete process.env.OPENCODE_TEST_MISSING
+        return previous
+      }),
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            Effect.gen(function* () {
+              yield* Effect.promise(() =>
+                Promise.all([
+                  fs.writeFile(path.join(tmp.path, "token.txt"), 'file\n"token"\n'),
+                  fs.writeFile(
+                    path.join(tmp.path, "opencode.jsonc"),
+                    `{
+                      // Ignored reference: {file:missing.txt}
+                      "username": "user-{env:OPENCODE_TEST_MISSING}",
+                      "mcp": {
+                        "servers": {
+                          "remote": {
+                            "type": "remote",
+                            "url": "https://example.com/mcp",
+                            "headers": {
+                              "Authorization": "Bearer {env:OPENCODE_TEST_MCP_TOKEN}",
+                              "X-Token": "{file:token.txt}"
+                            }
+                          }
+                        }
+                      }
+                    }`,
+                  ),
+                ]),
+              )
+
+              return yield* Effect.gen(function* () {
+                const config = yield* Config.Service
+                const document = (yield* config.entries()).find((entry) => entry.type === "document")
+                expect(document?.info.username).toBe("user-")
+                const remote = document?.info.mcp?.servers?.remote
+                expect(remote?.type).toBe("remote")
+                if (remote?.type !== "remote") return
+                expect(remote.headers).toEqual({
+                  Authorization: "Bearer secret",
+                  "X-Token": 'file\n"token"',
+                })
+              }).pipe(Effect.provide(testLayer(tmp.path)))
+            }),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        ),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous.token === undefined) delete process.env.OPENCODE_TEST_MCP_TOKEN
+          else process.env.OPENCODE_TEST_MCP_TOKEN = previous.token
+          if (previous.missing === undefined) delete process.env.OPENCODE_TEST_MISSING
+          else process.env.OPENCODE_TEST_MISSING = previous.missing
+        }),
+    ),
+  )
+
   it.live("does not load legacy config.json files", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

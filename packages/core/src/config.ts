@@ -22,6 +22,7 @@ import { ConfigPlugin } from "./config/plugin"
 import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
 import { ConfigToolOutput } from "./config/tool-output"
+import { ConfigVariable } from "./config/variable"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
@@ -147,9 +148,10 @@ const layer = Layer.effect(
     const loadFile = Effect.fnUntraced(function* (filepath: string) {
       const text = yield* fs.readFileStringSafe(filepath)
       if (!text) return
+      const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
 
       const errors: ParseError[] = []
-      const input: unknown = parse(text, errors, { allowTrailingComma: true })
+      const input: unknown = parse(substituted, errors, { allowTrailingComma: true })
       if (errors.length) return
 
       const info = Option.getOrUndefined(
