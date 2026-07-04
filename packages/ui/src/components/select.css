@@ -187,6 +187,11 @@
   }
 }
 
+[data-component="select-content"][data-instant-close][data-closed] {
+  animation: none;
+  opacity: 0;
+}
+
 @keyframes select-open {
   from {
     opacity: 0;

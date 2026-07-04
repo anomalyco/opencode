@@ -24,6 +24,11 @@
   animation: select-v2-content-out 80ms ease-in forwards;
 }
 
+[data-component="menu-v2-content"][data-slot="select-v2-content"][data-instant-close][data-closed] {
+  animation: none;
+  opacity: 0;
+}
+
 @keyframes select-v2-content-in {
   from {
     opacity: 0;

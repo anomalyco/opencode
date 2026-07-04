@@ -59,6 +59,7 @@ export type SelectV2Props<T> = Omit<
   numeric?: boolean
   children?: (item: T) => JSX.Element
   valueClass?: string
+  instantClose?: boolean
 }
 
 export function SelectV2<T>(props: SelectV2Props<T>) {
@@ -86,6 +87,7 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
     "flip",
     "slide",
     "fitViewport",
+    "instantClose",
   ])
 
   const inline = () => (local.appearance ?? "base") === "inline"
@@ -199,7 +201,11 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
         </span>
       </Kobalte.Trigger>
       <Kobalte.Portal>
-        <Kobalte.Content data-component="menu-v2-content" data-slot="select-v2-content">
+        <Kobalte.Content
+          data-component="menu-v2-content"
+          data-slot="select-v2-content"
+          data-instant-close={local.instantClose ? "" : undefined}
+        >
           <Kobalte.Listbox data-slot="select-v2-listbox" />
         </Kobalte.Content>
       </Kobalte.Portal>
