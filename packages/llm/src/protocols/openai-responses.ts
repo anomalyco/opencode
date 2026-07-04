@@ -815,10 +815,7 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
   const item = event.item
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
-  if (item.type === "message" && item.id) {
-    const events: LLMEvent[] = []
-    return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, item.id) }, events] satisfies StepResult
-  }
+  if (item.type === "message" && item.id) return onOutputTextDone(state, { ...event, item_id: item.id })
 
   if (item.type === "function_call") {
     if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult

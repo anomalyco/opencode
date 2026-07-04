@@ -805,6 +805,52 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("renders a live tool start when the call begins", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    events.push({
+      id: "evt_tool_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        callID: "call_read",
+        name: "read",
+      },
+    })
+    events.push({
+      id: "evt_tool_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: durable("ses_1", 1),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        callID: "call_read",
+        input: { path: "README.md" },
+        executed: false,
+      },
+    })
+    await Bun.sleep(0)
+
+    expect(ui.commits).toContainEqual(
+      expect.objectContaining({ kind: "tool", phase: "start", partID: "prt_call_read", tool: "read" }),
+    )
+    await transport.close()
+  })
+
   test("resolves an interrupted turn even when promotion never arrived", async () => {
     const events = feed()
     events.push(connected())
