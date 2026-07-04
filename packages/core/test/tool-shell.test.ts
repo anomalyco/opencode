@@ -171,9 +171,11 @@ const withSession = <A, E, R>(directory: string, body: (registry: ToolRegistry.I
     })
     const locations = yield* LocationServiceMap.Service
     const locationLayer = locations.get(location)
-    const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locationLayer))
-    yield* waitForTool(registry, ShellTool.name)
-    return yield* body(registry).pipe(Effect.provide(locationLayer))
+    return yield* Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      yield* waitForTool(registry, ShellTool.name)
+      return yield* body(registry)
+    }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
   })
 
 describe("ShellTool", () => {
