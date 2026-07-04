@@ -69,57 +69,55 @@ export const fromSpec = (options: Options): Result => {
         continue
       }
 
-      const base =
-        options.baseUrl !== undefined
-          ? validateBaseUrl(options.baseUrl)
-          : specServerUrl(
-              operationValue.servers !== undefined
-                ? operationValue
-                : pathValue.servers !== undefined
-                  ? pathValue
-                  : document,
-            )
-      if (typeof base !== "string") {
-        skipped.push({ method: operation.method, path, reason: base.reason })
+      const resolvedBaseUrl = (() => {
+        if (options.baseUrl !== undefined) return validateBaseUrl(options.baseUrl)
+        if (operationValue.servers !== undefined) return specServerUrl(operationValue)
+        if (pathValue.servers !== undefined) return specServerUrl(pathValue)
+        return specServerUrl(document)
+      })()
+      if (!resolvedBaseUrl.ok) {
+        skipped.push({ method: operation.method, path, reason: resolvedBaseUrl.reason })
         continue
       }
-      const input = operationInput(document, pathValue, operationValue)
-      if ("reason" in input) {
-        skipped.push({ method: operation.method, path, reason: input.reason })
+      const parsedInput = operationInput(document, pathValue, operationValue)
+      if (!parsedInput.ok) {
+        skipped.push({ method: operation.method, path, reason: parsedInput.reason })
         continue
       }
+      const input = parsedInput.value
 
-      const security =
-        operationValue.security === undefined ? defaultSecurity : securityRequirements(operationValue.security)
-      if ("reason" in security) {
-        skipped.push({ method: operation.method, path, reason: security.reason })
-        continue
-      }
-      const supportedSecurity = security.filter((requirement) =>
-        Object.keys(requirement).every((name) => {
-          const scheme = own(schemes, name)
-          return scheme !== undefined && !(scheme.type === "apiKey" && scheme.in === "cookie")
-        }),
-      )
-      if (security.length > 0 && supportedSecurity.length === 0) {
-        const names = [...new Set(security.flatMap((requirement) => Object.keys(requirement)))]
+      const security = (() => {
+        const parsed =
+          operationValue.security === undefined ? defaultSecurity : securityRequirements(operationValue.security)
+        if (!parsed.ok) return parsed
+        const supported = parsed.value.filter((requirement) =>
+          Object.keys(requirement).every((name) => {
+            const scheme = own(schemes, name)
+            return scheme !== undefined && !(scheme.type === "apiKey" && scheme.in === "cookie")
+          }),
+        )
+        if (parsed.value.length === 0 || supported.length > 0) return { ok: true, value: supported } as const
+
+        const names = [...new Set(parsed.value.flatMap((requirement) => Object.keys(requirement)))]
         const cookieScheme = names.map((name) => own(schemes, name)).find((scheme) => scheme?.in === "cookie")
-        skipped.push({
-          method: operation.method,
-          path,
+        return {
+          ok: false,
           reason:
             cookieScheme === undefined
               ? `security requirement references missing or malformed scheme: ${names.join(", ")}`
               : `cookie authentication '${cookieScheme.name}' is not supported`,
-        })
+        } as const
+      })()
+      if (!security.ok) {
+        skipped.push({ method: operation.method, path, reason: security.reason })
         continue
       }
       const plan = {
         operation,
-        url: `${base.replace(/\/+$/, "")}${path}`,
+        url: `${resolvedBaseUrl.value.replace(/\/+$/, "")}${path}`,
         fields: input.fields,
         body: input.body,
-        security: supportedSecurity,
+        security: security.value,
         schemes,
         auth: options.auth,
         headers: options.headers ?? {},

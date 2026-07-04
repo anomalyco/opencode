@@ -5,9 +5,9 @@ import type {
   Document,
   InputField,
   OperationInput,
+  Parsed,
   SecurityRequirement,
   SecurityScheme,
-  Skip,
 } from "./types.js"
 
 export const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"])
@@ -101,7 +101,7 @@ export const operationInput = (
   document: Document,
   pathItem: Record<string, unknown>,
   operation: Record<string, unknown>,
-): OperationInput | Skip => {
+): Parsed<OperationInput> => {
   // Operation-level parameters override path-level ones sharing (location, name).
   const declared = new Map<
     string,
@@ -109,10 +109,11 @@ export const operationInput = (
   >()
   for (const raw of [...asArray(pathItem.parameters), ...asArray(operation.parameters)]) {
     const resolved = resolve(document, raw)
-    if (!isRecord(resolved)) return { reason: "parameter declaration is invalid or unresolved" }
+    if (!isRecord(resolved)) return { ok: false, reason: "parameter declaration is invalid or unresolved" }
     const name = nonEmptyString(resolved.name)
     const location = nonEmptyString(resolved.in)
-    if (name === undefined || location === undefined) return { reason: "parameter declaration is missing name or location" }
+    if (name === undefined || location === undefined)
+      return { ok: false, reason: "parameter declaration is missing name or location" }
     declared.set(`${location}:${name}`, { name, location, parameter: resolved })
   }
   const unordered: Array<Omit<InputField, "inputName">> = []
@@ -120,36 +121,38 @@ export const operationInput = (
     const name = item.name
     const location = item.location
     const resolved = item.parameter
-    if (location === "cookie") return { reason: `cookie parameter '${name}' is not supported` }
+    if (location === "cookie") return { ok: false, reason: `cookie parameter '${name}' is not supported` }
     if (location !== "path" && location !== "query" && location !== "header") {
-      return { reason: `parameter '${name}' uses unsupported location '${location}'` }
+      return { ok: false, reason: `parameter '${name}' uses unsupported location '${location}'` }
     }
     if (location === "header" && ignoredHeaderParameters.has(name.toLowerCase())) continue
     if (resolved.schema === undefined && resolved.content === undefined) {
-      return { reason: `parameter '${name}' declares neither schema nor content` }
+      return { ok: false, reason: `parameter '${name}' declares neither schema nor content` }
     }
-    if (resolved.content !== undefined) return { reason: `parameter '${name}' uses unsupported content encoding` }
+    if (resolved.content !== undefined)
+      return { ok: false, reason: `parameter '${name}' uses unsupported content encoding` }
     if (resolved.style !== undefined && nonEmptyString(resolved.style) === undefined) {
-      return { reason: `parameter '${name}' has an invalid style` }
+      return { ok: false, reason: `parameter '${name}' has an invalid style` }
     }
     if (resolved.explode !== undefined && typeof resolved.explode !== "boolean") {
-      return { reason: `parameter '${name}' has an invalid explode value` }
+      return { ok: false, reason: `parameter '${name}' has an invalid explode value` }
     }
     if (resolved.allowReserved !== undefined && typeof resolved.allowReserved !== "boolean") {
-      return { reason: `parameter '${name}' has an invalid allowReserved value` }
+      return { ok: false, reason: `parameter '${name}' has an invalid allowReserved value` }
     }
-    if (resolved.allowReserved === true) return { reason: `parameter '${name}' uses unsupported allowReserved encoding` }
+    if (resolved.allowReserved === true)
+      return { ok: false, reason: `parameter '${name}' uses unsupported allowReserved encoding` }
     const declaredStyle = nonEmptyString(resolved.style) ?? (location === "query" ? "form" : "simple")
     if (location === "query" && declaredStyle !== "form" && declaredStyle !== "deepObject") {
-      return { reason: `query parameter '${name}' uses unsupported style '${declaredStyle}'` }
+      return { ok: false, reason: `query parameter '${name}' uses unsupported style '${declaredStyle}'` }
     }
     if (location !== "query" && declaredStyle !== "simple") {
-      return { reason: `${location} parameter '${name}' uses unsupported style '${declaredStyle}'` }
+      return { ok: false, reason: `${location} parameter '${name}' uses unsupported style '${declaredStyle}'` }
     }
     const style = declaredStyle === "deepObject" ? "deepObject" : declaredStyle === "form" ? "form" : "simple"
     const explode = typeof resolved.explode === "boolean" ? resolved.explode : style === "form"
     if (style === "deepObject" && !explode) {
-      return { reason: `query parameter '${name}' uses deepObject with explode=false` }
+      return { ok: false, reason: `query parameter '${name}' uses deepObject with explode=false` }
     }
     const base = projectSchema(document, resolved.schema)
     const description = nonEmptyString(resolved.description)
@@ -169,17 +172,27 @@ export const operationInput = (
     unordered.filter((field) => field.location === location),
   )
   const resolved = resolve(document, operation.requestBody)
-  const body: Body | Skip | undefined = (() => {
-    if (!isRecord(resolved)) return undefined
+  const body: Parsed<Body | undefined> = (() => {
+    if (!isRecord(resolved)) return { ok: true, value: undefined }
     const content = isRecord(resolved.content) ? resolved.content : {}
     const selected = jsonContent(content)
     if (selected === undefined)
-      return { reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})` }
+      return {
+        ok: false,
+        reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})`,
+      }
     const schema = resolve(document, selected.schema)
     const required = resolved.required === true
     if (!isFlattenableObjectBody(schema, required)) {
-      fields.push({ name: "body", location: "body", required, schema: projectSchema(document, selected.schema), style: undefined, explode: undefined })
-      return { required, mode: "value", mediaType: selected.mediaType } as const
+      fields.push({
+        name: "body",
+        location: "body",
+        required,
+        schema: projectSchema(document, selected.schema),
+        style: undefined,
+        explode: undefined,
+      })
+      return { ok: true, value: { required, mode: "value", mediaType: selected.mediaType } } as const
     }
     const requiredProperties = new Set(
       Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
@@ -194,9 +207,9 @@ export const operationInput = (
         explode: undefined,
       })),
     )
-    return { required, mode: "object", mediaType: selected.mediaType } as const
+    return { ok: true, value: { required, mode: "object", mediaType: selected.mediaType } } as const
   })()
-  if (body !== undefined && "reason" in body) return body
+  if (!body.ok) return body
 
   const conflicts = new Set(
     [...Map.groupBy(fields, (field) => field.name)]
@@ -205,18 +218,21 @@ export const operationInput = (
   )
   const used = new Set<string>()
   return {
-    fields: fields.map((field) => {
-      const visibleName = blockedNames.has(field.name) ? `${field.name}_2` : field.name
-      const base = conflicts.has(field.name) ? `${field.location}_${visibleName}` : visibleName
-      const next = (index: number): string => {
-        const candidate = index === 1 ? base : `${base}_${index}`
-        return used.has(candidate) ? next(index + 1) : candidate
-      }
-      const inputName = next(1)
-      used.add(inputName)
-      return { ...field, inputName }
-    }),
-    body,
+    ok: true,
+    value: {
+      fields: fields.map((field) => {
+        const visibleName = blockedNames.has(field.name) ? `${field.name}_2` : field.name
+        const base = conflicts.has(field.name) ? `${field.location}_${visibleName}` : visibleName
+        const next = (index: number): string => {
+          const candidate = index === 1 ? base : `${base}_${index}`
+          return used.has(candidate) ? next(index + 1) : candidate
+        }
+        const inputName = next(1)
+        used.add(inputName)
+        return { ...field, inputName }
+      }),
+      body: body.value,
+    },
   }
 }
 
@@ -359,33 +375,33 @@ const isOperationPathAvailable = (
   return segments.slice(0, -1).every((_, index) => !used.has(segments.slice(0, index + 1).join(".")))
 }
 
-export const specServerUrl = (source: Record<string, unknown>): string | Skip => {
+export const specServerUrl = (source: Record<string, unknown>): Parsed<string> => {
   const server = asArray(source.servers).find(isRecord)
   const url = server === undefined ? undefined : nonEmptyString(server.url)
-  if (url === undefined) return { reason: "spec declares no servers; pass baseUrl" }
+  if (url === undefined) return { ok: false, reason: "spec declares no servers; pass baseUrl" }
   if (/\{[^{}]+\}/.test(url)) {
-    return { reason: `server URL '${url}' is not an absolute URL; pass baseUrl` }
+    return { ok: false, reason: `server URL '${url}' is not an absolute URL; pass baseUrl` }
   }
   return validateBaseUrl(url)
 }
 
-export const validateBaseUrl = (value: string): string | Skip => {
-  if (!/^https?:\/\//i.test(value)) return { reason: `server URL '${value}' is not an absolute HTTP(S) URL` }
+export const validateBaseUrl = (value: string): Parsed<string> => {
+  if (!/^https?:\/\//i.test(value)) return { ok: false, reason: `server URL '${value}' is not an absolute HTTP(S) URL` }
   const url = URL.parse(value)
   if (url === null || (url.protocol !== "http:" && url.protocol !== "https:")) {
-    return { reason: `server URL '${value}' is not an absolute HTTP(S) URL` }
+    return { ok: false, reason: `server URL '${value}' is not an absolute HTTP(S) URL` }
   }
   if (url.search !== "" || url.hash !== "") {
-    return { reason: `server URL '${value}' contains an unsupported query string or fragment` }
+    return { ok: false, reason: `server URL '${value}' contains an unsupported query string or fragment` }
   }
-  return value
+  return { ok: true, value }
 }
 
-export const securityRequirements = (value: unknown): ReadonlyArray<SecurityRequirement> | Skip => {
-  if (value === undefined) return []
-  if (!Array.isArray(value)) return { reason: "security declaration is not an array" }
+export const securityRequirements = (value: unknown): Parsed<ReadonlyArray<SecurityRequirement>> => {
+  if (value === undefined) return { ok: true, value: [] }
+  if (!Array.isArray(value)) return { ok: false, reason: "security declaration is not an array" }
   if (value.some((requirement) => !isRecord(requirement))) {
-    return { reason: "security requirement is not an object" }
+    return { ok: false, reason: "security requirement is not an object" }
   }
   const requirements = value.filter(isRecord)
   if (
@@ -395,16 +411,19 @@ export const securityRequirements = (value: unknown): ReadonlyArray<SecurityRequ
       ),
     )
   ) {
-    return { reason: "security requirement scopes are not string arrays" }
+    return { ok: false, reason: "security requirement scopes are not string arrays" }
   }
-  return requirements.map((requirement) =>
-    Object.fromEntries(
-      Object.entries(requirement).map(([name, scopes]) => [
-        name,
-        Array.isArray(scopes) ? scopes.filter((scope): scope is string => typeof scope === "string") : [],
-      ]),
+  return {
+    ok: true,
+    value: requirements.map((requirement) =>
+      Object.fromEntries(
+        Object.entries(requirement).map(([name, scopes]) => [
+          name,
+          Array.isArray(scopes) ? scopes.filter((scope): scope is string => typeof scope === "string") : [],
+        ]),
+      ),
     ),
-  )
+  }
 }
 
 export const securitySchemes = (document: Document): Readonly<Record<string, SecurityScheme>> => {

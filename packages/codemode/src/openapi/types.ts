@@ -76,7 +76,7 @@ export type Result = {
   readonly skipped: ReadonlyArray<Skipped>
 }
 
-export type Skip = { readonly reason: string }
+export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly reason: string }
 
 export type InputLocation = "path" | "query" | "header" | "body"
 
