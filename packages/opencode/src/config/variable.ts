@@ -69,7 +69,7 @@ export async function substitute(input: SubstituteInput) {
         if (missing === "empty") return ""
 
         const errMsg = `bad file reference: "${token}"`
-        if (error.code === "ENOENT") {
+        if (error.code === "ENOENT" || error.code === "ENXIO") {
           throw new InvalidError(
             {
               path: configSource,

@@ -66,7 +66,7 @@ function file(dir: string, key: string[]) {
 
 function missing(err: unknown) {
   if (!err || typeof err !== "object") return false
-  if ("code" in err && err.code === "ENOENT") return true
+  if ("code" in err && (err.code === "ENOENT" || err.code === "ENXIO")) return true
   if ("reason" in err && err.reason && typeof err.reason === "object" && "_tag" in err.reason) {
     return err.reason._tag === "NotFound"
   }

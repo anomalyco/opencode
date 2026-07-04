@@ -54,8 +54,8 @@ export async function readArrayBuffer(p: string): Promise<ArrayBuffer> {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
 }
 
-function isEnoent(e: unknown): e is { code: "ENOENT" } {
-  return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
+function isEnoent(e: unknown): e is { code: "ENOENT" | "ENXIO" } {
+  return typeof e === "object" && e !== null && "code" in e && ((e as { code: string }).code === "ENOENT" || (e as { code: string }).code === "ENXIO")
 }
 
 export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {

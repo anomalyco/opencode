@@ -355,7 +355,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
   }
 
   const src = await dep.readText(cfg).catch((err: NodeJS.ErrnoException) => {
-    if (err.code === "ENOENT") return "{}"
+    if (err.code === "ENOENT" || err.code === "ENXIO") return "{}"
     return err
   })
   if (src instanceof Error) {
