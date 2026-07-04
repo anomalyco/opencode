@@ -219,3 +219,165 @@ describe("ProjectV2.resolve", () => {
     }),
   )
 })
+
+describe("ProjectV2 versioned identity file", () => {
+  const uuid = "b3f1c2a0-4d5e-4f6a-8b7c-0123456789ab"
+
+  it.live("honors v1 repoID from .git/opencode over the remote", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(tmp.path, ".git", "opencode"), JSON.stringify({ version: 1, repoID: uuid })),
+      )
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(ProjectV2.ID.make(uuid))
+      expect(result.previous).toBeUndefined()
+      expect(result.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("two clones of the same remote resolve to their own v1 identities", () =>
+    Effect.gen(function* () {
+      const a = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const b = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const uuidB = "0f9e8d7c-6b5a-4f3e-9d1c-ba9876543210"
+      yield* Effect.promise(() => initRepo(a.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() => initRepo(b.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(a.path, ".git", "opencode"), JSON.stringify({ version: 1, repoID: uuid })),
+      )
+      yield* Effect.promise(() =>
+        Bun.write(path.join(b.path, ".git", "opencode"), JSON.stringify({ version: 1, repoID: uuidB })),
+      )
+      const project = yield* ProjectV2.Service
+
+      const first = yield* project.resolve(abs(a.path))
+      const second = yield* project.resolve(abs(b.path))
+
+      expect(first.id).toBe(ProjectV2.ID.make(uuid))
+      expect(second.id).toBe(ProjectV2.ID.make(uuidB))
+      expect(first.id).not.toBe(second.id)
+    }),
+  )
+
+  it.live("linked worktree resolves to the clone's v1 repoID", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const worktree = `${tmp.path}-worktree`
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`rm -rf ${worktree}`.quiet().nothrow()).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(tmp.path, ".git", "opencode"), JSON.stringify({ version: 1, repoID: uuid })),
+      )
+      yield* Effect.promise(() => $`git worktree add ${worktree} -b test-${Date.now()}`.cwd(tmp.path).quiet())
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(worktree))
+
+      expect(result.id).toBe(ProjectV2.ID.make(uuid))
+      expect(result.previous).toBeUndefined()
+      expect(result.directory).toBe(yield* real(worktree))
+    }),
+  )
+
+  it.live("identity survives a folder rename", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const renamed = `${tmp.path}-renamed`
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`rm -rf ${renamed}`.quiet().nothrow()).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(tmp.path, ".git", "opencode"), JSON.stringify({ version: 1, repoID: uuid })),
+      )
+      yield* Effect.promise(() => fs.rename(tmp.path, renamed))
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(renamed))
+
+      expect(result.id).toBe(ProjectV2.ID.make(uuid))
+      expect(result.previous).toBeUndefined()
+      expect(result.directory).toBe(yield* real(renamed))
+    }),
+  )
+
+  it.live("ignores structured content without a valid repoID and falls back to legacy chain", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(tmp.path, ".git", "opencode"), JSON.stringify({ version: 99, other: "thing" })),
+      )
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.previous).toBeUndefined()
+    }),
+  )
+
+  it.live("treats a non-uuid bare string as the legacy previous id", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(tmp.path, ".git", "opencode"), Hash.fast("git-remote:github.com/owner/repo")),
+      )
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.previous).toBe(remoteID("github.com/owner/repo"))
+    }),
+  )
+
+  it.live("commit writes the versioned identity file and round-trips through resolve", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* ProjectV2.Service
+
+      yield* project.commit({ store: abs(path.join(tmp.path, ".git")), id: ProjectV2.ID.make(uuid) })
+
+      const content = yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).text())
+      expect(JSON.parse(content)).toEqual({ version: 1, repoID: uuid })
+
+      const result = yield* project.resolve(abs(tmp.path))
+      expect(result.id).toBe(ProjectV2.ID.make(uuid))
+      expect(result.previous).toBeUndefined()
+    }),
+  )
+})
