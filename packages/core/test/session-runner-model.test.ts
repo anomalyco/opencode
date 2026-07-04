@@ -4,6 +4,7 @@ import { LLMClient } from "@opencode-ai/llm/route"
 import { DateTime, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -31,8 +32,6 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
     request: {
       headers: { "x-test": "header" },
       body: { apiKey: "secret", custom_extension: { enabled: true } },
-      generation: { temperature: 0.7 },
-      options: { store: false, serviceTier: "priority" },
     },
     variants,
     time: { released: 0 },
@@ -56,8 +55,6 @@ describe("SessionRunnerModel", () => {
         defaults: {
           headers: { "x-test": "header" },
           limits: { context: 100, output: 20 },
-          generation: { temperature: 0.7 },
-          providerOptions: { openai: { store: false, serviceTier: "priority" } },
           http: { body: { custom_extension: { enabled: true } } },
         },
       })
@@ -86,7 +83,7 @@ describe("SessionRunnerModel", () => {
             url: "https://compatible.example/v1",
             settings: { apiKey: "settings-secret", compatibility: "strict" },
           }),
-          request: { headers: {}, body: {}, generation: {}, options: {} },
+          request: { headers: {}, body: {} },
         }),
       )
       const request = LLM.request({ model: resolved, prompt: "Hello" })
@@ -103,21 +100,20 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("lowers selected OpenAI Session variants into Responses options", () =>
+  it.effect("overlays selected OpenAI Session variant bodies", () =>
     Effect.gen(function* () {
-      const base = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }, [
+      const catalog = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }, [
         {
           id: ModelV2.VariantID.make("high"),
           headers: { "x-variant": "high" },
-          body: {},
-          generation: { temperature: 0.2 },
-          options: { reasoningEffort: "high" },
+          body: {
+            store: false,
+            service_tier: "priority",
+            temperature: 0.2,
+            reasoning: { effort: "high" },
+          },
         },
       ])
-      const catalog = ModelV2.Info.make({
-        ...base,
-        request: { ...base.request, options: { ...base.request.options, reasoningEffort: "medium" } },
-      })
       const session = SessionV2.Info.make({
         id: SessionV2.ID.make("ses_model_variant"),
         projectID: ProjectV2.ID.global,
@@ -134,21 +130,19 @@ describe("SessionRunnerModel", () => {
       })
 
       const resolved = yield* SessionRunnerModel.resolve(session, catalog)
-      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
 
       expect(resolved.route.defaults.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
-      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
-      expect(prepared.body).toMatchObject({
+      expect(resolved.route.defaults.http?.body).toEqual({
+        custom_extension: { enabled: true },
         store: false,
         service_tier: "priority",
         temperature: 0.2,
         reasoning: { effort: "high" },
       })
-      expect(prepared.body).not.toHaveProperty("reasoningEffort")
     }),
   )
 
-  it.effect("lowers selected OpenAI-compatible Session variants into Chat options", () =>
+  it.effect("overlays selected OpenAI-compatible Session variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model(
         { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://compatible.example/v1" },
@@ -156,9 +150,7 @@ describe("SessionRunnerModel", () => {
           {
             id: ModelV2.VariantID.make("high"),
             headers: {},
-            body: {},
-            generation: {},
-            options: { reasoningEffort: "high" },
+            body: { store: false, reasoning_effort: "high" },
           },
         ],
       )
@@ -174,14 +166,12 @@ describe("SessionRunnerModel", () => {
       })
 
       const resolved = yield* SessionRunnerModel.resolve(session, catalog)
-      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
 
-      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
-      expect(prepared.body).toMatchObject({
+      expect(resolved.route.defaults.http?.body).toEqual({
+        custom_extension: { enabled: true },
         store: false,
         reasoning_effort: "high",
       })
-      expect(prepared.body).not.toHaveProperty("reasoningEffort")
     }),
   )
 
@@ -215,15 +205,13 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("lowers selected Anthropic Session variants into Messages options", () =>
+  it.effect("overlays selected Anthropic Session variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model({ type: "aisdk", package: "@ai-sdk/anthropic", url: "https://anthropic.example/v1" }, [
         {
           id: ModelV2.VariantID.make("high"),
           headers: {},
-          body: {},
-          generation: {},
-          options: { thinking: { type: "enabled", budgetTokens: 12000 } },
+          body: { thinking: { type: "enabled", budget_tokens: 12000 } },
         },
       ])
       const session = SessionV2.Info.make({
@@ -238,13 +226,11 @@ describe("SessionRunnerModel", () => {
       })
 
       const resolved = yield* SessionRunnerModel.resolve(session, catalog)
-      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
 
-      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
-      expect(prepared.body).toMatchObject({
+      expect(resolved.route.defaults.http?.body).toEqual({
+        custom_extension: { enabled: true },
         thinking: { type: "enabled", budget_tokens: 12000 },
       })
-      expect(JSON.stringify(prepared.body)).not.toContain("budgetTokens")
     }),
   )
 
@@ -266,7 +252,7 @@ describe("SessionRunnerModel", () => {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
-          request: { headers: {}, body: {}, generation: {}, options: {} },
+          request: { headers: {}, body: {} },
         }),
         Credential.Key.make({ type: "key", key: "secret" }),
       )
@@ -289,7 +275,7 @@ describe("SessionRunnerModel", () => {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
-          request: { headers: {}, body: { apiKey: "configured-secret" }, generation: {}, options: {} },
+          request: { headers: {}, body: { apiKey: "configured-secret" } },
         }),
         credential,
       )
@@ -303,6 +289,27 @@ describe("SessionRunnerModel", () => {
 
       expect(headers.authorization).toBe("Bearer stored-secret")
       expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
+    }),
+  )
+
+  it.effect("does not project OAuth account metadata into the request body", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+          request: { headers: {}, body: {} },
+        }),
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "secret",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { server: "https://console.example", orgID: "org_123" },
+        }),
+      )
+
+      expect(resolved.route.defaults.http?.body).toEqual({})
     }),
   )
 

@@ -212,7 +212,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           draft.finish = event.data.finish
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
-          if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, end: event.data.snapshot }
+          if (event.data.snapshot || event.data.files)
+            draft.snapshot = {
+              ...draft.snapshot,
+              end: event.data.snapshot,
+              files: event.data.files ? Array.from(event.data.files) : undefined,
+            }
         })
       },
       "session.next.step.failed": (event) => {
@@ -344,6 +349,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 id: event.data.reasoningID,
                 text: "",
                 providerMetadata: event.data.providerMetadata,
+                time: { created: event.data.timestamp },
               }),
             ),
           )
@@ -360,6 +366,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           const match = latestReasoning(draft, event.data.reasoningID)
           if (match) {
             match.text = event.data.text
+            match.time = { created: match.time?.created ?? event.data.timestamp, completed: event.data.timestamp }
             if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
           }
         })
@@ -380,6 +387,9 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.revert.staged": () => Effect.void,
+      "session.next.revert.cleared": () => Effect.void,
+      "session.next.revert.committed": () => Effect.void,
     })
   })
 }

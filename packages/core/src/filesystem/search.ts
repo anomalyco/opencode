@@ -1,5 +1,6 @@
 export * as FileSystemSearch from "./search"
 
+import { makeLocationNode } from "../effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
@@ -127,12 +128,19 @@ export const fffLayer = Layer.effect(
         Fff.create({
           basePath: location.directory,
           aiMode: true,
-          enableFsRootScanning: true,
-          enableHomeDirScanning: true,
         }),
       catch: (cause) => cause,
-    }).pipe(Effect.orDie)
-    if (!result.ok) return yield* Effect.die(result.error)
+    }).pipe(
+      Effect.catch((error) => Effect.logWarning("failed to initialize fff", { error }).pipe(Effect.as(undefined))),
+    )
+    if (!result?.ok) {
+      if (result) yield* Effect.logWarning("failed to initialize fff", { error: result.error })
+      return Service.of({
+        find: () => Effect.succeed([]),
+        glob: () => Effect.succeed([]),
+        grep: () => Effect.succeed([]),
+      })
+    }
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
     return Service.of({
       glob: (input) =>
@@ -222,6 +230,8 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const locationLayer = Layer.unwrap(
-  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)),
-)
+const layer = Layer.unwrap(Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)))
+
+export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Location.node, Ripgrep.node] })

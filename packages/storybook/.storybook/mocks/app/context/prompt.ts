@@ -73,8 +73,8 @@ export function createPromptState() {
     key: item.key ?? `ctx:${++index}`,
   })
 
-  return {
-    ready: () => ready,
+  const value = {
+    ready,
     current: () => store.prompt,
     cursor: () => store.cursor,
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
@@ -87,6 +87,7 @@ export function createPromptState() {
       setStore("cursor", 0)
       setStore("items", (current) => current.filter((item) => !!item.comment?.trim()))
     },
+    capture: () => value,
     context: {
       items: () => store.items,
       add(item: Omit<ContextItem, "key"> & { key?: string }) {
@@ -116,6 +117,7 @@ export function createPromptState() {
       },
     },
   }
+  return value
 }
 
 const prompt = createPromptState()

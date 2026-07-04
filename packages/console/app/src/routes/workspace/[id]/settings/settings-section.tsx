@@ -43,6 +43,7 @@ const updateWorkspace = action(async (form: FormData) => {
           .catch((e) => ({ error: e.message as string })),
       workspaceID,
     ),
+    { revalidate: getWorkspaceInfo.key },
   )
 }, "workspace.update")
 

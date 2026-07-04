@@ -399,7 +399,7 @@
   overflow: hidden;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -633,7 +633,7 @@
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-header"] {
   align-items: center;
-  padding: 24px 24px 0;
+  padding: 24px 24px 16px;
 }
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-body"] {

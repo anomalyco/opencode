@@ -72,7 +72,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
             .filter((text) => text.trim())
             .join("\n\n") || "MCP tool returned an error",
         )
-      if (result.structuredContent === undefined || result.structuredContent === null) return result
+      if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
+        return result
       return {
         ...result,
         content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
@@ -114,6 +115,8 @@ export function fetch<T extends { name: string }>(
 }
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+export const toolName = (clientName: string, name: string) => sanitize(clientName) + "_" + sanitize(name)
 
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])

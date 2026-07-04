@@ -2,6 +2,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, mock, beforeEach } from "bun:test"
 import { ListRootsRequestSchema, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
@@ -13,6 +14,7 @@ import { TestInstance } from "../fixture/fixture"
 interface MockClientState {
   capabilities: { tools?: object; prompts?: object; resources?: object }
   capabilitiesShouldThrow: boolean
+  instructions?: string
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
   listPromptsCalls: number
@@ -188,6 +190,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return this._state?.capabilities
     }
 
+    getInstructions() {
+      return this._state?.instructions
+    }
+
     async listTools(params?: { cursor?: string }) {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
@@ -270,7 +276,7 @@ beforeEach(() => {
 const { MCP } = await import("../../src/mcp/index")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 
-const it = testEffect(MCP.defaultLayer)
+const it = testEffect(LayerNode.compile(MCP.node))
 
 function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server: string) {
   if ("status" in status) return status.status
@@ -342,6 +348,60 @@ it.instance(
         expect(Object.keys(toolsA).length).toBeGreaterThan(0)
         expect(Object.keys(toolsB).length).toBeGreaterThan(0)
         expect(serverState.listToolsCalls).toBe(1)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "instructions() returns connected server instructions with tool names",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "guide-server"
+        const serverState = getOrCreateClientState("guide-server")
+        serverState.instructions = "Use lookup before mutate."
+
+        yield* mcp.add("guide-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.instructions()).toContainEqual({
+          name: "guide-server",
+          instructions: "Use lookup before mutate.",
+          tools: ["guide-server_test_tool"],
+        })
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "instructions() omits empty and disconnected server instructions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "temporary-server"
+        getOrCreateClientState("temporary-server").instructions = "Temporary guidance."
+
+        yield* mcp.add("temporary-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+        yield* mcp.disconnect("temporary-server")
+
+        lastCreatedClientName = "blank-server"
+        getOrCreateClientState("blank-server").instructions = "   "
+
+        yield* mcp.add("blank-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const instructions = yield* mcp.instructions()
+        expect(instructions.some((item) => item.name === "temporary-server")).toBe(false)
+        expect(instructions.some((item) => item.name === "blank-server")).toBe(false)
       }),
     ),
   { config: { mcp: {} } },

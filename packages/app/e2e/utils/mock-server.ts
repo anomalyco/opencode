@@ -1,16 +1,7 @@
 import type { Page, Route } from "@playwright/test"
 
-const emptyList = new Set([
-  "/skill",
-  "/command",
-  "/lsp",
-  "/formatter",
-  "/permission",
-  "/question",
-  "/vcs/status",
-  "/vcs/diff",
-])
-const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/session/status"])
+const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/vcs/status", "/vcs/diff"])
+const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp"])
 
 export interface MockServerConfig {
   provider: unknown
@@ -23,6 +14,12 @@ export interface MockServerConfig {
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   events?: () => unknown[]
   eventRetry?: number
+  todos?: (sessionID: string) => unknown[]
+  permissions?: unknown[] | (() => unknown[])
+  questions?: unknown[] | (() => unknown[])
+  fileList?: (path: string) => unknown | Promise<unknown>
+  fileContent?: (path: string) => unknown | Promise<unknown>
+  sessionStatus?: unknown
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -55,7 +52,16 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
     if (path === "/global/health") return json(route, { healthy: true })
+    if (path === "/permission")
+      return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
+    if (path === "/question")
+      return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
+    if (path === "/session/status") return json(route, config.sessionStatus ?? {})
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
+    if (path === "/file" && config.fileList)
+      return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
+    if (path === "/file/content" && config.fileContent)
+      return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
@@ -66,7 +72,9 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, session ?? {})
     }
 
-    if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(path)) return json(route, [])
+    const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
+    if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
+    if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
 
     const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
     if (messagesMatch) {
