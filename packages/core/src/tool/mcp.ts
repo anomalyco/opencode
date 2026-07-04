@@ -1,6 +1,5 @@
 export * as McpTool from "./mcp"
 
-import { createHash } from "node:crypto"
 import { ToolFailure } from "@opencode-ai/llm"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Effect, Exit, Layer, Scope, Semaphore, Stream } from "effect"
@@ -13,48 +12,12 @@ import { Tool } from "./tool"
 import { Tools, type ExecutePath } from "./tools"
 import { ToolRegistry } from "./registry"
 
-const MAX_NAME_LENGTH = 64
-const HASH_LENGTH = 8
-
 const sanitize = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, "_")
 
-// Deterministic short suffix used to keep overlong or colliding names unique and stable across restarts.
-const hashSuffix = (raw: string) => "_" + createHash("sha1").update(raw).digest("hex").slice(0, HASH_LENGTH)
-
-const fit = (base: string, raw: string) => base.slice(0, MAX_NAME_LENGTH - HASH_LENGTH - 1) + hashSuffix(raw)
-
-const unique = (initial: string, raw: string, used: Set<string>, prefix = "") => {
-  if (!used.has(prefix + initial)) {
-    used.add(prefix + initial)
-    return initial
-  }
-  for (let attempt = 0; ; attempt++) {
-    const candidate = fit(initial, attempt === 0 ? raw : `${raw}\u0000${attempt}`)
-    if (used.has(prefix + candidate)) continue
-    used.add(prefix + candidate)
-    return candidate
-  }
-}
-
-const executeSegment = (value: string) => {
-  const sanitized = sanitize(value) || "_"
-  const safe =
-    sanitized === "$codemode" || ["__proto__", "constructor", "prototype"].includes(sanitized)
-      ? `_${sanitized}`
-      : sanitized
-  return safe.length > MAX_NAME_LENGTH ? fit(safe, value) : safe
-}
-
 /**
- * Registry/permission action name for an MCP tool: V1-compatible `<server>_<tool>` so existing deny
- * rules keep working. Sanitized to a valid tool name, prefixed when it would not start with a letter,
- * and hashed down when it would exceed the 64-char limit.
+ * V1-compatible registry and permission name: `<server>_<tool>` with unsupported characters replaced.
  */
-export const name = (server: string, tool: string) => {
-  const joined = sanitize(server) + "_" + sanitize(tool)
-  const base = /^[A-Za-z]/.test(joined) ? joined : "mcp_" + joined
-  return base.length > MAX_NAME_LENGTH ? fit(base, `${server}\u0000${tool}`) : base
-}
+export const name = (server: string, tool: string) => sanitize(server) + "_" + sanitize(tool)
 
 const toContent = (part: MCP.ToolResultContent): Tool.Content =>
   part.type === "text" ? { type: "text", text: part.text } : { type: "file", data: part.data, mime: part.mimeType }
@@ -126,18 +89,12 @@ export const layer = Layer.effectDiscard(
     // registry never has a gap where MCP tools disappear mid-swap.
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
-        const used = new Set<string>()
-        const usedPaths = new Set<string>()
         const record: Record<string, Tool.AnyTool> = {}
         const execute: Record<string, ExecutePath> = {}
         for (const tool of yield* mcp.tools()) {
-          const initial = name(tool.server, tool.name)
-          const key = unique(initial, `${tool.server}\u0000${tool.name}`, used)
+          const key = name(tool.server, tool.name)
           record[key] = make(tool.server, tool, key)
-          const namespace = executeSegment(tool.server)
-          const initialMember = executeSegment(tool.name)
-          const member = unique(initialMember, `${tool.server}\u0000${tool.name}`, usedPaths, `${namespace}\u0000`)
-          execute[key] = [namespace, member]
+          execute[key] = [sanitize(tool.server), sanitize(tool.name)]
         }
         const next = yield* Scope.fork(scope)
         yield* tools
