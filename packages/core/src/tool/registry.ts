@@ -9,10 +9,9 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { definition, permission, registrationEntries, settle, type AnyTool, type RegistrationError } from "./tool"
-import { Tools, type CodeModeTools } from "./tools"
+import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "../effect/app-node"
-import { ExecuteTool } from "./execute"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -25,13 +24,6 @@ export interface Interface {
   readonly materialize: (input: MaterializeInput) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  /**
-   * Internal only. This is probably the wrong API: it mixes tool registration with CodeMode projection.
-   * Keep it out of PluginContext until the tool catalog has a proper projection mechanism.
-   */
-  readonly codeMode: {
-    readonly register: (tools: CodeModeTools) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  }
 }
 
 export interface MaterializeInput {
@@ -58,11 +50,19 @@ const registryLayer = Layer.effect(
     const resources = yield* ToolOutputStore.Service
     const toolHooks = yield* ToolHooks.Service
     type Registration = { readonly identity: object; readonly tool: AnyTool }
-    type Stack = Array<{ readonly token: object; readonly registration: Registration }>
-    const local = new Map<string, Stack>()
-    const codeMode = new Map<string, Stack>()
+    const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
 
-    const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, registration: Registration) {
+    const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised?: object) {
+      const registration = local.get(input.call.name)?.at(-1)?.registration
+      if (!registration)
+        return {
+          result: {
+            type: "error" as const,
+            value: advertised ? `Stale tool call: ${input.call.name}` : `Unknown tool: ${input.call.name}`,
+          },
+        }
+      if (advertised && registration.identity !== advertised)
+        return { result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` } }
       // Hooks fire only for hosted/local tools; provider-executed calls never reach settleWith.
       const beforeEvent: ToolHooks.BeforeEvent = {
         tool: input.call.name,
@@ -73,16 +73,12 @@ const registryLayer = Layer.effect(
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
-      const pending = yield* settle(
-        registration.tool,
-        { ...input.call, input: beforeEvent.input },
-        {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          assistantMessageID: input.assistantMessageID,
-          toolCallID: input.call.id,
-        },
-      ).pipe(
+      const pending = yield* settle(registration.tool, { ...input.call, input: beforeEvent.input }, {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        assistantMessageID: input.assistantMessageID,
+        toolCallID: input.call.id,
+      }).pipe(
         Effect.map((output) => ({ output })),
         Effect.catchTag("LLM.ToolFailure", (failure) =>
           Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
@@ -92,11 +88,7 @@ const registryLayer = Layer.effect(
       if ("result" in pending) {
         settlement = pending
       } else {
-        const bounded = yield* resources.bound({
-          sessionID: input.sessionID,
-          toolCallID: input.call.id,
-          output: pending.output,
-        })
+        const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output: pending.output })
         const result = ToolOutput.toResultValue(bounded.output)
         settlement =
           result.type === "error"
@@ -126,54 +118,28 @@ const registryLayer = Layer.effect(
       }
     })
 
-    const register = Effect.fn("ToolRegistry.register")(function* (
-      target: Map<string, Stack>,
-      entries: ReadonlyArray<readonly [string, AnyTool]>,
-    ) {
-      if (entries.length === 0) return
-      yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const token = {}
-          for (const [name, tool] of entries)
-            target.set(name, [...(target.get(name) ?? []), { token, registration: { identity: {}, tool } }])
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              for (const [name] of entries) {
-                const registrations = target.get(name)?.filter((registration) => registration.token !== token) ?? []
-                if (registrations.length > 0) target.set(name, registrations)
-                else target.delete(name)
-              }
-            }),
-          )
-        }),
-      )
-    })
-
-    const codeModeRegistrations = (rules: PermissionV2.Ruleset) =>
-      Array.from(codeMode).flatMap(([path, entries]) => {
-        const registration = entries.at(-1)?.registration
-        const separator = path.indexOf("\u0000")
-        const namespace = path.slice(0, separator)
-        const name = path.slice(separator + 1)
-        if (!registration || whollyDisabled(permission(registration.tool, `${namespace}.${name}`), rules)) return []
-        return [{ namespace, name, registration }]
-      })
-
     return Service.of({
-      register: (tools) => register(local, registrationEntries(tools)),
-      codeMode: {
-        register: (tools) =>
-          register(
-            codeMode,
-            Object.entries(tools).flatMap(([namespace, members]) =>
-              Object.entries(members).map(
-                ([name, tool]) => [`${executeSegment(namespace)}\u0000${executeSegment(name)}`, tool] as const,
-              ),
-            ),
-          ),
-      },
+      register: Effect.fn("ToolRegistry.register")(function* (tools) {
+        const entries = registrationEntries(tools)
+        if (entries.length === 0) return
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            const token = {}
+            for (const [name, tool] of entries)
+              local.set(name, [...(local.get(name) ?? []), { token, registration: { identity: {}, tool } }])
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                for (const [name] of entries) {
+                  const registrations = local.get(name)?.filter((registration) => registration.token !== token) ?? []
+                  if (registrations.length > 0) local.set(name, registrations)
+                  else local.delete(name)
+                }
+              }),
+            )
+          }),
+        )
+      }),
       materialize: Effect.fn("ToolRegistry.materialize")(function* (input) {
-        const rules = [...(input.permissions ?? [])]
         const registrations = new Map<string, Registration>()
         for (const [name, entries] of local) {
           const registration = entries.at(-1)?.registration
@@ -183,46 +149,16 @@ const registryLayer = Layer.effect(
         const usePatch = input.model.provider.toLowerCase() === "openai" || input.model.id.toLowerCase().includes("gpt")
         for (const [name, registration] of registrations) {
           const wrongEditTool = name === "apply_patch" ? !usePatch : (name === "edit" || name === "write") && usePatch
-          if (wrongEditTool || whollyDisabled(permission(registration.tool, name), rules)) registrations.delete(name)
+          if (wrongEditTool || whollyDisabled(permission(registration.tool, name), input.permissions ?? []))
+            registrations.delete(name)
         }
-
-        const children = codeModeRegistrations(rules)
-        const executeTools = new Map<string, Record<string, AnyTool>>()
-        for (const child of children) {
-          const members = executeTools.get(child.namespace) ?? {}
-          members[child.name] = child.registration.tool
-          executeTools.set(child.namespace, members)
-        }
-        const executeRegistration =
-          children.length > 0 && !whollyDisabled("execute", rules)
-            ? { identity: {}, tool: ExecuteTool.make(Object.fromEntries(executeTools)) }
-            : undefined
-        if (executeRegistration) registrations.set("execute", executeRegistration)
-
         return {
           definitions: Array.from(registrations, ([name, registration]) => definition(name, registration.tool)),
-          settle: (input) =>
-            Effect.suspend(() => {
-              const registration = registrations.get(input.call.name)
-              if (!registration)
-                return Effect.succeed({ result: { type: "error" as const, value: `Unknown tool: ${input.call.name}` } })
-              if (registration === executeRegistration) {
-                const current = codeModeRegistrations(rules)
-                if (
-                  current.length !== children.length ||
-                  current.some((item, index) => item.registration.identity !== children[index]?.registration.identity)
-                )
-                  return Effect.succeed({ result: { type: "error" as const, value: "Stale tool call: execute" } })
-              } else {
-                if (input.call.name === "execute" && codeModeRegistrations(rules).length > 0)
-                  return Effect.succeed({ result: { type: "error" as const, value: "Stale tool call: execute" } })
-                if (local.get(input.call.name)?.at(-1)?.registration.identity !== registration.identity)
-                  return Effect.succeed({
-                    result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` },
-                  })
-              }
-              return settleWith(input, registration)
-            }),
+          settle: (input) => {
+            const registration = registrations.get(input.call.name)
+            if (registration) return settleWith(input, registration.identity)
+            return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
+          },
         }
       }),
     })
@@ -231,21 +167,12 @@ const registryLayer = Layer.effect(
 
 const layer = Layer.effect(
   Tools.Service,
-  Service.use((registry) =>
-    Effect.succeed(
-      Tools.Service.of({ register: registry.register, codeMode: { register: registry.codeMode.register } }),
-    ),
-  ),
+  Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
 
 function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
-}
-
-function executeSegment(value: string) {
-  const name = value.replace(/[^a-zA-Z0-9_-]/g, "_")
-  return name === "__proto__" || name === "constructor" || name === "prototype" ? `_${name}` : name
 }
 
 export const node = makeLocationNode({

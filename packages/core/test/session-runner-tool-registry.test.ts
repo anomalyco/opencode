@@ -163,39 +163,6 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("aggregates scoped CodeMode tools and invalidates changed catalogs", () =>
-    Effect.gen(function* () {
-      const service = yield* ToolRegistry.Service
-      const alpha = yield* Scope.make()
-      const beta = yield* Scope.make()
-      yield* service.codeMode.register({ alpha: { one: make("hidden") } }).pipe(Scope.provide(alpha))
-      yield* service.codeMode.register({ ["__proto__"]: { constructor: make() } }).pipe(Scope.provide(alpha))
-      yield* service.codeMode.register({ beta: { two: make() } }).pipe(Scope.provide(beta))
-
-      const materialized = yield* service.materialize({ model: testModel })
-      expect(materialized.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect(materialized.definitions[0]?.description).toContain("tools.alpha.one")
-      expect(materialized.definitions[0]?.description).toContain("tools.beta.two")
-      expect(materialized.definitions[0]?.description).toContain("tools.___proto__._constructor")
-      const denied = yield* toolDefinitions(service, [{ action: "hidden", resource: "*", effect: "deny" }])
-      expect(denied[0]?.description).not.toContain("tools.alpha.one")
-      expect(denied[0]?.description).toContain("tools.beta.two")
-
-      yield* Scope.close(alpha, Exit.void)
-      expect((yield* toolDefinitions(service))[0]?.description).not.toContain("tools.alpha.one")
-      expect(
-        (yield* materialized.settle({
-          sessionID,
-          ...identity,
-          call: { type: "tool-call", id: "call-execute", name: "execute", input: { code: "return null" } },
-        })).result,
-      ).toEqual({ type: "error", value: "Stale tool call: execute" })
-
-      yield* Scope.close(beta, Exit.void)
-      expect(yield* toolDefinitions(service)).toEqual([])
-    }),
-  )
-
   it.effect("returns model errors without swallowing interruption or defects", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -262,8 +229,8 @@ describe("ToolRegistry", () => {
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       expect("definitions" in service).toBe(false)
+      expect("execute" in service).toBe(false)
       expect("settle" in service).toBe(false)
-      expect(typeof service.codeMode.register).toBe("function")
       expect(typeof service.materialize).toBe("function")
     }),
   )
@@ -391,10 +358,9 @@ describe("ToolRegistry", () => {
       const scope = yield* Scope.make()
       yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
       const materialized = yield* service.materialize({ model: testModel })
-      const settlement = materialized.settle(call("echo"))
       yield* Scope.close(scope, Exit.void)
 
-      expect((yield* settlement).result).toEqual({
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({
         type: "error",
         value: "Stale tool call: echo",
       })

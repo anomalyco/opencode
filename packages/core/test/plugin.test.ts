@@ -81,26 +81,27 @@ describe("PluginV2", () => {
       const plugin = define({
         id: "tool-plugin",
         effect: (ctx) =>
-          Effect.gen(function* () {
-            yield* ctx.tool
-              .register({
-                plugin_tool: Tool.make({
-                  description: "Plugin tool",
-                  input: Schema.Struct({}),
-                  output: Schema.Struct({ ok: Schema.Boolean }),
-                  execute: () => Effect.succeed({ ok: true }),
-                }),
-              })
-              .pipe(Effect.orDie)
-          }),
+          ctx.tool
+            .register({
+              plugin_tool: Tool.make({
+                description: "Plugin tool",
+                input: Schema.Struct({}),
+                output: Schema.Struct({ ok: Schema.Boolean }),
+                execute: () => Effect.succeed({ ok: true }),
+              }),
+            })
+            .pipe(Effect.orDie),
       })
 
       yield* plugins.add(PluginV2.ID.make(plugin.id), plugin.effect)
-      const active = (yield* registry.materialize({ model: testModel })).definitions
-      expect(active.map((tool) => tool.name)).toEqual(["plugin_tool"])
+      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
+        "plugin_tool",
+      )
 
       yield* plugins.remove(PluginV2.ID.make(plugin.id))
-      expect((yield* registry.materialize({ model: testModel })).definitions).toEqual([])
+      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).not.toContain(
+        "plugin_tool",
+      )
     }),
   )
 

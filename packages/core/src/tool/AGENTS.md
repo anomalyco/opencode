@@ -28,11 +28,7 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins and plugin tools register top-level tools through `Tools.Service.register({ [name]: tool })`. Core producers
-may temporarily register tools only inside the aggregate `execute` tool through the private
-`Tools.Service.codeMode.register({ [namespace]: tools })` bridge. Do not expose that bridge through `PluginContext`;
-it exists until the plugin tool catalog has a general projection mechanism. Both placements store the same canonical
-`Tool.AnyTool`; `execute` is derived during materialization rather than owned by any contributor.
+Built-ins and plugin tools register through `Tools.Service.register({ [name]: tool })`.
 
 Registrations are scoped:
 
@@ -56,5 +52,5 @@ Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOut
 
 ## Current Gaps
 
-- Future Session-scoped registrations still need an explicit canonical registration design.
+- MCP and future Session-scoped registrations still need an explicit canonical registration design.
 - The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

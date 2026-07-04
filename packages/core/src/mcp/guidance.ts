@@ -1,12 +1,12 @@
 export * as McpGuidance from "./guidance"
 
+import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
-import { makeLocationNode } from "../effect/app-node"
-import { Flag } from "../flag/flag"
 import { PermissionV2 } from "../permission"
-import { SystemContext } from "../system-context/index"
+import { McpTool } from "../tool/mcp"
 import { MCP } from "./index"
+import { SystemContext } from "../system-context/index"
 
 const Summary = Schema.Struct({
   server: Schema.String,
@@ -62,7 +62,6 @@ export const layer = Layer.effect(
 
     return Service.of({
       load: Effect.fn("McpGuidance.load")(function* (selection) {
-        if (Flag.OPENCODE_CODE_MODE) return SystemContext.empty
         const agent = selection.info
         if (!agent) return SystemContext.empty
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
@@ -76,7 +75,7 @@ export const layer = Layer.effect(
               owned.length === 0 ||
               owned.some(
                 (tool) =>
-                  PermissionV2.evaluate(`mcp:${tool.server}:${tool.name}`, "*", agent.permissions).effect !== "deny",
+                  PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
               )
             )
           })
