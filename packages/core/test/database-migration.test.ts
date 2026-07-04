@@ -15,7 +15,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
-import resetExecutionErrorsMigration from "@opencode-ai/core/database/migration/20260703210000_reset_v2_execution_errors"
+import resetSessionEventsMigration from "@opencode-ai/core/database/migration/20260703200000_reset_v2_session_events"
 import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -40,7 +40,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
-  test("resets incompatible V2 execution and error history", async () => {
+  test("resets incompatible V2 Session event history", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -53,7 +53,7 @@ describe("DatabaseMigration", () => {
         yield* db.run(sql`INSERT INTO event (id) VALUES ('event')`)
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 1)`)
 
-        yield* DatabaseMigration.applyOnly(db, [resetExecutionErrorsMigration])
+        yield* DatabaseMigration.applyOnly(db, [resetSessionEventsMigration])
 
         expect(yield* db.get(sql`SELECT id FROM session_input`)).toBeUndefined()
         expect(yield* db.get(sql`SELECT id FROM session_message`)).toBeUndefined()

@@ -985,5 +985,5 @@ Compatibility:
 
 Compatibility:
 
-- All changed durable definitions remain version 1. `20260703200000_reset_v2_event_fragments` wipes experimental V2 events, sequences, projected messages, and admitted inputs.
+- All changed durable definitions remain version 1. `20260703200000_reset_v2_session_events` performs the single reset for this Session event contract update, wiping experimental V2 events, sequences, projected messages, and admitted inputs.
 - Promise, Effect, and legacy JavaScript SDK surfaces are regenerated from the simplified schemas.
