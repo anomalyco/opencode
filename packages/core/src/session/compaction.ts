@@ -18,32 +18,32 @@ const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
-## Goal
+## Continuation Goal
 - [single-sentence task summary]
 
-## Constraints & Preferences
+## Operating Constraints
 - [user constraints, preferences, specs, or "(none)"]
 
 ## Progress
-### Done
+### Completed
 - [completed work or "(none)"]
 
-### In Progress
+### In Flight
 - [current work or "(none)"]
 
 ### Blocked
 - [blockers or "(none)"]
 
-## Key Decisions
+## Decisions To Preserve
 - [decision and why, or "(none)"]
 
-## Next Steps
+## Resume From Here
 - [ordered next actions or "(none)"]
 
-## Critical Context
+## Context To Preserve
 - [important technical facts, errors, open questions, or "(none)"]
 
-## Relevant Files
+## Working Files
 - [file or directory path: why it matters, or "(none)"]
 </template>
 

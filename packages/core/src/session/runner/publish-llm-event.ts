@@ -68,7 +68,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   >()
   let assistantMessageID = input.assistantMessageID
   let stepStarted = false
-  let assistantFailed = false
+  let stepFailed = false
   let providerFailed = false
   let retryEvidence = false
   let stepFailure: SessionError.Error | undefined
@@ -206,16 +206,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* flushFragments()
   })
 
-  const failAssistant = Effect.fnUntraced(function* (error: SessionError.Error) {
-    if (assistantFailed) return
+  const failAssistant = Effect.fnUntraced(function* (error: SessionError.Error, replace = false) {
     yield* flush()
+    yield* startAssistant()
+    if (replace || stepFailure === undefined) stepFailure = error
+  })
+
+  const publishStepFailure = Effect.fnUntraced(function* () {
+    if (stepFailed || stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
-    assistantFailed = true
-    stepFailure = error
+    stepFailed = true
     yield* events.publish(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
-      error,
+      error: stepFailure,
     })
   })
 
@@ -223,9 +227,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     error: SessionError.Error,
     hostedOnly = false,
   ) {
+    let failed = false
     for (const [callID, tool] of tools) {
       if (tool.settled || (hostedOnly && !tool.providerExecuted)) continue
       tool.settled = true
+      failed = true
       yield* events.publish(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,
         assistantMessageID: tool.assistantMessageID,
@@ -234,6 +240,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         executed: tool.providerExecuted,
       })
     }
+    return failed
   })
 
   const assistantMessageIDForTool = (callID: string) => {
@@ -396,7 +403,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
         if (event.reason === "content-filter") {
           providerFailed = true
-          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
+          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)
           return
         }
         stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
@@ -405,7 +412,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "provider-error":
         providerFailed = true
-        yield* failAssistant({ type: "provider.unknown", message: event.message })
+        yield* failAssistant({ type: "provider.unknown", message: event.message }, true)
         return
     }
   })
@@ -414,6 +421,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     publish,
     flush,
     failAssistant,
+    publishStepFailure,
     failUnsettledTools,
     hasProviderError: () => providerFailed,
     hasRetryEvidence: () => retryEvidence,

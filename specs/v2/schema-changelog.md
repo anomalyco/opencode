@@ -1,5 +1,13 @@
 # V2 Schema Changelog
 
+## 2026-07-04: Canonicalize Generated Shell Type Name
+
+- Collapse the legacy JavaScript SDK generator's equivalent `Shell1V2` component into the canonical `ShellV2` contract.
+
+Compatibility:
+
+- The Shell wire shape is unchanged. Generated event and endpoint types now consistently reference `ShellV2`.
+
 ## 2026-07-03: Add Execution Lifecycle, Retry, And Structured Session Errors
 
 - Replace live-only `session.execution.settled` and unused `session.retried` with durable v1 `session.execution.started`, `session.execution.succeeded`, `session.execution.failed`, `session.execution.interrupted`, and `session.retry.scheduled` events.

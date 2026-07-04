@@ -68,6 +68,32 @@ test("compaction describes tool media without embedding base64", () => {
   expect(serialized).not.toContain(base64)
 })
 
+test("compaction prompt requires the continuation checkpoint headings in order", () => {
+  const prompt = SessionCompaction.buildPrompt({ context: ["Conversation history"] })
+  expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
+    "## Continuation Goal",
+    "## Operating Constraints",
+    "## Progress",
+    "### Completed",
+    "### In Flight",
+    "### Blocked",
+    "## Decisions To Preserve",
+    "## Resume From Here",
+    "## Context To Preserve",
+    "## Working Files",
+  ])
+  expect(prompt).toContain("single-sentence task summary")
+  expect(prompt).toContain("user constraints, preferences, specs")
+  expect(prompt).toContain("completed work")
+  expect(prompt).toContain("current work")
+  expect(prompt).toContain("blockers")
+  expect(prompt).toContain("decision and why")
+  expect(prompt).toContain("ordered next actions")
+  expect(prompt).toContain("important technical facts, errors, open questions")
+  expect(prompt).toContain("file or directory path: why it matters")
+  expect(prompt).toContain("Keep every section, even when empty.")
+})
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []

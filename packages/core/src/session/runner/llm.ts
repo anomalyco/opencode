@@ -11,7 +11,7 @@ import {
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Effect, Exit, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -148,9 +148,6 @@ const layer = Layer.effect(
       }
     })
 
-    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error | UserInterruptedError>) =>
-      Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
-
     // Match V1: dismissing a question halts the loop instead of becoming model-facing tool output.
     const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
@@ -188,6 +185,7 @@ const layer = Layer.effect(
         session.id,
       )
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | UserInterruptedError>()
+      const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error | UserInterruptedError>> = []
       let needsContinuation = false
       let currentStep = step
       if (promotion) {
@@ -265,37 +263,39 @@ const layer = Layer.effect(
             }
             needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
-            yield* Effect.uninterruptibleMask((restore) =>
-              restore(
-                toolMaterialization.settle({
-                  sessionID: session.id,
-                  agent: agent.id,
-                  assistantMessageID,
-                  call: event,
-                }),
-              ).pipe(
-                Effect.flatMap((settlement) =>
-                  publish(
-                    LLMEvent.toolResult({
-                      id: event.id,
-                      name: event.name,
-                      result: settlement.result,
-                      output: settlement.output,
-                    }),
-                    settlement.outputPaths ?? [],
-                    settlement.error,
-                  ).pipe(
-                    Effect.andThen(
-                      settlement.error?.type === "permission.rejected"
-                        ? serialized(publisher.failAssistant(settlement.error)).pipe(
-                            Effect.andThen(Effect.fail(new UserInterruptedError())),
-                          )
-                        : Effect.void,
+            ownedToolFibers.push(
+              yield* Effect.uninterruptibleMask((restore) =>
+                restore(
+                  toolMaterialization.settle({
+                    sessionID: session.id,
+                    agent: agent.id,
+                    assistantMessageID,
+                    call: event,
+                  }),
+                ).pipe(
+                  Effect.flatMap((settlement) =>
+                    publish(
+                      LLMEvent.toolResult({
+                        id: event.id,
+                        name: event.name,
+                        result: settlement.result,
+                        output: settlement.output,
+                      }),
+                      settlement.outputPaths ?? [],
+                      settlement.error,
+                    ).pipe(
+                      Effect.andThen(
+                        settlement.error?.type === "permission.rejected"
+                          ? serialized(publisher.failAssistant(settlement.error)).pipe(
+                              Effect.andThen(Effect.fail(new UserInterruptedError())),
+                            )
+                          : Effect.void,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ).pipe(FiberSet.run(toolFibers))
+              ).pipe(FiberSet.run(toolFibers)),
+            )
           }),
         ),
         Effect.ensuring(serialized(publisher.flush())),
@@ -345,8 +345,8 @@ const layer = Layer.effect(
             return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
 
           // An unrecovered held-back overflow becomes the step's durable provider error. A
-          // thrown LLM failure fails hosted tool calls and the assistant unless a provider
-          // error was already recorded from the stream.
+          // thrown LLM failure records the assistant failure unless a provider error was
+          // already recorded from the stream. Terminal publication waits for owned tools.
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
@@ -363,39 +363,39 @@ const layer = Layer.effect(
                 step: currentStep,
               })
             }
-            yield* serialized(
-              publisher.failUnsettledTools(
-                { type: "tool.result-missing", message: "Provider did not return a tool result" },
-                true,
-              ),
-            )
             yield* serialized(publisher.failAssistant(error))
           }
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
 
-          // Settle tool fibers: an interrupted stream abandons unstarted tool work first.
+          // Settle every owned tool fiber. FiberSet.join returns on the first failure, so retain
+          // the individual fibers and await all exits before publishing the terminal step event.
           if (streamInterrupted) yield* FiberSet.clear(toolFibers)
-          const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
-          const toolsInterrupted = settled._tag === "Failure" && Cause.hasInterrupts(settled.cause)
-          const questionDismissed = settled._tag === "Failure" && isQuestionRejected(settled.cause)
-          const settledError =
-            settled._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(settled.cause)) : undefined
-          const permissionRejected = settledError instanceof UserInterruptedError
+          const settled = yield* restore(
+            Effect.forEach(ownedToolFibers, Fiber.await, { concurrency: "unbounded" }),
+          ).pipe(Effect.exit)
+          const settledCauses =
+            settled._tag === "Failure"
+              ? [settled.cause]
+              : settled.value.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
+          const toolsInterrupted = settledCauses.some(Cause.hasInterrupts)
+          const questionDismissed = settledCauses.some(isQuestionRejected)
+          const permissionRejected = settledCauses.some(
+            (cause) => Option.getOrUndefined(Cause.findErrorOption(cause)) instanceof UserInterruptedError,
+          )
 
           if (questionDismissed || permissionRejected || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
             yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
-            // Match V1: dismissing a question halts the loop like an interruption.
-            if (questionDismissed || permissionRejected) return yield* new UserInterruptedError()
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
           // settles so the model may recover. A typed infrastructure failure (tool output
           // could not be persisted) also fails the assistant and then fails the drain.
-          const settledFailure =
-            settled._tag === "Failure" && !toolsInterrupted && !permissionRejected ? settled.cause : undefined
+          const settledFailure = settledCauses.find(
+            (cause) => !Cause.hasInterrupts(cause) && !isQuestionRejected(cause) && !permissionRejected,
+          )
           const infraError =
             settledFailure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(settledFailure))
           if (settledFailure !== undefined) {
@@ -405,26 +405,50 @@ const layer = Layer.effect(
             if (infraError !== undefined) yield* serialized(publisher.failAssistant(error))
           }
 
-          const stepSettlement = publisher.stepSettlement()
-          const stepEndedCleanly =
-            !streamInterrupted && !toolsInterrupted && infraError === undefined && !providerFailed
-          if (stepSettlement && stepEndedCleanly) yield* publishStepEnd(stepSettlement)
-          // A provider error orphans recorded local calls; a clean stream can still leave
-          // hosted calls without results.
+          // Fail unresolved calls before the terminal step event. Local calls have joined, so
+          // these sweeps only close calls that could not produce a truthful settlement.
           if (providerFailed)
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-          if (stream._tag === "Success" && !providerFailed)
+          if (llmFailure && !providerFailed)
             yield* serialized(
               publisher.failUnsettledTools(
-                { type: "tool.result-missing", message: "Provider did not return a tool result" },
+                {
+                  type: "tool.result-missing",
+                  message: "Provider did not return a tool result",
+                },
                 true,
               ),
             )
+          const hostedResultMissing =
+            stream._tag === "Success" && !providerFailed
+              ? yield* serialized(
+                  publisher.failUnsettledTools(
+                    { type: "tool.result-missing", message: "Provider did not return a tool result" },
+                    true,
+                  ),
+                )
+              : false
+          if (hostedResultMissing && !publisher.stepSettlement())
+            yield* serialized(
+              publisher.failAssistant({
+                type: "tool.result-missing",
+                message: "Provider did not return a tool result",
+              }),
+            )
+
+          const stepFailure = publisher.stepFailure()
+          const stepSettlement = publisher.stepSettlement()
+          const stepEndedCleanly =
+            !streamInterrupted && !toolsInterrupted && infraError === undefined && !providerFailed && !stepFailure
+          if (stepSettlement && stepEndedCleanly) yield* publishStepEnd(stepSettlement)
+          if (stepFailure) yield* serialized(publisher.publishStepFailure())
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
-          if (settled._tag === "Failure" && (toolsInterrupted || infraError !== undefined))
-            return yield* Effect.failCause(settled.cause)
-          const stepFailure = publisher.stepFailure()
+          // Match V1: dismissing a question halts the loop like an interruption.
+          if (questionDismissed || permissionRejected) return yield* new UserInterruptedError()
+          if ((toolsInterrupted || infraError !== undefined) && settledFailure)
+            return yield* Effect.failCause(settledFailure)
+          if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
           return {
             _tag: "Completed",
