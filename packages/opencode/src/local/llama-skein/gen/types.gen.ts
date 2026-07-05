@@ -44,7 +44,7 @@ export type LoadedModelInfo = {
      */
     model_mb?: number;
     /**
-     * Estimated KV cache MB: max(0, vram.used_mb - model_mb).
+     * Estimated KV cache MB. On GPU hosts: max(0, vram.used_mb - model_mb). When that yields 0 (CPU-only inference, no GPU telemetry), falls back to the fit engine's GGUF-derived KV size at the model's usable context.
      */
     kv_estimate_mb?: number;
 };
