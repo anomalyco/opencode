@@ -81,7 +81,11 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
     <DialogSelect
       title="Connect a service"
       options={options()}
-      emptyView={<text fg={theme.textMuted}>No integrations available</text>}
+      emptyView={
+        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+          <text fg={theme.textMuted}>No integrations available</text>
+        </box>
+      }
     />
   )
 }
