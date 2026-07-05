@@ -161,9 +161,7 @@ const api = OpenAPI.fromSpec({
   spec: await Bun.file("openapi.json").json(), // parsed document (no YAML)
   auth: {
     resolve: ({ name, scopes, operation }) =>
-      name === "BearerAuth"
-        ? Effect.succeed({ type: "bearer", token })
-        : Effect.succeed(undefined),
+      name === "BearerAuth" ? Effect.succeed({ type: "bearer", token }) : Effect.succeed(undefined),
   },
 })
 

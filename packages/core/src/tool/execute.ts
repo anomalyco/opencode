@@ -2,7 +2,6 @@ export * as ExecuteTool from "./execute"
 
 import {
   CodeMode,
-  ExecuteInputSchema,
   Tool,
   toolError,
   type DataValue,
@@ -93,7 +92,7 @@ export const create = (options: {
   const discovery = runtime(() => Effect.fail(toolError("Execute context is unavailable")))
   return make({
     description: discovery.instructions(),
-    input: ExecuteInputSchema,
+    input: CodeMode.Input,
     output: ExecuteOutput,
     structured: ExecuteMetadata,
     toStructuredOutput: ({ output }) => ({
