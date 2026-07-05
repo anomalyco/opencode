@@ -47,7 +47,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     additionalProperties: false,
   }
 
-  return dynamicTool({
+  const tool = dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
@@ -80,6 +80,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       }
     },
   })
+  if (!mcpTool.outputSchema) return tool
+  return { ...tool, outputSchema: jsonSchema(mcpTool.outputSchema as JSONSchema7) }
 }
 
 export function fetch<T extends { name: string }>(
