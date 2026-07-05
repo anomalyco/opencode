@@ -33,7 +33,7 @@ function validateText(field: Field, text: string): string | undefined {
     try {
       if (!new RegExp(field.pattern).test(text)) return `Must match pattern: ${field.pattern}`
     } catch {
-      return
+      return `Invalid pattern: ${field.pattern}`
     }
   }
   if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return "Expected an email address"
