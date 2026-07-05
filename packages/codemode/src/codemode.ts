@@ -108,7 +108,7 @@ export type ExecuteFailure = {
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type ExecuteResult = ExecuteSuccess | ExecuteFailure
 
-/** Reusable CodeMode configuration shared by one-shot and reusable execution. */
+/** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
 export type CodeModeOptions<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Tools>, "code"> & {
   /** Progressive-disclosure configuration for the agent-facing tool catalog. */
   readonly discovery?: DiscoveryOptions
