@@ -126,7 +126,7 @@ function display(field: Field, value: FormValue | undefined) {
   if (value === undefined) return ""
   const label = (item: string | number | boolean) =>
     fieldRows(field).find((row) => row.value === item)?.label ?? String(item)
-  if (Array.isArray(value)) return value.map(label).join(", ")
+  if (Array.isArray(value)) return value.length === 0 ? "(none)" : value.map(label).join(", ")
   return label(value)
 }
 
@@ -261,7 +261,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     () =>
       fields().filter((item) => {
         const value = store.answers[item.key]
-        return Array.isArray(value) ? value.length > 0 : value !== undefined
+        return value !== undefined
       }).length,
   )
   const field = createMemo(() => fields()[Math.min(store.tab, fields().length - 1)])
@@ -368,7 +368,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     const index = list.indexOf(value)
     if (index === -1) list.push(value)
     if (index !== -1) list.splice(index, 1)
-    answer(current.key, list.length === 0 ? undefined : list)
+    answer(current.key, list)
   }
 
   function validateCurrent() {
@@ -382,7 +382,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function selectTab(index: number) {
-    if (!validateCurrent()) return
+    if (!confirm() && index > store.tab && !validateCurrent()) return
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", selectedRow(next, next ? store.answers[next.key] : undefined))
@@ -422,7 +422,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
       const previous = store.custom[current.key]
       const existing = store.answers[current.key]
       const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
-      const value = !isTextual && isMulti && values.length > 0 ? values : undefined
+      const value = !isTextual && isMulti && Array.isArray(existing) ? values : undefined
       const invalid = validateValue(current, value)
       if (invalid) {
         setStore("error", invalid)
@@ -481,20 +481,28 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function submitInput(text: string, direction: 1 | -1 = 1) {
-    if (!commitInput(text)) return
-    if (!single()) selectTab((store.tab + direction + tabs()) % tabs())
+    const index = (store.tab + direction + tabs()) % tabs()
+    if (!commitInput(text)) {
+      if (direction === -1) selectTab(index)
+      return
+    }
+    if (!single()) selectTab(index)
   }
 
   function selectTabFromMouse(target?: Field) {
-    const move = () => {
+    const targetIndex = () => {
       const index = target ? fields().findIndex((field) => field.key === target.key) : fields().length
-      selectTab(index === -1 ? fields().length : index)
+      return index === -1 ? fields().length : index
     }
+    const move = () => selectTab(targetIndex())
     if (!textual() && !store.editing) {
       move()
       return
     }
-    if (!commitInput(textarea?.plainText?.trim() ?? "")) return
+    if (!commitInput(textarea?.plainText?.trim() ?? "")) {
+      if (targetIndex() < store.tab) move()
+      return
+    }
     move()
   }
 
@@ -937,7 +945,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                 const value = () => display(item, store.answers[item.key])
                 const answered = () => {
                   const value = store.answers[item.key]
-                  return Array.isArray(value) ? value.length > 0 : value !== undefined
+                  return value !== undefined
                 }
                 const missing = () => !answered() && item.required === true
                 const invalid = () => validateValue(item, store.answers[item.key])
