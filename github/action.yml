@@ -44,8 +44,15 @@ runs:
     - name: Get opencode version
       id: version
       shell: bash
+      env:
+        # Authenticate the API request to use the 1000/hr rate limit instead of
+        # the 60/hr unauthenticated per-IP limit that shared runners often hit.
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
-        VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        # `shell: bash` runs with `-e -o pipefail`, so a failed lookup (e.g. an
+        # API rate-limit 403) would abort the step before the ${VERSION:-latest}
+        # fallback runs. `|| true` keeps the failure non-fatal so we fall back.
+        VERSION=$(curl -sf -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 || true)
         echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
 
     - name: Cache opencode
