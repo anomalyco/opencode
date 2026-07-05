@@ -900,7 +900,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             directory: defaultLocation().directory,
             workspace: defaultLocation().workspaceID,
           })
-          .then(async (response) => {
+          .then((response) => {
             setStore(
               "session",
               "info",
@@ -909,12 +909,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               }),
             )
             for (const session of response.data) registerSession(session.id)
-            await Promise.all(
-              Object.keys(store.session.info).flatMap((sessionID) => [
-                result.session.permission.refresh(sessionID),
-                result.session.form.refresh(sessionID),
-              ]),
-            )
           }),
         result.location.refresh(),
         result.location.agent.refresh(),

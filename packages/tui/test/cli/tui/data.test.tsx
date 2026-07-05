@@ -203,58 +203,6 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
   }
 })
 
-test("refreshes pending session forms after reconnect", async () => {
-  const events = createEventStream()
-  let requests = 0
-  const calls = createFetch((url) => {
-    if (url.pathname === "/api/session" && url.searchParams.has("parentID")) return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session")
-      return json({
-        data: [
-          {
-            id: "ses_form",
-            title: "Form session",
-            location: { directory },
-            time: { created: 0, updated: 0 },
-          },
-        ],
-        cursor: {},
-      })
-    if (url.pathname !== "/api/session/ses_form/form") return
-    requests++
-    return json({ data: [{ id: `frm_${requests}`, sessionID: "ses_form", mode: "form", fields: [] }] })
-  }, events)
-  let data!: ReturnType<typeof useData>
-
-  function Probe() {
-    data = useData()
-    return <box />
-  }
-
-  const app = await testRender(() => (
-    <TestTuiContexts>
-      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
-        <ProjectProvider>
-          <DataProvider>
-            <Probe />
-          </DataProvider>
-        </ProjectProvider>
-      </SDKProvider>
-    </TestTuiContexts>
-  ))
-
-  try {
-    await wait(() => data.session.form.list("ses_form")?.[0]?.id === "frm_1")
-
-    events.disconnect()
-
-    await wait(() => data.session.form.list("ses_form")?.[0]?.id === "frm_2", 4000)
-    expect(requests).toBe(2)
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
 test("completes exploration when a queued prompt is promoted", async () => {
   const events = createEventStream()
   const sessionID = "session-promotion"
