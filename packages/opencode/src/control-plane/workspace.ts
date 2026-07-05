@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
@@ -12,7 +14,6 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Log from "@opencode-ai/core/util/log"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Slug } from "@opencode-ai/core/util/slug"
@@ -30,8 +31,9 @@ import { waitEvent } from "./util"
 import { WorkspaceRef } from "@/effect/instance-ref"
 import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
+import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
+import { WorkspaceEvent } from "@opencode-ai/schema/workspace-event"
 
 export const Info = Schema.Struct({
   ...WorkspaceInfoSchema.fields,
@@ -39,27 +41,10 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Workspace" })
 export type Info = WorkspaceInfo & { timeUsed: number }
 
-export const ConnectionStatus = Schema.Struct({
-  workspaceID: WorkspaceV2.ID,
-  status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
-})
-export type ConnectionStatus = Schema.Schema.Type<typeof ConnectionStatus>
+export const ConnectionStatus = WorkspaceEvent.ConnectionStatus
+export type ConnectionStatus = WorkspaceEvent.ConnectionStatus
 
-export const Event = {
-  Ready: EventV2.define({
-    type: "workspace.ready",
-    schema: {
-      name: Schema.String,
-    },
-  }),
-  Failed: EventV2.define({
-    type: "workspace.failed",
-    schema: {
-      message: Schema.String,
-    },
-  }),
-  Status: EventV2.define({ type: "workspace.status", schema: ConnectionStatus.fields }),
-}
+export const Event = WorkspaceEvent
 
 function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
   return {
@@ -73,8 +58,6 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     timeUsed: row.time_used,
   }
 }
-
-const log = Log.create({ service: "workspace-sync" })
 
 export const CreateInput = Schema.Struct({
   id: Schema.optional(WorkspaceV2.ID),
@@ -132,7 +115,7 @@ export class SyncTimeoutError extends Schema.TaggedErrorClass<SyncTimeoutError>(
 
 export class SyncAbortedError extends Schema.TaggedErrorClass<SyncAbortedError>()("WorkspaceSyncAbortedError", {
   message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 type CreateError = Auth.AuthError
@@ -167,7 +150,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const auth = yield* Auth.Service
@@ -292,18 +275,16 @@ export const layer = Layer.effect(
 
         const response = yield* http.execute(input.remote({ workspace, target })).pipe(
           Effect.catch((error) =>
-            Effect.sync(() => {
-              log.warn("workspace target request failed", {
-                workspaceID: workspace.id,
-                error: errorData(error),
-              })
-            }),
+            Effect.logWarning("workspace target request failed", {
+              workspaceID: workspace.id,
+              error: errorData(error),
+            }).pipe(Effect.as(undefined)),
           ),
         )
         if (!response) return input.fallback
         if (response.status < 200 || response.status >= 300) {
           const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
-          log.warn("workspace target request failed", {
+          yield* Effect.logWarning("workspace target request failed", {
             workspaceID: workspace.id,
             status: response.status,
             body,
@@ -315,13 +296,10 @@ export const layer = Layer.effect(
         return yield* body.pipe(
           Effect.map((result) => result as A),
           Effect.catch((error) =>
-            Effect.sync(() => {
-              log.warn("workspace target response decode failed", {
-                workspaceID: workspace.id,
-                error: errorData(error),
-              })
-              return input.fallback
-            }),
+            Effect.logWarning("workspace target response decode failed", {
+              workspaceID: workspace.id,
+              error: errorData(error),
+            }).pipe(Effect.as(input.fallback)),
           ),
         )
       })
@@ -348,12 +326,6 @@ export const layer = Layer.effect(
           )
         : {}
 
-      log.info("syncing workspace history", {
-        workspaceID: space.id,
-        sessions: sessionIDs.length,
-        known: Object.keys(state).length,
-      })
-
       const response = yield* http.execute(
         HttpClientRequest.post(route(url, "/sync/history"), {
           headers: new Headers(headers),
@@ -371,11 +343,6 @@ export const layer = Layer.effect(
       }
 
       const history = (yield* response.json) as HistoryEvent[]
-
-      log.info("workspace history synced", {
-        workspaceID: space.id,
-        events: history.length,
-      })
 
       yield* Effect.forEach(
         history,
@@ -404,17 +371,16 @@ export const layer = Layer.effect(
       let attempt = 0
 
       while (true) {
-        log.info("connecting to global sync", { workspace: space.name })
         setStatus(space.id, "connecting")
 
         const stream = yield* connectSSE(target.url, target.headers).pipe(
           Effect.tap(() => syncHistory(space, target.url, target.headers)),
           Effect.catch((err) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               setStatus(space.id, "error")
-              log.info("failed to connect to global sync", {
+              yield* Effect.logWarning("failed to connect to global sync", {
                 workspace: space.name,
-                err,
+                error: errorData(err),
               })
               return null
             }),
@@ -424,7 +390,6 @@ export const layer = Layer.effect(
         if (stream) {
           attempt = 0
 
-          log.info("global sync connected", { workspace: space.name })
           setStatus(space.id, "connected")
 
           yield* parseSSE(stream, (evt) =>
@@ -437,13 +402,10 @@ export const layer = Layer.effect(
                 const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
-                    Effect.sync(() => {
-                      log.info("failed to replay global event", {
-                        workspaceID: space.id,
-                        error,
-                      })
-                      return true
-                    }),
+                    Effect.logWarning("failed to replay global event", error).pipe(
+                      Effect.annotateLogs({ workspaceID: space.id }),
+                      Effect.as(true),
+                    ),
                   ),
                 )
                 if (failed) return
@@ -458,15 +420,14 @@ export const layer = Layer.effect(
                   payload: event.payload,
                 })
               } catch (error) {
-                log.info("failed to replay global event", {
+                yield* Effect.logWarning("failed to emit global event", {
                   workspaceID: space.id,
-                  error,
+                  error: errorData(error),
                 })
               }
             }),
           )
 
-          log.info("disconnected from global sync: " + space.id)
           setStatus(space.id, "disconnected")
         }
 
@@ -482,9 +443,9 @@ export const layer = Layer.effect(
 
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catch((error) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             setStatus(space.id, "error")
-            log.warn("workspace target failed", {
+            yield* Effect.logWarning("workspace target failed", {
               workspaceID: space.id,
               error: errorData(error),
             })
@@ -511,11 +472,11 @@ export const layer = Layer.effect(
         // allow the fiber to fail and automatically get removed
         syncWorkspaceLoop(space).pipe(
           Effect.catch((error) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               setStatus(space.id, "error")
-              log.warn("workspace listener failed", {
+              yield* Effect.logWarning("workspace listener failed", {
                 workspaceID: space.id,
-                error,
+                error: errorData(error),
               })
             }),
           ),
@@ -597,11 +558,6 @@ export const layer = Layer.effect(
 
     const sessionWarp = Effect.fn("Workspace.sessionWarp")(function* (input: SessionWarpInput) {
       return yield* Effect.gen(function* () {
-        log.info("session warp requested", {
-          workspaceID: input.workspaceID,
-          sessionID: input.sessionID,
-        })
-
         const current = yield* db
           .select({ workspaceID: SessionTable.workspace_id })
           .from(SessionTable)
@@ -617,12 +573,10 @@ export const layer = Layer.effect(
             if (target.type === "remote") {
               yield* syncHistory(previous, target.url, target.headers).pipe(
                 Effect.catch((error) =>
-                  Effect.sync(() => {
-                    log.warn("session warp final source sync failed", {
-                      workspaceID: previous.id,
-                      sessionID: input.sessionID,
-                      error: errorData(error),
-                    })
+                  Effect.logWarning("session warp final source sync failed", {
+                    workspaceID: previous.id,
+                    sessionID: input.sessionID,
+                    error: errorData(error),
                   }),
                 ),
               )
@@ -647,7 +601,7 @@ export const layer = Layer.effect(
                   }),
                 fallback: "",
                 response: "text",
-              }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+              }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
             : ""
 
         if (sourcePatch) {
@@ -663,17 +617,12 @@ export const layer = Layer.effect(
                 body: HttpBody.jsonUnsafe({ patch: sourcePatch }),
               }),
             fallback: { applied: false },
-          }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+          }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
         }
 
         if (input.workspaceID === null) {
           yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined })
 
-          log.info("session warp complete", {
-            workspaceID: input.workspaceID,
-            sessionID: input.sessionID,
-            target: "local",
-          })
           return
         }
 
@@ -690,11 +639,6 @@ export const layer = Layer.effect(
         if (target.type === "local") {
           yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
 
-          log.info("session warp complete", {
-            workspaceID: input.workspaceID,
-            sessionID: input.sessionID,
-            target: target.directory,
-          })
           return
         }
 
@@ -720,16 +664,6 @@ export const layer = Layer.effect(
         const batches = Iterable.chunksOf(rows, 10)
         const total = Iterable.size(batches)
 
-        log.info("session warp prepared", {
-          workspaceID: input.workspaceID,
-          sessionID: input.sessionID,
-          target: String(route(target.url, "/sync/replay")),
-          events: rows.length,
-          batches: total,
-          first: rows[0]?.seq,
-          last: rows.at(-1)?.seq,
-        })
-
         yield* Effect.forEach(
           batches,
           (events, i) =>
@@ -746,14 +680,6 @@ export const layer = Layer.effect(
 
               if (response.status < 200 || response.status >= 300) {
                 const body = yield* response.text
-                log.error("session warp batch failed", {
-                  workspaceID: input.workspaceID,
-                  sessionID: input.sessionID,
-                  step: i + 1,
-                  total,
-                  status: response.status,
-                  body,
-                })
                 return yield* new SessionWarpHttpError({
                   message: `Failed to warp session ${input.sessionID} into workspace ${workspaceID}: HTTP ${response.status} ${body}`,
                   workspaceID,
@@ -762,14 +688,6 @@ export const layer = Layer.effect(
                   body,
                 })
               }
-
-              log.info("session warp batch posted", {
-                workspaceID: input.workspaceID,
-                sessionID: input.sessionID,
-                step: i + 1,
-                total,
-                status: response.status,
-              })
             }),
           { discard: true },
         )
@@ -782,12 +700,6 @@ export const layer = Layer.effect(
         )
         if (response.status < 200 || response.status >= 300) {
           const body = yield* response.text
-          log.error("session warp steal failed", {
-            workspaceID: input.workspaceID,
-            sessionID: input.sessionID,
-            status: response.status,
-            body,
-          })
           return yield* new SessionWarpHttpError({
             message: `Failed to steal session ${input.sessionID} into workspace ${workspaceID}: HTTP ${response.status} ${body}`,
             workspaceID,
@@ -798,23 +710,7 @@ export const layer = Layer.effect(
         }
 
         yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
-
-        log.info("session warp complete", {
-          workspaceID: input.workspaceID,
-          sessionID: input.sessionID,
-          batches: total,
-        })
-      }).pipe(
-        Effect.tapError((err) =>
-          Effect.sync(() =>
-            log.error("session warp failed", {
-              workspaceID: input.workspaceID,
-              sessionID: input.sessionID,
-              error: errorData(err),
-            }),
-          ),
-        ),
-      )
+      })
     })
 
     const list = Effect.fn("Workspace.list")(function* (project: Project.Info) {
@@ -835,10 +731,7 @@ export const layer = Layer.effect(
         ([type, adapter]) =>
           WorkspaceAdapterRuntime.list(adapter).pipe(
             Effect.catchCause((error) =>
-              Effect.sync(() => {
-                log.warn("workspace adapter list failed", { type, error })
-                return []
-              }),
+              Effect.logWarning("workspace adapter list failed", { type, error }).pipe(Effect.as([])),
             ),
           ),
         { concurrency: "unbounded" },
@@ -914,10 +807,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           yield* WorkspaceAdapterRuntime.remove(info)
         }),
-        () =>
-          Effect.sync(() => {
-            log.error("adapter not available when removing workspace", { type: row.type })
-          }),
+        () => Effect.logError("adapter not available when removing workspace", { type: row.type }),
       )
 
       yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)
@@ -973,10 +863,6 @@ export const layer = Layer.effect(
           Effect.catch((error) =>
             Effect.sync(() => {
               setStatus(workspace.id, "error")
-              log.warn("workspace sync failed to start", {
-                workspaceID: workspace.id,
-                error,
-              })
             }),
           ),
           Effect.forkDetach,
@@ -997,19 +883,6 @@ export const layer = Layer.effect(
       startWorkspaceSyncing,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Auth.defaultLayer),
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(SessionPrompt.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(Vcs.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 const TIMEOUT = 5000
@@ -1071,5 +944,21 @@ function route(url: string | URL, path: string) {
   next.hash = ""
   return next
 }
+
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    Auth.node,
+    Session.node,
+    SessionPrompt.node,
+    httpClient,
+    EventV2Bridge.node,
+    Vcs.node,
+    RuntimeFlags.node,
+    FSUtil.node,
+    Database.node,
+  ],
+})
 
 export * as Workspace from "./workspace"

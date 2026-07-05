@@ -1,11 +1,12 @@
 import { describe, test, expect } from "bun:test"
-import { Effect, Layer, FileSystem } from "effect"
-import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, FileSystem } from "effect"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
 
-const live = FSUtil.layer.pipe(Layer.provideMerge(NodeFileSystem.layer))
+const live = LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem]))
 const { effect: it } = testEffect(live)
 
 describe("FSUtil", () => {
@@ -107,6 +108,21 @@ describe("FSUtil", () => {
         const result = yield* fs.readJson(file)
 
         expect(result).toEqual(data)
+      }),
+    )
+
+    it(
+      "fails invalid JSON through the error channel",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "broken.json")
+        yield* filesys.writeFileString(file, "{")
+
+        const result = yield* fs.readJson(file).pipe(Effect.catch((error) => Effect.succeed(error)))
+
+        expect(result).toHaveProperty("_tag", "FileSystemError")
       }),
     )
   })

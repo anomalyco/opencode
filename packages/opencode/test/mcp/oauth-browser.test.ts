@@ -1,5 +1,6 @@
 import { expect, mock, beforeEach } from "bun:test"
 import { EventEmitter } from "events"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect, Layer, Option } from "effect"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
@@ -38,7 +39,7 @@ class MockUnauthorizedError extends Error {
 const transportCalls: Array<{
   type: "streamable" | "sse"
   url: string
-  options: { authProvider?: unknown }
+  options: { authProvider?: unknown; requestInit?: RequestInit }
 }> = []
 
 // Mock the transport constructors
@@ -46,7 +47,10 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     url: string
     authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
-    constructor(url: URL, options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> } }) {
+    constructor(
+      url: URL,
+      options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> }; requestInit?: RequestInit },
+    ) {
       this.url = url.toString()
       this.authProvider = options?.authProvider
       transportCalls.push({
@@ -86,8 +90,14 @@ void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 // Mock the MCP SDK Client to trigger OAuth flow
 void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
+    setRequestHandler() {}
+
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
+    }
+
+    getServerCapabilities() {
+      return { tools: {} }
     }
   },
 }))
@@ -113,21 +123,18 @@ const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 const { FSUtil } = await import("@opencode-ai/core/fs-util")
 const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
 const mcpTest = testEffect(
-  MCP.layer.pipe(
-    Layer.provide(McpAuth.defaultLayer),
-    Layer.provideMerge(EventV2Bridge.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(FSUtil.defaultLayer),
+  LayerNode.compile(
+    LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node, CrossSpawnSpawner.node, FSUtil.node]),
   ),
 )
 const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
-const config = (name: string) => ({
+const config = (name: string, headers?: Record<string, string>) => ({
   mcp: {
     [name]: {
       type: "remote" as const,
       url: "https://example.com/mcp",
+      headers,
     },
   },
 })
@@ -153,10 +160,10 @@ const trackBrowserOpenFailed = Effect.gen(function* () {
   return event
 })
 
-const authenticateScoped = (name: string) =>
+const authenticateScoped = (name: string, onAuthorization?: (authorizationUrl: string) => void) =>
   Effect.gen(function* () {
     const mcp = yield* service
-    yield* mcp.authenticate(name).pipe(
+    yield* mcp.authenticate(name, onAuthorization).pipe(
       Effect.ignore,
       Effect.catchCause(() => Effect.void),
       Effect.forkScoped,
@@ -215,14 +222,22 @@ mcpTest.instance(
 
       const opened = yield* trackBrowserOpen
       const event = yield* trackBrowserOpenFailed
-      yield* authenticateScoped("test-oauth-server-3")
+      const authorization = yield* Deferred.make<string>()
+      yield* authenticateScoped("test-oauth-server-3", (url) => Deferred.doneUnsafe(authorization, Effect.succeed(url)))
 
       const url = yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()", "5 seconds")
+      const authorizationUrl = yield* awaitWithTimeout(
+        Deferred.await(authorization),
+        "Timed out waiting for authorization URL",
+        "5 seconds",
+      )
       const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
 
       expect(failure).toEqual(Option.none())
+      expect(authorizationUrl).toBe(url)
       expect(typeof url).toBe("string")
       expect(url).toContain("https://")
+      expect(transportCalls.at(-1)?.options.requestInit?.headers).toEqual({ "X-Custom-Header": "custom-value" })
     }),
-  { config: config("test-oauth-server-3") },
+  { config: config("test-oauth-server-3", { "X-Custom-Header": "custom-value" }) },
 )

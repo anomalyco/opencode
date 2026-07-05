@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
 import { describe, expect } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import * as Log from "@opencode-ai/core/util/log"
-import { ConfigProvider, Effect, Layer } from "effect"
+import { ConfigProvider, Effect, Layer, Option } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import {
   HttpClient,
   HttpClientRequest,
@@ -19,8 +19,6 @@ import { authorizationRouterMiddleware } from "../../src/server/routes/instance/
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -42,7 +40,15 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const it = testEffect(Layer.mergeAll(testStateLayer, FSUtil.defaultLayer, RuntimeFlags.layer()))
+const fsUtilLayer = AppNodeBuilder.build(FSUtil.node)
+const it = testEffect(Layer.mergeAll(testStateLayer, fsUtilLayer, RuntimeFlags.layer()))
+
+function authConfigLayer(input?: { password?: string; username?: string }) {
+  return ServerAuth.Config.configLayer({
+    password: input?.password === undefined ? Option.none() : Option.some(input.password),
+    username: input?.username ?? "opencode",
+  })
+}
 
 function restoreEnv(key: string, value: string | undefined) {
   if (value === undefined) {
@@ -97,18 +103,12 @@ function uiApp(input?: {
         )
       }),
     ).pipe(
-      Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))),
+      Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(authConfigLayer(input)))),
       Layer.provide([
-        FSUtil.defaultLayer,
+        fsUtilLayer,
         input?.client ?? httpClient(new Response("ui")),
         RuntimeFlags.layer({ disableEmbeddedWebUi: input?.disableEmbeddedWebUi ?? false }),
         HttpServer.layerServices,
-        ConfigProvider.layer(
-          ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input?.password,
-            OPENCODE_SERVER_USERNAME: input?.username,
-          }),
-        ),
       ]),
     ),
     { disableLogger: true },
@@ -144,7 +144,7 @@ function routeOrderingApp() {
       }),
     ).pipe(
       Layer.provide([
-        FSUtil.defaultLayer,
+        fsUtilLayer,
         RuntimeFlags.layer({ disableEmbeddedWebUi: true }),
         httpClient(new Response("ui"), (request) => {
           proxiedUrl = request.url

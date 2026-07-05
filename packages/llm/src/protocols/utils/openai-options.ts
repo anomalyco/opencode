@@ -20,15 +20,19 @@ export const OpenAIResponseIncludables = [
   "message.output_text.logprobs",
 ] as const
 export type OpenAIResponseIncludable = (typeof OpenAIResponseIncludables)[number]
+export const OpenAIServiceTiers = ["auto", "default", "flex", "priority"] as const
+export type OpenAIServiceTier = (typeof OpenAIServiceTiers)[number]
 
 const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
 const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(OpenAIResponseIncludables)
+const SERVICE_TIERS = new Set<string>(OpenAIServiceTiers)
 
 export const OpenAIReasoningEffort = Schema.Literals(OpenAIReasoningEfforts)
 export const OpenAITextVerbosity = TextVerbosity
 export const OpenAIResponseIncludable = Schema.Literals(OpenAIResponseIncludables)
+export const OpenAIServiceTier = Schema.Literals(OpenAIServiceTiers)
 
 const isAnyReasoningEffort = (effort: unknown): effort is ReasoningEffort =>
   typeof effort === "string" && REASONING_EFFORTS.has(effort)
@@ -74,6 +78,11 @@ export const promptCacheKey = (request: LLMRequest) => {
 export const textVerbosity = (request: LLMRequest) => {
   const value = options(request)?.textVerbosity
   return isTextVerbosity(value) ? value : undefined
+}
+
+export const serviceTier = (request: LLMRequest) => {
+  const value = options(request)?.serviceTier
+  return typeof value === "string" && SERVICE_TIERS.has(value) ? (value as OpenAIServiceTier) : undefined
 }
 
 export const instructions = (request: LLMRequest) => {

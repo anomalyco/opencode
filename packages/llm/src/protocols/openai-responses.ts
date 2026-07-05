@@ -8,18 +8,21 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
   type ProviderMetadata,
   type ReasoningPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
+  type ToolContent,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
@@ -52,7 +55,7 @@ const OpenAIResponsesReasoningSummaryText = Schema.Struct({
 
 const OpenAIResponsesReasoningItem = Schema.Struct({
   type: Schema.tag("reasoning"),
-  id: Schema.String,
+  id: Schema.optionalKey(Schema.String),
   summary: Schema.Array(OpenAIResponsesReasoningSummaryText),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -100,6 +103,7 @@ type OpenAIResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
+type OpenAIResponsesReasoningReplay = Omit<OpenAIResponsesReasoningInput, "id">
 
 const OpenAIResponsesTool = Schema.Struct({
   type: Schema.tag("function"),
@@ -126,6 +130,7 @@ const OpenAIResponsesCoreFields = {
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
+  service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(
@@ -251,11 +256,13 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
   description: tool.description,
-  parameters: tool.inputSchema,
+  parameters: ToolSchemaProjection.openAI(inputSchema),
+  // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
+  strict: false,
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -302,25 +309,29 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
   part: LLMRequest["messages"][number]["content"][number],
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media" && part.mediaType.startsWith("image/")) {
-    return { type: "input_image" as const, image_url: ProviderShared.mediaDataUrl(part) }
+  if (part.type === "media") {
+    const media = yield* ProviderShared.validateMedia(
+      "OpenAI Responses",
+      part,
+      new Set<string>(ProviderShared.IMAGE_MIMES),
+    )
+    return { type: "input_image" as const, image_url: media.dataUrl }
   }
-  if (part.type === "media") return yield* invalid("OpenAI Responses user media content only supports images")
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
 
 // Tool results may carry structured text/images. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultContentItem")(function* (
-  item: ToolResultContentPart,
+  item: ToolContent,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  if (item.mediaType.startsWith("image/"))
-    return {
-      type: "input_image" as const,
-      image_url: ProviderShared.mediaDataUrl(item),
-    }
-  return yield* invalid(`OpenAI Responses tool-result media content only supports images, got ${item.mediaType}`)
+  const media = yield* ProviderShared.validateToolFile(
+    "OpenAI Responses",
+    item,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
+  return { type: "input_image" as const, image_url: media.dataUrl }
 })
 
 const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")(function* (part: ToolResultPart) {
@@ -328,7 +339,7 @@ const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")
   // compatibility with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
-  const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+  const content: ReadonlyArray<ToolContent> = part.result.value
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
@@ -358,7 +369,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
-      const reasoningItems: Record<string, OpenAIResponsesReasoningInput> = {}
+      const reasoningItems: Record<string, OpenAIResponsesReasoningReplay> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
@@ -375,7 +386,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           flushText()
           const reasoning = lowerReasoning(part)
           if (!reasoning) continue
-          if (store !== false && reasoning.id) {
+          if (store !== false) {
             if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
             reasoningReferences.add(reasoning.id)
             continue
@@ -387,8 +398,13 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          reasoningItems[reasoning.id] = reasoning
-          input.push(reasoning)
+          const replay = {
+            type: reasoning.type,
+            summary: reasoning.summary,
+            encrypted_content: reasoning.encrypted_content,
+          }
+          reasoningItems[reasoning.id] = replay
+          input.push(replay)
           continue
         }
         if (part.type === "tool-call") {
@@ -447,6 +463,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const include = OpenAIOptions.include(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
+  const serviceTier = OpenAIOptions.serviceTier(request)
   return {
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
@@ -454,16 +471,23 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
     ...(include ? { include } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
+    ...(serviceTier ? { service_tier: serviceTier } : {}),
   }
 })
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const options = yield* lowerOptions(request)
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
     input: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools:
+      request.tools.length === 0
+        ? undefined
+        : request.tools.map((tool) =>
+            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+          ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
@@ -877,14 +901,23 @@ const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): st
   return message || code || fallback
 }
 
+const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
+  const code = event.code || event.response?.error?.code || undefined
+  const message = providerErrorMessage(event, fallback)
+  return LLMEvent.providerError({
+    message,
+    classification: code === "context_length_exceeded" || isContextOverflow(message) ? "context-overflow" : undefined,
+  })
+}
+
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses response failed") })],
+  [providerError(event, "OpenAI Responses response failed")],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses stream error") })],
+  [providerError(event, "OpenAI Responses stream error")],
 ]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {
@@ -955,6 +988,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport: httpTransport,
+  defaults: { providerOptions: { openai: { store: false } } },
 })
 
 const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
@@ -982,6 +1016,7 @@ export const webSocketRoute = Route.make({
   endpoint,
   auth,
   transport: webSocketTransport,
+  defaults: { providerOptions: { openai: { store: false } } },
 })
 
 export * as OpenAIResponses from "./openai-responses"

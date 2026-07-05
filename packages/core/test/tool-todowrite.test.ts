@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { Project } from "@opencode-ai/core/project"
@@ -10,8 +12,10 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { TodoWriteTool } from "@opencode-ai/core/tool/todowrite"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_todowrite_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -31,12 +35,22 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const todos = SessionTodo.layer.pipe(Layer.provide(database), Layer.provide(events))
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
-const tool = TodoWriteTool.layer.pipe(Layer.provide(registry), Layer.provide(todos))
-const it = testEffect(Layer.mergeAll(database, events, todos, permission, registry, tool))
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionTodo.node,
+      ToolRegistry.node,
+      ToolRegistry.toolsNode,
+      TodoWriteTool.node,
+    ]),
+    [
+      [PermissionV2.node, permission],
+      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    ],
+  ),
+)
 
 const setup = Effect.gen(function* () {
   assertions.length = 0
@@ -63,6 +77,7 @@ const setup = Effect.gen(function* () {
 
 const call = (todos: ReadonlyArray<SessionTodo.Info>, id = "call-todowrite") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: TodoWriteTool.name, input: { todos } },
 })
 
@@ -72,17 +87,19 @@ describe("TodoWriteTool", () => {
       yield* setup
       const registry = yield* ToolRegistry.Service
       const service = yield* SessionTodo.Service
-      const todoList = [{ content: "Implement slice", status: "in_progress", priority: "high" }]
+      const todoList: ReadonlyArray<SessionTodo.Info> = [
+        { content: "Implement slice", status: "in_progress", priority: "high" },
+      ]
 
-      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
-      expect(yield* registry.settle(call(todoList))).toEqual({
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
+      expect(yield* settleTool(registry, call(todoList))).toEqual({
         result: { type: "text", value: JSON.stringify(todoList, null, 2) },
         output: {
           structured: { todos: todoList },
           content: [{ type: "text", text: JSON.stringify(todoList, null, 2) }],
         },
       })
-      expect(assertions).toEqual([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
+      expect(assertions).toMatchObject([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
       expect(yield* service.get(sessionID)).toEqual(todoList)
     }),
   )
@@ -95,12 +112,14 @@ describe("TodoWriteTool", () => {
       yield* service.update({ sessionID, todos: [{ content: "keep", status: "pending", priority: "low" }] })
       deny = true
 
-      expect(yield* registry.execute(call([{ content: "blocked", status: "completed", priority: "high" }]))).toEqual({
+      expect(
+        yield* executeTool(registry, call([{ content: "blocked", status: "completed", priority: "high" }])),
+      ).toEqual({
         type: "error",
         value: "Unable to update todos",
       })
       expect(yield* service.get(sessionID)).toEqual([{ content: "keep", status: "pending", priority: "low" }])
-      expect(assertions).toEqual([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
+      expect(assertions).toMatchObject([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
     }),
   )
 })

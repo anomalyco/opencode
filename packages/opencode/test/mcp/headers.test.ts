@@ -1,4 +1,5 @@
 import { describe, expect, mock, beforeEach } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 
@@ -46,7 +47,7 @@ beforeEach(() => {
 
 // Import MCP after mocking
 const { MCP } = await import("../../src/mcp/index")
-const it = testEffect(MCP.defaultLayer)
+const it = testEffect(LayerNode.compile(MCP.node))
 
 describe("mcp.headers", () => {
   it.instance("headers are passed to transports when oauth is enabled (default)", () =>
