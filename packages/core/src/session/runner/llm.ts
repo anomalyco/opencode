@@ -16,6 +16,7 @@ import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
+import { ModelV2 } from "../../model"
 import { QuestionV2 } from "../../question"
 import { SystemContext } from "../../system-context/index"
 import { SystemContextBuiltIns } from "../../system-context/builtins"
@@ -43,6 +44,29 @@ import { SessionRunnerSystemPrompt } from "./system-prompt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+
+type StepTokens = {
+  readonly input: number
+  readonly output: number
+  readonly reasoning: number
+  readonly cache: { readonly read: number; readonly write: number }
+}
+
+export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
+  const context = tokens.input + tokens.cache.read + tokens.cache.write
+  const tier = costs
+    .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
+    .toSorted((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
+  const cost = tier ?? costs.find((cost) => cost.tier === undefined) ?? costs[0]
+  if (!cost) return 0
+  return (
+    (tokens.input * cost.input +
+      (tokens.output + tokens.reasoning) * cost.output +
+      tokens.cache.read * cost.cache.read +
+      tokens.cache.write * cost.cache.write) /
+    1_000_000
+  )
+}
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -298,7 +322,7 @@ const layer = Layer.effect(
               sessionID: session.id,
               assistantMessageID: yield* publisher.startAssistant(),
               finish: settlement.finish,
-              cost: 0,
+              cost: calculateCost(resolved.cost, settlement.tokens),
               tokens: settlement.tokens,
               snapshot: endSnapshot,
               files,

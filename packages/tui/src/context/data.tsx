@@ -360,6 +360,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.step.ended":
           setSessionStatus(event.data.sessionID, "running")
+          if (store.session.info[event.data.sessionID])
+            setStore(
+              "session",
+              "info",
+              event.data.sessionID,
+              produce((draft) => {
+                draft.cost += event.data.cost
+                draft.tokens.input += event.data.tokens.input
+                draft.tokens.output += event.data.tokens.output
+                draft.tokens.reasoning += event.data.tokens.reasoning
+                draft.tokens.cache.read += event.data.tokens.cache.read
+                draft.tokens.cache.write += event.data.tokens.cache.write
+              }),
+            )
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
             if (!currentAssistant) return

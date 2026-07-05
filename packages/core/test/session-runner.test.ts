@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import {
   LLMClient,
   LLMError,
@@ -115,6 +115,19 @@ const recoveryModel = Model.make({
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
 })
+
+test("calculates step cost using the matching context tier", () => {
+  expect(
+    SessionRunnerLLM.calculateCost(
+      [
+        { input: 1, output: 2, cache: { read: 0.1, write: 0.5 } },
+        { tier: { type: "context", size: 100 }, input: 3, output: 4, cache: { read: 0.2, write: 0.6 } },
+      ],
+      { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
+    ),
+  ).toBeCloseTo(0.0002926)
+})
+
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
 const permission = Layer.succeed(

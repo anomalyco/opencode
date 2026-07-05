@@ -351,6 +351,18 @@ test("tracks session status from active sessions and execution events", async ()
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session/active")
       return json({ data: { "session-active": { type: "running" } }, watermarks: {} })
+    if (url.pathname === "/api/session/session-live")
+      return json({
+        data: {
+          id: "session-live",
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: "Live session",
+          location: { directory },
+        },
+      })
   }, events)
   let data!: ReturnType<typeof useData>
 
@@ -374,6 +386,7 @@ test("tracks session status from active sessions and execution events", async ()
   try {
     await wait(() => data.session.status("session-active") === "running")
     expect(data.session.status("session-idle")).toBe("idle")
+    await data.session.refresh("session-live")
 
     emitEvent(events, {
       id: "evt_step_started",
@@ -398,8 +411,8 @@ test("tracks session status from active sessions and execution events", async ()
         sessionID: "session-live",
         assistantMessageID: "message-live",
         finish: "stop",
-        cost: 0,
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        cost: 0.75,
+        tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       },
     })
     await wait(() => {
@@ -407,6 +420,10 @@ test("tracks session status from active sessions and execution events", async ()
       return assistant?.type === "assistant" && assistant.finish === "stop"
     })
     expect(data.session.status("session-live")).toBe("running")
+    expect(data.session.get("session-live")).toMatchObject({
+      cost: 0.75,
+      tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
+    })
 
     emitEvent(events, {
       id: "evt_execution_settled",
