@@ -181,12 +181,12 @@ Supported bearer, basic, header, and query authentication follows OpenAPI `secur
 
 The agent-tool instructions use a budgeted catalog. Every tool namespace is always listed with its tool count regardless of budget, and as many complete, JSDoc-annotated tool signatures (each with a one-line description) as fit an estimated-token budget are inlined. Schema field descriptions and tags are part of each signature's measured cost. Selection is round-robin across namespaces for fairness: in each round (namespaces alphabetical), every namespace still holding un-inlined tools attempts to place its next-cheapest signature against the shared budget, and a namespace whose next signature does not fit drops out while the others keep going - so every namespace gets some representation before any namespace gets everything. The instructions state exactly how comprehensive the list is, both overall (`COMPLETE list` vs `PARTIAL - N of M shown`) and per namespace (`(3 tools)`, `(3 tools, 1 shown)`, `(3 tools, none shown)`).
 
-The default budget is 2,000 estimated tokens (characters / 4, the same heuristic OpenCode uses). Override it when constructing a runtime:
+The catalog-entry budget defaults to 2,000 estimated tokens (characters / 4, the same heuristic OpenCode uses). It applies only to full tool entries shown in the catalog; fixed instructions and namespace summaries are not counted. Override it when constructing a runtime:
 
 ```ts
 const runtime = CodeMode.make({
   tools,
-  discovery: { maxInlineCatalogTokens: 6_000 },
+  discovery: { catalogBudget: 6_000 },
 })
 ```
 

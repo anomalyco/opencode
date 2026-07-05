@@ -76,7 +76,7 @@ export type ToolDescription = {
 export type SafeObject = Record<string, unknown>
 
 const reservedNamespace = "$codemode"
-const defaultMaxInlineCatalogTokens = 2_000
+const defaultCatalogBudget = 2_000
 const defaultSearchLimit = 10
 const searchSignature =
   "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
@@ -383,7 +383,7 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
 
 /**
  * Budgeted catalog: every namespace is always listed with its tool count; full call
- * signatures are inlined against the `maxInlineCatalogTokens` budget (estimated tokens,
+ * signatures are inlined against the `catalogBudget` (estimated tokens,
  * chars/4) round-robin across namespaces - in each round (namespaces alphabetical), every
  * namespace still holding un-inlined tools attempts to place its next-cheapest line, and
  * a namespace whose next line does not fit is done while the others keep going - so every
@@ -394,10 +394,10 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
  */
 export const prepare = <R>(
   tools: HostTools<R>,
-  maxInlineCatalogTokens = defaultMaxInlineCatalogTokens,
+  catalogBudget = defaultCatalogBudget,
 ): DiscoveryPlan => {
-  if (!Number.isSafeInteger(maxInlineCatalogTokens) || maxInlineCatalogTokens < 0) {
-    throw new RangeError("discovery.maxInlineCatalogTokens must be a non-negative safe integer")
+  if (!Number.isSafeInteger(catalogBudget) || catalogBudget < 0) {
+    throw new RangeError("discovery.catalogBudget must be a non-negative safe integer")
   }
   const visible = visibleDefinitions(tools)
   const described = visible.map(({ description }) => description)
@@ -432,7 +432,7 @@ export const prepare = <R>(
     for (const selection of active) {
       const tool = selection.queue[0]!
       const cost = estimateTokens(catalogLine(tool))
-      if (used + cost > maxInlineCatalogTokens) continue
+      if (used + cost > catalogBudget) continue
       selection.queue.shift()
       selection.picked.add(tool)
       used += cost

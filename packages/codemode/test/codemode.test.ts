@@ -621,7 +621,7 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("1. Pick a tool from the list under `## Available tools`")
     expect(instructions).not.toContain("Browse one namespace")
 
-    const partial = CodeMode.make({ tools, discovery: { maxInlineCatalogTokens: 0 } }).instructions()
+    const partial = CodeMode.make({ tools, discovery: { catalogBudget: 0 } }).instructions()
     // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
     // a query string, never a tool name) and the browse-namespace rule appears.
     expect(partial).toContain(
@@ -682,7 +682,7 @@ describe("CodeMode public contract", () => {
     })
     const runtime = CodeMode.make({
       tools: { thread: { uploadFile: upload, generateImage: generate }, orders: { lookup } },
-      discovery: { maxInlineCatalogTokens: 0 },
+      discovery: { catalogBudget: 0 },
     })
     expect(runtime.instructions()).toContain(
       "Available tools (PARTIAL - 0 of 3 shown; find the rest with tools.$codemode.search)",
@@ -965,7 +965,7 @@ describe("CodeMode public contract", () => {
     // other namespaces from inlining (beta already got its line in the same round).
     const runtime = CodeMode.make({
       tools: { alpha: { cheap, expensive }, beta: { cheap } },
-      discovery: { maxInlineCatalogTokens: 40 },
+      discovery: { catalogBudget: 40 },
     })
 
     const instructions = runtime.instructions()
@@ -995,7 +995,7 @@ describe("CodeMode public contract", () => {
     })
     const runtime = CodeMode.make({
       tools: { records: { lookup: documented } },
-      discovery: { maxInlineCatalogTokens: 40 },
+      discovery: { catalogBudget: 40 },
     })
 
     expect(runtime.catalog()[0]?.signature).toContain("/** A detailed identifier description.")
@@ -1055,12 +1055,12 @@ describe("CodeMode public contract", () => {
     expect(() => CodeMode.execute({ code: "return 1", limits: { maxToolCalls: -1 } })).toThrow(RangeError)
     expect(() => CodeMode.execute({ code: "return 1", limits: { maxOutputBytes: -1 } })).toThrow(RangeError)
 
-    expect(() => CodeMode.make({ tools, discovery: { maxInlineCatalogTokens: -1 } })).toThrow(RangeError)
+    expect(() => CodeMode.make({ tools, discovery: { catalogBudget: -1 } })).toThrow(RangeError)
 
     const result = await Effect.runPromise(
       CodeMode.make({
         tools,
-        discovery: { maxInlineCatalogTokens: 0 },
+        discovery: { catalogBudget: 0 },
       }).execute(`return await tools.$codemode.search({ query: "order", limit: 0.5 })`),
     )
     expect(result.ok).toBe(false)

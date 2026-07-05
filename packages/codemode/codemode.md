@@ -315,7 +315,7 @@ packages typecheck clean.
 - **Budgeted catalog** (`prepare` in `tool-runtime.ts`): the all-or-nothing
   inline/search modes are gone - `DiscoveryMode` deleted, `CodeMode.DiscoveryOptions` is just
   `{ maxInlineCatalogBytes? }` (default 16,000 UTF-8 bytes; later converted to
-  `maxInlineCatalogTokens`, default 4,000 estimated tokens - see Post-wave fixes). Port of
+  `catalogBudget`, default 4,000 estimated tokens - see Post-wave fixes). Port of
   the old opencode
   `describe()` `PREVIEW_BUDGET` algorithm, adapted to `ToolDescription`: every namespace is
   ALWAYS listed with its tool count; full signature lines
@@ -542,7 +542,7 @@ budget; namespaces must always be present):
 
 - `src/token.ts` added: copy of `@opencode-ai/core/util/token` (`round(chars / 4)`), so
   the package stays dependency-free; keep in sync if the core heuristic changes.
-- `CodeMode.DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
+- `CodeMode.DiscoveryOptions.maxInlineCatalogBytes` -> `catalogBudget` (default 4,000
   estimated tokens ~ the old 16,000 bytes at 4 chars/token - behavior parity, not a size
   reduction). `prepare` charges `estimate(catalogLine(tool))` per line; cheapest-first
   - stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
@@ -724,7 +724,7 @@ along). All in `tool-runtime.ts`; no interpreter changes.
 **Fix 9 - prompting trims per user review of Fix 8** (user reviewed the condensed
 instructions and directed further cuts):
 
-- Default `maxInlineCatalogTokens` 4,000 -> **2,000** (user wants ~2k tokens of signatures
+- Default `catalogBudget` 4,000 -> **2,000** (user wants ~2k tokens of signatures
   auto-inlined; round-robin fairness from Fix 8 spreads it across all namespaces).
 - Console rule and files/images rule DROPPED from `## Rules`. Replaced by a single
   `unknown`-treatment warning: "A result typed `Promise<unknown>` has no guaranteed
