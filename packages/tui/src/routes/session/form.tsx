@@ -341,6 +341,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function validateCurrent() {
+    if (confirm()) return true
     const current = field()
     if (!current) return true
     const invalid = validateValue(current, store.answers[current.key])
