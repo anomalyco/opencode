@@ -75,7 +75,7 @@ describe("buildRequestParts", () => {
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
-  test("sends source-backed attachments as file URLs for the model", () => {
+  test("sends source-backed attachments as data URLs with source metadata", () => {
     const result = buildRequestParts({
       prompt: [],
       context: [],
@@ -97,8 +97,13 @@ describe("buildRequestParts", () => {
 
     const filePart = result.requestParts.find((part) => part.type === "file")
 
-    expect(filePart?.url).toBe("file:///C:/Users/Luke/AppData/Roaming/ai.opencode.desktop.beta/opencode.global.dat")
+    expect(filePart?.url).toBe("data:text/plain;base64,AAA")
     expect(filePart?.filename).toBe("opencode.global.dat")
+    expect(filePart?.source).toEqual({
+      type: "file",
+      path: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+      text: { value: "", start: 0, end: 0 },
+    })
     expect(result.optimisticParts.find((part) => part.type === "file")?.url).toBe("data:text/plain;base64,AAA")
   })
 

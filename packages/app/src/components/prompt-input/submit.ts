@@ -15,7 +15,7 @@ import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
-import { attachmentRequestUrl, buildRequestParts } from "./build-request-parts"
+import { attachmentRequestSource, attachmentRequestUrl, buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
@@ -94,6 +94,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           mime: attachment.mime,
           url: attachmentRequestUrl(attachment),
           filename: attachment.filename,
+          source: attachmentRequestSource(attachment),
         })),
       })
       return true
@@ -477,6 +478,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
               mime: attachment.mime,
               url: attachmentRequestUrl(attachment),
               filename: attachment.filename,
+              source: attachmentRequestSource(attachment),
             })),
           })
           .catch((err) => {

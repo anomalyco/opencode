@@ -22,7 +22,7 @@ const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
-const commandRequests: Array<{ parts?: Array<{ url: string; filename: string }> }> = []
+const commandRequests: Array<{ parts?: Array<{ url: string; filename: string; source?: unknown }> }> = []
 const syncCommands: Array<{ name: string }> = []
 
 let params: { id?: string } = {}
@@ -68,7 +68,7 @@ const clientFor = (directory: string) => {
       },
       prompt: async () => ({ data: undefined }),
       promptAsync: async () => ({ data: undefined }),
-      command: async (input: { parts?: Array<{ url: string; filename: string }> }) => {
+      command: async (input: { parts?: Array<{ url: string; filename: string; source?: unknown }> }) => {
         commandRequests.push(input)
         return { data: undefined }
       },
@@ -259,7 +259,7 @@ beforeEach(() => {
 })
 
 describe("sendFollowupDraft slash commands", () => {
-  test("sends source-backed attachments as file URLs", async () => {
+  test("sends source-backed attachments as data URLs with source metadata", async () => {
     await sendFollowupDraft({
       client: clientFor("/repo/main") as unknown as Parameters<typeof sendFollowupDraft>[0]["client"],
       serverSync: {
@@ -292,13 +292,18 @@ describe("sendFollowupDraft slash commands", () => {
 
     expect(commandRequests[0]?.parts?.[0]).toMatchObject({
       filename: "opencode.global.dat",
-      url: "file:///C:/Users/Luke/AppData/Roaming/ai.opencode.desktop.beta/opencode.global.dat",
+      url: "data:text/plain;base64,AAA",
+      source: {
+        type: "file",
+        path: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+        text: { value: "", start: 0, end: 0 },
+      },
     })
   })
 })
 
 describe("prompt submit worktree selection", () => {
-  test("sends slash command source-backed attachments as file URLs", async () => {
+  test("sends slash command source-backed attachments as data URLs with source metadata", async () => {
     params = { id: "session-1" }
     syncCommands.push({ name: "inspect" })
 
@@ -340,7 +345,12 @@ describe("prompt submit worktree selection", () => {
 
     expect(commandRequests[0]?.parts?.[0]).toMatchObject({
       filename: "opencode.global.dat",
-      url: "file:///C:/Users/Luke/AppData/Roaming/ai.opencode.desktop.beta/opencode.global.dat",
+      url: "data:text/plain;base64,AAA",
+      source: {
+        type: "file",
+        path: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+        text: { value: "", start: 0, end: 0 },
+      },
     })
   })
 

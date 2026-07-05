@@ -53,7 +53,16 @@ const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => p
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
 
 export const attachmentRequestUrl = (attachment: ImageAttachmentPart) =>
-  attachment.sourcePath ? `file://${encodeFilePath(attachment.sourcePath)}` : attachment.dataUrl
+  attachment.dataUrl
+
+export const attachmentRequestSource = (attachment: ImageAttachmentPart): FilePartInput["source"] | undefined =>
+  attachment.sourcePath
+    ? {
+        type: "file",
+        path: attachment.sourcePath,
+        text: { value: "", start: 0, end: 0 },
+      }
+    : undefined
 
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
   if (part.type === "text") {
@@ -195,6 +204,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
         mime: attachment.mime,
         url,
         filename: attachment.filename,
+        source: attachmentRequestSource(attachment),
       } satisfies PromptRequestPart,
       optimistic: {
         id,
