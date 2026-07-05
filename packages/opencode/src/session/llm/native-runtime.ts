@@ -175,7 +175,6 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
       NativeTool.make({
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),
-        outputSchema: item.outputSchema ? nativeSchema(item.outputSchema) : undefined,
         execute: (args: unknown, ctx) =>
           Effect.tryPromise({
             try: () => {

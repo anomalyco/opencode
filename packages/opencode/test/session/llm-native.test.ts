@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLMEvent, ToolFailure, toDefinitions } from "@opencode-ai/llm"
+import { LLMEvent, ToolFailure } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor, type LLMClientShape } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
 import { Effect, Fiber, Layer, Stream } from "effect"
@@ -209,11 +209,6 @@ describe("session.llm-native.request", () => {
             },
             required: ["command"],
           }),
-          outputSchema: jsonSchema({
-            type: "object",
-            properties: { output: { type: "string" } },
-            required: ["output"],
-          }),
         }),
       },
       toolChoice: "required",
@@ -261,11 +256,6 @@ describe("session.llm-native.request", () => {
             command: { type: "string" },
           },
           required: ["command"],
-        },
-        outputSchema: {
-          type: "object",
-          properties: { output: { type: "string" } },
-          required: ["output"],
         },
       },
     ])
@@ -533,23 +523,6 @@ describe("session.llm-native.request", () => {
       expect(failure.message).toBe("boom")
     }),
   )
-
-  test("native tool wrapper preserves output schemas", () => {
-    const outputSchema = { type: "object" as const, properties: { value: { type: "string" as const } } }
-    const wrapped = LLMNativeRuntime.nativeTools(
-      {
-        lookup: {
-          description: "lookup",
-          inputSchema: jsonSchema({ type: "object" }),
-          outputSchema: jsonSchema(outputSchema),
-          execute: async () => ({ value: "ok" }),
-        } satisfies Tool,
-      },
-      { messages: [] as ModelMessage[], abort: new AbortController().signal },
-    )
-
-    expect(toDefinitions(wrapped)[0]?.outputSchema).toEqual(outputSchema)
-  })
 
   it.effect("native tool wrapper raises ToolFailure when the source tool has no execute handler", () =>
     Effect.gen(function* () {
