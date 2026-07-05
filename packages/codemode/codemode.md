@@ -246,7 +246,7 @@ maxOutputBytes? }` (defaults 10_000 / 100 / 32_000). This wave kept the other kn
   serialized values become truncated text + ` [result truncated: N bytes exceeds the M-byte
 output limit; return a smaller value]`; logs keep leading lines within the remaining budget
   - `[logs truncated: showing K of N lines]`; result gains `truncated: true` (also added to
-    `ExecuteResultSchema`). UTF-8-safe truncation (no split code points). (The in-sandbox
+    `CodeMode.Result`). UTF-8-safe truncation (no split code points). (The in-sandbox
     `maxDataBytes` check that used to throw first on oversized raw values died in Fix 5 -
     truncation is now the only result-size mechanism.)
 - **Search polish**: default limit 12 -> **10** (`defaultSearchLimit`); exact-path lookup - a
@@ -575,7 +575,7 @@ configurable knobs; the internal limit system dies):
   `maxCollectionLength` (every array-length/object-field-count check - this knob was
   actively harmful: an MCP tool returning 20k rows failed). The `OperationLimitExceeded`
   and `AuditLimitExceeded` diagnostic kinds are gone from the `DiagnosticKind` union and
-  `ExecuteResultSchema` (fine - the package is unreleased).
+  `CodeMode.Result` (fine - the package is unreleased).
 - **Fixed constants, not knobs**: `TOOL_CALL_CONCURRENCY = 8` (codemode.ts; the fork
   semaphore) and `MAX_VALUE_DEPTH = 32` (tool-runtime.ts; the `copyIn` depth check - kept
   only because it produces a clearer error than a native stack-overflow RangeError; still

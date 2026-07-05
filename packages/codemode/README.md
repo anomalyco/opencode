@@ -4,7 +4,7 @@ Effect-native confined code execution over explicit, schema-described tools.
 
 CodeMode lets a model write a small JavaScript program that can call only the tools supplied by the host. The program can sequence calls, transform plain data, branch, loop, and run independent calls in parallel without receiving ambient filesystem, process, network, module, or application authority.
 
-The package is currently private to this workspace. Its API is designed around three uses:
+The package is currently private to this workspace. Its API is designed around one-shot and reusable execution:
 
 ```ts
 // One execution
@@ -13,9 +13,6 @@ yield * CodeMode.execute({ tools, code })
 // A reusable runtime
 const runtime = CodeMode.make({ tools, limits })
 yield * runtime.execute(code)
-
-// One agent-facing code tool
-const codeTool = runtime.agentTool()
 ```
 
 ## Install
@@ -117,10 +114,9 @@ const runtime = CodeMode.make({
 runtime.catalog() // structured tool descriptions
 runtime.instructions() // model-facing syntax and tool guide
 runtime.execute(source) // ExecuteResult
-runtime.agentTool() // { name, description, input, output, execute }
 ```
 
-`catalog`, `instructions`, and `agentTool` are projections of the same configured tool tree. `agentTool().description` is exactly `instructions()`.
+`CodeMode.Input` and `CodeMode.Result` are Effect schemas for the execution request and result. Hosts can combine them with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
 
 ### Results
 
@@ -333,8 +329,6 @@ A program cannot gain authority through prose or generated code. It can only exe
 The public contract is guided by these equivalences:
 
 - `CodeMode.execute({ ...options, code })` is equivalent to `CodeMode.make(options).execute(code)`.
-- `CodeMode.make(options).agentTool().execute({ code })` is equivalent to `CodeMode.make(options).execute(code)`.
-- `CodeMode.make(options).agentTool().description` equals `CodeMode.make(options).instructions()`.
 - A tool implementation is not invoked unless its input has decoded successfully.
 - A tool result is not visible to the program unless its output has decoded and crossed the plain-data boundary successfully.
 - Unknown host failures do not become model-visible diagnostics; `ToolError` is the explicit safe-message channel.
