@@ -598,8 +598,12 @@ export function MessageTimeline(props: {
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
-    if (event.target !== event.currentTarget) return
-    props.onMarkScrollGesture(event.currentTarget)
+    props.onMarkScrollGesture(event.target)
+  }
+
+  const handleListPointerMove = (event: PointerEvent) => {
+    if (event.buttons !== 1) return
+    props.onMarkScrollGesture(event.target)
   }
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
@@ -1356,6 +1360,7 @@ export function MessageTimeline(props: {
         onTouchEnd={handleListTouchEnd}
         onTouchCancel={handleListTouchEnd}
         onPointerDown={handleListPointerDown}
+        onPointerMove={handleListPointerMove}
         onKeyDown={handleListKeyDown}
         onScroll={handleListScroll}
         onClick={props.onAutoScrollInteraction}

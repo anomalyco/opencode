@@ -1,16 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
-import {
-  CodeMode,
-  ExecuteInputSchema,
-  ExecuteResultSchema,
-  Tool,
-  toolError,
-  type ExecutionLimits,
-} from "../src/index.js"
-import type { Definition } from "../src/tool.js"
+import { CodeMode, Tool, toolError } from "../src/index.js"
 
-const run = (tool: Definition<never>) =>
+const run = (tool: Tool.Definition<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
 class UnsafeHostError extends Schema.TaggedErrorClass<UnsafeHostError>()("UnsafeHostError", {
@@ -235,7 +227,7 @@ describe("CodeMode console capture", () => {
       logs: ['Thread info: {"name":"Demo","count":2}', "[warn] careful"],
       toolCalls: [],
     })
-    expect(Schema.decodeUnknownSync(ExecuteResultSchema)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 
   test("keeps logs captured before failures", async () => {
@@ -356,7 +348,7 @@ describe("CodeMode output budget", () => {
   })
 
   test("truncates an oversized result value with a marker instead of failing", async () => {
-    const limits: ExecutionLimits = { maxOutputBytes: 40 }
+    const limits: CodeMode.ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `return { data: "${"x".repeat(200)}" }`,
@@ -371,11 +363,11 @@ describe("CodeMode output budget", () => {
     expect(result.value).toMatch(
       /^\{"data":"x+ \[result truncated: \d+ bytes exceeds the 40-byte output limit; return a smaller value\]$/,
     )
-    expect(Schema.decodeUnknownSync(ExecuteResultSchema)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 
   test("keeps leading logs within the remaining budget and marks the cut", async () => {
-    const limits: ExecutionLimits = { maxOutputBytes: 40 }
+    const limits: CodeMode.ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `
@@ -501,24 +493,17 @@ describe("CodeMode public contract", () => {
   const tools = { orders: { lookup } }
   const source = `return await tools.orders.lookup({ id: "order_42" })`
 
-  test("keeps one-shot, reusable, and agent-tool execution equivalent", async () => {
+  test("keeps one-shot and reusable execution equivalent", async () => {
     const runtime = CodeMode.make({ tools })
-    const agentTool = runtime.agentTool()
-    const [oneShot, reusable, projected] = await Promise.all([
+    const [oneShot, reusable] = await Promise.all([
       Effect.runPromise(CodeMode.execute({ tools, code: source })),
       Effect.runPromise(runtime.execute(source)),
-      Effect.runPromise(agentTool.execute({ code: source })),
     ])
 
     expect(reusable).toStrictEqual(oneShot)
-    expect(projected).toStrictEqual(oneShot)
-    expect(agentTool.name).toBe("code")
-    expect(agentTool.input).toBe(ExecuteInputSchema)
-    expect(agentTool.output).toBe(ExecuteResultSchema)
-    expect(agentTool.description).toBe(runtime.instructions())
-    expect(Schema.decodeUnknownSync(ExecuteResultSchema)(JSON.parse(JSON.stringify(projected)))).toStrictEqual(
-      projected,
-    )
+    const input: CodeMode.Input = { code: source }
+    expect(Schema.decodeUnknownSync(CodeMode.Input)(input)).toStrictEqual(input)
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(reusable)))).toStrictEqual(reusable)
   })
 
   test("inlines a COMPLETE small catalog and keeps search registered but unadvertised", async () => {
@@ -1035,7 +1020,7 @@ describe("CodeMode public contract", () => {
       value: { top: null, nested: [1, null] },
       toolCalls: [],
     })
-    expect(Schema.decodeUnknownSync(ExecuteResultSchema)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 
   test("rejects invalid configuration and discovery limits", async () => {

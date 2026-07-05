@@ -1,14 +1,7 @@
 import * as Tool from "./tool"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
-import {
-  CodeMode,
-  Tool as SandboxTool,
-  toolError,
-  type ExecuteResult,
-  type JsonSchema,
-  type ToolDefinition,
-} from "@opencode-ai/codemode"
+import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
@@ -132,13 +125,13 @@ function projectMcpResult(result: CallToolResult, collect: (attachment: Attachme
 type Run = (input: unknown) => Effect.Effect<unknown, unknown>
 
 function toolTree(catalog: readonly CatalogEntry[], run: (entry: CatalogEntry) => Run) {
-  const tree: Record<string, Record<string, ToolDefinition>> = {}
+  const tree: Record<string, Record<string, SandboxTool.Definition>> = {}
   for (const entry of catalog) {
     const namespace = (tree[entry.server] ??= {})
     namespace[entry.local] = SandboxTool.make({
       description: entry.tool.def.description ?? "",
-      input: entry.tool.def.inputSchema as JsonSchema,
-      output: entry.tool.def.outputSchema as JsonSchema | undefined,
+      input: entry.tool.def.inputSchema as SandboxTool.JsonSchema,
+      output: entry.tool.def.outputSchema as SandboxTool.JsonSchema | undefined,
       run: run(entry),
     })
   }
@@ -279,7 +272,7 @@ export const CodeModeTool = Tool.define(
           ctx.abort.addEventListener("abort", handler, { once: true })
           return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
         })
-        const cancelled = (): ExecuteResult => ({
+        const cancelled = (): CodeMode.Result => ({
           ok: false,
           error: { kind: "ExecutionFailure", message: "Execution cancelled." },
           toolCalls: calls.map((call) => ({ name: call.tool })),

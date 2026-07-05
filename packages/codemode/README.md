@@ -4,7 +4,7 @@ Effect-native confined code execution over explicit, schema-described tools.
 
 CodeMode lets a model write a small JavaScript program that can call only the tools supplied by the host. The program can sequence calls, transform plain data, branch, loop, and run independent calls in parallel without receiving ambient filesystem, process, network, module, or application authority.
 
-The package is currently private to this workspace. Its API is designed around three uses:
+The package is currently private to this workspace. Its API is designed around one-shot and reusable execution:
 
 ```ts
 // One execution
@@ -13,9 +13,6 @@ yield * CodeMode.execute({ tools, code })
 // A reusable runtime
 const runtime = CodeMode.make({ tools, limits })
 yield * runtime.execute(code)
-
-// One agent-facing code tool
-const codeTool = runtime.agentTool()
 ```
 
 ## Install
@@ -63,7 +60,7 @@ const result =
 `)
 ```
 
-`result` is always an `ExecuteResult`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
+`result` is always a `CodeMode.Result`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
 
 Successful result values are JSON-safe data. A program that returns `undefined`, including by reaching the end without `return`, produces `null`; nested `undefined` values are normalized to `null` as well.
 
@@ -85,6 +82,8 @@ const tool = Tool.make({
 `output` is optional. Without it the tool's signature advertises `Promise<unknown>` and the host result is exposed as-is.
 
 The description and schemas are part of the model-visible tool contract. Keep descriptions concrete and put authorization in `run` or in the service it calls.
+
+Public tool types are grouped under the same namespace: `Tool.Definition`, `Tool.Options`, `Tool.SchemaType`, and `Tool.JsonSchema`.
 
 ### `CodeMode.execute`
 
@@ -116,31 +115,32 @@ const runtime = CodeMode.make({
 
 runtime.catalog() // structured tool descriptions
 runtime.instructions() // model-facing syntax and tool guide
-runtime.execute(source) // ExecuteResult
-runtime.agentTool() // { name, description, input, output, execute }
+runtime.execute(source) // CodeMode.Result
 ```
 
-`catalog`, `instructions`, and `agentTool` are projections of the same configured tool tree. `agentTool().description` is exactly `instructions()`.
+`CodeMode.Input`, `CodeMode.Result`, `CodeMode.Success`, `CodeMode.Failure`, `CodeMode.Diagnostic`, and `CodeMode.DiagnosticKind` are both Effect schemas and their inferred TypeScript types. Hosts can combine `CodeMode.Input` and `CodeMode.Result` with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
+
+All other CodeMode types use the same namespace: `CodeMode.Options`, `CodeMode.ExecuteOptions`, `CodeMode.Runtime`, `CodeMode.ExecutionLimits`, `CodeMode.DiscoveryOptions`, `CodeMode.DataValue`, `CodeMode.ToolDescription`, and the `CodeMode.ToolCall*` observation types.
 
 ### Results
 
 ```ts
-type ExecuteResult = ExecuteSuccess | ExecuteFailure
+type Result = Success | Failure
 
-interface ExecuteSuccess {
+interface Success {
   readonly ok: true
-  readonly value: Schema.Json
+  readonly value: CodeMode.DataValue
   readonly logs?: ReadonlyArray<string>
   readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<ToolCall>
+  readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
 }
 
-interface ExecuteFailure {
+interface Failure {
   readonly ok: false
-  readonly error: Diagnostic
+  readonly error: CodeMode.Diagnostic
   readonly logs?: ReadonlyArray<string>
   readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<ToolCall>
+  readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
 }
 ```
 
@@ -151,6 +151,31 @@ interface ExecuteFailure {
 `onToolCallStart` receives `{ index, name, input }` after input decoding and before tool execution. The input is decoded host-side data and may include values produced by schema transformations; applications should avoid logging sensitive tool arguments indiscriminately.
 
 `onToolCallEnd` receives `{ index, name, input, durationMs, outcome, message? }` when an admitted call settles. `outcome` is `"success"` or `"failure"`; `message` is the model-safe failure message and is present only on failure. Interrupted calls (for example when the execution timeout fires) do not produce an end event. Both hooks are Effect-returning and must not fail.
+
+### OpenAPI tools
+
+`OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Dotted `operationId` values form namespaces such as `v2.session.get`. Missing IDs receive a flat method/path fallback such as `getUsersById`; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+
+```ts
+import { CodeMode, OpenAPI } from "@opencode-ai/codemode"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const api = OpenAPI.fromSpec({
+  spec: await Bun.file("openapi.json").json(), // parsed document (no YAML)
+  auth: {
+    resolve: ({ name, scopes, operation }) =>
+      name === "BearerAuth" ? Effect.succeed({ type: "bearer", token }) : Effect.succeed(undefined),
+  },
+})
+
+const runtime = CodeMode.make({ tools: { opencode: api.tools } })
+const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+`fromSpec` is synchronous and returns `{ tools, skipped }`. The initial adapter supports query `form`/`deepObject`, path/header `simple`, JSON request bodies, JSON responses, and text responses; unsupported parameter encodings, non-JSON request bodies, binary responses, and streaming operations land in `skipped` instead of producing broken tools. Operation and path servers take precedence over document servers unless `baseUrl` explicitly overrides all of them. Tool inputs flatten path, query, header, and closed object-body fields into one model-facing object while retaining their HTTP locations internally. Cross-location name collisions receive a location prefix such as `path_id` and `query_id`; composed, nullable, dictionary, conditionally-required, and non-object JSON bodies remain under `body`. Auth is never model-visible. Responses are limited to 50 MiB, and non-2xx responses become safe tool failures carrying the status and a size-capped body summary. Deferred capabilities are tracked in `src/openapi/TODO.md`.
+
+Supported bearer, basic, header, and query authentication follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the compiler. Cookie authentication alternatives are discarded; an operation is skipped when it has no supported alternative. See the option docstrings in `src/openapi/types.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution. The supplied client owns redirect policy; credentialed hosts should reject redirects or strip credentials when the origin changes.
 
 ## Discovery
 
@@ -279,7 +304,7 @@ import { toolError } from "@opencode-ai/codemode"
 run: ({ id }) => (authorized(id) ? loadOrder(id) : Effect.fail(toolError("Order is unavailable")))
 ```
 
-Only the supplied message is model-visible. The optional cause is never returned in `ExecuteResult`; hosts should perform any required internal logging before crossing this boundary.
+Only the supplied message is model-visible. The optional cause is never returned in `CodeMode.Result`; hosts should perform any required internal logging before crossing this boundary.
 
 ## Authority Boundary
 
@@ -308,12 +333,10 @@ A program cannot gain authority through prose or generated code. It can only exe
 The public contract is guided by these equivalences:
 
 - `CodeMode.execute({ ...options, code })` is equivalent to `CodeMode.make(options).execute(code)`.
-- `CodeMode.make(options).agentTool().execute({ code })` is equivalent to `CodeMode.make(options).execute(code)`.
-- `CodeMode.make(options).agentTool().description` equals `CodeMode.make(options).instructions()`.
 - A tool implementation is not invoked unless its input has decoded successfully.
 - A tool result is not visible to the program unless its output has decoded and crossed the plain-data boundary successfully.
 - Unknown host failures do not become model-visible diagnostics; `ToolError` is the explicit safe-message channel.
-- Host interruption remains interruption rather than an `ExecuteFailure`.
+- Host interruption remains interruption rather than a `CodeMode.Failure`.
 
 ## Non-Goals
 
