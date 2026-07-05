@@ -302,7 +302,7 @@ const visibleDefinitions = <R>(tools: HostTools<R>) =>
     description: {
       path,
       description: definition.description,
-      signature: `${toolExpression(path)}(input: ${inputTypeScript(definition)}): Promise<${outputTypeScript(definition)}>`,
+      signature: `${toolExpression(path)}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
     },
   }))
 
@@ -317,11 +317,6 @@ export type DiscoveryPlan = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
-  /**
-   * JSDoc-annotated multiline signature shown on search-result items; the compact
-   * single-line form (inline catalog lines) stays in `description.signature`.
-   */
-  readonly signature: string
   /** Top-level namespace (first path segment), matched by the search `namespace` option. */
   readonly namespace: string
   /** Lowercased path + description + input property names/descriptions, for substring matching. */
@@ -356,7 +351,7 @@ const termForms = (term: string): Array<string> => {
 }
 
 const catalogLine = (tool: ToolDescription) => {
-  // Inline catalog lines use only a compact first line; full text stays in search results.
+  // Keep the tool description concise; the full schema documentation remains in the signature.
   const line = tool.description.split("\n", 1)[0]!.trim()
   const description = line.length > 120 ? line.slice(0, 119) + "..." : line
   return description === "" ? `  - ${tool.signature}` : `  - ${tool.signature} // ${description}`
@@ -364,7 +359,6 @@ const catalogLine = (tool: ToolDescription) => {
 
 const toSearchEntry = <R>(path: string, definition: Definition<R>, description: ToolDescription): SearchEntry => ({
   description,
-  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
   namespace: path.split(".", 1)[0]!,
   searchText: [
     path,
@@ -778,13 +772,11 @@ export const make = <R>(
                         .map(({ entry }) => entry)
                 // Result paths are rendered as JavaScript expressions so each `path` is
                 // directly usable as the call site (`await tools.github.list({ ... })` or
-                // `await tools.ns["dashed-name"]({ ... })`). The signature is the pretty,
-                // JSDoc-annotated form (schema descriptions and constraints ride along as
-                // field comments).
-                const items = ranked.slice(0, limit).map(({ description, signature }) => ({
+                // `await tools.ns["dashed-name"]({ ... })`). Search returns the same
+                // JSDoc-annotated signature used by the inline catalog.
+                const items = ranked.slice(0, limit).map(({ description }) => ({
                   ...description,
                   path: toolExpression(description.path),
-                  signature,
                 }))
                 return copyIn({ items, total: ranked.length }, "Result from tool '$codemode.search'")
               },

@@ -332,7 +332,7 @@ describe("union schemas render every alternative", () => {
   })
 })
 
-describe("pretty signatures in search results", () => {
+describe("JSDoc signatures in catalogs and search results", () => {
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 
   const search = async (query: string) => {
@@ -390,15 +390,15 @@ describe("pretty signatures in search results", () => {
     }
   })
 
-  test("the inline catalog line for the same tool stays single-line compact", () => {
+  test("the inline catalog uses the same JSDoc signatures", async () => {
     const instructions = runtime.instructions()
-    expect(instructions).toContain(
-      '  - tools.github.list_issues(input: { owner: string; after?: string; perPage?: number; labels?: Array<string>; state?: "open" | "closed" }): Promise<unknown> // List issues in a repository',
-    )
-    expect(instructions).toContain(
-      "  - tools.orders.lookup(input: { id: string; verbose?: boolean }): Promise<{ status: string }> // Look up an order",
-    )
-    expect(instructions).not.toContain("/**")
+    const github = (await search("list issues repository")).items.find(
+      ({ path }) => path === "tools.github.list_issues",
+    )!
+    const orders = (await search("look up order")).items.find(({ path }) => path === "tools.orders.lookup")!
+    expect(instructions).toContain(`  - ${github.signature} // List issues in a repository`)
+    expect(instructions).toContain(`  - ${orders.signature} // Look up an order`)
+    expect(instructions).toContain("/** Repository owner */")
   })
 })
 
@@ -421,7 +421,7 @@ describe("non-identifier tool paths", () => {
     const instructions = runtime.instructions()
 
     expect(instructions).toContain(
-      'tools.context7["resolve-library-id"](input: { query: string; libraryName: string }): Promise<unknown>',
+      'tools.context7["resolve-library-id"](input: {\n  query: string\n  libraryName: string\n}): Promise<unknown>',
     )
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain("bracket notation and quotes are part of the path")

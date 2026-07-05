@@ -67,10 +67,10 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 - **Search only - no separate `describe`.** `tools.$codemode.search({ query?, namespace?,
 limit? })` over the final tool tree, owned by this package.
 - Search result item shape: `{ path, description, signature }` in an `{ items, total }`
-  wrapper. The `signature` string embeds the full input/output TypeScript types - in search
-  results it is the pretty, JSDoc-annotated multiline form (Fix 7), so per-field schema
-  `description`s and constraints (`@default`, `@format`, `@deprecated`, `@minItems`,
-  `@maxItems`) ride along as field comments. The original spec's separate `input`/`output`
+  wrapper. The `signature` string embeds the full input/output TypeScript types and uses the
+  same pretty, JSDoc-annotated multiline form in inline catalogs and search results, so
+  per-field schema `description`s and constraints (`@default`, `@format`, `@deprecated`,
+  `@minItems`, `@maxItems`) ride along as field comments. The original spec's separate `input`/`output`
   raw-schema fields are deliberately NOT added: shapes are already fully expressed in the
   TypeScript signature and schema annotations now arrive as JSDoc - intent satisfied, letter
   deviated. Result `path`s render a JavaScript expression rooted at `tools` (for example

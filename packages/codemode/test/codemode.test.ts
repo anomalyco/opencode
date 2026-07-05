@@ -426,7 +426,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "adapter.call",
         description: "Call an adapter-described tool",
-        signature: "tools.adapter.call(input: { id: string; count?: number }): Promise<unknown>",
+        signature: "tools.adapter.call(input: {\n  id: string\n  count?: number\n}): Promise<unknown>",
       },
     ])
 
@@ -459,7 +459,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "users.lookup",
         description: "Look up a user",
-        signature: "tools.users.lookup(input: { login: string }): Promise<{ login: string; id: number }>",
+        signature: "tools.users.lookup(input: {\n  login: string\n}): Promise<{\n  login: string\n  id: number\n}>",
       },
     ])
 
@@ -475,7 +475,7 @@ describe("CodeMode schema flexibility", () => {
       run: () => Effect.succeed("pong"),
     })
     const runtime = CodeMode.make({ tools: { net: { ping } } })
-    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: { host: string }): Promise<unknown>")
+    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string\n}): Promise<unknown>")
 
     const result = await Effect.runPromise(runtime.execute(`return await tools.net.ping({ host: "example.test" })`))
     expect(result.ok).toBe(true)
@@ -512,19 +512,19 @@ describe("CodeMode public contract", () => {
       {
         path: "orders.lookup",
         description: "Look up an order by ID",
-        signature: "tools.orders.lookup(input: { id: string }): Promise<{ id: string; status: string }>",
+        signature: "tools.orders.lookup(input: {\n  id: string\n}): Promise<{\n  id: string\n  status: string\n}>",
       },
     ])
     expect(runtime.instructions()).toContain("Available tools (COMPLETE list")
     expect(runtime.instructions()).toContain("- orders (1 tool)")
     expect(runtime.instructions()).toContain(
-      "  - tools.orders.lookup(input: { id: string }): Promise<{ id: string; status: string }> // Look up an order by ID",
+      "  - tools.orders.lookup(input: {\n  id: string\n}): Promise<{\n  id: string\n  status: string\n}> // Look up an order by ID",
     )
     // A fully inlined catalog does not advertise search in the instructions...
     expect(runtime.instructions()).not.toMatch(/\$codemode/)
 
-    // ...but the search tool stays registered, so a speculative call still works. Search
-    // results carry the pretty multiline signature; the inline catalog stays compact.
+    // ...but the search tool stays registered, so a speculative call still works with the
+    // same signature as the inline catalog.
     const result = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: "order" })`))
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -554,11 +554,11 @@ describe("CodeMode public contract", () => {
       {
         path: "context7.resolve-library-id",
         description: "Resolve a library ID",
-        signature: 'tools.context7["resolve-library-id"](input: { libraryName: string }): Promise<string>',
+        signature: 'tools.context7["resolve-library-id"](input: {\n  libraryName: string\n}): Promise<string>',
       },
     ])
     expect(runtime.instructions()).toContain(
-      'tools.context7["resolve-library-id"](input: { libraryName: string }): Promise<string>',
+      'tools.context7["resolve-library-id"](input: {\n  libraryName: string\n}): Promise<string>',
     )
 
     const search = await Effect.runPromise(
@@ -973,12 +973,36 @@ describe("CodeMode public contract", () => {
       "Available tools (PARTIAL - 2 of 3 shown; find the rest with tools.$codemode.search)",
     )
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
-    expect(instructions).toContain("  - tools.alpha.cheap(input: { q: string }): Promise<string> // Cheap")
+    expect(instructions).toContain("  - tools.alpha.cheap(input: {\n  q: string\n}): Promise<string> // Cheap")
     expect(instructions).not.toContain("tools.alpha.expensive(")
     // Fully shown namespaces read cleanly (no "shown" annotation).
     expect(instructions).toContain("- beta (1 tool)")
-    expect(instructions).toContain("  - tools.beta.cheap(input: { q: string }): Promise<string> // Cheap")
+    expect(instructions).toContain("  - tools.beta.cheap(input: {\n  q: string\n}): Promise<string> // Cheap")
     expect(instructions).toMatch(/\$codemode\.search/)
+  })
+
+  test("charges inline JSDoc against the catalog token budget", () => {
+    const documented = Tool.make({
+      description: "Look up a record",
+      input: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "A detailed identifier description. ".repeat(20) },
+        },
+        required: ["id"],
+      } as const,
+      run: () => Effect.succeed("ok"),
+    })
+    const runtime = CodeMode.make({
+      tools: { records: { lookup: documented } },
+      discovery: { maxInlineCatalogTokens: 40 },
+    })
+
+    expect(runtime.catalog()[0]?.signature).toContain("/** A detailed identifier description.")
+    expect(runtime.instructions()).toContain(
+      "Available tools (PARTIAL - 0 of 1 shown; find the rest with tools.$codemode.search)",
+    )
+    expect(runtime.instructions()).not.toContain("tools.records.lookup(input:")
   })
 
   test("decodes tool input and output before exposing either side", async () => {
