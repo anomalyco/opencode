@@ -87,7 +87,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
     if (mac()) return `${height / zoom()}px`
     if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
-    return undefined
+    return `calc(${height}px + env(safe-area-inset-top, 0px))`
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
 
@@ -230,7 +230,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       style={{
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
-        "padding-left": mac() ? `${84 / zoom()}px` : 0,
+        "padding-top": "env(safe-area-inset-top, 0px)",
+        "padding-left": mac() ? `${84 / zoom()}px` : "env(safe-area-inset-left, 0px)",
+        "padding-right": "env(safe-area-inset-right, 0px)",
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
           ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
