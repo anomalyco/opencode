@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Readable } from "node:stream"
-import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "@/cli/cmd/run/runtime.stdin"
+import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "@opencode-ai/cli/mini/runtime.stdin"
 
 function stream(isTTY: boolean) {
   return Object.assign(new Readable({ read() {} }), { isTTY }) as NodeJS.ReadStream

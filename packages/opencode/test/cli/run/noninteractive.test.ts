@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient, type V2Event } from "@opencode-ai/sdk/v2"
-import { runNonInteractivePrompt } from "@/cli/cmd/run/noninteractive"
+import { OpenCode, type EventSubscribeOutput } from "@opencode-ai/client/promise"
+import { runNonInteractivePrompt } from "@opencode-ai/cli/mini/noninteractive"
 
+type V2Event = EventSubscribeOutput
 type FormInfo = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 
 function ok<T>(data: T) {
-  return Promise.resolve({
-    data,
-    error: undefined,
-    request: new Request("https://opencode.test"),
-    response: new Response(),
-  })
+  return Promise.resolve(data)
 }
 
 function form(id: string, sessionID: string): FormInfo {
@@ -43,8 +39,8 @@ function settled(outcome: "success" | "interrupted" = "success"): V2Event {
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?: FormInfo[]; attached?: boolean }) {
-  const sdk = new OpencodeClient()
-  const values: V2Event[] = [{ id: "evt_connected", created: 0, type: "server.connected", data: {} }]
+  const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+  const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {
@@ -58,22 +54,20 @@ async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?:
       yield value
     }
   })()
-  spyOn(sdk.v2.event, "subscribe").mockImplementation(
-    () => Promise.resolve({ stream }) as ReturnType<typeof sdk.v2.event.subscribe>,
-  )
-  spyOn(sdk.v2.session.permission, "list").mockImplementation(() => ok({ data: [] }) as never)
-  spyOn(sdk.v2.session.question, "list").mockImplementation(() => ok({ data: [] }) as never)
-  spyOn(sdk.v2.session.form, "list").mockImplementation(
+  spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
+  spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.question, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.form, "list").mockImplementation(
     (request) =>
-      ok({ data: input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? [] }) as never,
+      ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
-  spyOn(sdk.v2.session.form, "cancel").mockImplementation(() => ok(undefined) as never)
-  spyOn(sdk.v2.session, "prompt").mockImplementation((request) => {
+  spyOn(sdk.form, "cancel").mockImplementation(() => ok(undefined) as never)
+  spyOn(sdk.session, "prompt").mockImplementation((request) => {
     const messageID = request.id ?? "msg_prompt"
     values.push(...input.turn(messageID))
     wake?.()
     wake = undefined
-    return ok({ data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", timeCreated: 1 } }) as never
+    return ok({ admittedSeq: 1, id: messageID, sessionID: "ses_1", timeCreated: 1 }) as never
   })
   await runNonInteractivePrompt({
     client: sdk,
@@ -102,9 +96,9 @@ describe("runNonInteractivePrompt", () => {
       // which must not leave the consume loop waiting forever.
       turn: () => [formCreated(form("frm_live", "global")), settled("interrupted")],
     })
-    expect(sdk.v2.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
-    expect(sdk.v2.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.v2.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
+    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
+    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
+    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
   })
 
   test("attach mode cancels only session-owned forms", async () => {
@@ -113,9 +107,9 @@ describe("runNonInteractivePrompt", () => {
       pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
       turn: (messageID) => [formCreated(form("frm_live", "global")), prompted(messageID), settled()],
     })
-    expect(sdk.v2.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.v2.session.form.list).not.toHaveBeenCalledWith({ sessionID: "global" })
-    expect(sdk.v2.session.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
-    expect(sdk.v2.session.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
+    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
+    expect(sdk.form.list).not.toHaveBeenCalledWith({ sessionID: "global" })
+    expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
+    expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
   })
 })

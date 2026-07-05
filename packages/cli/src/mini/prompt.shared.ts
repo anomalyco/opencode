@@ -7,7 +7,7 @@
 // the current browse position. When the user arrows up at cursor offset 0,
 // the current draft is saved and history begins. Arrowing past the end
 // restores the draft.
-export { displayCharAt, displaySlice, mentionTriggerIndex } from "../prompt-display"
+export { displayCharAt, displaySlice, mentionTriggerIndex } from "@opencode-ai/tui/prompt/display"
 import type { RunPrompt } from "./types"
 
 const HISTORY_LIMIT = 200

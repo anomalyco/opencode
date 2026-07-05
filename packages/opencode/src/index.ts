@@ -20,6 +20,7 @@ import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/attach"
 import { MiniCommand } from "./cli/cmd/mini"
+import { V2ServeCommand } from "./cli/cmd/v2-serve"
 import { TuiThreadCommand } from "./cli/cmd/tui"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
@@ -81,6 +82,7 @@ const cli = yargs(args)
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
+  .command(V2ServeCommand)
   .command(MiniCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)

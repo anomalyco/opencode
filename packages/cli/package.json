@@ -10,6 +10,20 @@
   "files": [
     "bin"
   ],
+  "exports": {
+    "./daemon": "./src/daemon.ts",
+    "./mini": "./src/mini/index.ts",
+    "./mini/footer.command": "./src/mini/footer.command.tsx",
+    "./mini/footer.menu": "./src/mini/footer.menu.tsx",
+    "./mini/footer.permission": "./src/mini/footer.permission.tsx",
+    "./mini/footer.prompt": "./src/mini/footer.prompt.tsx",
+    "./mini/footer.question": "./src/mini/footer.question.tsx",
+    "./mini/footer.subagent": "./src/mini/footer.subagent.tsx",
+    "./mini/footer.view": "./src/mini/footer.view.tsx",
+    "./mini/scrollback.writer": "./src/mini/scrollback.writer.tsx",
+    "./mini/*": "./src/mini/*.ts",
+    "./server-process": "./src/server-process.ts"
+  },
   "scripts": {
     "build": "bun run script/build.ts",
     "dev": "bun run src/index.ts",
@@ -19,16 +33,22 @@
     "@effect/platform-node": "catalog:",
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/server": "workspace:*",
     "@opencode-ai/tui": "workspace:*",
     "@opentui/core": "catalog:",
+    "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
     "effect": "catalog:",
+    "fuzzysort": "catalog:",
     "jsonc-parser": "3.3.1",
+    "opentui-spinner": "catalog:",
     "semver": "catalog:",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "strip-ansi": "7.1.2"
   },
   "devDependencies": {
     "@opencode-ai/script": "workspace:*",

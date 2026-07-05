@@ -203,6 +203,8 @@ export class RunFooter implements FooterApi {
   private setSubagent: (next: FooterSubagentState) => void
   private queuedPrompts: Accessor<FooterQueuedPrompt[]>
   private setQueuedPrompts: Setter<FooterQueuedPrompt[]>
+  private history: Accessor<RunPrompt[]>
+  private setHistory: Setter<RunPrompt[]>
   private promptRoute: FooterPromptRoute = { type: "composer" }
   private subagentMenuRows = SUBAGENT_ROWS
   private autocomplete = false
@@ -289,6 +291,9 @@ export class RunFooter implements FooterApi {
     const [queuedPrompts, setQueuedPrompts] = createSignal<FooterQueuedPrompt[]>([])
     this.queuedPrompts = queuedPrompts
     this.setQueuedPrompts = setQueuedPrompts
+    const [history, setHistory] = createSignal(options.history ?? [])
+    this.history = history
+    this.setHistory = setHistory
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
     this.scrollback = this.createScrollback(options.wrote ?? false)
 
@@ -322,7 +327,7 @@ export class RunFooter implements FooterApi {
               diffStyle: options.diffStyle,
               tuiConfig: options.tuiConfig,
               backgroundSubagents: options.backgroundSubagents,
-              history: options.history,
+              history: footer.history,
               agent: options.agentLabel,
               onSubmit: footer.handlePrompt,
               onPermissionReply: footer.handlePermissionReply,
@@ -390,6 +395,11 @@ export class RunFooter implements FooterApi {
   }
 
   public event(next: FooterEvent): void {
+    if (next.type === "history") {
+      this.setHistory(next.history)
+      return
+    }
+
     if (next.type === "model") {
       this.setCurrentModel(next.selection)
     }

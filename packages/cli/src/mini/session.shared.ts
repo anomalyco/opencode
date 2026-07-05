@@ -4,11 +4,12 @@
 // the prompt history ring. Also finds the most recently used variant for
 // the current model so the footer can pre-select it.
 import { promptCopy, promptSame } from "./prompt.shared"
+import type { Message, Part } from "@opencode-ai/sdk/v2"
 import type { RunInput, RunPrompt } from "./types"
 
 const LIMIT = 200
 
-export type SessionMessages = NonNullable<Awaited<ReturnType<RunInput["sdk"]["session"]["messages"]>>["data"]>
+export type SessionMessages = Array<{ info: Message; parts: Part[] }>
 
 type Turn = {
   prompt: RunPrompt
@@ -160,10 +161,10 @@ export async function resolveCurrentSession(
   limit = LIMIT,
 ): Promise<RunSession> {
   const [response, session] = await Promise.all([
-    sdk.v2.session.messages({ sessionID, limit, order: "desc" }, { throwOnError: true }),
-    sdk.v2.session.get({ sessionID }, { throwOnError: true }),
+    sdk.message.list({ sessionID, limit, order: "desc" }),
+    sdk.session.get({ sessionID }),
   ])
-  const messages = response.data.data.toReversed()
+  const messages = response.data.toReversed()
   return {
     first: messages.length === 0,
     turns: messages.flatMap((message) => {
@@ -195,18 +196,18 @@ export async function resolveCurrentSession(
               })),
             ],
           },
-          provider: session.data.data.model?.providerID,
-          model: session.data.data.model?.id,
-          variant: session.data.data.model?.variant,
+          provider: session.model?.providerID,
+          model: session.model?.id,
+          variant: session.model?.variant,
         },
       ]
     }),
-    ...(session.data.data.model && {
+    ...(session.model && {
       model: {
-        providerID: session.data.data.model.providerID,
-        modelID: session.data.data.model.id,
+        providerID: session.model.providerID,
+        modelID: session.model.id,
       },
-      variant: session.data.data.model.variant,
+      variant: session.model.variant,
     }),
   }
 }

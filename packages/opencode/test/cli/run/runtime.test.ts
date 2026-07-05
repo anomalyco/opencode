@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient } from "@opencode-ai/sdk/v2"
-import { runInteractiveMode } from "@/cli/cmd/run/runtime"
-import type { FooterApi, FooterEvent, RunProvider } from "@/cli/cmd/run/types"
+import { OpenCode } from "@opencode-ai/client/promise"
+import { runInteractiveDeferredMode, runInteractiveMode } from "@opencode-ai/cli/mini/runtime"
+import type { FooterApi, FooterEvent, RunProvider } from "@opencode-ai/cli/mini/types"
 
 const provider: RunProvider = {
   id: "openai",
@@ -45,12 +45,7 @@ function defer<T>() {
 }
 
 function ok<T>(data: T) {
-  return Promise.resolve({
-    data,
-    error: undefined,
-    request: new Request("https://opencode.test"),
-    response: new Response(),
-  })
+  return Promise.resolve(data)
 }
 
 function footer(events: FooterEvent[] = []): FooterApi {
@@ -110,16 +105,173 @@ afterEach(() => {
 })
 
 describe("run interactive runtime", () => {
+  test("resolves the deferred session only after first paint", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const lifecycleStarted = defer<void>()
+    const painted = defer<void>()
+    const api = footer()
+    let resolved = 0
+    api.idle = () => painted.promise
+    spyOn(sdk.provider, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.model, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+
+    const task = runInteractiveDeferredMode(
+      {
+        sdk,
+        directory: "/tmp",
+        resolveAgent: async () => "build",
+        session: async () => {
+          resolved++
+          api.close()
+          return { id: "ses-deferred", title: "Deferred" }
+        },
+        agent: "build",
+        model: { providerID: "openai", modelID: "gpt-5" },
+        variant: undefined,
+        files: [],
+        thinking: false,
+        backgroundSubagents: false,
+      },
+      {
+        createRuntimeLifecycle: async () => {
+          lifecycleStarted.resolve()
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+      },
+    )
+
+    await lifecycleStarted.promise
+    expect(resolved).toBe(0)
+    painted.resolve()
+    await task
+    expect(resolved).toBe(1)
+  })
+
+  test("restores deferred session history and model after first paint", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const lifecycleStarted = defer<void>()
+    const painted = defer<void>()
+    const events: FooterEvent[] = []
+    const api = footer(events)
+    api.idle = () => painted.promise
+    const event = api.event
+    api.event = (value) => {
+      event(value)
+      if (value.type === "model") api.close()
+    }
+    spyOn(sdk.session, "get").mockImplementation(
+      () =>
+        ok({
+          id: "ses-resume",
+          projectID: "pro-1",
+          title: "Resume",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          location: { directory: "/tmp" },
+          model: { providerID: "openai", id: "gpt-5", variant: "high" },
+        }) as never,
+    )
+    spyOn(sdk.message, "list").mockImplementation(
+      () =>
+        ok({
+          data: [{ id: "msg-user", type: "user", text: "previous prompt", time: { created: 1 } }],
+          cursor: {},
+        }) as never,
+    )
+    spyOn(sdk.provider, "list").mockImplementation(
+      () =>
+        ok({
+          location: { directory: "/tmp" },
+          data: [{ id: "openai", name: "OpenAI", request: { headers: {}, body: {} } }],
+        }) as never,
+    )
+    spyOn(sdk.model, "list").mockImplementation(
+      () =>
+        ok({
+          location: { directory: "/tmp" },
+          data: [
+            {
+              id: "gpt-5",
+              providerID: "openai",
+              name: "Little Frank",
+              capabilities: { tools: true, input: ["text"], output: ["text"] },
+              request: { headers: {}, body: {} },
+              variants: [{ id: "high", settings: {}, headers: {}, body: {} }],
+              time: { released: 1 },
+              cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+              status: "active",
+              enabled: true,
+              limit: { context: 128000, output: 8192 },
+            },
+          ],
+        }) as never,
+    )
+    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+
+    const task = runInteractiveDeferredMode(
+      {
+        sdk,
+        directory: "/tmp",
+        resolveAgent: async () => "build",
+        session: async () => ({ id: "ses-resume", title: "Resume", resume: true }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+        thinking: false,
+        backgroundSubagents: false,
+      },
+      {
+        createRuntimeLifecycle: async () => {
+          lifecycleStarted.resolve()
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+      },
+    )
+
+    await lifecycleStarted.promise
+    expect(sdk.session.get).not.toHaveBeenCalled()
+    painted.resolve()
+    await task
+
+    expect(events).toContainEqual({
+      type: "history",
+      history: [{ text: "previous prompt", parts: [] }],
+    })
+    expect(events).toContainEqual({
+      type: "model",
+      model: "Little Frank · OpenAI · high",
+      selection: { providerID: "openai", modelID: "gpt-5" },
+    })
+  })
+
   test("waits for provider metadata before eager replay transport bootstrap", async () => {
     const providersStarted = defer<void>()
     const providers = defer<void>()
     const lifecycleModels: unknown[] = []
 
-    const sdk = new OpencodeClient()
-    const legacyProviders = spyOn(sdk.config, "providers").mockRejectedValue(new Error("legacy providers should stay unused"))
-    const legacyAgents = spyOn(sdk.app, "agents").mockRejectedValue(new Error("legacy agents should stay unused"))
-    const legacyCommands = spyOn(sdk.command, "list").mockRejectedValue(new Error("legacy commands should stay unused"))
-    spyOn(sdk.v2.provider, "list").mockImplementation(async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(sdk.provider, "list").mockImplementation(async () => {
       providersStarted.resolve()
       await providers.promise
       return ok({
@@ -142,55 +294,56 @@ describe("run interactive runtime", () => {
         ],
       }) as never
     })
-    spyOn(sdk.v2.model, "list").mockImplementation(() =>
-      ok({
-        location: {
-          directory: "/tmp",
-        },
-        data: [
-          {
-            id: "gpt-5",
-            providerID: "openai",
-            name: "Little Frank",
-            api: {
-              id: "openai",
-              type: "native",
-              settings: {},
-            },
-            capabilities: {
-              tools: true,
-              input: ["text"],
-              output: ["text"],
-            },
-            request: {
-              headers: {},
-              body: {},
-            },
-            variants: [],
-            time: {
-              released: 1,
-            },
-            cost: [
-              {
-                input: 0,
-                output: 0,
-                cache: {
-                  read: 0,
-                  write: 0,
-                },
-              },
-            ],
-            status: "active",
-            enabled: true,
-            limit: {
-              context: 128000,
-              output: 8192,
-            },
+    spyOn(sdk.model, "list").mockImplementation(
+      () =>
+        ok({
+          location: {
+            directory: "/tmp",
           },
-        ],
-      }) as never,
+          data: [
+            {
+              id: "gpt-5",
+              providerID: "openai",
+              name: "Little Frank",
+              api: {
+                id: "openai",
+                type: "native",
+                settings: {},
+              },
+              capabilities: {
+                tools: true,
+                input: ["text"],
+                output: ["text"],
+              },
+              request: {
+                headers: {},
+                body: {},
+              },
+              variants: [],
+              time: {
+                released: 1,
+              },
+              cost: [
+                {
+                  input: 0,
+                  output: 0,
+                  cache: {
+                    read: 0,
+                    write: 0,
+                  },
+                },
+              ],
+              status: "active",
+              enabled: true,
+              limit: {
+                context: 128000,
+                output: 8192,
+              },
+            },
+          ],
+        }) as never,
     )
-    spyOn(sdk.v2.session, "messages").mockImplementation(() =>
+    spyOn(sdk.message, "list").mockImplementation(() =>
       ok({
         data: [
           {
@@ -205,9 +358,9 @@ describe("run interactive runtime", () => {
         cursor: {},
       }),
     )
-    spyOn(sdk.v2.session, "get").mockImplementation(() =>
-      ok({
-        data: {
+    spyOn(sdk.session, "get").mockImplementation(
+      () =>
+        ok({
           id: "ses-1",
           projectID: "pro-1",
           title: "Session",
@@ -232,13 +385,12 @@ describe("run interactive runtime", () => {
             providerID: "openai",
             id: "gpt-5",
           },
-        },
-      }),
+        }) as never,
     )
-    spyOn(sdk.v2.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.v2.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.v2.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.v2.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
 
     const task = runInteractiveMode(
       {
@@ -296,13 +448,10 @@ describe("run interactive runtime", () => {
 
     expect(lifecycleModels).toEqual([{ providerID: "openai", modelID: "gpt-5" }])
     expect(transportProviders).toEqual([[provider]])
-    expect(legacyProviders).not.toHaveBeenCalled()
-    expect(legacyAgents).not.toHaveBeenCalled()
-    expect(legacyCommands).not.toHaveBeenCalled()
   })
 
   test("defers catalog-selected model resolution until after first paint", async () => {
-    const sdk = new OpencodeClient()
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const defaultStarted = defer<void>()
     const releaseDefault = defer<void>()
     const lifecycleStarted = defer<void>()
@@ -320,7 +469,7 @@ describe("run interactive runtime", () => {
       api.close()
     }
 
-    spyOn(sdk.v2.model, "default").mockImplementation(async () => {
+    spyOn(sdk.model, "default").mockImplementation(async () => {
       defaultRequested = true
       defaultStarted.resolve()
       await releaseDefault.promise
@@ -329,24 +478,12 @@ describe("run interactive runtime", () => {
         data: { id: "gpt-5", providerID: "openai" },
       }) as never
     })
-    spyOn(sdk.v2.provider, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
-    spyOn(sdk.v2.model, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
-    spyOn(sdk.v2.agent, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
-    spyOn(sdk.v2.reference, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
-    spyOn(sdk.v2.command, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
-    spyOn(sdk.v2.skill, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
+    spyOn(sdk.provider, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.model, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
 
     const task = runInteractiveMode(
       {
@@ -402,12 +539,12 @@ describe("run interactive runtime", () => {
   })
 
   test("does not start deferred work after the footer closes", async () => {
-    const sdk = new OpencodeClient()
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const lifecycleStarted = defer<void>()
     const painted = defer<void>()
     const api = footer()
     api.idle = () => painted.promise
-    const defaultModel = spyOn(sdk.v2.model, "default")
+    const defaultModel = spyOn(sdk.model, "default")
 
     const task = runInteractiveMode(
       {
@@ -444,8 +581,50 @@ describe("run interactive runtime", () => {
     expect(defaultModel).not.toHaveBeenCalled()
   })
 
+  test("searches files through the V2 file API", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const api = footer()
+    const find = spyOn(sdk.file, "find").mockImplementation(
+      () =>
+        ok({
+          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+          data: [{ path: "src/index.ts", type: "file" }],
+        }) as never,
+    )
+
+    await runInteractiveMode(
+      {
+        sdk,
+        directory: "/tmp",
+        sessionID: "ses-files",
+        resume: false,
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+        thinking: false,
+        backgroundSubagents: false,
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          await expect(input.findFiles("index")).resolves.toEqual(["src/index.ts"])
+          api.close()
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+      },
+    )
+
+    expect(find).toHaveBeenCalledWith({ query: "index", type: "file", location: { directory: "/tmp" } })
+  })
+
   test("retains last-known-good state across failed coalesced refreshes and retries later", async () => {
-    const sdk = new OpencodeClient()
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const refreshGate = defer<void>()
     let providerCalls = 0
     let modelCalls = 0
@@ -453,7 +632,7 @@ describe("run interactive runtime", () => {
     let referenceCalls = 0
     const events: FooterEvent[] = []
     const api = footer(events)
-    spyOn(sdk.v2.provider, "list").mockImplementation(async () => {
+    spyOn(sdk.provider, "list").mockImplementation(async () => {
       providerCalls++
       if (providerCalls === 2) {
         await refreshGate.promise
@@ -471,7 +650,7 @@ describe("run interactive runtime", () => {
         ],
       }) as never
     })
-    spyOn(sdk.v2.model, "list").mockImplementation(() => {
+    spyOn(sdk.model, "list").mockImplementation(() => {
       modelCalls++
       return ok({
         location: { directory: "/tmp" },
@@ -484,9 +663,7 @@ describe("run interactive runtime", () => {
             capabilities: { tools: true, input: ["text"], output: ["text"] },
             request: { headers: {}, body: {} },
             variants:
-              modelCalls >= 4
-                ? []
-                : [{ id: modelCalls >= 3 ? "high" : "low", settings: {}, headers: {}, body: {} }],
+              modelCalls >= 4 ? [] : [{ id: modelCalls >= 3 ? "high" : "low", settings: {}, headers: {}, body: {} }],
             time: { released: 1 },
             cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
             status: "active",
@@ -496,7 +673,7 @@ describe("run interactive runtime", () => {
         ],
       }) as never
     })
-    spyOn(sdk.v2.agent, "list").mockImplementation(async () => {
+    spyOn(sdk.agent, "list").mockImplementation(async () => {
       agentCalls++
       if (agentCalls === 2) throw new Error("agent refresh failed")
       return ok({
@@ -504,7 +681,7 @@ describe("run interactive runtime", () => {
         data: [{ id: "build", description: agentCalls >= 3 ? "Refreshed agent" : "Agent", mode: "primary" }],
       }) as never
     })
-    spyOn(sdk.v2.reference, "list").mockImplementation(() => {
+    spyOn(sdk.reference, "list").mockImplementation(() => {
       referenceCalls++
       return ok({
         location: { directory: "/tmp" },
@@ -513,12 +690,10 @@ describe("run interactive runtime", () => {
         ],
       }) as never
     })
-    spyOn(sdk.v2.command, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [{ name: "check", description: "Check" }] }) as never,
+    spyOn(sdk.command, "list").mockImplementation(
+      () => ok({ location: { directory: "/tmp" }, data: [{ name: "check", description: "Check" }] }) as never,
     )
-    spyOn(sdk.v2.skill, "list").mockImplementation(() =>
-      ok({ location: { directory: "/tmp" }, data: [] }) as never,
-    )
+    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
     let finalProviders: RunProvider[] = []
     let finalLimits: Record<string, number> = {}
     let retainedProviders: RunProvider[] = []

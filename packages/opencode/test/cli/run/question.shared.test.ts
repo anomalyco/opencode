@@ -10,7 +10,7 @@ import {
   questionStoreCustom,
   questionSubmit,
   questionSync,
-} from "@/cli/cmd/run/question.shared"
+} from "@opencode-ai/cli/mini/question.shared"
 
 function req(input: Partial<QuestionRequest> = {}): QuestionRequest {
   return {

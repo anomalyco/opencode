@@ -1,15 +1,17 @@
 import type {
-  OpencodeClient,
+  EventSubscribeOutput,
+  OpenCodeClient,
+} from "@opencode-ai/client/promise"
+import type {
   ReasoningPart,
   StepFinishPart,
   StepStartPart,
   TextPart,
   ToolPart,
-  V2Event,
 } from "@opencode-ai/sdk/v2"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
-import { MessageID } from "@/session/schema"
-import { UI } from "../../ui"
+import { UI } from "./ui"
 
 type Model = {
   providerID: string
@@ -23,7 +25,7 @@ type File = {
 }
 
 type Input = {
-  client: OpencodeClient
+  client: OpenCodeClient
   sessionID: string
   message: string
   files: File[]
@@ -52,6 +54,7 @@ type ToolState = StartedPart & {
   provider?: unknown
 }
 
+type V2Event = EventSubscribeOutput
 type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 
 // MCP elicitations are temporarily owned by the "global" sentinel instead of a real
@@ -61,16 +64,11 @@ const GLOBAL_FORM_SESSION_ID = "global"
 
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
-  const events = await input.client.v2.event.subscribe({
-    signal: controller.signal,
-    sseMaxRetryAttempts: 0,
-    throwOnError: true,
-  })
-  const stream = events.stream[Symbol.asyncIterator]() as AsyncGenerator<V2Event>
+  const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
   if (connected.done) throw new Error("Event stream disconnected before prompt admission")
 
-  const messageID = MessageID.ascending()
+  const messageID = SessionMessage.ID.create()
   const starts = new Map<string, StartedPart>()
   const tools = new Map<string, ToolState>()
   let submitted = false
@@ -101,7 +99,7 @@ export async function runNonInteractivePrompt(input: Input) {
     UI.empty()
   }
 
-  const replyPermission = async (request: { id: string; action: string; resources: string[] }) => {
+  const replyPermission = async (request: { id: string; action: string; resources: ReadonlyArray<string> }) => {
     if (!input.dangerouslySkipPermissions) {
       permissionRejected = true
       UI.println(
@@ -110,7 +108,7 @@ export async function runNonInteractivePrompt(input: Input) {
           `permission requested: ${request.action} (${request.resources.join(", ")}); auto-rejecting`,
       )
     }
-    await input.client.v2.session.permission
+    await input.client.permission
       .reply({
         sessionID: input.sessionID,
         requestID: request.id,
@@ -118,18 +116,18 @@ export async function runNonInteractivePrompt(input: Input) {
       })
       .catch(() => {})
     if (!input.dangerouslySkipPermissions) {
-      await input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     }
   }
 
   const rejectQuestion = async (request: { id: string }) => {
     questionRejected = true
-    await input.client.v2.session.question.reject({ sessionID: input.sessionID, requestID: request.id }).catch(() => {})
+    await input.client.question.reject({ sessionID: input.sessionID, requestID: request.id }).catch(() => {})
   }
 
   const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID">) => {
     formCancelled = true
-    await input.client.v2.session.form.cancel({ sessionID: request.sessionID, formID: request.id }).catch(() => {})
+    await input.client.form.cancel({ sessionID: request.sessionID, formID: request.id }).catch(() => {})
   }
 
   const consume = async () => {
@@ -156,7 +154,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
-      const time = toMillis(event.created)
+      const time = toMillis("created" in event ? event.created : undefined)
 
       if (event.type === "session.prompt.promoted") {
         if (event.data.inputID === messageID) {
@@ -367,34 +365,31 @@ export async function runNonInteractivePrompt(input: Input) {
     interrupted = true
     process.exitCode = 130
     admission?.abort()
-    void input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+    void input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
   }
   process.on("SIGINT", interrupt)
 
   let completed: Promise<void> | undefined
   try {
     if (input.agent) {
-      await input.client.v2.session.switchAgent(
-        { sessionID: input.sessionID, agent: input.agent },
-        { throwOnError: true },
-      )
+      await input.client.session.switchAgent({ sessionID: input.sessionID, agent: input.agent })
     }
     const selected = input.model
       ? { providerID: input.model.providerID, id: input.model.modelID, variant: input.variant }
       : input.variant
-        ? await input.client.v2.session
-            .get({ sessionID: input.sessionID }, { throwOnError: true })
-            .then((result) => result.data.data.model)
+        ? await input.client.session
+            .get({ sessionID: input.sessionID })
+            .then((result) => result.model)
             .then(async (model) => {
               if (model) return { ...model, variant: input.variant }
-              const result = await input.client.v2.model.default(undefined, { throwOnError: true })
-              const fallback = result.data.data
+              const result = await input.client.model.default()
+              const fallback = result.data
               return fallback ? { providerID: fallback.providerID, id: fallback.id, variant: input.variant } : undefined
             })
         : undefined
     if (input.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
     if (selected) {
-      await input.client.v2.session.switchModel({ sessionID: input.sessionID, model: selected }, { throwOnError: true })
+      await input.client.session.switchModel({ sessionID: input.sessionID, model: selected })
     }
 
     const prepared = await Promise.all(input.files.map(prepareFile))
@@ -402,7 +397,7 @@ export async function runNonInteractivePrompt(input: Input) {
     submitted = true
     completed = consume()
     admission = new AbortController()
-    const response = await input.client.v2.session
+    const response = await input.client.session
       .prompt(
         {
           sessionID: input.sessionID,
@@ -413,11 +408,11 @@ export async function runNonInteractivePrompt(input: Input) {
           },
           delivery: "steer",
         },
-        { throwOnError: true, signal: admission.signal },
+        { signal: admission.signal },
       )
       .catch(async (error) => {
         if (interrupted) {
-          await input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+          await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
         }
         controller.abort()
         await completed?.catch(() => {})
@@ -426,22 +421,21 @@ export async function runNonInteractivePrompt(input: Input) {
       })
     admission = undefined
     if (!response) return
-    if (!response.data.data) throw new Error("Prompt was not admitted")
-    if (interrupted) await input.client.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+    if (interrupted) await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
 
     const [permissions, questions, forms] = await Promise.all([
-      input.client.v2.session.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.v2.session.question.list({ sessionID: input.sessionID }).catch(() => undefined),
+      input.client.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
+      input.client.question.list({ sessionID: input.sessionID }).catch(() => undefined),
       Promise.all(
         (input.attached ? [input.sessionID] : [input.sessionID, GLOBAL_FORM_SESSION_ID]).map((sessionID) =>
-          input.client.v2.session.form.list({ sessionID }).catch(() => undefined),
+          input.client.form.list({ sessionID }).catch(() => undefined),
         ),
       ),
     ])
     await Promise.all([
-      ...(permissions?.data?.data ?? []).map(replyPermission),
-      ...(questions?.data?.data ?? []).map(rejectQuestion),
-      ...forms.flatMap((response) => response?.data?.data ?? []).map(cancelForm),
+      ...(permissions ?? []).map(replyPermission),
+      ...(questions ?? []).map(rejectQuestion),
+      ...forms.flatMap((response) => response ?? []).map(cancelForm),
     ])
     await completed
   } finally {

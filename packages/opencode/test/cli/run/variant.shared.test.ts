@@ -10,9 +10,9 @@ import {
   formatModelLabel,
   pickVariant,
   resolveVariant,
-} from "@/cli/cmd/run/variant.shared"
-import type { SessionMessages } from "@/cli/cmd/run/session.shared"
-import type { RunProvider } from "@/cli/cmd/run/types"
+} from "@opencode-ai/cli/mini/variant.shared"
+import type { SessionMessages } from "@opencode-ai/cli/mini/session.shared"
+import type { RunProvider } from "@opencode-ai/cli/mini/types"
 import { testEffect } from "../../lib/effect"
 
 const model = {

@@ -12,7 +12,7 @@ import { normalizePromptContent } from "@opencode-ai/tui/prompt/content"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
-import * as Locale from "@/util/locale"
+import { Locale } from "@opencode-ai/tui/util/locale"
 import {
   createPromptHistory,
   displayCharAt,
@@ -67,7 +67,7 @@ type PromptInput = {
   prompt: Accessor<boolean>
   width: Accessor<number>
   theme: Accessor<RunFooterTheme>
-  history?: RunPrompt[]
+  history?: Accessor<RunPrompt[]>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean
@@ -302,7 +302,10 @@ export function createPromptState(input: PromptInput): PromptState {
     return new StyledText([fg(input.theme().muted)('Ask anything... "Fix a TODO in the codebase"')])
   })
 
-  let history = createPromptHistory(input.history)
+  let history = createPromptHistory(input.history?.())
+  createEffect(() => {
+    history = createPromptHistory(input.history?.())
+  })
   let draft: RunPrompt = { text: "", parts: [] }
   let stash: RunPrompt = { text: "", parts: [] }
   let area: TextareaRenderable | undefined

@@ -25,7 +25,7 @@
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
 import type { Event, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import * as Locale from "@/util/locale"
+import { Locale } from "@opencode-ai/tui/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
 

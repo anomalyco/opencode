@@ -7,12 +7,10 @@
 // none block each other.
 import { Context, Effect, Layer } from "effect"
 import { resolve } from "@opencode-ai/tui/config"
-import { TuiConfig } from "@/config/tui"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
-import { makeRuntime } from "@/effect/run-service"
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { loadRunProviders } from "./catalog.shared"
-import { reusePendingTask } from "./runtime.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
@@ -30,7 +28,6 @@ export type SessionInfo = {
   variant: string | undefined
 }
 
-type Config = Awaited<ReturnType<typeof TuiConfig.get>>
 type BootService = {
   readonly resolveModelInfo: (
     sdk: RunInput["sdk"],
@@ -42,17 +39,9 @@ type BootService = {
     sessionID: string,
     model: RunInput["model"],
   ) => Effect.Effect<SessionInfo>
-  readonly resolveRunTuiConfig: () => Effect.Effect<RunTuiConfig>
-  readonly resolveDiffStyle: () => Effect.Effect<RunDiffStyle>
 }
-
-const configTask: { current?: Promise<Config> } = {}
 
 class Service extends Context.Service<Service, BootService>()("@opencode/RunBoot") {}
-
-function loadConfig() {
-  return reusePendingTask(configTask, () => TuiConfig.get())
-}
 
 function emptyModelInfo(): ModelInfo {
   return {
@@ -77,23 +66,9 @@ function defaultRunTuiConfig(): RunTuiConfig {
   }
 }
 
-function runTuiConfig(config: Config | undefined): RunTuiConfig {
-  if (!config) {
-    return defaultRunTuiConfig()
-  }
-
-  return {
-    keybinds: config.keybinds,
-    leader_timeout: config.leader_timeout,
-    diff_style: config.diff_style ?? "auto",
-  }
-}
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const config = Effect.fn("RunBoot.config")(() => Effect.promise(() => loadConfig().catch(() => undefined)))
-
     const resolveModelInfo = Effect.fn("RunBoot.resolveModelInfo")(function* (
       sdk: RunInput["sdk"],
       directory: string,
@@ -147,19 +122,9 @@ const layer = Layer.effect(
       }
     })
 
-    const resolveRunTuiConfig = Effect.fn("RunBoot.resolveRunTuiConfig")(function* () {
-      return runTuiConfig(yield* config())
-    })
-
-    const resolveDiffStyle = Effect.fn("RunBoot.resolveDiffStyle")(function* () {
-      return runTuiConfig(yield* config()).diff_style ?? "auto"
-    })
-
     return Service.of({
       resolveModelInfo,
       resolveSessionInfo,
-      resolveRunTuiConfig,
-      resolveDiffStyle,
     })
   }),
 )
@@ -190,10 +155,12 @@ export async function resolveSessionInfo(
 }
 
 // Reads TUI config once for direct mode keymap setup and display preferences.
-export async function resolveRunTuiConfig(): Promise<RunTuiConfig> {
-  return runtime.runPromise((svc) => svc.resolveRunTuiConfig()).catch(() => defaultRunTuiConfig())
+export async function resolveRunTuiConfig(
+  config?: RunTuiConfig | Promise<RunTuiConfig>,
+): Promise<RunTuiConfig> {
+  return Promise.resolve(config).then((value) => value ?? defaultRunTuiConfig()).catch(() => defaultRunTuiConfig())
 }
 
-export async function resolveDiffStyle(): Promise<RunDiffStyle> {
-  return runtime.runPromise((svc) => svc.resolveDiffStyle()).catch(() => "auto")
+export async function resolveDiffStyle(config?: RunTuiConfig | Promise<RunTuiConfig>): Promise<RunDiffStyle> {
+  return resolveRunTuiConfig(config).then((value) => value.diff_style ?? "auto")
 }

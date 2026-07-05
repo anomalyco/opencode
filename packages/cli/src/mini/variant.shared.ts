@@ -12,9 +12,8 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
-import { makeRuntime } from "@/effect/run-service"
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Global } from "@opencode-ai/core/global"
-import { isRecord } from "@/util/record"
 import { createSession, sessionVariant, type RunSession, type SessionMessages } from "./session.shared"
 import type { RunInput, RunProvider } from "./types"
 
@@ -30,6 +29,10 @@ type VariantService = {
 type VariantRuntime = {
   resolveSavedVariant(model: RunInput["model"]): Promise<string | undefined>
   saveVariant(model: RunInput["model"], variant: string | undefined): Promise<void>
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
 class Service extends Context.Service<Service, VariantService>()("@opencode/RunVariant") {}

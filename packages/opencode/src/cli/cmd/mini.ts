@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { UI } from "@/cli/ui"
 import { resolveThreadDirectory } from "./tui"
+import { v2ServerCommand } from "./v2-server-command"
 
 type ReplayArgs = {
   replay?: boolean
@@ -102,7 +103,8 @@ export const MiniLocalCommand = cmd<{}, MiniLocalArgs>({
     const shouldReplay = replay(args)
     if (shouldReplay === "invalid") return
 
-    const { runMini } = await import("./run")
+    const { runMini } = await import("@opencode-ai/cli/mini")
+    const { TuiConfig } = await import("@/config/tui")
     await runMini({
       directory: resolveThreadDirectory(args.project),
       continue: args.continue,
@@ -114,6 +116,8 @@ export const MiniLocalCommand = cmd<{}, MiniLocalArgs>({
       replay: shouldReplay,
       replayLimit: args.replayLimit,
       demo: args.demo,
+      serverCommand: v2ServerCommand(),
+      tuiConfig: TuiConfig.get(),
     })
   },
 })
@@ -149,7 +153,8 @@ export const MiniAttachCommand = cmd<{}, MiniAttachArgs>({
     const shouldReplay = replay(args)
     if (shouldReplay === "invalid") return
 
-    const { runMini } = await import("./run")
+    const { runMini } = await import("@opencode-ai/cli/mini")
+    const { TuiConfig } = await import("@/config/tui")
     await runMini({
       attach: args.url,
       directory: args.dir,
@@ -160,6 +165,8 @@ export const MiniAttachCommand = cmd<{}, MiniAttachArgs>({
       fork: args.fork,
       replay: shouldReplay,
       replayLimit: args.replayLimit,
+      serverCommand: v2ServerCommand(),
+      tuiConfig: TuiConfig.get(),
     })
   },
 })

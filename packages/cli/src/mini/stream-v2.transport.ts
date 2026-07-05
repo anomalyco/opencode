@@ -1,13 +1,13 @@
 import type {
-  OpencodeClient,
+  EventSubscribeOutput,
+  OpenCodeClient,
+} from "@opencode-ai/client/promise"
+import type {
   PermissionRequest,
-  PermissionV2Request,
   QuestionRequest,
-  QuestionV2Request,
   SessionMessage,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
-  V2Event,
 } from "@opencode-ai/sdk/v2"
 import { Event } from "@opencode-ai/schema/event"
 import { blockerStatus, pickBlockerView } from "./session-data"
@@ -31,7 +31,7 @@ type Trace = {
 }
 
 type StreamInput = {
-  sdk: OpencodeClient
+  sdk: OpenCodeClient
   directory?: string
   sessionID: string
   thinking: boolean
@@ -90,7 +90,9 @@ type ShellWait = {
   abort: () => void
 }
 
-type RunV2Event = V2Event
+type RunV2Event = EventSubscribeOutput
+type PermissionV2Request = Extract<RunV2Event, { type: "permission.v2.asked" }>["data"]
+type QuestionV2Request = Extract<RunV2Event, { type: "question.v2.asked" }>["data"]
 type PromptFilePart = Extract<RunPromptPart, { type: "file" }>
 
 type ToolState = {
@@ -144,9 +146,9 @@ function permission(request: PermissionV2Request): PermissionRequest {
     id: request.id,
     sessionID: request.sessionID,
     permission: request.action,
-    patterns: request.resources,
+    patterns: [...request.resources],
     metadata: request.metadata ?? {},
-    always: request.save ?? [],
+    always: [...(request.save ?? [])],
     tool: request.source?.type === "tool" ? request.source : undefined,
   }
 }
@@ -155,7 +157,7 @@ function question(request: QuestionV2Request): QuestionRequest {
   return {
     id: request.id,
     sessionID: request.sessionID,
-    questions: request.questions,
+    questions: request.questions.map((item) => ({ ...item, options: item.options.map((option) => ({ ...option })) })),
     tool: request.tool,
   }
 }
@@ -303,14 +305,14 @@ async function resolveSelectedModel(input: StreamInput, next: Pick<SessionTurnIn
   if (next.model) return { providerID: next.model.providerID, id: next.model.modelID, variant: next.variant }
   if (!next.variant) return
 
-  const session = await input.sdk.v2.session
-    .get({ sessionID: input.sessionID }, { throwOnError: true, signal: next.signal })
-    .then((response) => response.data.data.model)
+  const session = await input.sdk.session
+    .get({ sessionID: input.sessionID }, { signal: next.signal })
+    .then((response) => response.model)
   if (session) return { ...session, variant: next.variant }
 
-  const fallback = await input.sdk.v2.model
-    .default(undefined, { throwOnError: true, signal: next.signal })
-    .then((response) => response.data.data)
+  const fallback = await input.sdk.model
+    .default(undefined, { signal: next.signal })
+    .then((response) => response.data)
   if (!fallback) return
   return { providerID: fallback.providerID, id: fallback.id, variant: next.variant }
 }
@@ -532,21 +534,18 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const hydrate = async (next: { render: boolean; reuseVisibleWait: boolean }) => {
     const [messages, permissions, questions, active] = await Promise.all([
-      input.sdk.v2.session.messages(
-        { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
-        { throwOnError: true },
-      ),
-      input.sdk.v2.session.permission.list({ sessionID: input.sessionID }, { throwOnError: true }),
-      input.sdk.v2.session.question.list({ sessionID: input.sessionID }, { throwOnError: true }),
-      input.sdk.v2.session.active({ throwOnError: true }),
+      input.sdk.message.list({ sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" }),
+      input.sdk.permission.list({ sessionID: input.sessionID }),
+      input.sdk.question.list({ sessionID: input.sessionID }),
+      input.sdk.session.active(),
     ])
-    const projected = messages.data.data.toReversed()
+    const projected = structuredClone(messages.data).toReversed() as SessionMessage[]
     for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
-    state.permissions = permissions.data.data.map(permission)
-    state.questions = questions.data.data.map(question)
+    state.permissions = permissions.map(permission)
+    state.questions = questions.map(question)
     syncBlockers()
-    await subagents.hydrate({ messages: projected, active: active.data.data })
-    const running = input.sessionID in active.data.data
+    await subagents.hydrate({ messages: [...projected], active: active.data })
+    const running = input.sessionID in active.data
     write([], { phase: running ? "running" : "idle", status: running ? "assistant responding" : "" })
     if (!running && state.wait && (state.wait.promoted || state.wait.interrupted)) {
       const current = state.wait
@@ -721,14 +720,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (event.type === "session.tool.called") {
       if (state.finishedTools.has(event.data.callID)) return
       const current = state.tools.get(event.data.callID)
-      const item: SessionMessageAssistantTool = {
+      const item = structuredClone({
         type: "tool",
         id: event.data.callID,
         name: event.data.tool,
         provider: event.data.provider,
         state: { status: "running", input: event.data.input, structured: {}, content: [] },
         time: { created: current?.started ?? event.created, ran: event.created },
-      }
+      }) as SessionMessageAssistantTool
       renderTool(event.data.assistantMessageID, item)
       return
     }
@@ -736,7 +735,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
       const current = state.tools.get(event.data.callID)
       const failed = event.type === "session.tool.failed"
-      const item: SessionMessageAssistantTool = {
+      const item = structuredClone({
         type: "tool",
         id: event.data.callID,
         name: current?.name ?? "tool",
@@ -759,7 +758,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               result: event.data.result,
             },
         time: { created: current?.started ?? event.created, ran: current?.started, completed: event.created },
-      }
+      }) as SessionMessageAssistantTool
       renderTool(event.data.assistantMessageID, item)
       return
     }
@@ -838,12 +837,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         const connection = new AbortController()
         const abortConnection = () => connection.abort()
         controller.signal.addEventListener("abort", abortConnection, { once: true })
-        const response = await input.sdk.v2.event.subscribe({
-          signal: connection.signal,
-          sseMaxRetryAttempts: 0,
-          throwOnError: true,
-        })
-        const stream = response.stream[Symbol.asyncIterator]() as AsyncGenerator<RunV2Event>
+        const stream = input.sdk.event.subscribe({ signal: connection.signal })[Symbol.asyncIterator]()
         try {
           const first = await stream.next()
           if (first.done || first.value.type !== "server.connected") throw new Error("Event stream disconnected")
@@ -910,9 +904,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     input.trace?.write("send.shell", { sessionID: input.sessionID, id: eventID, command: next.prompt.text })
     write([], { phase: "running", status: "running shell" })
     try {
-      await input.sdk.v2.session.shell(
+      await input.sdk.session.shell(
         { sessionID: input.sessionID, id: eventID, command: next.prompt.text },
-        { throwOnError: true, signal: abort.signal },
+        { signal: abort.signal },
       )
       await Promise.race([output, wait(SHELL_OUTPUT_GRACE_MS, abort.signal)])
     } catch (error) {
@@ -950,7 +944,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.wait = active
     const interrupt = () => {
       active.interrupted = true
-      void input.sdk.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      void input.sdk.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     }
     next.signal?.addEventListener("abort", interrupt, { once: true })
     try {
@@ -981,9 +975,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         input.trace?.write("send.skill", { sessionID: input.sessionID, messageID, skill: command.name })
         await runTurnWait(next, messageID, {
           send: () =>
-            input.sdk.v2.session.skill(
+            input.sdk.session.skill(
               { sessionID: input.sessionID, id: messageID, skill: command.name },
-              { throwOnError: true, signal: next.signal },
+              { signal: next.signal },
             ),
         })
         return
@@ -1001,7 +995,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name })
         await runTurnWait(next, messageID, {
           send: () =>
-            input.sdk.v2.session.command(
+            input.sdk.session.command(
               {
                 sessionID: input.sessionID,
                 id: messageID,
@@ -1013,24 +1007,24 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
                 agents: agents.length ? agents : undefined,
                 delivery: "steer",
               },
-              { throwOnError: true, signal: next.signal },
+              { signal: next.signal },
             ),
         })
         return
       }
 
       if (next.agent) {
-        await input.sdk.v2.session.switchAgent(
+        await input.sdk.session.switchAgent(
           { sessionID: input.sessionID, agent: next.agent },
-          { throwOnError: true, signal: next.signal },
+          { signal: next.signal },
         )
       }
       const selected = await resolveSelectedModel(input, next)
       if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
       if (selected)
-        await input.sdk.v2.session.switchModel(
+        await input.sdk.session.switchModel(
           { sessionID: input.sessionID, model: selected },
-          { throwOnError: true, signal: next.signal },
+          { signal: next.signal },
         )
 
       const prepared = await Promise.all((next.includeFiles ? next.files : []).map(prepareFile))
@@ -1042,7 +1036,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID })
       await runTurnWait(next, messageID, {
         send: () =>
-          input.sdk.v2.session.prompt(
+          input.sdk.session.prompt(
             {
               sessionID: input.sessionID,
               id: messageID,
@@ -1053,7 +1047,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               },
               delivery: "steer",
             },
-            { throwOnError: true, signal: next.signal },
+            { signal: next.signal },
           ),
       })
     },
@@ -1067,7 +1061,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (state.wait) state.wait.interrupted = true
-      await input.sdk.v2.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      await input.sdk.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     },
     selectSubagent(sessionID) {
       subagents.select(sessionID)

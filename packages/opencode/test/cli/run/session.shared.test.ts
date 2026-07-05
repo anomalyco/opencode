@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient } from "@opencode-ai/sdk/v2"
+import { OpenCode } from "@opencode-ai/client/promise"
 import {
   createSession,
   resolveCurrentSession,
@@ -7,7 +7,7 @@ import {
   sessionVariant,
   type RunSession,
   type SessionMessages,
-} from "@/cli/cmd/run/session.shared"
+} from "@opencode-ai/cli/mini/session.shared"
 
 type Message = SessionMessages[number]
 type Part = Message["parts"][number]
@@ -252,11 +252,10 @@ describe("run session shared", () => {
   })
 
   test("restores current prompt history from stored text and file references", async () => {
-    const client = new OpencodeClient()
-    spyOn(client.v2.session, "messages").mockImplementation(() =>
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.message, "list").mockImplementation(() =>
       Promise.resolve({
-        data: {
-          data: [
+        data: [
             {
               id: "msg_prompt",
               type: "user",
@@ -272,32 +271,20 @@ describe("run session shared", () => {
               agents: [],
               time: { created: 1 },
             },
-          ],
-          cursor: {},
-        },
-        error: undefined,
-        request: new Request("https://opencode.test"),
-        response: new Response(),
+        ],
+        cursor: {},
       }),
     )
-    spyOn(client.v2.session, "get").mockImplementation(() =>
+    spyOn(client.session, "get").mockImplementation(() =>
       Promise.resolve({
-        data: {
-          data: {
-            id: "ses_1",
-            title: "Session",
-            version: "dev",
-            projectID: "proj_1",
-            location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
-            time: { created: 1, updated: 1 },
-            cost: 0,
-            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-            model: { providerID: "openai", id: "gpt-5", variant: "high" },
-          },
-        },
-        error: undefined,
-        request: new Request("https://opencode.test"),
-        response: new Response(),
+        id: "ses_1",
+        title: "Session",
+        projectID: "proj_1",
+        location: { directory: "/tmp" },
+        time: { created: 1, updated: 1 },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        model: { providerID: "openai", id: "gpt-5", variant: "high" },
       }),
     )
 

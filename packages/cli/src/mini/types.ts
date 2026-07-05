@@ -11,7 +11,8 @@
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
-import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { OpenCodeClient, ReferenceListOutput } from "@opencode-ai/client/promise"
+import type { FilePart, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import type { TuiConfig } from "@opencode-ai/tui/config"
 
 export type RunFilePart = {
@@ -21,10 +22,17 @@ export type RunFilePart = {
   mime: string
 }
 
-type PromptModel = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
-type PromptInput = Parameters<OpencodeClient["session"]["prompt"]>[0]
+type PromptModel = { providerID: string; modelID: string }
 
-export type RunPromptPart = NonNullable<PromptInput["parts"]>[number]
+export type RunPromptPart =
+  | {
+      type: "file"
+      url: string
+      filename?: string
+      mime?: string
+      source?: FilePart["source"]
+    }
+  | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
 
 export type RunCommand = {
   name: string
@@ -111,12 +119,10 @@ export type RunAgent = {
   hidden: boolean
 }
 
-export type RunReference = NonNullable<
-  Awaited<ReturnType<OpencodeClient["v2"]["reference"]["list"]>>["data"]
->["data"][number]
+export type RunReference = ReferenceListOutput["data"][number]
 
 export type RunInput = {
-  sdk: OpencodeClient
+  sdk: OpenCodeClient
   directory: string
   sessionID: string
   sessionTitle?: string
@@ -283,6 +289,10 @@ export type FooterOutput = {
 // internal signals directly.
 export type FooterEvent =
   | {
+      type: "history"
+      history: RunPrompt[]
+    }
+  | {
       type: "catalog"
       agents: RunAgent[]
       references: RunReference[]
@@ -342,11 +352,14 @@ export type FooterEvent =
       state: FooterSubagentState
     }
 
-export type PermissionReply = Parameters<OpencodeClient["permission"]["reply"]>[0]
+export type PermissionReply = Omit<Parameters<OpenCodeClient["permission"]["reply"]>[0], "sessionID">
 
-export type QuestionReply = Parameters<OpencodeClient["question"]["reply"]>[0]
+export type QuestionReply = {
+  requestID: string
+  answers: string[][]
+}
 
-export type QuestionReject = Parameters<OpencodeClient["question"]["reject"]>[0]
+export type QuestionReject = Omit<Parameters<OpenCodeClient["question"]["reject"]>[0], "sessionID">
 
 export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style">
 

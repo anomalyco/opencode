@@ -8,8 +8,9 @@
 // and tracks per-turn wall-clock duration for the footer status line.
 //
 // Resolves when the footer closes and all in-flight work finishes.
-import * as Locale from "@/util/locale"
-import { MessageID, PartID } from "@/session/schema"
+import { ascending } from "@opencode-ai/schema/identifier"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Locale } from "@opencode-ai/tui/util/locale"
 import { isExitCommand, isNewCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, FooterQueuedPrompt, RunPrompt } from "./types"
 
@@ -167,7 +168,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               ? prompt
               : {
                   ...prompt,
-                  messageID: prompt.messageID ?? queued?.messageID ?? MessageID.ascending(),
+                  messageID: prompt.messageID ?? queued?.messageID ?? SessionMessage.ID.create(),
                 }
           state.active = sent
 
@@ -285,8 +286,8 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       !isNewCommand(prompt.text)
     ) {
       const queued: FooterQueuedPrompt = {
-        messageID: MessageID.ascending(),
-        partID: PartID.ascending(),
+        messageID: SessionMessage.ID.create(),
+        partID: "prt_" + ascending(),
         prompt,
       }
       state.queued = [...state.queued, queued]

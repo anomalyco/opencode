@@ -85,6 +85,15 @@ describe("tui thread", () => {
     }),
   )
 
+  cliIt.live("rejects standalone Mini mode", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["mini", "--standalone"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).not.toContain("opencode mini requires a TTY stdout")
+    }),
+  )
+
   cliIt.live("routes local sessions through mini", ({ opencode }) =>
     Effect.gen(function* () {
       const result = yield* opencode.spawn(["mini"])

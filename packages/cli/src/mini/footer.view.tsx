@@ -88,7 +88,7 @@ type RunFooterViewProps = {
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
   backgroundSubagents: boolean
-  history?: RunPrompt[]
+  history?: () => RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
   onPermissionReply: (input: PermissionReply) => void | Promise<void>

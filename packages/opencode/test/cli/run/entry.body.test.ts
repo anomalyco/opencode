@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
-import { entryBody, entryCanStream, entryDone } from "@/cli/cmd/run/entry.body"
-import type { StreamCommit, ToolSnapshot } from "@/cli/cmd/run/types"
+import { entryBody, entryCanStream, entryDone } from "@opencode-ai/cli/mini/entry.body"
+import type { StreamCommit, ToolSnapshot } from "@opencode-ai/cli/mini/types"
 
 function commit(input: Partial<StreamCommit> & Pick<StreamCommit, "kind" | "text" | "phase" | "source">): StreamCommit {
   return input

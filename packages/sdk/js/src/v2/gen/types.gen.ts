@@ -15546,6 +15546,8 @@ export type V2HealthGetResponses = {
    */
   200: {
     healthy: true
+    version: string
+    pid: number
   }
 }
 

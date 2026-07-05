@@ -15,14 +15,9 @@
 // Per-child interruption uses `v2.session.interrupt(childID)`. Per-child
 // backgrounding is intentionally absent: subagent jobs block the parent
 // session, so only whole-session `v2.session.background(parentID)` exists.
-import type {
-  OpencodeClient,
-  SessionMessage,
-  SessionMessageAssistantTool,
-  ToolPart,
-  V2Event,
-} from "@opencode-ai/sdk/v2"
-import { Locale } from "@/util/locale"
+import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
+import type { SessionMessage, SessionMessageAssistantTool, ToolPart } from "@opencode-ai/sdk/v2"
+import { Locale } from "@opencode-ai/tui/util/locale"
 import type { FooterSubagentDetail, FooterSubagentState, FooterSubagentTab, StreamCommit } from "./types"
 
 const CHILD_MESSAGE_LIMIT = 80
@@ -30,6 +25,8 @@ const CHILD_FRAME_LIMIT = 80
 const CHILD_EVENT_BUFFER_LIMIT = 64
 const FAMILY_LIST_LIMIT = 100
 const FALLBACK_LABEL = "Subagent"
+
+type V2Event = EventSubscribeOutput
 
 export function outputText(content: ReadonlyArray<{ type: string; text?: string }>) {
   return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
@@ -165,7 +162,7 @@ type ChildState = {
 }
 
 export type SubagentTrackerInput = {
-  sdk: OpencodeClient
+  sdk: OpenCodeClient
   sessionID: string
   thinking: boolean
   emit: () => void
@@ -390,8 +387,8 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     const pendingPrompts = new Map(child.prompts)
     const pendingTools = new Map(child.tools)
     let retry = false
-    const task = input.sdk.v2.session
-      .messages({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" }, { throwOnError: true })
+    const task = input.sdk.message
+      .list({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" })
       .then((response) => {
         const buffered = hydrationEvents.get(child.sessionID) ?? []
         hydrationEvents.delete(child.sessionID)
@@ -404,7 +401,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         for (const [id, prompt] of pendingPrompts) {
           if (!child.prompts.has(id)) child.prompts.set(id, prompt)
         }
-        rebuild(child, response.data.data.toReversed())
+        rebuild(child, structuredClone(response.data).toReversed() as SessionMessage[])
         for (const [id, tool] of pendingTools) {
           if (!child.finishedTools.has(id) && !child.tools.has(id)) child.tools.set(id, tool)
         }
@@ -428,10 +425,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     if (checked.has(sessionID) || children.has(sessionID) || sessionID === input.sessionID) return
     checked.add(sessionID)
     if (!pendingEvents.has(sessionID)) pendingEvents.set(sessionID, [])
-    void input.sdk.v2.session
-      .get({ sessionID }, { throwOnError: true })
-      .then((response) => {
-        const session = response.data.data
+    void input.sdk.session
+      .get({ sessionID })
+      .then((session) => {
         const buffered = pendingEvents.get(sessionID) ?? []
         pendingEvents.delete(sessionID)
         if (session.parentID !== input.sessionID) return
@@ -558,14 +554,14 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       })
       childTool(
         child,
-        {
+        structuredClone({
           type: "tool",
           id: event.data.callID,
           name: event.data.tool,
           provider: event.data.provider,
           state: { status: "running", input: event.data.input, structured: {}, content: [] },
           time: { created: current?.started ?? event.created, ran: event.created },
-        },
+        }) as SessionMessageAssistantTool,
         event.data.assistantMessageID,
       )
       touch(child, event.created)
@@ -578,7 +574,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       const failed = event.type === "session.tool.failed"
       childTool(
         child,
-        {
+        structuredClone({
           type: "tool",
           id: event.data.callID,
           name: current?.name ?? "tool",
@@ -605,7 +601,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             ran: current?.started,
             completed: event.created,
           },
-        },
+        }) as SessionMessageAssistantTool,
         event.data.assistantMessageID,
       )
       touch(child, event.created)
@@ -697,9 +693,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       }
       // Family index: adopt children directly from the current session list so
       // historical subagents beyond the projected message window still get tabs.
-      const family = await input.sdk.v2.session
-        .list({ parentID: input.sessionID, limit: FAMILY_LIST_LIMIT, order: "desc" }, { throwOnError: true })
-        .then((response) => response.data.data)
+      const family = await input.sdk.session
+        .list({ parentID: input.sessionID, limit: FAMILY_LIST_LIMIT, order: "desc" })
+        .then((response) => response.data)
         .catch(() => [])
       for (const session of family) {
         const child = ensureChild(session.id)

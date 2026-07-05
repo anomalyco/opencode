@@ -4,7 +4,7 @@
 // and prompt queue together into a single session loop. Two entry points:
 //
 //   runInteractiveMode     -- used when an SDK client already exists (attach mode)
-//   runInteractiveLocalMode -- used for local in-process mode (no server)
+//   runInteractiveDeferredMode -- paints before resolving its session
 //
 // Both delegate to runInteractiveRuntime, which:
 //   1. resolves TUI config, model info, and session history,
@@ -12,15 +12,22 @@
 //   3. starts the stream transport (SDK event subscription), lazily for fresh
 //      local sessions,
 //   4. runs the prompt queue until the footer closes.
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { MessageID } from "@/session/schema"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { loadRunAgents, loadRunCommands, loadRunReferences, waitForDefaultModel } from "./catalog.shared"
 import { resolveModelInfo, resolveModelInfoStrict, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
-import type { LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
+import type {
+  LocalReplayAnchor,
+  LocalReplayRow,
+  RunInput,
+  RunPrompt,
+  RunProvider,
+  RunTuiConfig,
+  StreamCommit,
+} from "./types"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -44,9 +51,7 @@ type CreateSession = (sdk: RunInput["sdk"], input: CreateSessionInput) => Promis
 type RunRuntimeInput = {
   boot: () => Promise<BootContext>
   afterPaint?: (ctx: BootContext) => Promise<void> | void
-  resolveSession?: (
-    ctx: BootContext,
-  ) => Promise<{ sessionID: string; sessionTitle?: string; agent?: string | undefined }>
+  resolveSession?: (ctx: BootContext) => Promise<ResolvedSession>
   createSession?: (ctx: BootContext, input: CreateSessionInput) => Promise<ResolvedSession>
   files: RunInput["files"]
   initialInput?: string
@@ -55,13 +60,14 @@ type RunRuntimeInput = {
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
+  tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
 }
 
-type RunLocalInput = {
+type RunDeferredInput = {
+  sdk: RunInput["sdk"]
   directory: string
-  fetch: typeof globalThis.fetch
   resolveAgent: () => Promise<string | undefined>
-  session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string } | undefined>
+  session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string; resume?: boolean } | undefined>
   createSession?: CreateSession
   agent: RunInput["agent"]
   model: RunInput["model"]
@@ -73,6 +79,7 @@ type RunLocalInput = {
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
+  tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
 }
 
 type StreamTransportModule = Pick<
@@ -96,6 +103,7 @@ type ResolvedSession = {
   sessionID: string
   sessionTitle?: string
   agent?: string | undefined
+  resume?: boolean
 }
 
 function createSessionResolver(fn?: CreateSession) {
@@ -165,9 +173,9 @@ async function resolveExitTitle(
     return undefined
   }
 
-  return ctx.sdk.v2.session
+  return ctx.sdk.session
     .get({ sessionID: state.sessionID })
-    .then((x) => x.data?.data.title)
+    .then((session) => session.title)
     .catch(() => undefined)
 }
 
@@ -180,7 +188,7 @@ async function resolveExitTitle(
 async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDeps = {}): Promise<void> {
   const start = performance.now()
   const log = trace()
-  const tuiConfigTask = resolveRunTuiConfig()
+  const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig)
   const ctx = await input.boot()
   const sessionTask =
     ctx.resume === true
@@ -247,9 +255,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const shell = await (deps.createRuntimeLifecycle ?? createRuntimeLifecycle)({
     directory: ctx.directory,
     findFiles: (query) =>
-      ctx.sdk.find
-        .files({ query, directory: ctx.directory })
-        .then((x) => x.data ?? [])
+      ctx.sdk.file
+        .find({ query, type: "file", location: { directory: ctx.directory } })
+        .then((result) => result.data.map((file) => file.path))
         .catch(() => []),
     agents: [],
     references: [],
@@ -257,7 +265,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     sessionTitle: state.sessionTitle,
     getSessionID: () => state.sessionID,
     first: session.first,
-    history: session.history,
+    history: state.history,
     agent: state.agent,
     model: state.model,
     variant: state.activeVariant,
@@ -269,17 +277,17 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       log?.write("send.permission.reply", next)
-      await ctx.sdk.v2.session.permission.reply({ sessionID: state.sessionID, ...next })
+      await ctx.sdk.permission.reply({ sessionID: state.sessionID, ...next })
     },
     onQuestionReply: async (next) => {
       if (state.demo?.questionReply(next)) {
         return
       }
 
-      await ctx.sdk.v2.session.question.reply({
+      await ctx.sdk.question.reply({
         sessionID: state.sessionID,
         requestID: next.requestID,
-        questionV2Reply: { answers: next.answers ?? [] },
+        answers: next.answers ?? [],
       })
     },
     onQuestionReject: async (next) => {
@@ -287,7 +295,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         return
       }
 
-      await ctx.sdk.v2.session.question.reject({ sessionID: state.sessionID, ...next })
+      await ctx.sdk.question.reject({ sessionID: state.sessionID, ...next })
     },
     onCycleVariant: () => {
       if (!state.model || state.variants.length === 0) {
@@ -369,7 +377,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       void (
         state.stream
           ? state.stream.then((item) => item.handle.interruptActiveTurn())
-          : ctx.sdk.v2.session.interrupt({ sessionID: state.sessionID })
+          : ctx.sdk.session.interrupt({ sessionID: state.sessionID })
       )
         .catch(() => {})
         .finally(() => {
@@ -383,11 +391,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       log?.write("send.background", { sessionID: state.sessionID })
-      void ctx.sdk.v2.session.background({ sessionID: state.sessionID }).catch(() => {})
+      void ctx.sdk.session.background({ sessionID: state.sessionID }).catch(() => {})
     },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
-      void ctx.sdk.v2.session.interrupt({ sessionID }).catch(() => {})
+      void ctx.sdk.session.interrupt({ sessionID }).catch(() => {})
     },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)
@@ -398,7 +406,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   })
   const footer = shell.footer
   const firstPaint = footer.idle().catch(() => {})
-  const modelTask = firstPaint.then(() => (footer.isClosed ? undefined : loadModel()))
   const ensureSession = () => {
     if (!input.resolveSession || state.sessionID) {
       return Promise.resolve()
@@ -408,13 +415,33 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       return state.session
     }
 
-    state.session = input.resolveSession(ctx).then((next) => {
+    state.session = input.resolveSession(ctx).then(async (next) => {
       state.sessionID = next.sessionID
       state.sessionTitle = next.sessionTitle ?? state.sessionTitle
       state.agent = next.agent
+      if (!next.resume) return
+      const resumed = await resolveSessionInfo(ctx.sdk, next.sessionID, ctx.model)
+      session.first = resumed.first
+      session.history = resumed.history
+      session.model = resumed.model
+      session.variant = resumed.variant
+      state.shown = !resumed.first
+      state.history = [...resumed.history]
+      state.model = ctx.model ?? resumed.model
+      const resumedSavedVariant = state.model ? await resolveSavedVariant(state.model) : undefined
+      state.activeVariant = resolveVariant(ctx.variant, resumed.variant, resumedSavedVariant, [])
+      session.variant = state.activeVariant
+      footer.event({ type: "history", history: resumed.history })
+      footer.event({ type: "first", first: resumed.first })
     })
     return state.session
   }
+  const modelTask = firstPaint.then(async () => {
+    if (footer.isClosed) return
+    await ensureSession()
+    if (footer.isClosed) return
+    return loadModel()
+  })
   const rememberLocal = (commit: StreamCommit, after?: LocalReplayAnchor) => {
     state.localRows = [...state.localRows, { commit, after }].slice(-LOCAL_REPLAY_ROW_LIMIT)
   }
@@ -640,6 +667,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const runQueue = async () => {
     await firstPaint
     if (footer.isClosed) return
+    await ensureSession()
+    if (footer.isClosed) return
+    await modelTask
+    if (footer.isClosed) return
     let includeFiles = true
     if (state.demo) {
       await state.demo.start()
@@ -728,7 +759,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                 text: error instanceof Error ? error.message : String(error),
                 phase: "start",
                 source: "system",
-                messageID: MessageID.ascending(),
+                messageID: SessionMessage.ID.create(),
               } as const
               rememberLocal(commit)
               footer.append(commit)
@@ -834,61 +865,62 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   }
 }
 
-// Local in-process mode. Creates an SDK client backed by a direct fetch to
-// the in-process server, so no external HTTP server is needed.
-export async function runInteractiveLocalMode(input: RunLocalInput): Promise<void> {
-  const sdk = createOpencodeClient({
-    baseUrl: "http://opencode.internal",
-    fetch: input.fetch,
-    directory: input.directory,
-  })
+// Deferred mode paints before session resolution. The caller may back the
+// generated client with a transport that is still acquiring a daemon.
+export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?: RunRuntimeDeps): Promise<void> {
+  const sdk = input.sdk
   let session: Promise<ResolvedSession> | undefined
 
-  return runInteractiveRuntime({
-    files: input.files,
-    initialInput: input.initialInput,
-    thinking: input.thinking,
-    backgroundSubagents: input.backgroundSubagents,
-    replay: input.replay,
-    replayLimit: input.replayLimit,
-    demo: input.demo,
-    resolveSession: () => {
-      if (session) {
+  return runInteractiveRuntime(
+    {
+      files: input.files,
+      initialInput: input.initialInput,
+      thinking: input.thinking,
+      backgroundSubagents: input.backgroundSubagents,
+      replay: input.replay,
+      replayLimit: input.replayLimit,
+      demo: input.demo,
+      tuiConfig: input.tuiConfig,
+      resolveSession: () => {
+        if (session) {
+          return session
+        }
+
+        session = Promise.all([input.resolveAgent(), input.session(sdk)]).then(([agent, next]) => {
+          if (!next?.id) {
+            throw new Error("Session not found")
+          }
+
+          return {
+            sessionID: next.id,
+            sessionTitle: next.title,
+            agent,
+            resume: next.resume,
+          }
+        })
         return session
-      }
-
-      session = Promise.all([input.resolveAgent(), input.session(sdk)]).then(([agent, next]) => {
-        if (!next?.id) {
-          throw new Error("Session not found")
-        }
-
+      },
+      createSession: createSessionResolver(input.createSession),
+      boot: async () => {
         return {
-          sessionID: next.id,
-          sessionTitle: next.title,
-          agent,
+          sdk,
+          directory: input.directory,
+          sessionID: "",
+          sessionTitle: undefined,
+          resume: false,
+          agent: input.agent,
+          model: input.model,
+          variant: input.variant,
         }
-      })
-      return session
+      },
     },
-    createSession: createSessionResolver(input.createSession),
-    boot: async () => {
-      return {
-        sdk,
-        directory: input.directory,
-        sessionID: "",
-        sessionTitle: undefined,
-        resume: false,
-        agent: input.agent,
-        model: input.model,
-        variant: input.variant,
-      }
-    },
-  })
+    deps,
+  )
 }
 
 // Attach mode. Uses the caller-provided SDK client directly.
 export async function runInteractiveMode(
-  input: RunInput & { createSession?: CreateSession },
+  input: RunInput & { createSession?: CreateSession; tuiConfig?: RunTuiConfig | Promise<RunTuiConfig> },
   deps?: RunRuntimeDeps,
 ): Promise<void> {
   return runInteractiveRuntime(
@@ -900,6 +932,7 @@ export async function runInteractiveMode(
       replay: input.replay,
       replayLimit: input.replayLimit,
       demo: input.demo,
+      tuiConfig: input.tuiConfig,
       boot: async () => ({
         sdk: input.sdk,
         directory: input.directory,

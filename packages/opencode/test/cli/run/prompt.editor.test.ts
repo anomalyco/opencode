@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { realignEditorPromptParts, resolveEditorSlashValue } from "@/cli/cmd/run/prompt.editor"
-import type { RunPromptPart } from "@/cli/cmd/run/types"
+import { realignEditorPromptParts, resolveEditorSlashValue } from "@opencode-ai/cli/mini/prompt.editor"
+import type { RunPromptPart } from "@opencode-ai/cli/mini/types"
 
 describe("run prompt editor helpers", () => {
   test("strips the local /editor command from the initial editor text", () => {
