@@ -1068,6 +1068,40 @@ const scenarios: Scenario[] = [
     }))
     .status(400, undefined, "none"),
   http.protected
+    .get("/api/session/{sessionID}/history", "v2.session.history")
+    .seeded((ctx) => ctx.session({ title: "Session history" }))
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?${new URLSearchParams({
+        after: "0",
+        limit: "2",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.data)
+        check(typeof body.hasMore === "boolean", "Expected a history exhaustion signal")
+      },
+      "none",
+    ),
+  http.protected
+    .get("/api/session/{sessionID}/history", "v2.session.history.missing")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/history", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/history", "v2.session.history.invalid")
+    .seeded((ctx) => ctx.session({ title: "Invalid history sequence" }))
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/history", { sessionID: ctx.state.id })}?after=-1`,
+      headers: ctx.headers(),
+    }))
+    .json(400, object, "status"),
+  http.protected
     .get("/api/session/{sessionID}/event", "v2.session.events.missing")
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/event", { sessionID: "ses_httpapi_missing" })}?after=0`,
@@ -1522,33 +1556,21 @@ const scenarios: Scenario[] = [
         const session = yield* ctx.session({ title: "Summarize session" })
         yield* ctx.message(session.id, { text: "summarize this work" })
         const summary = [
-          "## Goal",
+          "## Objective",
           "- Exercise session summarize.",
           "",
-          "## Constraints & Preferences",
+          "## Important Details",
           "- Use fake LLM.",
-          "",
-          "## Progress",
-          "### Done",
-          "- Summary generated.",
-          "",
-          "### In Progress",
-          "- (none)",
-          "",
-          "### Blocked",
-          "- (none)",
-          "",
-          "## Key Decisions",
           "- Keep route local.",
+          "- Test fixture: test/server/httpapi-exercise/index.ts.",
           "",
-          "## Next Steps",
-          "- (none)",
+          "## Work State",
+          "- Completed: Summary generated.",
+          "- Active: (none)",
+          "- Blocked: (none)",
           "",
-          "## Critical Context",
-          "- Test fixture.",
-          "",
-          "## Relevant Files",
-          "- test/server/httpapi-exercise/index.ts: scenario",
+          "## Next Move",
+          "1. (none)",
         ].join("\n")
         yield* ctx.llmText(summary)
         yield* ctx.llmText(summary)

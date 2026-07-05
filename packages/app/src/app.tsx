@@ -16,6 +16,7 @@ import {
   type Component,
   createEffect,
   createMemo,
+  createRenderEffect,
   createResource,
   createSignal,
   ErrorBoundary,
@@ -27,11 +28,11 @@ import {
   Show,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { CommandProvider } from "@/context/command"
+import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
-import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
+import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSyncProvider } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
@@ -39,10 +40,10 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
-import { TerminalProvider } from "@/context/terminal"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { WslServersProvider } from "@/wsl/context"
@@ -51,16 +52,9 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import {
-  legacySessionHref,
-  legacySessionServer,
-  requireServerKey,
-  selectSessionLineage,
-  sessionHref,
-} from "./utils/session-route"
-import { isSessionNotFoundError } from "./utils/server-errors"
+import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 
-import Session from "@/pages/session"
+import { SessionPage, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -94,11 +88,7 @@ const SessionRoute = () => {
     tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
   })
 
-  return (
-    <SessionProviders>
-      <Session />
-    </SessionProviders>
-  )
+  return <SessionPage />
 }
 
 const TargetSessionRoute = () => {
@@ -110,75 +100,15 @@ const TargetSessionRoute = () => {
   })
 
   return (
+    // Owns the server-identity remount. Session changes must NOT remount this
+    // subtree (SessionRouteErrorBoundary resets and createSessionLineage
+    // re-resolves reactively instead); both rely on this key for server changes.
     <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
-          <ResolvedTargetSessionRoute />
+          <TargetSessionRouteContent />
         </ServerSyncProvider>
       </ServerSDKProvider>
-    </Show>
-  )
-}
-
-function ResolvedTargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
-  const settings = useSettings()
-  const tabs = useTabs()
-  const sync = useServerSync()
-  const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const cached = createMemo(() => sync().session.lineage.peek(params.id))
-  const [resolved] = createResource(
-    () => {
-      if (cached()) return
-      return { id: params.id, server: serverKey(), sync: sync() }
-    },
-    ({ id, server, sync }) =>
-      sync.session.lineage.resolve(id).catch((error) => {
-        if (isSessionNotFoundError(error, id)) tabs.removeSessionTab({ server, sessionId: id })
-        throw error
-      }),
-  )
-  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
-  const directory = createMemo(() => current()?.session.directory)
-  const targetDirectory = () => directory()!
-
-  createEffect(() => {
-    const session = current()
-    if (!session) return
-    tabs.addSessionTab({
-      server: serverKey(),
-      sessionId: session.root.id,
-    })
-  })
-
-  return (
-    <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <Show when={!!current() || resolved.state !== "errored"} fallback={<ErrorPage error={resolved.error} />}>
-        <Show when={directory()}>
-          <Show
-            when={settings.general.newLayoutDesigns()}
-            fallback={<Navigate href={legacySessionHref(directory()!, params.id)} />}
-          >
-            <SDKProvider directory={targetDirectory}>
-              <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-                <TargetSessionPage />
-              </DirectoryDataProvider>
-            </SDKProvider>
-          </Show>
-        </Show>
-      </Show>
-    </TargetServerScopedProviders>
-  )
-}
-
-function TargetSessionPage() {
-  const sdk = useSDK()
-  const serverSDK = useServerSDK()
-  return (
-    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
-      <SessionProviders>
-        <Session />
-      </SessionProviders>
     </Show>
   )
 }
@@ -230,7 +160,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
-          <TargetServerScopedProviders directory={directory}>
+          <DraftServerScopedProviders directory={directory}>
             <SDKProvider directory={directory}>
               <DirectoryDataProvider directory={directory} server={serverKey}>
                 <DraftProviders>
@@ -238,7 +168,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
                 </DraftProviders>
               </DirectoryDataProvider>
             </SDKProvider>
-          </TargetServerScopedProviders>
+          </DraftServerScopedProviders>
         </ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
@@ -278,10 +208,11 @@ function QueryProvider(props: ParentProps) {
 function BodyDesignClass() {
   const settings = useSettings()
 
-  createEffect(() => {
+  createRenderEffect(() => {
     if (typeof document === "undefined") return
 
     const enabled = settings.general.newLayoutDesigns()
+    document.body.toggleAttribute("data-new-layout", enabled)
     document.body.classList.toggle("text-12-regular", !enabled)
     document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
     document.body.classList.toggle("text-[13px]", enabled)
@@ -298,10 +229,34 @@ function SharedProviders(props: ParentProps) {
     <>
       <BodyDesignClass />
       <CommandProvider>
+        <DesktopCommands />
         <HighlightsProvider>{props.children}</HighlightsProvider>
       </CommandProvider>
     </>
   )
+}
+
+function DesktopCommands() {
+  const command = useCommand()
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  command.register("desktop", () => {
+    const commands: CommandOption[] = []
+    if (platform.platform === "desktop" && platform.exportDebugLogs) {
+      commands.push({
+        id: "logs.export",
+        title: "Export logs",
+        category: language.t("command.category.settings"),
+        onSelect: () => {
+          void platform.exportDebugLogs?.()
+        },
+      })
+    }
+    return commands
+  })
+
+  return null
 }
 
 // Server-scoped providers shared by the legacy shell and the top-level new shell.
@@ -314,9 +269,7 @@ function ServerScopedProviders(props: ServerScopedShellProps) {
   return (
     <PermissionProvider directory={props.directory}>
       <LayoutProvider>
-        <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-          <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-        </NotificationProvider>
+        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
       </LayoutProvider>
     </PermissionProvider>
   )
@@ -340,25 +293,11 @@ function NewAppLayout(props: ParentProps) {
   )
 }
 
-function TargetServerScopedProviders(props: ServerScopedShellProps) {
+function DraftServerScopedProviders(props: ParentProps<{ directory?: () => string | undefined }>) {
   return (
     <PermissionProvider directory={props.directory}>
-      <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-      </NotificationProvider>
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
     </PermissionProvider>
-  )
-}
-
-function SessionProviders(props: ParentProps) {
-  return (
-    <TerminalProvider>
-      <FileProvider>
-        <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
-        </PromptProvider>
-      </FileProvider>
-    </TerminalProvider>
   )
 }
 
@@ -558,11 +497,13 @@ export function AppInterface(props: {
                 component={props.router ?? Router}
                 root={(routerProps) => (
                   <TabsProvider>
-                    <ServerShell>
-                      <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
-                        <NewAppLayout>{routerProps.children}</NewAppLayout>
-                      </Show>
-                    </ServerShell>
+                    <NotificationProvider>
+                      <ServerShell>
+                        <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
+                          <NewAppLayout>{routerProps.children}</NewAppLayout>
+                        </Show>
+                      </ServerShell>
+                    </NotificationProvider>
                   </TabsProvider>
                 )}
               >

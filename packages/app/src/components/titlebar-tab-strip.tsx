@@ -17,20 +17,18 @@ import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 
-const sortableTransition = { duration: 0 }
-
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
   index: () => number
   active: () => boolean
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   serverCtx: () => ServerCtx | undefined
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
   const tabs = useTabs()
+  const language = useLanguage()
   const sortable = useSortable({
     get id() {
       return props.id
@@ -50,6 +48,7 @@ function SessionTabSlot(props: {
     ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
   )
   const session = createMemo(() => cachedSession() ?? loadedSession())
+  const missingSession = createMemo(() => !!props.serverCtx() && !loadedSession.loading && !session())
   let prefetched = false
 
   createEffect(() => {
@@ -85,8 +84,9 @@ function SessionTabSlot(props: {
       ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
+      data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
-      classList={{ hidden: !session() }}
+      classList={{ hidden: !session() && !missingSession() }}
     >
       <TabNavItem
         ref={(el) => {
@@ -95,6 +95,7 @@ function SessionTabSlot(props: {
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={session}
+        fallbackTitle={missingSession() ? language.t("session.tab.unknown") : undefined}
         onTitleChange={(title) => {
           const value = session()
           const ctx = props.serverCtx()
@@ -108,7 +109,6 @@ function SessionTabSlot(props: {
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active()}
-        activeServer={props.tab.server === props.activeServerKey}
         forceTruncate={props.forceTruncate}
         dragging={sortable.isDragSource()}
       />
@@ -140,6 +140,7 @@ function DraftTabSlot(props: {
       ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
+      data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
     >
       <DraftTabItem
@@ -160,7 +161,6 @@ function DraftTabSlot(props: {
 export function TitlebarTabStrip(props: {
   tabs: Tab[]
   currentTab: () => Tab | undefined
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -266,7 +266,6 @@ export function TitlebarTabStrip(props: {
                       id={id}
                       index={index}
                       active={() => props.currentTab() === tab}
-                      activeServerKey={props.activeServerKey}
                       forceTruncate={props.forceTruncate}
                       serverCtx={serverCtx}
                       onNavigate={(element) => {

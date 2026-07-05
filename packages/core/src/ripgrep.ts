@@ -3,7 +3,7 @@ export * as Ripgrep from "./ripgrep"
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Entry, Match } from "@opencode-ai/schema/filesystem"
-import { LayerNode } from "./effect/layer-node"
+import { makeGlobalNode } from "./effect/app-node"
 import { AppProcess, collectStream, waitForAbort } from "./process"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 import { RipgrepBinary } from "./ripgrep/binary"
@@ -89,7 +89,7 @@ const failure = (message: string, cause?: unknown) => new Error({ message, cause
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const process = yield* AppProcess.Service
@@ -278,5 +278,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Layer.merge(RipgrepBinary.defaultLayer, AppProcess.defaultLayer)))
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })
+export const node = makeGlobalNode({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })

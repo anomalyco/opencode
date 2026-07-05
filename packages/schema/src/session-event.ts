@@ -511,7 +511,9 @@ export const Definitions = Event.inventory(
   RevertEvent.Committed,
 )
 
-export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "SessionDurableEvent" })
 export type DurableEvent = typeof Durable.Type
 
 export const All = Schema.Union(Definitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))

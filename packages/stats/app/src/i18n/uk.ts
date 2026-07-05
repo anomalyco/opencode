@@ -223,6 +223,7 @@ export const dict = {
   "model.noPeersDescription": "Рейтинги схожих моделей з'являться після використання.",
   "model.noUsageLastWeek": "Немає використання минулого тижня",
   "model.newThisWeek": "Нова цього тижня",
+  "model.sameAsPreviousWeek": "Без змін відносно попереднього тижня",
   "model.vsPreviousWeek": "{{change}} до попереднього тижня",
   "model.pdf": "PDF",
   "format.users": "користувачі",

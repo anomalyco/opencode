@@ -1,12 +1,16 @@
 export * as ApplyPatchTool from "./apply-patch"
 
 import { ToolFailure } from "@opencode-ai/llm"
+import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -24,7 +28,10 @@ export const Applied = Schema.Struct({
   target: Schema.String,
 })
 
-export const Output = Schema.Struct({ applied: Schema.Array(Applied) })
+export const Output = Schema.Struct({
+  applied: Schema.Array(Applied),
+  files: Schema.Array(FileDiff.Info),
+})
 export type Output = typeof Output.Type
 
 export const toModelOutput = (output: Output) =>
@@ -36,14 +43,20 @@ export const toModelOutput = (output: Output) =>
   ].join("\n")
 
 type Prepared =
-  | (Extract<Patch.Hunk, { readonly type: "add" | "delete" }> & { readonly target: LocationMutation.Target })
+  | (Extract<Patch.Hunk, { readonly type: "add" | "delete" }> & {
+      readonly target: LocationMutation.Target
+      readonly before: string
+      readonly after: string
+    })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
       readonly target: LocationMutation.Target
       readonly source: Uint8Array
       readonly content: string
+      readonly before: string
+      readonly after: string
     })
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
@@ -113,29 +126,36 @@ export const layer = Layer.effectDiscard(
                 for (const { hunk, target } of targets) {
                   yield* Effect.gen(function* () {
                     if (hunk.type === "add") {
-                      prepared.push({ ...hunk, target })
+                      prepared.push({
+                        ...hunk,
+                        target,
+                        before: "",
+                        after:
+                          hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`,
+                      })
                       return
                     }
                     if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
+                    const source = yield* fs.readFile(target.canonical)
+                    const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
+                    const before = original.replace(/^\uFEFF/, "")
                     if (hunk.type === "delete") {
-                      prepared.push({ ...hunk, target })
+                      prepared.push({ ...hunk, target, before, after: "" })
                       return
                     }
-                    const source = yield* fs.readFile(target.canonical)
-                    const update = Patch.derive(
-                      hunk.path,
-                      hunk.chunks,
-                      new TextDecoder("utf-8", { ignoreBOM: true }).decode(source),
-                    )
+                    const update = Patch.derive(hunk.path, hunk.chunks, original)
                     prepared.push({
                       ...hunk,
                       target,
                       source,
                       content: Patch.joinBom(update.content, update.bom),
+                      before,
+                      after: update.content,
                     })
                   }).pipe(Effect.mapError(() => fail(hunk.path)))
                 }
 
+                const patchFiles = prepared.map(patchFile)
                 yield* Effect.forEach(
                   prepared,
                   (change) =>
@@ -165,7 +185,7 @@ export const layer = Layer.effectDiscard(
                     }).pipe(Effect.mapError(() => fail(change.path))),
                   { discard: true },
                 )
-                return { applied }
+                return { applied, files: patchFiles }
               }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))
             },
           }),
@@ -175,3 +195,25 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/apply-patch",
+  layer,
+  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, FSUtil.node, PermissionV2.node],
+})
+
+function patchFile(change: Prepared): typeof FileDiff.Info.Type {
+  const counts = diffLines(change.before, change.after).reduce(
+    (result, item) => ({
+      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
+      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+    }),
+    { additions: 0, deletions: 0 },
+  )
+  return {
+    file: change.target.resource,
+    patch: createTwoFilesPatch(change.target.resource, change.target.resource, change.before, change.after),
+    status: change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
+    ...counts,
+  }
+}
