@@ -29,7 +29,8 @@ function png(url: string) {
 describe("supports", () => {
   test("targets gpt-5.5 and fable only", () => {
     expect(supports("gpt-5.5")).toBe(true)
-    expect(supports("gpt-5.5-codex")).toBe(true)
+    // Substring match keeps routed ids working, e.g. via OpenRouter.
+    expect(supports("openai/gpt-5.5")).toBe(true)
     expect(supports("claude-fable-5")).toBe(true)
     expect(supports("gpt-5.1")).toBe(false)
     expect(supports("claude-sonnet-4-6")).toBe(false)
