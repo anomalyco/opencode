@@ -85,11 +85,8 @@ function selectedRow(field: Field | undefined, value: FormValue | undefined) {
 }
 
 function customDefault(field: Field) {
-  if (!field.custom || (field.type !== "multiselect" && !(field.type === "string" && field.options))) return
-  const values = Array.isArray(field.default) ? field.default : [field.default]
-  return values.find(
-    (value): value is string => typeof value === "string" && !field.options?.some((option) => option.value === value),
-  )
+  if (!field.custom || field.type !== "string" || !field.options || typeof field.default !== "string") return
+  if (!field.options.some((option) => option.value === field.default)) return field.default
 }
 
 function display(field: Field, value: FormValue | undefined) {
@@ -236,7 +233,18 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   )
   const field = createMemo(() => fields()[Math.min(store.tab, fields().length - 1)])
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
-  const rows = createMemo(() => (field() ? fieldRows(field()!) : []))
+  const rows = createMemo(() => {
+    const current = field()
+    if (!current) return []
+    const configured = fieldRows(current)
+    const value = store.answers[current.key]
+    if (current.type !== "multiselect" || !Array.isArray(value)) return configured
+    const known = new Set(configured.map((row) => row.value))
+    return [
+      ...configured,
+      ...value.filter((item) => !known.has(item)).map((item) => ({ value: item, label: item, description: undefined })),
+    ]
+  })
   const textual = createMemo(() => {
     if (confirm()) return false
     const current = field()
@@ -416,6 +424,11 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         if (index !== -1) values.splice(index, 1)
       }
       if (!values.includes(text)) values.push(text)
+      const invalid = validateSelection(current, values)
+      if (invalid) {
+        setStore("error", invalid)
+        return false
+      }
       answer(current.key, values)
     }
 
@@ -430,7 +443,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
       answer(current.key, text)
     }
 
-    setStore("custom", { ...store.custom, [current.key]: text })
+    setStore("custom", { ...store.custom, [current.key]: isMulti ? "" : text })
     setStore("editing", false)
     return true
   }
