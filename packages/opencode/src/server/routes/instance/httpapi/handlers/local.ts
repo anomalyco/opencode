@@ -2,6 +2,7 @@ import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import type { MtpMetadata } from "@/local/llama-skein/gen/types.gen"
 import { probeModelIDs, scanLlamaSwap } from "@/local/mdns"
 import { createClient, createConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
@@ -95,7 +96,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         }
       }
 
-      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(1000, false))
+      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(1000, true))
 
       // Index mDNS/localhost results by normalised baseURL.
       const byURL = new Map<
@@ -108,6 +109,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           baseURL: string
           online: boolean
           models: string[]
+          mtpMetadata: Record<string, MtpMetadata | undefined>
           configuredProviderID?: string
           source: "mdns" | "localhost" | "lan" | "config"
         }
@@ -139,6 +141,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           baseURL: svc.baseURL,
           online: svc.online,
           models: [...svc.models],
+          mtpMetadata: svc.mtpMetadata ?? {},
           configuredProviderID,
           source: svc.source,
         })
@@ -172,6 +175,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           baseURL: entry.baseURL,
           online,
           models: models?.ids ?? [],
+          mtpMetadata: models?.mtpMetadata ?? {},
           configuredProviderID: entry.id,
           source: "config",
         })
@@ -187,6 +191,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           baseURL: string
           online: boolean
           models: string[]
+          mtpMetadata: Record<string, MtpMetadata | undefined>
           configuredProviderID?: string
           source: "mdns" | "localhost" | "lan" | "config"
         }

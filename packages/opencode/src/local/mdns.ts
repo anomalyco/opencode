@@ -4,6 +4,7 @@ import os from "os"
 import Bonjour from "bonjour-service"
 import { createClient } from "./llama-skein/gen/client"
 import { LlamaSkeinClient } from "./llama-skein/gen/sdk.gen"
+import type { MtpMetadata } from "./llama-skein/gen/types.gen"
 
 export interface LocalLlamaSwapService {
   name: string
@@ -52,13 +53,14 @@ function llamaSkeinClient(baseURL: string) {
 }
 
 type ModelListResult = {
-  data?: { data?: Array<{ id?: string; default?: boolean }> }
+  data?: { data?: Array<{ id?: string; default?: boolean; metadata?: { mtp?: MtpMetadata } }> }
   error?: unknown
 }
 
 export type ModelProbeResult = {
   ids: string[]
   defaultModel: string | null
+  mtpMetadata: Record<string, MtpMetadata | undefined>
 }
 
 export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<ModelProbeResult | null> {
@@ -71,7 +73,13 @@ export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<
         const models = response.data.data
         const ids = models.map((m) => m.id).filter((id): id is string => Boolean(id))
         const defaultEntry = models.find((m) => m.default)
-        return { ids, defaultModel: defaultEntry?.id ?? null }
+        const mtpMetadata: Record<string, MtpMetadata | undefined> = {}
+        for (const m of models) {
+          if (m.id) {
+            mtpMetadata[m.id] = m.metadata?.mtp
+          }
+        }
+        return { ids, defaultModel: defaultEntry?.id ?? null, mtpMetadata }
       })
       .catch(() => null),
     timeoutMs,
@@ -272,7 +280,7 @@ export async function scanMDNSOnly(timeoutMs = 4000): Promise<LocalLlamaSwapServ
 export async function scanLlamaSwap(
   timeoutMs = 1000,
   probeModels = true,
-): Promise<Array<LocalLlamaSwapService & { models: string[]; defaultModel: string | null; online: boolean }>> {
+): Promise<Array<LocalLlamaSwapService & { models: string[]; defaultModel: string | null; online: boolean; mtpMetadata: Record<string, MtpMetadata | undefined> }>> {
   const raw: LocalLlamaSwapService[] = []
 
   const mdnsScan = new Promise<void>((resolve) => {
@@ -333,13 +341,19 @@ export async function scanLlamaSwap(
   }
 
   if (!probeModels) {
-    return raw.map((svc) => ({ ...svc, models: [], defaultModel: null, online: true }))
+    return raw.map((svc) => ({ ...svc, models: [], defaultModel: null, online: true, mtpMetadata: {} }))
   }
 
   return Promise.all(
     raw.map(async (svc) => {
       const probe = await probeModelIDs(svc.baseURL, 750)
-      return { ...svc, models: probe?.ids ?? [], defaultModel: probe?.defaultModel ?? null, online: probe !== null }
+      return {
+        ...svc,
+        models: probe?.ids ?? [],
+        defaultModel: probe?.defaultModel ?? null,
+        online: probe !== null,
+        mtpMetadata: probe?.mtpMetadata ?? {},
+      }
     }),
   )
 }

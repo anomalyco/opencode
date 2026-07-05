@@ -134,6 +134,13 @@ export type Model = {
      * True when this model is the configured default, used for requests that omit the 'model' field. Listed first in the model list. llama-skein extension to the OpenAI schema.
      */
     default?: boolean;
+    /**
+     * Optional capability metadata for this model. llama-skein extension for MTP and other runtime capabilities.
+     */
+    metadata?: {
+        mtp?: MtpMetadata;
+        [key: string]: unknown | MtpMetadata | undefined;
+    };
 };
 
 export type ConfigInfoResponse = {
@@ -224,6 +231,13 @@ export type ConfigModelPatchRequest = {
     flags?: {
         [key: string]: unknown;
     };
+    /**
+     * Optional capability metadata for this model. llama-skein extension for MTP and other runtime capabilities.
+     */
+    metadata?: {
+        mtp?: MtpMetadata;
+        [key: string]: unknown | MtpMetadata | undefined;
+    };
 };
 
 export type ConfigGroupPatchRequest = {
@@ -266,6 +280,13 @@ export type ConfigModelDetail = {
     flags?: {
         [key: string]: string;
     };
+    /**
+     * Optional capability metadata for this model. llama-skein extension for MTP and other runtime capabilities.
+     */
+    metadata?: {
+        mtp?: MtpMetadata;
+        [key: string]: unknown | MtpMetadata | undefined;
+    };
 };
 
 export type ReloadResponse = {
@@ -284,6 +305,40 @@ export type ConfigDefaultModelResponse = {
      * Configured default model ID, or null when no default is set.
      */
     model: string | null;
+};
+
+/**
+ * Multi-Token Prediction (MTP) capability for llama.cpp models. Enables running supported GGUF models with draft model guidance for multi-token prediction.
+ */
+export type MtpMetadata = {
+    /**
+     * Whether MTP is enabled for this model. When true, the model command must include --spec-type draft-mtp and a draft model.
+     */
+    enabled?: boolean;
+    /**
+     * The spec type for draft models. For MTP-enabled models, this is always 'draft-mtp'.
+     */
+    spec_type?: 'draft-mtp';
+    /**
+     * Maximum draft N value (number of prompt tokens per generated token). Recommended starting point is 2 for most models.
+     */
+    draft_n_max?: number;
+    /**
+     * Optional list of tunable draft N values that were benchmarked on this model. If present, llama-skein will try values from this list when auto-tuning MTP.
+     */
+    draft_n_tunable?: Array<number>;
+    /**
+     * Optional explicit path to the draft model GGUF file. If omitted, llama-skein will automatically download the draft model from Hugging Face when MTP is enabled.
+     */
+    model_draft?: string;
+    /**
+     * Approximate additional memory overhead in MB when running this model with MTP enabled. Use this for capacity-aware scheduling.
+     */
+    memory_overhead_mb?: number;
+    /**
+     * How this metadata was derived: 'config' for explicitly set metadata, 'cmd' for parsed values from the llama-server command string.
+     */
+    source?: 'config' | 'cmd';
 };
 
 export type OffloadRecommendation = {
