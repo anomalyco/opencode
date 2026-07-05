@@ -8,6 +8,7 @@ import {
   type DiffRenderable,
   type ScrollBoxRenderable,
 } from "@opentui/core"
+import { truncateDiffs } from "@opencode-ai/core/util/truncate-diff"
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { useTheme } from "../../context/theme"
@@ -114,21 +115,30 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const [diff] = createResource(diffInput, async (input) => {
     if (input.mode === "last-turn") {
       const sessionID = input.sessionID
-      if (!sessionID) return []
+      if (!sessionID) return { diffs: [], truncated: { files: false, patches: 0, totalFiles: 0 } }
       const result = await props.api.client.session.diff(
         { sessionID, messageID: input.messageID },
         { throwOnError: true },
       )
-      return normalizeDiffs(result.data ?? [])
+      const normalized = normalizeDiffs(result.data ?? [])
+      return truncateDiffs(normalized, {
+        maxFiles: props.api.config?.diff?.max_files,
+        maxPatchBytes: props.api.config?.diff?.max_patch_bytes,
+      })
     }
 
     const result = await props.api.client.vcs.diff(
       { directory: input.directory, mode: input.mode, context: VCS_DIFF_CONTEXT_LINES },
       { throwOnError: true },
     )
-    return normalizeDiffs(result.data ?? [])
+    const normalized = normalizeDiffs(result.data ?? [])
+    return truncateDiffs(normalized, {
+      maxFiles: props.api.config?.diff?.max_files,
+      maxPatchBytes: props.api.config?.diff?.max_patch_bytes,
+    })
   })
-  const files = createMemo(() => diff() ?? [])
+  const files = createMemo(() => diff()?.diffs ?? [])
+  const truncated = createMemo(() => diff()?.truncated)
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
   const [fileTreeEnabled, setFileTreeEnabled] = createSignal(
     props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false,
@@ -756,9 +766,16 @@ function DiffViewer(props: { api: TuiPluginApi }) {
           <text fg={theme().text}>Diff </text>
           <text fg={theme().textMuted}>{diffSourceLabel(mode())}</text>
           <box flexGrow={1} />
-          <text fg={theme().textMuted}>
-            {files().length} {files().length === 1 ? "file" : "files"}
-          </text>
+          <Show when={truncated()?.files}>
+            <text fg={theme().warning}>
+              {files().length}/{truncated()?.totalFiles} files (truncated)
+            </text>
+          </Show>
+          <Show when={!truncated()?.files}>
+            <text fg={theme().textMuted}>
+              {files().length} {files().length === 1 ? "file" : "files"}
+            </text>
+          </Show>
         </Panel>
 
         <box flexGrow={1} minHeight={0}>
