@@ -35,7 +35,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
           const output = Stream.unwrap(
             Effect.gen(function* () {
               // Acquiring the bounded stream installs its listener before readiness is observable.
-              const live = yield* EventV2.liveBounded(events, subscriberCapacity)
+              const live = yield* EventV2.serverLiveBounded(events, subscriberCapacity)
               return Stream.make(connected).pipe(Stream.concat(live))
             }),
           ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))

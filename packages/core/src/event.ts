@@ -11,6 +11,7 @@ import { Location } from "./location"
 import { makeGlobalNode } from "./effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode-ai/schema/durable-event-manifest"
+import { EventManifest } from "@opencode-ai/schema/event-manifest"
 
 export const ID = Event.ID
 export type ID = import("@opencode-ai/schema/event").ID
@@ -160,19 +161,29 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const liveBounded = (events: Interface, capacity: number) =>
+const isServerEvent = Schema.is(Schema.Union(EventManifest.ServerDefinitions))
+
+export const serverLive = (events: Interface) => events.live().pipe(Stream.filter(isServerEvent))
+
+const bounded = (events: Interface, capacity: number, accept: (event: Payload) => boolean) =>
   Effect.gen(function* () {
     const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
     const unsubscribe = yield* events.listen((event) =>
-      Queue.offer(queue, event).pipe(
-        Effect.flatMap((accepted) =>
-          accepted ? Effect.void : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
-        ),
-      ),
+      !accept(event)
+        ? Effect.void
+        : Queue.offer(queue, event).pipe(
+            Effect.flatMap((accepted) =>
+              accepted ? Effect.void : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
+            ),
+          ),
     )
     yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
     return Stream.fromQueue(queue)
   })
+
+export const liveBounded = (events: Interface, capacity: number) => bounded(events, capacity, () => true)
+
+export const serverLiveBounded = (events: Interface, capacity: number) => bounded(events, capacity, isServerEvent)
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
