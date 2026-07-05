@@ -220,7 +220,7 @@ wave; both packages typecheck clean.
   (render-only - no validation, values pass through; rendering handles `$defs`/`definitions`
   - `$ref`). `output` is **optional** -> signature renders `Promise<unknown>` and the host
     result is exposed as-is. Discrimination via `Schema.isSchema`. New helpers exported from
-    `tool.ts`: `inputTypeScript`/`outputTypeScript`/`decodeInput`/`decodeOutput`/
+    `tool-schema.ts`: `inputTypeScript`/`outputTypeScript`/`decodeInput`/`decodeOutput`/
     `jsonSchemaToTypeScript`; `tool-runtime.ts` consumes them (no direct `Schema.*` use there
     anymore). Types `Tool.JsonSchema`/`Tool.SchemaType` exported from the index. Note: an empty
     `Schema.Struct({})` renders as `{  } | Array<unknown>` (effect's JSON Schema emission) -
@@ -340,7 +340,7 @@ packages typecheck clean.
   read-the-description-before-calling guidance. (The flat prose layout this wave produced
   was later replaced wholesale by the markdown-section restructure - see Post-wave fixes -
   which also deleted this wave's worked example.)
-- **Cosmetic renderer fixes** (`renderSchema` in `tool.ts`): an object schema with no
+- **Cosmetic renderer fixes** (`renderSchema` in `tool-schema.ts`): an object schema with no
   properties renders `{}` (was `{  }`), and the empty `Schema.Struct({})` emission
   (`anyOf: [{ type: "object" }, { type: "array" }]`, no properties/items) collapses to `{}`
   (was `{  } | Array<unknown>`).
@@ -469,7 +469,7 @@ adapter needed **no changes**.
     `rankTools` algorithm in `packages/opencode/src/session/code-mode.ts` at git HEAD),
     replacing the word-set ranker in `tool-runtime.ts`. Searchable text per tool = path +
     description + input-schema property names + their `description` strings - extracted by
-    the new `inputProperties` helper in `tool.ts` (Effect Schemas via
+    the new `inputProperties` helper in `tool-schema.ts` (Effect Schemas via
     `Schema.toJsonSchemaDocument`, the same emission signature rendering uses; JSON Schemas
     read `properties` directly, resolving a trivial top-level `$ref`; try/catch falls back to
     path + description). Queries tokenize on camelCase boundaries + non-alphanumeric
@@ -633,7 +633,7 @@ Semantics: each described input/output field carries its schema `description` as
 express surface as JSDoc tags - `@deprecated`, `@default <json>` (unserializable defaults
 skipped), `@format`, `@minItems`/`@maxItems`; `*/` inside text is neutralized to `* /`;
 multiline descriptions become `*`-prefixed blocks with blank edges trimmed; undescribed,
-untagged fields get no comment. Implementation: `renderSchema` in `tool.ts` grew a
+untagged fields get no comment. Implementation: `renderSchema` in `tool-schema.ts` grew a
 `RenderContext` (`{ definitions, pretty }`), a `MAX_RENDER_DEPTH = 8` recursion ceiling plus
 a `$ref` `seen` guard (the renderer previously had neither - a cyclic `$defs` would have
 looped; it now degrades to the ref name/`unknown`), and try/catch totality on the public
@@ -949,16 +949,16 @@ child calls" gap):
 **Signature rendering + compound-assignment parity fixes** (externally reported, both
 verified real with failing tests before fixing):
 
-- **Non-identifier property names in rendered signatures** (`src/tool.ts`): `renderSchema`
+- **Non-identifier property names in rendered signatures** (`src/tool-schema.ts`): `renderSchema`
   emitted raw property names, so schema properties like `foo-bar`/`@type`/`x.y`/`123`
   rendered invalid TypeScript (`{ foo-bar?: string }`). Fixed with a `renderKey` helper -
   bare identifiers stay bare, everything else is `JSON.stringify`-quoted - applied in the
   single `field` closure both the compact and pretty renderings share. The
-  `identifierSegment` regex now lives in `tool.ts` (exported) and `tool-runtime.ts`'s
+  `identifierSegment` regex now lives in `tool-schema.ts` (internal) and `tool-runtime.ts`'s
   bracket-notation `toolExpression` imports it: one source of truth for "is this a bare
   identifier" across object keys and tool paths. Tests: `signature.test.ts` +4 (compact,
   pretty with JSDoc on a quoted key, JSON Schema input+output, Effect Schema struct).
-- **Numeric schema unions keep their real alternatives** (`src/tool.ts`): the old
+- **Numeric schema unions keep their real alternatives** (`src/tool-schema.ts`): the old
   `anyOf`/`oneOf` renderer collapsed any union containing `{ type: "number" }` to just
   `number`, dropping real JSON Schema alternatives (`string | number`, `number | null`,
   etc.). The collapse is now restricted to Effect's number-schema artifact
@@ -1209,7 +1209,8 @@ Post-MVP (logged, not blocking an experimental flag):
   the workspace is the implementation source of truth for v4 behavior questions.
 - File map (this package): `src/codemode.ts` - types/limits/parser/Interpreter/execute/make;
   `src/tool-runtime.ts` - tool tree, `copyIn`/`copyOut`, search/discovery, invoke path;
-  `src/tool.ts` - `Tool.make` + JSON-Schema->TS rendering; `src/values.ts` - sandbox value
+  `src/tool.ts` - public `Tool` definitions; `src/tool-schema.ts` - schema rendering and decoding;
+  `src/values.ts` - sandbox value
   types; `src/tool-error.ts` - `ToolError`; tests in `test/{codemode,parity,stdlib}.test.ts`.
 - OpenCode file map (integration points): `src/tool/code-mode.ts` (the adapter, now a
   registry tool service - `CodeModeTool` + `catalogInstructions`; formerly

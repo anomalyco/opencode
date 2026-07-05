@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { CodeMode, OpenAPI } from "../src/index.js"
-import { inputTypeScript, outputTypeScript, Tool } from "../src/tool.js"
+import { CodeMode, OpenAPI, Tool } from "../src/index.js"
+import { inputTypeScript, outputTypeScript } from "../src/tool-schema.js"
 
 const baseUrl = "http://localhost:4096"
 type Document = OpenAPI.Document

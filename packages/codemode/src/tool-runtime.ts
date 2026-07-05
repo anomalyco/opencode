@@ -6,10 +6,9 @@ import {
   identifierSegment,
   inputProperties,
   inputTypeScript,
-  isDefinition as isToolDefinition,
   outputTypeScript,
-  type Definition,
-} from "./tool.js"
+} from "./tool-schema.js"
+import { isDefinition as isToolDefinition, type Definition } from "./tool.js"
 import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
 
 const estimateTokens = (input: string) => Math.max(0, Math.round(input.length / 4))
