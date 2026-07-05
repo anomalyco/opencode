@@ -1,14 +1,6 @@
 export * as ExecuteTool from "./execute"
 
-import {
-  CodeMode,
-  Tool,
-  toolError,
-  type DataValue,
-  type ExecuteResult,
-  type ToolCallHooks,
-  type ToolDefinition,
-} from "@opencode-ai/codemode"
+import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import { ToolOutput } from "@opencode-ai/llm"
 import { Effect, Ref, Schema } from "effect"
 import { definition, make, settle, type AnyTool } from "./tool"
@@ -57,9 +49,9 @@ export const create = (options: {
 }) => {
   const runtime = (
     invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
-    hooks?: ToolCallHooks,
+    hooks?: CodeMode.ToolCallHooks,
   ) => {
-    const tools: Record<string, ToolDefinition<never> | Record<string, ToolDefinition<never>>> = {}
+    const tools: Record<string, Tool.Definition<never> | Record<string, Tool.Definition<never>>> = {}
     for (const [name, registration] of options.registrations) {
       const child = definition(name, registration.tool)
       const value = Tool.make({
@@ -83,7 +75,7 @@ export const create = (options: {
         group[path] = value
         continue
       }
-      const entries: Record<string, ToolDefinition<never>> = {}
+      const entries: Record<string, Tool.Definition<never>> = {}
       entries[path] = value
       tools[namespace] = entries
     }
@@ -178,7 +170,7 @@ function displayInput(input: unknown): Record<string, unknown> | undefined {
   return input as Record<string, unknown>
 }
 
-function formatResult(result: ExecuteResult) {
+function formatResult(result: CodeMode.Result) {
   const output = result.ok
     ? formatValue(result.value)
     : [result.error.message, ...(result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))]
@@ -189,7 +181,7 @@ function formatResult(result: ExecuteResult) {
   return output === "" ? logs : `${output}\n\n${logs}`
 }
 
-function formatValue(value: DataValue) {
+function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
   return JSON.stringify(value, null, 2) ?? String(value)
 }

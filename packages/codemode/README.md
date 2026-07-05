@@ -60,7 +60,7 @@ const result =
 `)
 ```
 
-`result` is always an `ExecuteResult`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
+`result` is always a `CodeMode.Result`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
 
 Successful result values are JSON-safe data. A program that returns `undefined`, including by reaching the end without `return`, produces `null`; nested `undefined` values are normalized to `null` as well.
 
@@ -82,6 +82,8 @@ const tool = Tool.make({
 `output` is optional. Without it the tool's signature advertises `Promise<unknown>` and the host result is exposed as-is.
 
 The description and schemas are part of the model-visible tool contract. Keep descriptions concrete and put authorization in `run` or in the service it calls.
+
+Public tool types are grouped under the same namespace: `Tool.Definition`, `Tool.Options`, `Tool.SchemaType`, and `Tool.JsonSchema`.
 
 ### `CodeMode.execute`
 
@@ -113,30 +115,32 @@ const runtime = CodeMode.make({
 
 runtime.catalog() // structured tool descriptions
 runtime.instructions() // model-facing syntax and tool guide
-runtime.execute(source) // ExecuteResult
+runtime.execute(source) // CodeMode.Result
 ```
 
-`CodeMode.Input` and `CodeMode.Result` are Effect schemas for the execution request and result. Hosts can combine them with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
+`CodeMode.Input`, `CodeMode.Result`, `CodeMode.Success`, `CodeMode.Failure`, `CodeMode.Diagnostic`, and `CodeMode.DiagnosticKind` are both Effect schemas and their inferred TypeScript types. Hosts can combine `CodeMode.Input` and `CodeMode.Result` with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
+
+All other CodeMode types use the same namespace: `CodeMode.Options`, `CodeMode.ExecuteOptions`, `CodeMode.Runtime`, `CodeMode.ExecutionLimits`, `CodeMode.DiscoveryOptions`, `CodeMode.DataValue`, `CodeMode.ToolDescription`, and the `CodeMode.ToolCall*` observation types.
 
 ### Results
 
 ```ts
-type ExecuteResult = ExecuteSuccess | ExecuteFailure
+type Result = Success | Failure
 
-interface ExecuteSuccess {
+interface Success {
   readonly ok: true
-  readonly value: Schema.Json
+  readonly value: CodeMode.DataValue
   readonly logs?: ReadonlyArray<string>
   readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<ToolCall>
+  readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
 }
 
-interface ExecuteFailure {
+interface Failure {
   readonly ok: false
-  readonly error: Diagnostic
+  readonly error: CodeMode.Diagnostic
   readonly logs?: ReadonlyArray<string>
   readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<ToolCall>
+  readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
 }
 ```
 
@@ -300,7 +304,7 @@ import { toolError } from "@opencode-ai/codemode"
 run: ({ id }) => (authorized(id) ? loadOrder(id) : Effect.fail(toolError("Order is unavailable")))
 ```
 
-Only the supplied message is model-visible. The optional cause is never returned in `ExecuteResult`; hosts should perform any required internal logging before crossing this boundary.
+Only the supplied message is model-visible. The optional cause is never returned in `CodeMode.Result`; hosts should perform any required internal logging before crossing this boundary.
 
 ## Authority Boundary
 
@@ -332,7 +336,7 @@ The public contract is guided by these equivalences:
 - A tool implementation is not invoked unless its input has decoded successfully.
 - A tool result is not visible to the program unless its output has decoded and crossed the plain-data boundary successfully.
 - Unknown host failures do not become model-visible diagnostics; `ToolError` is the explicit safe-message channel.
-- Host interruption remains interruption rather than an `ExecuteFailure`.
+- Host interruption remains interruption rather than a `CodeMode.Failure`.
 
 ## Non-Goals
 

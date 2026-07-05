@@ -222,7 +222,7 @@ wave; both packages typecheck clean.
     result is exposed as-is. Discrimination via `Schema.isSchema`. New helpers exported from
     `tool.ts`: `inputTypeScript`/`outputTypeScript`/`decodeInput`/`decodeOutput`/
     `jsonSchemaToTypeScript`; `tool-runtime.ts` consumes them (no direct `Schema.*` use there
-    anymore). Types `JsonSchema`/`ToolSchema` exported from the index. Note: an empty
+    anymore). Types `Tool.JsonSchema`/`Tool.SchemaType` exported from the index. Note: an empty
     `Schema.Struct({})` renders as `{  } | Array<unknown>` (effect's JSON Schema emission) -
     cosmetic, fixed in Wave 4.
 - **`output.*` API deleted**: `OutputItem`(+Schema), result `output` fields, the `output`
@@ -237,7 +237,7 @@ wave; both packages typecheck clean.
   so failures are typed and observable). `message` is the model-safe failure message
   (`ToolError`/`ToolRuntimeError` message, else "Tool execution failed"). Interrupted calls
   fire no end event (timeout kills the whole execution anyway).
-- **Limits collapse**: public `ExecutionLimits` = `{ timeoutMs?, maxToolCalls?,
+- **Limits collapse**: public `CodeMode.ExecutionLimits` = `{ timeoutMs?, maxToolCalls?,
 maxOutputBytes? }` (defaults 10_000 / 100 / 32_000). This wave kept the other knobs as
   internal defaults reachable through an `@internal` `InternalExecutionLimits` type; Fix 5
   later deleted that type and the internal limit system entirely.
@@ -313,7 +313,7 @@ real MCP config. Package still 101 tests / 0 fail; opencode adapter suites still
 packages typecheck clean.
 
 - **Budgeted catalog** (`discoveryPlan` in `tool-runtime.ts`): the all-or-nothing
-  inline/search modes are gone - `DiscoveryMode` deleted, `DiscoveryOptions` is just
+  inline/search modes are gone - `DiscoveryMode` deleted, `CodeMode.DiscoveryOptions` is just
   `{ maxInlineCatalogBytes? }` (default 16,000 UTF-8 bytes; later converted to
   `maxInlineCatalogTokens`, default 4,000 estimated tokens - see Post-wave fixes). Port of
   the old opencode
@@ -542,7 +542,7 @@ budget; namespaces must always be present):
 
 - `src/token.ts` added: copy of `@opencode-ai/core/util/token` (`round(chars / 4)`), so
   the package stays dependency-free; keep in sync if the core heuristic changes.
-- `DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
+- `CodeMode.DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
   estimated tokens ~ the old 16,000 bytes at 4 chars/token - behavior parity, not a size
   reduction). `discoveryPlan` charges `estimate(catalogLine(tool))` per line; cheapest-first
   - stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
@@ -558,7 +558,7 @@ budget; namespaces must always be present):
 **Fix 5 - internal limits removed** (user direction: only the three PUBLIC limits survive as
 configurable knobs; the internal limit system dies):
 
-- `ExecutionLimits` (`timeoutMs` 10_000 / `maxToolCalls` 100 / `maxOutputBytes` 32_000 at
+- `CodeMode.ExecutionLimits` (`timeoutMs` 10_000 / `maxToolCalls` 100 / `maxOutputBytes` 32_000 at
   the time; Fix 6 later removed the first two defaults. Same validation: safe integers,
   timeoutMs >= 1, others >= 0, RangeError otherwise) is now
   the ENTIRE limit surface - exactly the shape section 2's original locked spec named.
@@ -602,7 +602,7 @@ configurable knobs; the internal limit system dies):
   enumeration operation-budget, codemode maxDataBytes/maxSourceBytes/maxOperations/
   maxConcurrency-RangeError assertions, and the adapter's runaway-loop-via-operation-limit
   test - superseded by the package timeout regression test); rewrote the helpers that used
-  `InternalExecutionLimits` as a convenience to plain `ExecutionLimits`
+  `InternalExecutionLimits` as a convenience to plain `CodeMode.ExecutionLimits`
   (promise/enumeration/stdlib run helpers). Package suite: 154 pass / 0 fail; adapter
   suites: 34 + 16.
 
@@ -849,7 +849,7 @@ section 4 outer-truncation item the OPPOSITE way from "kill the outer one"):
   that relied on the old default now asserts the oversized result reaches the shared
   wrapper un-truncated. Suites: 210 + 50, tsgo clean both.
 
-**Docs polish** (post-API-review): stale `DiscoveryOptions` JSDoc fixed (claimed default
+**Docs polish** (post-API-review): stale `CodeMode.DiscoveryOptions` JSDoc fixed (claimed default
 4,000 and alphabetical cheapest-first - now 2,000 and round-robin, matching Fix 8/9 reality)
 and the README's incorrect "`effect` as a peer dependency" line corrected (`effect` is a
 regular dependency; hosts depend on it themselves because the API surface is Effect-typed).
