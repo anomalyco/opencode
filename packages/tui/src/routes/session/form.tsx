@@ -60,6 +60,13 @@ function validateSelection(field: Field, value: FormValue | undefined) {
   if (field.maxItems !== undefined && value.length > field.maxItems) return `Select at most ${field.maxItems}`
 }
 
+function validateValue(field: Field, value: FormValue | undefined) {
+  if (field.required && (value === undefined || value === "" || (Array.isArray(value) && value.length === 0))) {
+    return field.type === "multiselect" ? "Select at least one option" : "Answer required"
+  }
+  return validateSelection(field, value)
+}
+
 function fieldRows(field: Field): { value: FormValue; label: string; description?: string }[] {
   if (field.type === "boolean")
     return [
@@ -333,7 +340,17 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     answer(current.key, list.length === 0 ? undefined : list)
   }
 
+  function validateCurrent() {
+    const current = field()
+    if (!current) return true
+    const invalid = validateValue(current, store.answers[current.key])
+    if (!invalid) return true
+    setStore("error", invalid)
+    return false
+  }
+
   function selectTab(index: number) {
+    if (!validateCurrent()) return
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", selectedRow(next, next ? store.answers[next.key] : undefined))
@@ -374,11 +391,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
       const existing = store.answers[current.key]
       const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
       const value = !isTextual && isMulti && values.length > 0 ? values : undefined
-      if (current.required && value === undefined) {
-        setStore("error", "Answer required")
-        return false
-      }
-      const invalid = validateSelection(current, value)
+      const invalid = validateValue(current, value)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -424,11 +437,6 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         if (index !== -1) values.splice(index, 1)
       }
       if (!values.includes(text)) values.push(text)
-      const invalid = validateSelection(current, values)
-      if (invalid) {
-        setStore("error", invalid)
-        return false
-      }
       answer(current.key, values)
     }
 
@@ -595,9 +603,9 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                 desc: "Submit form",
                 group: "Form",
                 cmd: () => {
-                  const invalid = fields().find((field) => validateSelection(field, store.answers[field.key]))
+                  const invalid = fields().find((field) => validateValue(field, store.answers[field.key]))
                   if (invalid) {
-                    setStore("error", validateSelection(invalid, store.answers[invalid.key]) ?? "Invalid answer")
+                    setStore("error", validateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
                     return
                   }
                   sdk.api.form
@@ -910,7 +918,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                   return Array.isArray(value) ? value.length > 0 : value !== undefined
                 }
                 const missing = () => !answered() && item.required === true
-                const invalid = () => validateSelection(item, store.answers[item.key])
+                const invalid = () => validateValue(item, store.answers[item.key])
                 return (
                   <box paddingLeft={1}>
                     <text>
