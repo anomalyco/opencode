@@ -312,7 +312,7 @@ Instructions are now the budgeted-catalog + prompting-guidance form; verified e2
 real MCP config. Package still 101 tests / 0 fail; opencode adapter suites still 34 + 16; both
 packages typecheck clean.
 
-- **Budgeted catalog** (`discoveryPlan` in `tool-runtime.ts`): the all-or-nothing
+- **Budgeted catalog** (`prepare` in `tool-runtime.ts`): the all-or-nothing
   inline/search modes are gone - `DiscoveryMode` deleted, `CodeMode.DiscoveryOptions` is just
   `{ maxInlineCatalogBytes? }` (default 16,000 UTF-8 bytes; later converted to
   `maxInlineCatalogTokens`, default 4,000 estimated tokens - see Post-wave fixes). Port of
@@ -489,7 +489,7 @@ adapter needed **no changes**.
     segments), directly usable as the call site. Internal `ToolDescription.path` stays
     unprefixed; only the search RESULT items are rendered this way. Exact-path queries accept
     canonical paths and rendered expressions.
-  - **Instructions** (`discoveryPlan`): an explicit calling-convention line and a browse
+  - **Instructions** (`prepare`): an explicit calling-convention line and a browse
     hint on the search advertisement (both since absorbed into the `## Rules` section by
     the instructions restructure below).
   - **Tests**: package search/discovery tests updated (prefixed paths, alphabetical browse)
@@ -499,7 +499,7 @@ adapter needed **no changes**.
 
 - **Instructions restructure: markdown sections, placeholder-only call forms (done).**
   The flat prose instructions (which mixed a real catalog tool with fabricated result
-  fields in the worked example) are replaced by structured markdown in `discoveryPlan`,
+  fields in the worked example) are replaced by structured markdown in `prepare`,
   ordered so the workflow sits at the top (the least likely part of a long description to
   be truncated or skimmed away) and the catalog at the bottom (the per-section content
   described here was later condensed by Fix 8 - Workflow/Rules deduped, Syntax inverted):
@@ -544,7 +544,7 @@ budget; namespaces must always be present):
   the package stays dependency-free; keep in sync if the core heuristic changes.
 - `CodeMode.DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
   estimated tokens ~ the old 16,000 bytes at 4 chars/token - behavior parity, not a size
-  reduction). `discoveryPlan` charges `estimate(catalogLine(tool))` per line; cheapest-first
+  reduction). `prepare` charges `estimate(catalogLine(tool))` per line; cheapest-first
   - stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
     Fix 8). Namespace stub lines were and remain unbudgeted - every
     namespace always appears with its tool count, even at budget 0 (asserted in package and
@@ -690,7 +690,7 @@ along). All in `tool-runtime.ts`; no interpreter changes.
   (332 -> 176), Syntax 453 -> 188 (419 -> 174); fixed prose total 1,005 -> 610 (927 -> 562),
   ~ 40% reduction with no behavioral content dropped. Workflow grew slightly because it
   absorbed the deduped parse/return-small justifications.
-- **Round-robin namespace inlining** (`discoveryPlan`): the ported stop-on-first-miss
+- **Round-robin namespace inlining** (`prepare`): the ported stop-on-first-miss
   behavior (alphabetically-late namespaces starved to "none shown" while an early
   namespace inlines everything) is replaced by round-robin fairness - in each round
   (namespaces alphabetical), every namespace still holding un-inlined tools attempts to

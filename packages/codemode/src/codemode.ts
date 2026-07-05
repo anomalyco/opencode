@@ -4061,10 +4061,10 @@ export const make = <const Tools extends Record<string, unknown> = {}>(
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
-  const discovery = ToolRuntime.discoveryPlan(tools, options.discovery?.maxInlineCatalogTokens)
-  const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, discovery.searchIndex)
-  const catalog = discovery.catalog
-  const instructions = discovery.instructions
+  const prepared = ToolRuntime.prepare(tools, options.discovery?.maxInlineCatalogTokens)
+  const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, prepared.searchIndex)
+  const catalog = prepared.catalog
+  const instructions = prepared.instructions
 
   return {
     catalog: () => catalog,

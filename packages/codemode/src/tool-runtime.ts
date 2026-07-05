@@ -392,7 +392,7 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
  * namespace. Namespace stub lines are never budgeted: every namespace appears with its
  * tool count even at budget 0.
  */
-export const discoveryPlan = <R>(
+export const prepare = <R>(
   tools: HostTools<R>,
   maxInlineCatalogTokens = defaultMaxInlineCatalogTokens,
 ): DiscoveryPlan => {
