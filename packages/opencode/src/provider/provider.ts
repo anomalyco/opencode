@@ -1661,8 +1661,36 @@ const layer = Layer.effect(
           delete options.fetch
         }
 
-        if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-          options["includeUsage"] = true
+        if (model.api.npm.includes("@ai-sdk/openai-compatible")) {
+          if (options["includeUsage"] !== false) {
+            // Some OpenAI-compatible providers return 400 when stream_options.includeUsage
+            // is sent. Skip it for known incompatible hosts unless the user explicitly
+            // opted in by setting includeUsage: true.
+            const baseURLValue = typeof options["baseURL"] === "string" ? options["baseURL"] : model.api.url
+            let isIncompatible = false
+            if (baseURLValue) {
+              try {
+                const host = new URL(baseURLValue).host.toLowerCase()
+                const incompatibleHosts = [
+                  "api.xiaomimimo.com",
+                  "open.bigmodel.cn",
+                  "dashscope.aliyuncs.com",
+                  "qianfan.baidubce.com",
+                  "api.minimax.io",
+                  "ark.cn-beijing.volces.com",
+                  "api.lkeap.cloud.tencent.com",
+                  "api-ai.gitcode.com",
+                  "api-inference.modelscope.cn",
+                ]
+                isIncompatible = incompatibleHosts.some((h) => host === h || host.endsWith(`.${h}`))
+              } catch {
+                // ignore invalid URLs
+              }
+            }
+            if (!isIncompatible) {
+              options["includeUsage"] = true
+            }
+          }
         }
 
         const baseURL = iife(() => {
