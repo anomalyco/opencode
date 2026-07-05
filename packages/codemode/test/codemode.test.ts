@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
-import { CodeMode, Tool, toolError, type ExecutionLimits } from "../src/index.js"
-import type { Definition } from "../src/tool.js"
+import { CodeMode, Tool, toolError } from "../src/index.js"
 
-const run = (tool: Definition<never>) =>
+const run = (tool: Tool.Definition<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
 class UnsafeHostError extends Schema.TaggedErrorClass<UnsafeHostError>()("UnsafeHostError", {
@@ -349,7 +348,7 @@ describe("CodeMode output budget", () => {
   })
 
   test("truncates an oversized result value with a marker instead of failing", async () => {
-    const limits: ExecutionLimits = { maxOutputBytes: 40 }
+    const limits: CodeMode.ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `return { data: "${"x".repeat(200)}" }`,
@@ -368,7 +367,7 @@ describe("CodeMode output budget", () => {
   })
 
   test("keeps leading logs within the remaining budget and marks the cut", async () => {
-    const limits: ExecutionLimits = { maxOutputBytes: 40 }
+    const limits: CodeMode.ExecutionLimits = { maxOutputBytes: 40 }
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `
@@ -502,7 +501,8 @@ describe("CodeMode public contract", () => {
     ])
 
     expect(reusable).toStrictEqual(oneShot)
-    expect(Schema.decodeUnknownSync(CodeMode.Input)({ code: source })).toStrictEqual({ code: source })
+    const input: CodeMode.Input = { code: source }
+    expect(Schema.decodeUnknownSync(CodeMode.Input)(input)).toStrictEqual(input)
     expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(reusable)))).toStrictEqual(reusable)
   })
 
