@@ -77,8 +77,8 @@ function validateValue(field: Field, value: FormValue | undefined) {
   if (field.type === "number" || field.type === "integer") {
     if (typeof value !== "number" || !Number.isFinite(value)) return "Expected a number"
     if (field.type === "integer" && !Number.isInteger(value)) return "Expected an integer"
-    if (field.minimum !== undefined && value < field.minimum) return `Must be at least ${field.minimum}`
-    if (field.maximum !== undefined && value > field.maximum) return `Must be at most ${field.maximum}`
+    if (typeof field.minimum === "number" && value < field.minimum) return `Must be at least ${field.minimum}`
+    if (typeof field.maximum === "number" && value > field.maximum) return `Must be at most ${field.maximum}`
     return
   }
   if (field.type === "boolean") return typeof value === "boolean" ? undefined : "Expected yes or no"
@@ -113,12 +113,12 @@ function selectedRow(field: Field | undefined, value: FormValue | undefined) {
   const rows = fieldRows(field)
   const index = rows.findIndex((row) => row.value === value)
   if (index !== -1) return index
-  if (typeof value === "string" && field.custom && (field.type === "multiselect" || field.options)) return rows.length
+  if (typeof value === "string" && field.type === "string" && field.options && field.custom) return rows.length
   return 0
 }
 
 function customDefault(field: Field) {
-  if (!field.custom || field.type !== "string" || !field.options || typeof field.default !== "string") return
+  if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return
   if (!field.options.some((option) => option.value === field.default)) return field.default
 }
 
