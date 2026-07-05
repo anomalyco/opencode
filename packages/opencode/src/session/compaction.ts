@@ -437,6 +437,10 @@ export const layer = Layer.effect(
         ],
         model,
       })
+      // The message carrying the summary — swapped to the retry processor's
+      // message when the first pass overflows (processor.message is a getter;
+      // it cannot be reassigned).
+      let activeMessage = processor.message
 
       if (result === "compact") {
         // Compaction itself overflowed — retry with aggressive truncation
@@ -504,10 +508,11 @@ export const layer = Layer.effect(
           })
 
           // Don't return "stop" — let the auto-continue path below handle recovery
+          activeMessage = retryProcessor.message
           result = "continue"
         } else {
           // Retry succeeded — swap in the retry processor's result
-          processor.message = retryProcessor.message
+          activeMessage = retryProcessor.message
           result = retryResult
         }
       }
@@ -603,13 +608,13 @@ export const layer = Layer.effect(
         }
       }
 
-      if (processor.message.error) return "stop"
+      if (activeMessage.error) return "stop"
       if (result === "continue") {
         const summary = summaryText(
           (yield* session.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-            (item) => item.info.id === msg.id,
+            (item) => item.info.id === activeMessage.id,
           ) ?? {
-            info: msg,
+            info: activeMessage,
             parts: [],
           },
         )
