@@ -67,3 +67,5 @@ export const EventGroup = event.group
 export const OpenCodeEvent = event.schema
 export type OpenCodeEvent = typeof OpenCodeEvent.Type
 export type OpenCodeEventEncoded = typeof OpenCodeEvent.Encoded
+export const isOpenCodeEvent = (event: { readonly type: string }): event is OpenCodeEvent =>
+  event.type === "server.connected" || EventManifest.isServer(event)

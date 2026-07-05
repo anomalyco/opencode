@@ -27,7 +27,6 @@ describe("public event manifest", () => {
       Agent.Event.Updated,
     ])
     expect(EventManifest.Definitions).toContain(Agent.Event.Updated)
-    expect(EventManifest.ServerDefinitions).toContain(McpEvent.ToolsChanged)
     expect(EventManifest.Definitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])
@@ -47,6 +46,8 @@ describe("public event manifest", () => {
       EventManifest.Definitions.map((definition) => definition.type),
     )
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
+    expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
+    expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })

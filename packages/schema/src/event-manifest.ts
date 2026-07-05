@@ -1,5 +1,6 @@
 export * as EventManifest from "./event-manifest.js"
 
+import { Schema } from "effect"
 import { Agent } from "./agent.js"
 import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
@@ -78,7 +79,7 @@ export const ServerDefinitions = Event.inventory(
   ...TuiEvent.Definitions,
   ...InstallationEvent.Definitions,
   ...VcsEvent.Definitions,
-  ...McpEvent.Definitions,
+  McpEvent.StatusChanged,
   // Shared transitional: V1 contracts the current TUI still consumes during
   // the migration (permission.asked/replied, question.asked, session.error).
   // Remove when the TUI moves to the current permission/question surfaces.
@@ -86,6 +87,9 @@ export const ServerDefinitions = Event.inventory(
   ...QuestionV1.Event.Definitions,
   SessionV1.Error,
 )
+export const Server = Event.latest(ServerDefinitions)
+export type ServerEvent = Schema.Schema.Type<(typeof ServerDefinitions)[number]>
+export const isServer = (event: { readonly type: string }): event is ServerEvent => Server.has(event.type)
 
 export const Definitions = Event.inventory(
   ...foundationDefinitions,

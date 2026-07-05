@@ -1,7 +1,8 @@
 export * as PluginHost from "./host"
 
 import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
-import { Effect, Schema } from "effect"
+import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
 import { Catalog } from "../catalog"
@@ -157,7 +158,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
     },
     event: {
-      subscribe: () => EventV2.serverLive(events),
+      subscribe: () => events.live().pipe(Stream.filter(EventManifest.isServer)),
     },
     integration: {
       list: () => response(integration.list()),
