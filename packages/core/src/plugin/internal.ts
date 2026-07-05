@@ -14,6 +14,7 @@ import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { EventV2 } from "../event"
 import { FileMutation } from "../file-mutation"
+import { Form } from "../form"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
@@ -24,7 +25,6 @@ import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
 import { PermissionV2 } from "../permission"
-import { QuestionV2 } from "../question"
 import { Reference } from "../reference"
 import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
@@ -73,7 +73,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const npm = yield* Npm.Service
   const permission = yield* PermissionV2.Service
   const runtime = yield* PluginRuntime.Service
-  const question = yield* QuestionV2.Service
+  const form = yield* Form.Service
   const read = yield* ReadToolFileSystem.Service
   const reference = yield* Reference.Service
   const ripgrep = yield* Ripgrep.Service
@@ -102,7 +102,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Npm.Service, npm),
     Context.make(PermissionV2.Service, permission),
     Context.make(PluginRuntime.Service, runtime),
-    Context.make(QuestionV2.Service, question),
+    Context.make(Form.Service, form),
     Context.make(ReadToolFileSystem.Service, read),
     Context.make(Reference.Service, reference),
     Context.make(Ripgrep.Service, ripgrep),

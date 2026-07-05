@@ -3,6 +3,7 @@ export * as QuestionTool from "./question"
 import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
+import { Form } from "../form"
 import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
 import { Tool } from "./tool"
@@ -45,7 +46,7 @@ export const toModelOutput = (
 export const Plugin = {
   id: "opencode.tool.question",
   effect: Effect.fn("QuestionTool.Plugin")(function* (ctx: PluginContext) {
-    const question = yield* QuestionV2.Service
+    const forms = yield* Form.Service
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
@@ -69,15 +70,42 @@ export const Plugin = {
               .pipe(
                 Effect.mapError(() => new ToolFailure({ message: "Permission denied: question" })),
                 Effect.andThen(
-                  question
+                  forms
                     .ask({
                       sessionID: context.sessionID,
-                      questions: input.questions,
-                      tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
+                      metadata: {
+                        kind: "question",
+                        tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
+                      },
+                      mode: "form",
+                      fields: input.questions.map(
+                        (question, index): Form.Field => ({
+                          key: `q${index}`,
+                          title: question.header,
+                          description: question.question,
+                          type: question.multiple === true ? "multiselect" : "string",
+                          options: question.options.map((option) => ({
+                            value: option.label,
+                            label: option.label,
+                            description: option.description,
+                          })),
+                        custom: true,
+                        }),
+                      ),
                     })
                     .pipe(Effect.orDie),
                 ),
-                Effect.map((answers) => ({ answers })),
+                Effect.flatMap((state) => {
+                  if (state.status !== "answered") return Effect.die(new Form.CancelledError())
+                  return Effect.succeed({
+                    answers: input.questions.map((_, index): QuestionV2.Answer => {
+                      const value = state.answer[`q${index}`]
+                      if (value === undefined) return []
+                      if (typeof value === "object") return Array.from(value)
+                      return [String(value)]
+                    }),
+                  })
+                }),
               ),
         }),
       })
