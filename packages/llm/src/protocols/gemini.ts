@@ -19,6 +19,7 @@ import {
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
+import { unflattenArgs } from "./utils/unflatten-args"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
 
@@ -439,7 +440,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
     }
 
     if ("functionCall" in part) {
-      const input = part.functionCall.args
+      const input = unflattenArgs(part.functionCall.args)
       const id = `tool_${nextToolCallId++}`
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
