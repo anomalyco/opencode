@@ -203,6 +203,58 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
   }
 })
 
+test("refreshes pending session forms after reconnect", async () => {
+  const events = createEventStream()
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session" && url.searchParams.has("parentID")) return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session")
+      return json({
+        data: [
+          {
+            id: "ses_form",
+            title: "Form session",
+            location: { directory },
+            time: { created: 0, updated: 0 },
+          },
+        ],
+        cursor: {},
+      })
+    if (url.pathname !== "/api/session/ses_form/form") return
+    requests++
+    return json({ data: [{ id: `frm_${requests}`, sessionID: "ses_form", mode: "form", fields: [] }] })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.session.form.list("ses_form")?.[0]?.id === "frm_1")
+
+    events.disconnect()
+
+    await wait(() => data.session.form.list("ses_form")?.[0]?.id === "frm_2", 4000)
+    expect(requests).toBe(2)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("completes exploration when a queued prompt is promoted", async () => {
   const events = createEventStream()
   const sessionID = "session-promotion"
@@ -802,6 +854,76 @@ test("adds and dismisses permission requests from live events", async () => {
       data: { sessionID: "ses_1", requestID: "per_2", reply: "reject" },
     })
     await wait(() => data.session.permission.list("ses_1")?.length === 0)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("adds, dismisses, and refreshes form requests", async () => {
+  const events = createEventStream()
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/session/ses_1/form") return
+    return json({ data: [{ id: "frm_remote", sessionID: "ses_1", mode: "form", fields: [] }] })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.connection.status() === "connected")
+    emitEvent(events, {
+      id: "evt_form_created_1",
+      created: 0,
+      type: "form.created",
+      data: { form: { id: "frm_1", sessionID: "ses_1", mode: "form", fields: [] } },
+    })
+    emitEvent(events, {
+      id: "evt_form_created_duplicate",
+      created: 1,
+      type: "form.created",
+      data: { form: { id: "frm_1", sessionID: "ses_1", mode: "form", fields: [] } },
+    })
+    await wait(() => data.session.form.list("ses_1")?.length === 1)
+
+    emitEvent(events, {
+      id: "evt_form_replied_1",
+      created: 2,
+      type: "form.replied",
+      data: { sessionID: "ses_1", id: "frm_1", answer: {} },
+    })
+    await wait(() => data.session.form.list("ses_1")?.length === 0)
+
+    emitEvent(events, {
+      id: "evt_form_created_2",
+      created: 3,
+      type: "form.created",
+      data: { form: { id: "frm_2", sessionID: "ses_1", mode: "form", fields: [] } },
+    })
+    emitEvent(events, {
+      id: "evt_form_cancelled_2",
+      created: 4,
+      type: "form.cancelled",
+      data: { sessionID: "ses_1", id: "frm_2" },
+    })
+    await wait(() => data.session.form.list("ses_1")?.length === 0)
+
+    await data.session.form.refresh("ses_1")
+    expect(data.session.form.list("ses_1")?.map((form) => form.id)).toEqual(["frm_remote"])
   } finally {
     app.renderer.destroy()
   }

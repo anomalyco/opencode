@@ -59,6 +59,7 @@ import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
+import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { sessionEpilogue } from "../../util/presentation"
 import { useTuiConfig } from "../../config"
@@ -185,11 +186,15 @@ export function Session() {
     if (session()?.parentID) return []
     return data.session.question.list(route.sessionID) ?? []
   })
+  const forms = createMemo(() => {
+    const sessionIDs = session()?.parentID ? [route.sessionID] : [route.sessionID, ...descendantSessionIDs()]
+    return sessionIDs.flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
+  })
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
   })
-  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0 || forms().length > 0)
 
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.type === "assistant" && x.time.completed)?.id
@@ -236,18 +241,19 @@ export function Session() {
 
   createEffect(
     on(descendantSessionIDs, (sessionIDs) => {
-      void Promise.all(sessionIDs.map((sessionID) => data.session.permission.refresh(sessionID)))
+      void Promise.all(
+        sessionIDs.flatMap((sessionID) => [
+          data.session.permission.refresh(sessionID),
+          data.session.form.refresh(sessionID),
+        ]),
+      )
     }),
   )
 
   createEffect(() => {
     const sessionID = route.sessionID
     void (async () => {
-      await Promise.all([
-        data.session.refresh(sessionID),
-        data.session.permission.refresh(sessionID),
-        data.session.question.refresh(sessionID),
-      ])
+      await data.session.refresh(sessionID)
       const info = data.session.get(sessionID)
       if (!info) {
         toast.show({
@@ -258,6 +264,12 @@ export function Session() {
         navigate({ type: "home" })
         return
       }
+      if (!info.parentID) await data.session.refreshChildren(sessionID)
+      await Promise.all([
+        data.session.permission.refresh(sessionID),
+        data.session.question.refresh(sessionID),
+        data.session.form.refresh(sessionID),
+      ])
 
       project.workspace.set(info.location.workspaceID)
       editor.reconnect(info.location.directory)
@@ -935,13 +947,21 @@ export function Session() {
                   onClose={() => setComposer("open", false)}
                 />
                 <Switch>
-                  <Match when={composer.open || !!session()?.parentID}>{null}</Match>
                   <Match when={permissions().length > 0}>
                     <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
                   </Match>
                   <Match when={questions().length > 0}>
                     <QuestionPrompt request={questions()[0]} directory={session()?.location.directory} />
                   </Match>
+                  <Match when={forms().length > 0}>
+                    <Show when={forms()[0]?.id} keyed>
+                      {(_) => {
+                        const form = forms()[0]
+                        return form ? <FormPrompt form={form} /> : null
+                      }}
+                    </Show>
+                  </Match>
+                  <Match when={composer.open || !!session()?.parentID}>{null}</Match>
                   <Match when={!disabled()}>
                     <pluginRuntime.Slot
                       name="session_prompt"

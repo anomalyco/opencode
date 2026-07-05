@@ -123,7 +123,16 @@ function stateApi(sync: ReturnType<typeof useSync>, data: ReturnType<typeof useD
         return sync.data.session.length
       },
       get(sessionID) {
-        return sync.session.get(sessionID)
+        const session = data.session.get(sessionID)
+        if (!session) return
+        return {
+          ...session,
+          slug: session.id,
+          workspaceID: session.location.workspaceID,
+          directory: session.location.directory,
+          path: session.subpath,
+          version: "2",
+        }
       },
       diff(sessionID) {
         return (sync.data.session_diff[sessionID] ?? []).flatMap((item) =>

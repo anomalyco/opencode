@@ -1,6 +1,8 @@
 import type {
   AgentV2Info,
   CommandV2Info,
+  FormFormInfo,
+  FormUrlInfo,
   IntegrationInfo,
   LocationRef,
   McpServer,
@@ -29,6 +31,8 @@ export type DataSessionStatus = "idle" | "running"
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 
+export type FormInfo = FormFormInfo | FormUrlInfo
+
 type LocationData = {
   agent?: AgentV2Info[]
   command?: CommandV2Info[]
@@ -54,6 +58,8 @@ type Data = {
     message: Record<string, SessionMessage[]>
     permission: Record<string, PermissionV2Request[]>
     question: Record<string, QuestionV2Request[]>
+    // Pending forms keyed by session ID.
+    form: Record<string, FormInfo[]>
   }
   project: {
     permission: Record<string, PermissionSavedInfo[]>
@@ -88,6 +94,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         message: {},
         permission: {},
         question: {},
+        form: {},
       },
       project: {
         permission: {},
@@ -602,6 +609,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             ),
           )
           break
+        case "form.created":
+          if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
+          setStore("session", "form", event.data.form.sessionID, [
+            ...(store.session.form[event.data.form.sessionID] ?? []),
+            mutable(event.data.form),
+          ])
+          break
+        case "form.replied":
+        case "form.cancelled":
+          setStore(
+            "session",
+            "form",
+            event.data.sessionID,
+            (store.session.form[event.data.sessionID] ?? []).filter((form) => form.id !== event.data.id),
+          )
+          break
         case "shell.created":
           setStore("location", locationKey(event.location ?? defaultLocation()), (data) => ({
             ...data,
@@ -680,6 +703,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
           registerSession(sessionID)
         },
+        async refreshChildren(sessionID: string) {
+          const visit = async (parentID: string, seen: Set<string>): Promise<void> => {
+            const children = mutable((await sdk.api.session.list({ parentID, limit: 200 })).data).filter(
+              (session) => !seen.has(session.id),
+            )
+            for (const session of children) setStore("session", "info", session.id, session)
+            for (const session of children) registerSession(session.id)
+            await Promise.all(children.map((session) => visit(session.id, new Set([...seen, session.id]))))
+          }
+          await visit(sessionID, new Set([sessionID]))
+        },
         message: {
           ids(sessionID: string) {
             return (store.session.message[sessionID] ?? []).map((message) => message.id)
@@ -726,6 +760,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(sessionID: string) {
             setStore("session", "question", sessionID, mutable(await sdk.api.question.list({ sessionID })))
+          },
+        },
+        form: {
+          list(sessionID: string) {
+            return store.session.form[sessionID]
+          },
+          async refresh(sessionID: string) {
+            setStore("session", "form", sessionID, mutable(await sdk.api.form.list({ sessionID })))
           },
         },
       },
@@ -869,7 +911,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             directory: defaultLocation().directory,
             workspace: defaultLocation().workspaceID,
           })
-          .then((response) => {
+          .then(async (response) => {
             setStore(
               "session",
               "info",
@@ -878,6 +920,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               }),
             )
             for (const session of response.data) registerSession(session.id)
+            await Promise.all(
+              Object.values(store.session.info).flatMap((session) =>
+                session.parentID ? [] : [result.session.refreshChildren(session.id)],
+              ),
+            )
+            await Promise.all(
+              Object.keys(store.session.info).flatMap((sessionID) => [
+                result.session.permission.refresh(sessionID),
+                result.session.form.refresh(sessionID),
+              ]),
+            )
           }),
         result.location.refresh(),
         result.location.agent.refresh(),
