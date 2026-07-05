@@ -2129,27 +2129,40 @@
 }
 
 [data-page="stats"] [data-component="market-share-list"] li {
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="market-share-list"] li > a,
+[data-page="stats"] [data-component="market-share-list"] li > button {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-width: 0;
   height: 28px;
   box-sizing: border-box;
   padding: 0 8px;
-  background: var(--stats-layer);
   border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+  color: inherit;
+  font: inherit;
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
   outline: none;
+  text-decoration: none;
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease,
     background 120ms ease;
 }
 
-[data-page="stats"] [data-component="market-share-list"] li[data-active="true"],
-[data-page="stats"] [data-component="market-share-list"] li:focus-visible {
+[data-page="stats"] [data-component="market-share-list"] li > button {
+  appearance: none;
+}
+
+[data-page="stats"] [data-component="market-share-list"] li[data-active="true"] > :is(a, button),
+[data-page="stats"] [data-component="market-share-list"] li > :is(a, button):focus-visible {
   border-color: var(--stats-text);
   background: var(--stats-layer);
   box-shadow:
@@ -3333,6 +3346,320 @@
 [data-page="stats"] [data-slot="model-hero-sparkline"] svg {
   width: 36px;
   height: 24px;
+}
+
+[data-page="stats"] [data-section="model-specs"] {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  min-height: 144px;
+  color: var(--stats-text);
+  box-shadow:
+    inset 0 1px var(--stats-line),
+    inset 0 -1px var(--stats-line),
+    inset 1px 0 var(--stats-line),
+    inset -1px 0 var(--stats-line);
+}
+
+[data-page="stats"] [data-component="model-spec"] {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 144px;
+  box-sizing: border-box;
+  padding: 40px;
+  border-left: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-component="model-spec"]:first-child {
+  border-left: 0;
+}
+
+[data-page="stats"] [data-component="model-spec"] span {
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+[data-page="stats"] [data-component="model-spec"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-section="model-momentum"] {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  gap: 40px;
+  min-height: 938px;
+  padding: 80px 40px;
+  color: var(--stats-text);
+  box-shadow:
+    inset 1px 0 var(--stats-line),
+    inset -1px 0 var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="model-momentum-title"] {
+  min-width: 0;
+  height: 42px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--stats-muted);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 42px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-momentum-title"] a {
+  color: var(--stats-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-momentum-title"] a:hover,
+[data-page="stats"] [data-slot="model-momentum-title"] a:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-momentum-title"] span {
+  margin-left: 12px;
+}
+
+[data-page="stats"] [data-slot="model-momentum-pattern"] {
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  background: var(--stats-line);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position: center top;
+  mask-repeat: repeat;
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: center top;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-component="model-momentum-chart"] {
+  position: relative;
+  display: grid;
+  grid-template-rows: 64px 370px 14px;
+  gap: 16px;
+  height: 480px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="model-momentum-summary"] {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  width: fit-content;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="model-momentum-total"] {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  height: 42px;
+}
+
+[data-page="stats"] [data-slot="model-momentum-total"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 42px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-momentum-total"] span,
+[data-page="stats"] [data-slot="model-momentum-end"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  background: #198b4324;
+  color: #198b43;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-momentum-total"] span[data-state="negative"],
+[data-page="stats"] [data-slot="model-momentum-end"][data-state="negative"] {
+  background: #b82d3524;
+  color: #b82d35;
+}
+
+[data-page="stats"] [data-slot="model-momentum-summary"] p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="model-momentum-plot"] {
+  position: relative;
+  min-width: 0;
+  height: 370px;
+}
+
+[data-page="stats"] [data-slot="model-momentum-plot"] svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+[data-page="stats"] [data-slot="model-momentum-line-muted"],
+[data-page="stats"] [data-slot="model-momentum-line-active"] {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="model-momentum-line-muted"] {
+  stroke: var(--stats-bar-idle);
+}
+
+[data-page="stats"] [data-slot="model-momentum-line-active"] {
+  stroke: #198b43;
+}
+
+[data-page="stats"] [data-slot="model-momentum-marker"] {
+  fill: var(--stats-bar-idle);
+}
+
+[data-page="stats"] [data-slot="model-momentum-marker"][data-active="true"] {
+  fill: #198b43;
+}
+
+[data-page="stats"] [data-slot="model-momentum-end"] {
+  position: absolute;
+  top: var(--momentum-end-y);
+  left: var(--momentum-end-x);
+  gap: 8px;
+  height: 14px;
+  padding: 0;
+  background: transparent;
+  transform: translateY(-50%);
+}
+
+[data-page="stats"] [data-slot="model-momentum-end"] i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+[data-page="stats"] [data-slot="model-momentum-months"] {
+  position: relative;
+  height: 14px;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-slot="model-momentum-months"] span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+[data-page="stats"] [data-slot="model-momentum-months"] span:first-child {
+  transform: none;
+}
+
+[data-page="stats"] [data-slot="model-momentum-months"] span:last-child {
+  transform: translateX(-100%);
+}
+
+[data-page="stats"] [data-slot="model-momentum-metrics"] {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="model-momentum-metric"] {
+  position: relative;
+  display: grid;
+  align-content: space-between;
+  min-width: 0;
+  min-height: 120px;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--stats-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-bg) 76%, transparent), transparent), var(--stats-layer);
+}
+
+[data-page="stats"] [data-component="model-momentum-metric"] span {
+  position: relative;
+  z-index: 1;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-component="model-momentum-metric"] strong {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 42px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="model-momentum-metric"] em {
+  position: absolute;
+  top: -90px;
+  left: -69px;
+  color: var(--stats-text);
+  font-size: 200px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 300px;
+  opacity: 0.04;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 [data-page="stats"] [data-section="lab-overview"] {
@@ -4966,6 +5293,7 @@
   [data-page="stats"] [data-section="session-cost"],
   [data-page="stats"] [data-section="model-hero"],
   [data-page="stats"] [data-section="lab-hero"],
+  [data-page="stats"] [data-section="model-momentum"],
   [data-page="stats"] [data-section="model-panel"] {
     padding: 64px 32px;
   }
@@ -5054,6 +5382,48 @@
 
   [data-page="stats"] [data-component="model-rank-panel"] {
     min-height: 0;
+  }
+
+  [data-page="stats"] [data-section="model-specs"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  [data-page="stats"] [data-component="model-spec"] {
+    min-height: 132px;
+    padding: 32px;
+  }
+
+  [data-page="stats"] [data-component="model-spec"]:nth-child(3n + 1) {
+    border-left: 0;
+  }
+
+  [data-page="stats"] [data-component="model-spec"]:nth-child(n + 4) {
+    border-top: 1px solid var(--stats-line);
+  }
+
+  [data-page="stats"] [data-section="model-momentum"] {
+    min-height: auto;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-title"] {
+    height: auto;
+    overflow: visible;
+    line-height: 1.5;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  [data-page="stats"] [data-component="model-momentum-chart"] {
+    grid-template-rows: auto 320px 14px;
+    height: 434px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-plot"] {
+    height: 320px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-metrics"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   [data-page="stats"] [data-component="model-metric-grid"],
@@ -5184,6 +5554,7 @@
   [data-page="stats"] [data-section="session-cost"],
   [data-page="stats"] [data-section="model-hero"],
   [data-page="stats"] [data-section="lab-hero"],
+  [data-page="stats"] [data-section="model-momentum"],
   [data-page="stats"] [data-section="model-panel"] {
     padding: 48px 24px;
   }
@@ -5349,6 +5720,90 @@
     gap: 6px;
     font-size: 14px;
     line-height: 22px;
+  }
+
+  [data-page="stats"] [data-section="model-specs"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  [data-page="stats"] [data-component="model-spec"] {
+    min-height: 116px;
+    padding: 24px;
+  }
+
+  [data-page="stats"] [data-component="model-spec"]:nth-child(n) {
+    border-left: 1px solid var(--stats-line);
+    border-top: 0;
+  }
+
+  [data-page="stats"] [data-component="model-spec"]:nth-child(2n + 1) {
+    border-left: 0;
+  }
+
+  [data-page="stats"] [data-component="model-spec"]:nth-child(n + 3) {
+    border-top: 1px solid var(--stats-line);
+  }
+
+  [data-page="stats"] [data-component="model-spec"]:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  [data-page="stats"] [data-component="model-spec"] strong {
+    font-size: 24px;
+    line-height: 1.35;
+  }
+
+  [data-page="stats"] [data-section="model-momentum"] {
+    gap: 28px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-title"] {
+    font-size: 20px;
+    line-height: 30px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-title"] span {
+    margin-left: 8px;
+  }
+
+  [data-page="stats"] [data-component="model-momentum-chart"] {
+    grid-template-rows: auto 260px 14px;
+    gap: 14px;
+    height: 380px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-total"] {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    height: auto;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-total"] strong {
+    font-size: 24px;
+    line-height: 32px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-summary"] p {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-plot"] {
+    height: 260px;
+  }
+
+  [data-page="stats"] [data-slot="model-momentum-end"] {
+    display: none;
+  }
+
+  [data-page="stats"] [data-component="model-momentum-metric"] {
+    min-height: 112px;
+  }
+
+  [data-page="stats"] [data-component="model-momentum-metric"] strong {
+    font-size: clamp(20px, 5.5vw, 24px);
+    line-height: 34px;
   }
 
   [data-page="stats"] [data-slot="model-catalog-grid"] {
