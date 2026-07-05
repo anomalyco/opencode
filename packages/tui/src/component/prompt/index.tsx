@@ -269,7 +269,13 @@ export function Prompt(props: PromptProps) {
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (tokens <= 0) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    // Use the currently selected model for the context-limit denominator so it
+    // updates immediately after a model switch, falling back to the last
+    // assistant message's model when nothing is selected yet.
+    const selected = local.model.current()
+    const model =
+      (selected && sync.data.provider.find((item) => item.id === selected.providerID)?.models[selected.modelID]) ??
+      sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = session?.cost ?? 0
     return {

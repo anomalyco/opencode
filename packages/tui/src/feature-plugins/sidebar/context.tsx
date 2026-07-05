@@ -2,6 +2,7 @@ import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo } from "solid-js"
+import { useLocal } from "../../context/local"
 
 const id = "internal:sidebar-context"
 
@@ -12,6 +13,7 @@ const money = new Intl.NumberFormat("en-US", {
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
+  const local = useLocal()
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const session = createMemo(() => props.api.state.session.get(props.session_id))
   const cost = createMemo(() => session()?.cost ?? 0)
@@ -27,7 +29,16 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    // Use the currently selected model for the context-limit denominator so it
+    // updates immediately after a model switch, falling back to the last
+    // assistant message's model when nothing is selected yet. The global model
+    // picker only applies to the top-level session, so for subagent sessions
+    // (which run their own agent's model and can be viewed via the sidebar) use
+    // the session's own last-message model instead.
+    const selected = session()?.parentID ? undefined : local.model.current()
+    const model =
+      (selected && props.api.state.provider.find((item) => item.id === selected.providerID)?.models[selected.modelID]) ??
+      props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
