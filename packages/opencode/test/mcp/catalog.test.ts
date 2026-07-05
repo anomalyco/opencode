@@ -158,3 +158,195 @@ test("isolates malformed output schemas while caching valid sibling schemas", as
     await Promise.all([client.close(), server.close()])
   }
 })
+
+test("refreshes valid sibling metadata when another output schema is malformed", async () => {
+  let refreshed = false
+  const server = new Server({ name: "schema-refresh", version: "1.0.0" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, () =>
+    Promise.resolve({
+      tools: [
+        ...(refreshed
+          ? [
+              {
+                name: "malformed",
+                inputSchema: { type: "object" as const },
+                outputSchema: { type: "object" as const, properties: { value: { $ref: "#/$defs/Missing" } } },
+              },
+            ]
+          : []),
+        {
+          name: "valid",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: { value: { type: refreshed ? ("number" as const) : ("string" as const) } },
+            required: ["value"],
+          },
+        },
+      ],
+    }),
+  )
+  server.setRequestHandler(CallToolRequestSchema, () =>
+    Promise.resolve({ content: [], structuredContent: { value: 42 } }),
+  )
+
+  const client = new Client({ name: "schema-refresh-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    expect(await Effect.runPromise(McpCatalog.defs(client))).toHaveLength(1)
+    refreshed = true
+    expect(await Effect.runPromise(McpCatalog.defs(client))).toHaveLength(2)
+    await expect(client.callTool({ name: "valid", arguments: {} })).resolves.toMatchObject({
+      structuredContent: { value: 42 },
+    })
+  } finally {
+    await Promise.all([client.close(), server.close()])
+  }
+})
+
+test("retains the previous metadata when a continuation page fails", async () => {
+  let failContinuation = false
+  const server = new Server({ name: "failure", version: "1.0.0" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, ({ params }) => {
+    if (params?.cursor === "page-2") throw new Error("continuation failed")
+    return Promise.resolve({
+      tools: [
+        {
+          name: "lookup",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: { value: { type: failContinuation ? "number" : "string" } },
+            required: ["value"],
+          },
+        },
+      ],
+      nextCursor: failContinuation ? "page-2" : undefined,
+    })
+  })
+  server.setRequestHandler(CallToolRequestSchema, () =>
+    Promise.resolve({ content: [], structuredContent: { value: 42 } }),
+  )
+
+  const client = new Client({ name: "failure-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    expect(await Effect.runPromise(McpCatalog.defs(client))).toHaveLength(1)
+    failContinuation = true
+    expect(await Effect.runPromise(McpCatalog.defs(client))).toBeUndefined()
+    await expect(client.callTool({ name: "lookup", arguments: {} })).rejects.toThrow(
+      "Structured content does not match the tool's output schema",
+    )
+  } finally {
+    await Promise.all([client.close(), server.close()])
+  }
+})
+
+test("does not let an older overlapping listing replace newer metadata", async () => {
+  let listing = 0
+  let releaseOld: (() => void) | undefined
+  let markOldContinuationStarted: (() => void) | undefined
+  const oldContinuationStarted = new Promise<void>((resolve) => (markOldContinuationStarted = resolve))
+  const oldContinuation = new Promise<void>((resolve) => (releaseOld = resolve))
+  const server = new Server({ name: "overlap", version: "1.0.0" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, async ({ params }) => {
+    if (params?.cursor === "old-page-2") {
+      markOldContinuationStarted?.()
+      await oldContinuation
+      return { tools: [] }
+    }
+    listing++
+    return {
+      tools: [
+        {
+          name: "lookup",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: { value: { type: listing === 1 ? "string" : "number" } },
+            required: ["value"],
+          },
+        },
+      ],
+      nextCursor: listing === 1 ? "old-page-2" : undefined,
+    }
+  })
+  server.setRequestHandler(CallToolRequestSchema, () =>
+    Promise.resolve({ content: [], structuredContent: { value: 42 } }),
+  )
+
+  const client = new Client({ name: "overlap-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    const old = Effect.runPromise(McpCatalog.defs(client))
+    await oldContinuationStarted
+    expect(await Effect.runPromise(McpCatalog.defs(client))).toHaveLength(1)
+    releaseOld?.()
+    expect(await old).toHaveLength(1)
+    await expect(client.callTool({ name: "lookup", arguments: {} })).resolves.toMatchObject({
+      structuredContent: { value: 42 },
+    })
+  } finally {
+    releaseOld?.()
+    await Promise.all([client.close(), server.close()])
+  }
+})
+
+test("commits an older overlapping listing when the newer listing fails", async () => {
+  let listing = 0
+  let releaseOld: (() => void) | undefined
+  let markOldContinuationStarted: (() => void) | undefined
+  const oldContinuationStarted = new Promise<void>((resolve) => (markOldContinuationStarted = resolve))
+  const oldContinuation = new Promise<void>((resolve) => (releaseOld = resolve))
+  const server = new Server({ name: "overlap-failure", version: "1.0.0" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, async ({ params }) => {
+    if (params?.cursor === "old-page-2") {
+      markOldContinuationStarted?.()
+      await oldContinuation
+      return { tools: [] }
+    }
+    if (params?.cursor === "new-page-2") throw new Error("newer continuation failed")
+    listing++
+    return {
+      tools: [
+        {
+          name: "lookup",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: { value: { type: listing === 1 ? "string" : "number" } },
+            required: ["value"],
+          },
+        },
+      ],
+      nextCursor: listing === 1 ? "old-page-2" : "new-page-2",
+    }
+  })
+  server.setRequestHandler(CallToolRequestSchema, () =>
+    Promise.resolve({ content: [], structuredContent: { value: 42 } }),
+  )
+
+  const client = new Client({ name: "overlap-failure-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    const old = Effect.runPromise(McpCatalog.defs(client))
+    await oldContinuationStarted
+    expect(await Effect.runPromise(McpCatalog.defs(client))).toBeUndefined()
+    releaseOld?.()
+    expect(await old).toHaveLength(1)
+    await expect(client.callTool({ name: "lookup", arguments: {} })).rejects.toThrow(
+      "Structured content does not match the tool's output schema",
+    )
+  } finally {
+    releaseOld?.()
+    await Promise.all([client.close(), server.close()])
+  }
+})

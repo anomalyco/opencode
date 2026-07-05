@@ -28,7 +28,16 @@ diff --git a/dist/cjs/client/index.js b/dist/cjs/client/index.js
 index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c101584c84 100644
 --- a/dist/cjs/client/index.js
 +++ b/dist/cjs/client/index.js
-@@ -288,41 +288,16 @@ class Client extends protocol_js_1.Protocol {
+@@ -107,6 +107,8 @@ class Client extends protocol_js_1.Protocol {
+         this._cachedToolOutputValidators = new Map();
+         this._cachedKnownTaskTools = new Set();
+         this._cachedRequiredTaskTools = new Set();
++        this._toolListGeneration = 0;
++        this._toolListCommittedGeneration = 0;
+         this._listChangedDebounceTimers = new Map();
+         this._capabilities = options?.capabilities ?? {};
+         this._jsonSchemaValidator = options?.jsonSchemaValidator ?? new ajv_provider_js_1.AjvJsonSchemaValidator();
+@@ -288,41 +290,16 @@ class Client extends protocol_js_1.Protocol {
      }
      async connect(transport, options) {
          await super.connect(transport);
@@ -74,7 +83,7 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
          }
          catch (error) {
              // Disconnect if initialization fails.
-@@ -330,6 +305,37 @@ class Client extends protocol_js_1.Protocol {
+@@ -330,6 +307,37 @@ class Client extends protocol_js_1.Protocol {
              throw error;
          }
      }
@@ -112,20 +121,17 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
      /**
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
-@@ -540,13 +546,20 @@ class Client extends protocol_js_1.Protocol {
-      * Cache validators for tool output schemas.
+@@ -541,24 +549,30 @@ class Client extends protocol_js_1.Protocol {
       * Called after listTools() to pre-compile validators for better performance.
       */
 -    cacheToolMetadata(tools) {
 -        this._cachedToolOutputValidators.clear();
 -        this._cachedKnownTaskTools.clear();
 -        this._cachedRequiredTaskTools.clear();
-+    cacheToolMetadata(tools, reset = true) {
-+        if (reset) {
-+            this._cachedToolOutputValidators.clear();
-+            this._cachedKnownTaskTools.clear();
-+            this._cachedRequiredTaskTools.clear();
-+        }
++    cacheToolMetadata(tools) {
++        const outputValidators = new Map();
++        const knownTaskTools = new Set();
++        const requiredTaskTools = new Set();
          for (const tool of tools) {
              // If the tool has an outputSchema, create and cache the validator
              if (tool.outputSchema) {
@@ -133,18 +139,55 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
 -                this._cachedToolOutputValidators.set(tool.name, toolValidator);
 +                try {
 +                    const toolValidator = this._jsonSchemaValidator.getValidator(tool.outputSchema);
-+                    this._cachedToolOutputValidators.set(tool.name, toolValidator);
++                    outputValidators.set(tool.name, toolValidator);
 +                }
-+                catch {
-+                    this._cachedToolOutputValidators.delete(tool.name);
-+                }
++                catch { }
              }
-@@ -569,7 +582,7 @@ class Client extends protocol_js_1.Protocol {
+             // If the tool supports task-based execution, cache that information
+             const taskSupport = tool.execution?.taskSupport;
+             if (taskSupport === 'required' || taskSupport === 'optional') {
+-                this._cachedKnownTaskTools.add(tool.name);
++                knownTaskTools.add(tool.name);
+             }
+             if (taskSupport === 'required') {
+-                this._cachedRequiredTaskTools.add(tool.name);
++                requiredTaskTools.add(tool.name);
+             }
+         }
++        this._cachedToolOutputValidators = outputValidators;
++        this._cachedKnownTaskTools = knownTaskTools;
++        this._cachedRequiredTaskTools = requiredTaskTools;
+     }
+     /**
+      * Get cached validator for a tool
+@@ -567,9 +581,28 @@ class Client extends protocol_js_1.Protocol {
+         return this._cachedToolOutputValidators.get(toolName);
+     }
      async listTools(params, options) {
++        if (params?.cursor !== undefined) {
++            return this.request({ method: 'tools/list', params }, types_js_1.ListToolsResultSchema, options);
++        }
++        const generation = ++this._toolListGeneration;
          const result = await this.request({ method: 'tools/list', params }, types_js_1.ListToolsResultSchema, options);
-         // Cache the tools and their output schemas for future validation
+-        // Cache the tools and their output schemas for future validation
 -        this.cacheToolMetadata(result.tools);
-+        this.cacheToolMetadata(result.tools, params?.cursor === undefined);
++        const cursors = new Set();
++        for (let page = 1; result.nextCursor !== undefined; page++) {
++            if (page >= 1000) {
++                throw new Error('MCP tools/list exceeded 1000 pages');
++            }
++            if (cursors.has(result.nextCursor)) {
++                throw new Error(`MCP tools/list returned duplicate cursor: ${result.nextCursor}`);
++            }
++            cursors.add(result.nextCursor);
++            const next = await this.request({ method: 'tools/list', params: { ...params, cursor: result.nextCursor } }, types_js_1.ListToolsResultSchema, options);
++            result.tools.push(...next.tools);
++            result.nextCursor = next.nextCursor;
++        }
++        if (generation > this._toolListCommittedGeneration) {
++            this.cacheToolMetadata(result.tools);
++            this._toolListCommittedGeneration = generation;
++        }
          return result;
      }
      /**
@@ -413,7 +456,16 @@ diff --git a/dist/esm/client/index.js b/dist/esm/client/index.js
 index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8eb9e4caff 100644
 --- a/dist/esm/client/index.js
 +++ b/dist/esm/client/index.js
-@@ -284,41 +284,16 @@ export class Client extends Protocol {
+@@ -103,6 +103,8 @@ export class Client extends Protocol {
+         this._cachedToolOutputValidators = new Map();
+         this._cachedKnownTaskTools = new Set();
+         this._cachedRequiredTaskTools = new Set();
++        this._toolListGeneration = 0;
++        this._toolListCommittedGeneration = 0;
+         this._listChangedDebounceTimers = new Map();
+         this._capabilities = options?.capabilities ?? {};
+         this._jsonSchemaValidator = options?.jsonSchemaValidator ?? new AjvJsonSchemaValidator();
+@@ -284,41 +286,16 @@ export class Client extends Protocol {
      }
      async connect(transport, options) {
          await super.connect(transport);
@@ -459,7 +511,7 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
          }
          catch (error) {
              // Disconnect if initialization fails.
-@@ -326,6 +301,37 @@ export class Client extends Protocol {
+@@ -326,6 +303,37 @@ export class Client extends Protocol {
              throw error;
          }
      }
@@ -497,20 +549,17 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
      /**
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
-@@ -536,13 +542,20 @@ export class Client extends Protocol {
-      * Cache validators for tool output schemas.
+@@ -537,24 +545,30 @@ export class Client extends Protocol {
       * Called after listTools() to pre-compile validators for better performance.
       */
 -    cacheToolMetadata(tools) {
 -        this._cachedToolOutputValidators.clear();
 -        this._cachedKnownTaskTools.clear();
 -        this._cachedRequiredTaskTools.clear();
-+    cacheToolMetadata(tools, reset = true) {
-+        if (reset) {
-+            this._cachedToolOutputValidators.clear();
-+            this._cachedKnownTaskTools.clear();
-+            this._cachedRequiredTaskTools.clear();
-+        }
++    cacheToolMetadata(tools) {
++        const outputValidators = new Map();
++        const knownTaskTools = new Set();
++        const requiredTaskTools = new Set();
          for (const tool of tools) {
              // If the tool has an outputSchema, create and cache the validator
              if (tool.outputSchema) {
@@ -518,18 +567,55 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
 -                this._cachedToolOutputValidators.set(tool.name, toolValidator);
 +                try {
 +                    const toolValidator = this._jsonSchemaValidator.getValidator(tool.outputSchema);
-+                    this._cachedToolOutputValidators.set(tool.name, toolValidator);
++                    outputValidators.set(tool.name, toolValidator);
 +                }
-+                catch {
-+                    this._cachedToolOutputValidators.delete(tool.name);
-+                }
++                catch { }
              }
-@@ -565,7 +578,7 @@ export class Client extends Protocol {
+             // If the tool supports task-based execution, cache that information
+             const taskSupport = tool.execution?.taskSupport;
+             if (taskSupport === 'required' || taskSupport === 'optional') {
+-                this._cachedKnownTaskTools.add(tool.name);
++                knownTaskTools.add(tool.name);
+             }
+             if (taskSupport === 'required') {
+-                this._cachedRequiredTaskTools.add(tool.name);
++                requiredTaskTools.add(tool.name);
+             }
+         }
++        this._cachedToolOutputValidators = outputValidators;
++        this._cachedKnownTaskTools = knownTaskTools;
++        this._cachedRequiredTaskTools = requiredTaskTools;
+     }
+     /**
+      * Get cached validator for a tool
+@@ -563,9 +577,28 @@ export class Client extends Protocol {
+         return this._cachedToolOutputValidators.get(toolName);
+     }
      async listTools(params, options) {
++        if (params?.cursor !== undefined) {
++            return this.request({ method: 'tools/list', params }, ListToolsResultSchema, options);
++        }
++        const generation = ++this._toolListGeneration;
          const result = await this.request({ method: 'tools/list', params }, ListToolsResultSchema, options);
-         // Cache the tools and their output schemas for future validation
+-        // Cache the tools and their output schemas for future validation
 -        this.cacheToolMetadata(result.tools);
-+        this.cacheToolMetadata(result.tools, params?.cursor === undefined);
++        const cursors = new Set();
++        for (let page = 1; result.nextCursor !== undefined; page++) {
++            if (page >= 1000) {
++                throw new Error('MCP tools/list exceeded 1000 pages');
++            }
++            if (cursors.has(result.nextCursor)) {
++                throw new Error(`MCP tools/list returned duplicate cursor: ${result.nextCursor}`);
++            }
++            cursors.add(result.nextCursor);
++            const next = await this.request({ method: 'tools/list', params: { ...params, cursor: result.nextCursor } }, ListToolsResultSchema, options);
++            result.tools.push(...next.tools);
++            result.nextCursor = next.nextCursor;
++        }
++        if (generation > this._toolListCommittedGeneration) {
++            this.cacheToolMetadata(result.tools);
++            this._toolListCommittedGeneration = generation;
++        }
          return result;
      }
      /**

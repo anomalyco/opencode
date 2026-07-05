@@ -360,7 +360,7 @@ it.instance("one failed server does not affect another connected server", () =>
   }),
 )
 
-it.instance("falls back when output schema refs fail SDK tool discovery", () =>
+it.instance("isolates invalid output schema refs without dropping tool discovery", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer({ capabilities: { tools: {} } })
     server.state.tools = [
