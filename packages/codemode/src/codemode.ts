@@ -108,14 +108,14 @@ export type ExecuteFailure = {
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type ExecuteResult = ExecuteSuccess | ExecuteFailure
 
-/** Reusable CodeMode configuration shared by `execute` and `agentTool`. */
+/** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
 export type CodeModeOptions<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Tools>, "code"> & {
   /** Progressive-disclosure configuration for the agent-facing tool catalog. */
   readonly discovery?: DiscoveryOptions
 }
 
-/** Input schema for the single agent-facing tool produced by `runtime.agentTool()`. */
-export const ExecuteInputSchema = Schema.Struct({ code: Schema.String })
+/** Schema for a CodeMode execution request. */
+const Input = Schema.Struct({ code: Schema.String })
 
 const DiagnosticKindSchema = Schema.Literals([
   "ParseError",
@@ -130,8 +130,8 @@ const DiagnosticKindSchema = Schema.Literals([
   "ExecutionFailure",
 ])
 
-/** Structured success or diagnostic result schema returned by CodeMode execution. */
-export const ExecuteResultSchema = Schema.Union([
+/** Schema for the structured success or diagnostic returned by CodeMode execution. */
+const Result = Schema.Union([
   Schema.Struct({
     ok: Schema.Literal(true),
     value: Schema.Json,
@@ -153,23 +153,12 @@ export const ExecuteResultSchema = Schema.Union([
   }),
 ])
 
-/** Agent-facing projection of a configured CodeMode runtime. */
-export type AgentToolDefinition<R = never> = {
-  readonly name: "code"
-  readonly description: string
-  readonly input: typeof ExecuteInputSchema
-  readonly output: typeof ExecuteResultSchema
-  readonly execute: (input: { readonly code: string }) => Effect.Effect<ExecuteResult, never, R>
-}
-
 /** Reusable confined runtime over one explicit tool tree. */
 export type CodeModeRuntime<R = never> = {
   /** Lists schema-described tool paths provided by the host. */
   readonly catalog: () => ReadonlyArray<ToolDescription>
   /** Builds model-facing syntax guidance and visible tool signatures. */
   readonly instructions: () => string
-  /** Projects the configured runtime as one agent-facing `code` tool. */
-  readonly agentTool: () => AgentToolDefinition<R>
   /** Executes a program using this runtime's configured host tools. */
   readonly execute: (code: string) => Effect.Effect<ExecuteResult, never, R>
 }
@@ -4088,13 +4077,12 @@ export const execute = <const Tools extends Record<string, unknown>>(
 /**
  * Creates an Effect-native runtime over explicit, schema-described tools.
  *
- * Use `execute` for host-driven execution or `agentTool` to expose one confined code tool to an
- * agent framework. Tool requirements remain in the returned Effect environment.
+ * Use `execute` for host-driven execution. Tool requirements remain in the returned Effect environment.
  *
  * @example
  * ```ts
  * const runtime = CodeMode.make({ tools: { orders: { lookup } } })
- * const code = runtime.agentTool()
+ * const result = runtime.execute("return await tools.orders.lookup({ id: 'order_42' })")
  * ```
  */
 export const make = <const Tools extends Record<string, unknown> = {}>(
@@ -4111,16 +4099,9 @@ export const make = <const Tools extends Record<string, unknown> = {}>(
   return {
     catalog: () => catalog,
     instructions: () => instructions,
-    agentTool: () => ({
-      name: "code",
-      description: instructions,
-      input: ExecuteInputSchema,
-      output: ExecuteResultSchema,
-      execute: ({ code }) => executeProgram(code),
-    }),
     execute: executeProgram,
   }
 }
 
 /** Constructors for one-shot and reusable CodeMode execution. */
-export const CodeMode = { make, execute }
+export const CodeMode = { Input, Result, make, execute }
