@@ -1,10 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Log from "@opencode-ai/core/util/log"
 import * as Bom from "../util/bom"
-
-const log = Log.create({ service: "patch" })
 
 export const PatchSchema = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -530,14 +527,14 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
       case "add": {
         yield* fs.writeWithDirs(hunk.path, hunk.contents)
         added.push(hunk.path)
-        log.info(`Added file: ${hunk.path}`)
+        yield* Effect.logInfo(`Added file: ${hunk.path}`)
         break
       }
 
       case "delete": {
         yield* fs.remove(hunk.path)
         deleted.push(hunk.path)
-        log.info(`Deleted file: ${hunk.path}`)
+        yield* Effect.logInfo(`Deleted file: ${hunk.path}`)
         break
       }
 
@@ -549,11 +546,11 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
           yield* fs.writeWithDirs(hunk.move_path, Bom.join(fileUpdate.content, fileUpdate.bom))
           yield* fs.remove(hunk.path)
           modified.push(hunk.move_path)
-          log.info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
+          yield* Effect.logInfo(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
         } else {
           yield* fs.writeWithDirs(hunk.path, Bom.join(fileUpdate.content, fileUpdate.bom))
           modified.push(hunk.path)
-          log.info(`Updated file: ${hunk.path}`)
+          yield* Effect.logInfo(`Updated file: ${hunk.path}`)
         }
         break
       }

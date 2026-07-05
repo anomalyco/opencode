@@ -30,11 +30,17 @@ export function promptCopy(prompt: RunPrompt): RunPrompt {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
     ...(prompt.mode ? { mode: prompt.mode } : {}),
+    ...(prompt.command ? { command: prompt.command } : {}),
   }
 }
 
 export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
-  return a.mode === b.mode && a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
+  return (
+    a.mode === b.mode &&
+    a.text === b.text &&
+    JSON.stringify(a.parts) === JSON.stringify(b.parts) &&
+    JSON.stringify(a.command) === JSON.stringify(b.command)
+  )
 }
 
 export function isExitCommand(input: string): boolean {

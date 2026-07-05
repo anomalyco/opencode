@@ -13,6 +13,8 @@ This document breaks the legacy configuration schema into small review groups. W
 
 Use one v2 config schema for now. Some fields, such as `autoupdate`, are intended for global/user configuration, but there is not yet enough benefit to enforce that with separate global and location schemas. Revisit this if more scope-sensitive fields survive the review.
 
+V2 core discovers config documents named `opencode.json` or `opencode.jsonc` in the global config directory, ancestor project directories, and `.opencode` config directories. The legacy `config.json` filename is not supported in V2.
+
 ## Group 1: File Metadata
 
 Small fields describing the config file itself rather than application behavior.
@@ -238,13 +240,13 @@ Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` f
 
 Agent behavior and tool-access policy. Review together because agent configuration can contain permissions and model choices.
 
-| Field           | Current Purpose                                     | Status   | Notes                                                                                                                          |
-| --------------- | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `default_agent` | Choose default primary agent                        | remove   | Do not retain a separate top-level selector; default choice should be designed with the v2 agent configuration model.          |
-| `mode`          | Legacy agent configuration alias                    | remove   | Do not port deprecated alias; configure agents through the v2 agent surface only.                                              |
-| `agent`         | Configure primary, subagent, and specialized agents | redesign | Rename to plural `agents`; retain a named map of built-in overrides and custom agent definitions.                              |
-| `permission`    | Tool permission rules                               | redesign | Rename to plural `permissions`; replace legacy map shorthand with an ordered array of `{ permission, pattern, action }` rules. |
-| `tools`         | Legacy tool enable/disable map                      | remove   | Do not port boolean enable/disable alias; express tool access through permissions.                                             |
+| Field           | Current Purpose                                     | Status   | Notes                                                                                                                       |
+| --------------- | --------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `default_agent` | Choose default primary agent                        | remove   | Do not retain a separate top-level selector; default choice should be designed with the v2 agent configuration model.       |
+| `mode`          | Legacy agent configuration alias                    | remove   | Do not port deprecated alias; configure agents through the v2 agent surface only.                                           |
+| `agent`         | Configure primary, subagent, and specialized agents | redesign | Rename to plural `agents`; retain a named map of built-in overrides and custom agent definitions.                           |
+| `permission`    | Tool permission rules                               | redesign | Rename to plural `permissions`; replace legacy map shorthand with an ordered array of `{ action, resource, effect }` rules. |
+| `tools`         | Legacy tool enable/disable map                      | remove   | Do not port boolean enable/disable alias; express tool access through permissions.                                          |
 
 Do not port `default_agent` ahead of the v2 agent design. The legacy runtime uses it to choose a visible, non-subagent fallback instead of `build`, but exposing that selection as an isolated top-level field would pre-commit v2 to the legacy agent model before agents and their policy surface are defined together.
 
@@ -281,7 +283,7 @@ Retain `description`, `hidden`, and `steps`; they define an agent's discoverabil
       "color": "warning",
       "steps": 12,
       "disabled": false,
-      "permissions": [{ "permission": "edit", "pattern": "*", "action": "deny" }],
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
     },
   },
 }
@@ -289,13 +291,13 @@ Retain `description`, `hidden`, and `steps`; they define an agent's discoverabil
 
 Do not port `tools`, either as a top-level setting or as an agent-entry alias. The legacy loader already converts tool booleans into permission rules, including collapsing write-adjacent tool names into `edit`; v2 should avoid carrying that lossy compatibility input forward.
 
-Rename legacy `permission` to `permissions` and expose the normalized ordered ruleset already modeled by `PermissionV2.Ruleset`. Rules retain the interactive `"ask"` action in addition to `"allow"` and `"deny"`; this is distinct from `experimental.policies`, whose provider enforcement currently needs only allow/deny decisions. The same `permissions` ruleset shape should be used inside future `agents` entries.
+Rename legacy `permission` to `permissions` and expose the normalized ordered ruleset already modeled by `PermissionV2.Ruleset`. Rules retain the interactive `"ask"` effect in addition to `"allow"` and `"deny"`; this is distinct from `experimental.policies`, whose provider enforcement currently needs only allow/deny decisions. The same `permissions` ruleset shape should be used inside future `agents` entries.
 
 ```jsonc
 {
   "permissions": [
-    { "permission": "bash", "pattern": "*", "action": "ask" },
-    { "permission": "bash", "pattern": "git status", "action": "allow" },
+    { "action": "bash", "resource": "*", "effect": "ask" },
+    { "action": "bash", "resource": "git status", "effect": "allow" },
   ],
 }
 ```
@@ -304,23 +306,25 @@ Rename legacy `permission` to `permissions` and expose the normalized ordered ru
 
 External protocol and server integration configuration.
 
-| Field | Current Purpose                       | Status   | Notes                                                                                                                                             |
-| ----- | ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp` | MCP server definitions and enablement | redesign | Keep opencode's explicit local/remote server entry format, nested under `mcp.servers`; use `disabled` for inactive entries and move timeout here. |
+| Field | Current Purpose                       | Status   | Notes                                                                                                                                                      |
+| ----- | ------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp` | MCP server definitions and enablement | redesign | Keep opencode's explicit local/remote server entry format, nested under `mcp.servers`; use `disabled` for inactive entries and move timeout defaults here. |
 
-Keep the opencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as default timeout can live under the same subsystem.
+Keep the opencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as timeout defaults can live under the same subsystem.
+
+MCP timeouts have separate startup and request budgets, expressed in milliseconds. `startup` covers establishing the transport and completing MCP initialization. `request` applies independently to each post-initialization MCP request. A server may override either default without repeating the other.
 
 ```jsonc
 {
   "mcp": {
-    "timeout": 5000,
+    "timeout": { "startup": 30000, "request": 300000 },
     "servers": {
       "github": {
         "type": "local",
         "command": ["npx", "-y", "@github/github-mcp-server"],
         "environment": { "GITHUB_TOKEN": "{env:GITHUB_TOKEN}" },
         "disabled": false,
-        "timeout": 10000,
+        "timeout": { "startup": 60000 },
       },
       "docs": {
         "type": "remote",
@@ -334,6 +338,7 @@ Keep the opencode MCP server entry format instead of adopting the common `mcpSer
           "redirect_uri": "http://127.0.0.1:19876/mcp/oauth/callback",
         },
         "disabled": false,
+        "timeout": { "request": 600000 },
       },
     },
   },
@@ -348,7 +353,7 @@ Behavior affecting long-running conversations and context management.
 | ------------ | ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
 | `compaction` | Automatic compaction, pruning, and context reserve settings | redesign | Group retained verbatim history under `keep` and rename context headroom to `buffer`. |
 
-Retain the compaction capability but redesign the less clear limits. `keep.turns` is the maximum number of recent user turns to preserve verbatim after compaction, and `keep.tokens` is the token budget for those retained turns. `buffer` is the token headroom reserved so automatic compaction triggers before the input window is exhausted.
+Retain the compaction capability but redesign the less clear limits. `keep.tokens` is the token budget for recent history serialized into the textual compaction checkpoint. `buffer` is the token headroom reserved so automatic compaction triggers before the input window is exhausted.
 
 ```jsonc
 {
@@ -356,7 +361,6 @@ Retain the compaction capability but redesign the less clear limits. `keep.turns
     "auto": true,
     "prune": true,
     "keep": {
-      "turns": 2,
       "tokens": 2000,
     },
     "buffer": 10000,
@@ -376,7 +380,7 @@ Fields that should not be ported by inertia; each needs an explicit justificatio
 | `experimental.openTelemetry`         | Enable AI SDK telemetry spans           | remove   | Do not port; observability is process-level and should use standard OpenTelemetry environment or declarative configuration. |
 | `experimental.primary_tools`         | Restrict tools to primary agents        | remove   | Do not port obsolete gating; agent tool access is configured through permissions.                                           |
 | `experimental.continue_loop_on_deny` | Continue loop after denied tool call    | remove   | Do not port legacy denied-tool loop behavior.                                                                               |
-| `experimental.mcp_timeout`           | MCP request timeout                     | redesign | Move to `mcp.timeout` for the default and `mcp.servers.<name>.timeout` for per-server overrides.                            |
+| `experimental.mcp_timeout`           | MCP request timeout                     | redesign | Move to `mcp.timeout.request` for the default and `mcp.servers.<name>.timeout.request` for per-server overrides.            |
 
 ## Review Order
 

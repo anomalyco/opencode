@@ -287,6 +287,11 @@ export const dict = {
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
   "dialog.directory.search.placeholder": "Ordner durchsuchen",
   "dialog.directory.empty": "Keine Ordner gefunden",
+  "dialog.directory.action.selectFile": "Datei auswählen",
+  "dialog.directory.action.selectFolder": "Ordner auswählen",
+  "dialog.directory.root": "Stammverzeichnis",
+  "dialog.directory.parent": "Übergeordnet",
+  "dialog.directory.readError": "Dieser Ordner kann nicht gelesen werden",
   "dialog.server.title": "Server",
   "dialog.server.description": "Wechseln Sie den OpenCode-Server, mit dem sich diese App verbindet.",
   "dialog.server.search.placeholder": "Server durchsuchen",
@@ -604,9 +609,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
   "settings.general.row.editToolPartsExpanded.description":
     "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
-  "settings.general.row.showSessionProgressBar.title": "Sitzungsfortschrittsleiste anzeigen",
-  "settings.general.row.showSessionProgressBar.description":
-    "Die animierte Fortschrittsleiste oben in der Sitzung anzeigen, wenn der Agent arbeitet",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",
   "settings.general.row.wayland.description": "X11-Fallback unter Wayland deaktivieren. Erfordert Neustart.",
   "settings.general.row.wayland.tooltip":

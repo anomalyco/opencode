@@ -1,6 +1,6 @@
-import { Config } from "@/config/config"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventManifest } from "@/event-manifest"
 import { InstanceDisposed } from "@/server/event"
 import "@opencode-ai/core/account"
 import "@/server/event"
@@ -13,17 +13,16 @@ const GlobalHealth = Schema.Struct({
   version: Schema.String,
 })
 
-const SyncEventSchemas = EventV2.registry
-  .values()
+const SyncEventSchemas = EventManifest.Latest.values()
   .flatMap((definition) => {
-    if (!definition.sync) return []
+    if (!definition.durable) return []
     return [
       Schema.Struct({
         type: Schema.Literal("sync"),
-        id: Schema.String,
+        id: EventV2.ID,
         syncEvent: Schema.Struct({
-          type: Schema.Literal(EventV2.versionedType(definition.type, definition.sync.version)),
-          id: Schema.String,
+          type: Schema.Literal(EventV2.versionedType(definition.type, definition.durable.version)),
+          id: EventV2.ID,
           seq: Schema.Finite,
           aggregateID: Schema.String,
           data: definition.data,
@@ -38,10 +37,9 @@ const GlobalEventSchema = Schema.Struct({
   project: Schema.optional(Schema.String),
   workspace: Schema.optional(Schema.String),
   payload: Schema.Union([
-    ...EventV2.registry
-      .values()
+    ...EventManifest.Latest.values()
       .map((definition) =>
-        Schema.Struct({ id: Schema.String, type: Schema.Literal(definition.type), properties: definition.data }),
+        Schema.Struct({ id: EventV2.ID, type: Schema.Literal(definition.type), properties: definition.data }),
       )
       .toArray(),
     InstanceDisposed,
