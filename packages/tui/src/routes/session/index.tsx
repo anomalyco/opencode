@@ -21,7 +21,7 @@ import { useProject } from "../../context/project"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
-import { Spinner } from "../../component/spinner"
+import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -1301,45 +1301,52 @@ function CompactionMessage(props: {
   text?: string
 }) {
   const ctx = use()
+  const kv = useKV()
   const { theme, syntax } = useTheme()
   const status = () => props.message?.status ?? props.status
   const text = () => props.message?.summary ?? props.text ?? ""
+  const color = () => (status() === "failed" ? theme.error : status() === "completed" ? theme.success : theme.textMuted)
+  const border = () => (status() === "queued" ? theme.border : color())
   return (
-    <Switch>
-      <Match when={status() === "queued"}>
-        <text fg={theme.textMuted}>◇ Compaction queued</text>
-      </Match>
-      <Match when={status() === "failed"}>
-        <box border={["top"]} title=" Compaction failed " titleAlignment="center" borderColor={theme.error} />
-      </Match>
-      <Match when={status() === "running" || status() === "completed"}>
-        <box
-          border={["top"]}
-          title={status() === "completed" ? " Compacted " : " Compaction "}
-          titleAlignment="center"
-          borderColor={theme.borderActive}
-          gap={1}
-        >
-          <Show when={status() === "running"}>
-            <Spinner>Compacting conversation...</Spinner>
-          </Show>
-          <Show when={text().trim()}>
-            <box paddingLeft={3}>
-              <markdown
-                syntaxStyle={syntax()}
-                streaming={status() === "running"}
-                internalBlockMode="top-level"
-                content={text().trim()}
-                tableOptions={{ style: "grid" }}
-                conceal={ctx.conceal()}
-                fg={theme.markdownText}
-                bg={theme.background}
-              />
-            </box>
-          </Show>
+    <box>
+      <box flexDirection="row" alignItems="center">
+        <box border={["top"]} borderColor={border()} flexGrow={1} />
+        <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
+          <Switch>
+            <Match when={status() === "running"}>
+              <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯</text>}>
+                <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+              </Show>
+            </Match>
+            <Match when={status() === "completed"}>
+              <text fg={color()}>✓</text>
+            </Match>
+            <Match when={status() === "failed"}>
+              <text fg={color()}>✗</text>
+            </Match>
+            <Match when={status() === "queued"}>
+              <text fg={color()}>◇</text>
+            </Match>
+          </Switch>
+          <text fg={color()}>{status() === "queued" ? "Compaction queued" : "Compaction"}</text>
         </box>
-      </Match>
-    </Switch>
+        <box border={["top"]} borderColor={border()} flexGrow={1} />
+      </box>
+      <Show when={text().trim()}>
+        <box paddingTop={1} paddingLeft={3}>
+          <markdown
+            syntaxStyle={syntax()}
+            streaming={status() === "running"}
+            internalBlockMode="top-level"
+            content={text().trim()}
+            tableOptions={{ style: "grid" }}
+            conceal={ctx.conceal()}
+            fg={theme.markdownText}
+            bg={theme.background}
+          />
+        </box>
+      </Show>
+    </box>
   )
 }
 
