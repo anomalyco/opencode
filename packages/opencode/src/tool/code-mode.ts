@@ -287,35 +287,37 @@ export const CodeModeTool = Tool.define(
 
         const result = yield* Effect.raceFirst(runtime.execute(params.code), abort.pipe(Effect.map(cancelled)))
         const logs = result.logs ?? []
-        const attached = attachments.length > 0 ? { attachments } : {}
-        const hints = result.ok
-          ? []
-          : (result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))
-        const metadata: Metadata = result.ok ? { toolCalls: calls } : { toolCalls: calls, error: true }
-        let output: string
-        if (result.ok) {
-          if (typeof result.value === "string") output = result.value
-          else if (result.value === undefined) output = "undefined"
-          else {
-            try {
-              output = JSON.stringify(result.value, null, 2) ?? String(result.value)
-            } catch {
-              output = String(result.value)
-            }
-          }
-        } else {
-          output = [result.error.message, ...hints].join("\n")
+        const withLogs = (text: string) => {
+          if (logs.length === 0) return text
+          return text.length > 0 ? `${text}\n\nLogs:\n${logs.join("\n")}` : `Logs:\n${logs.join("\n")}`
         }
-        if (logs.length > 0)
-          output = output.length > 0 ? `${output}\n\nLogs:\n${logs.join("\n")}` : `Logs:\n${logs.join("\n")}`
+
+        if (!result.ok) {
+          if (ctx.abort.aborted) {
+            return {
+              title: CODE_MODE_TOOL,
+              metadata: { toolCalls: calls, error: true },
+              output: "Execution cancelled.",
+            } satisfies Tool.ExecuteResult<Metadata>
+          }
+          const hints = (result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))
+          return yield* Effect.fail(new Error(withLogs([result.error.message, ...hints].join("\n"))))
+        }
+
+        // The interpreter validates returned values as plain JSON, so stringify cannot throw;
+        // it yields undefined only for a program that returns undefined.
+        const output =
+          typeof result.value === "string"
+            ? result.value
+            : (JSON.stringify(result.value, null, 2) ?? String(result.value))
 
         return {
           title: CODE_MODE_TOOL,
-          metadata,
-          output,
-          ...attached,
+          metadata: { toolCalls: calls },
+          output: withLogs(output),
+          ...(attachments.length > 0 ? { attachments } : {}),
         } satisfies Tool.ExecuteResult<Metadata>
-      }),
+      }, Effect.orDie),
     }
     return init
   }),

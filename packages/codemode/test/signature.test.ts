@@ -159,8 +159,8 @@ describe("pretty signature rendering", () => {
       $ref: "#/$defs/Node",
       $defs: { Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" }, name: { type: "string" } } } },
     } as const
-    expect(jsonSchemaToTypeScript(cyclic)).toBe("{ child?: Node; name?: string }")
-    expect(jsonSchemaToTypeScript(cyclic, true)).toContain("child?: Node")
+    expect(jsonSchemaToTypeScript(cyclic)).toBe("{ child?: unknown; name?: string }")
+    expect(jsonSchemaToTypeScript(cyclic, true)).toContain("child?: unknown")
 
     let deep: Record<string, unknown> = { type: "string" }
     for (let level = 0; level < 12; level += 1) deep = { type: "object", properties: { next: deep } }
@@ -169,6 +169,43 @@ describe("pretty signature rendering", () => {
       expect(rendered).toContain("unknown")
       expect(rendered).toContain("next?:")
     }
+  })
+
+  test("intersects ref and union siblings instead of discarding them", () => {
+    expect(
+      jsonSchemaToTypeScript({
+        $ref: "#/$defs/User",
+        properties: { active: { type: "boolean" } },
+        required: ["active"],
+        $defs: {
+          User: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+      }),
+    ).toBe("{ id: string } & { active: boolean }")
+    expect(
+      jsonSchemaToTypeScript({
+        type: "object",
+        properties: { common: { type: "boolean" } },
+        required: ["common"],
+        anyOf: [
+          { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+          { type: "object", properties: { count: { type: "number" } }, required: ["count"] },
+        ],
+      }),
+    ).toBe("({ name: string } | { count: number }) & { common: boolean }")
+    expect(jsonSchemaToTypeScript({ $ref: "https://example.com/schema.json" })).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        $ref: "#/$defs/User/properties/id",
+        $defs: { User: { type: "object" }, id: { type: "string" } },
+      }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        type: ["object", "null"],
+        properties: { name: { type: "string" } },
+      }),
+    ).toBe("{ name?: string } | null")
   })
 })
 
@@ -268,6 +305,31 @@ describe("union schemas render every alternative", () => {
     expect(inputTypeScript(tool)).toBe("{ value?: string | number }")
     expect(outputTypeScript(tool)).toBe("number | boolean")
   })
+
+  test("allOf renders intersections with parenthesized union members", () => {
+    const schema = {
+      allOf: [{ type: "object", properties: { id: { type: "string" } } }, { type: ["string", "null"] }],
+    } as const
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
+  })
+
+  test("allOf does not discard an unresolved constraint", () => {
+    expect(jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { $ref: "https://example.com/external.json" }] })).toBe(
+      "unknown",
+    )
+    expect(
+      jsonSchemaToTypeScript({
+        allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }],
+      }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        type: "string",
+        allOf: [{ $ref: "#/$defs/Constraint" }],
+        $defs: { Constraint: { description: "TypeScript-neutral constraint" } },
+      }),
+    ).toBe("string")
+  })
 })
 
 describe("pretty signatures in search results", () => {
@@ -337,5 +399,45 @@ describe("pretty signatures in search results", () => {
       "  - tools.orders.lookup(input: { id: string; verbose?: boolean }): Promise<{ status: string }> // Look up an order",
     )
     expect(instructions).not.toContain("/**")
+  })
+})
+
+describe("non-identifier tool paths", () => {
+  const resolveLibrary = Tool.make({
+    description: "Resolve a Context7 library ID",
+    input: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        libraryName: { type: "string" },
+      },
+      required: ["query", "libraryName"],
+    } as const,
+    run: () => Effect.succeed("/reactjs/react.dev"),
+  })
+  const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
+
+  test("inline catalog uses bracket notation for dashed tool names", () => {
+    const instructions = runtime.instructions()
+
+    expect(instructions).toContain(
+      'tools.context7["resolve-library-id"](input: { query: string; libraryName: string }): Promise<unknown>',
+    )
+    expect(instructions).toContain("Do not infer or normalize tool names")
+    expect(instructions).toContain("bracket notation and quotes are part of the path")
+    expect(instructions).not.toContain("tools.context7.resolve-library-id")
+    expect(instructions).not.toContain("tools.context7.resolve_library_id")
+  })
+
+  test("search results return callable bracket-notation paths and signatures", async () => {
+    const result = await Effect.runPromise(
+      runtime.execute(`return await tools.$codemode.search({ query: "resolve library" })`),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("search failed")
+
+    const value = result.value as { items: Array<{ path: string; signature: string }> }
+    expect(value.items[0]?.path).toBe('tools.context7["resolve-library-id"]')
+    expect(value.items[0]?.signature).toContain('tools.context7["resolve-library-id"](input: {')
   })
 })

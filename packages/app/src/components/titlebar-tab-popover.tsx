@@ -3,7 +3,7 @@ import { createSignal, Show, type JSXElement } from "solid-js"
 import "./titlebar-tab-popover.css"
 
 // Initial hover delay before the preview appears, per design.
-const OPEN_DELAY = 400
+const OPEN_DELAY = 2_000
 // Mouse-out delay: begin closing immediately (a brief exit animation plays).
 const CLOSE_DELAY = 0
 // After a preview closes, hovering a neighbouring tab within this window skips
