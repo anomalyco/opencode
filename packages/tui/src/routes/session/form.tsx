@@ -61,10 +61,36 @@ function validateSelection(field: Field, value: FormValue | undefined) {
 }
 
 function validateValue(field: Field, value: FormValue | undefined) {
-  if (field.required && (value === undefined || value === "" || (Array.isArray(value) && value.length === 0))) {
+  if (value === undefined) return field.required ? "Answer required" : undefined
+  if (field.required && (value === "" || (Array.isArray(value) && value.length === 0))) {
     return field.type === "multiselect" ? "Select at least one option" : "Answer required"
   }
-  return validateSelection(field, value)
+  if (field.type === "string") {
+    if (typeof value !== "string") return "Expected text"
+    const invalid = validateText(field, value)
+    if (invalid) return invalid
+    if (field.options && !field.custom && !field.options.some((option) => option.value === value)) {
+      return "Select an available option"
+    }
+    return
+  }
+  if (field.type === "number" || field.type === "integer") {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "Expected a number"
+    if (field.type === "integer" && !Number.isInteger(value)) return "Expected an integer"
+    if (field.minimum !== undefined && value < field.minimum) return `Must be at least ${field.minimum}`
+    if (field.maximum !== undefined && value > field.maximum) return `Must be at most ${field.maximum}`
+    return
+  }
+  if (field.type === "boolean") return typeof value === "boolean" ? undefined : "Expected yes or no"
+  const invalid = validateSelection(field, value)
+  if (invalid) return invalid
+  if (
+    Array.isArray(value) &&
+    !field.custom &&
+    value.some((item) => !field.options.some((option) => option.value === item))
+  ) {
+    return "Select only available options"
+  }
 }
 
 function fieldRows(field: Field): { value: FormValue; label: string; description?: string }[] {
@@ -320,6 +346,11 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   function pick(value: FormValue, customValue?: string) {
     const current = field()
     if (!current) return
+    const invalid = validateValue(current, value)
+    if (invalid) {
+      setStore("error", invalid)
+      return
+    }
     answer(current.key, value)
     if (customValue !== undefined) setStore("custom", { ...store.custom, [current.key]: customValue })
     if (single()) {
@@ -405,23 +436,16 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
 
     if (isTextual && (current.type === "number" || current.type === "integer")) {
       const value = Number(text)
-      if (!Number.isFinite(value) || (current.type === "integer" && !Number.isInteger(value))) {
-        setStore("error", current.type === "integer" ? "Expected an integer" : "Expected a number")
-        return false
-      }
-      if (typeof current.minimum === "number" && value < current.minimum) {
-        setStore("error", `Must be at least ${current.minimum}`)
-        return false
-      }
-      if (typeof current.maximum === "number" && value > current.maximum) {
-        setStore("error", `Must be at most ${current.maximum}`)
+      const invalid = validateValue(current, value)
+      if (invalid) {
+        setStore("error", invalid)
         return false
       }
       answer(current.key, value)
     }
 
     if (isTextual && current.type === "string") {
-      const invalid = validateText(current, text)
+      const invalid = validateValue(current, text)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -442,17 +466,16 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     }
 
     if (!isTextual && !isMulti) {
-      if (current.type === "string") {
-        const invalid = validateText(current, text)
-        if (invalid) {
-          setStore("error", invalid)
-          return false
-        }
+      const invalid = validateValue(current, text)
+      if (invalid) {
+        setStore("error", invalid)
+        return false
       }
       answer(current.key, text)
     }
 
-    setStore("custom", { ...store.custom, [current.key]: isMulti ? "" : text })
+    const configured = current.type === "string" && current.options?.some((option) => option.value === text)
+    setStore("custom", { ...store.custom, [current.key]: isMulti || configured ? "" : text })
     setStore("editing", false)
     return true
   }
