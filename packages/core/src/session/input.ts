@@ -2,7 +2,7 @@ export * as SessionInput from "./input"
 
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
-import { Admitted, Compaction, Delivery, Entry } from "@opencode-ai/schema/session-input"
+import { Admitted, Compaction, Delivery, Entry, PromptEntry } from "@opencode-ai/schema/session-input"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
 import { KeyedMutex } from "../effect/keyed-mutex"
@@ -14,7 +14,7 @@ import { SessionInputTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-export { Admitted, Compaction, Delivery, Entry }
+export { Admitted, Compaction, Delivery, Entry, PromptEntry }
 
 const decodePrompt = Schema.decodeUnknownSync(Prompt)
 const encodePrompt = Schema.encodeSync(Prompt)
@@ -38,7 +38,7 @@ const fromRow = (row: typeof SessionInputTable.$inferSelect): Entry => {
       ...(row.promoted_seq === null ? {} : { handledSeq: row.promoted_seq }),
     })
   if (!row.prompt || !row.delivery) throw new LifecycleConflict({ id: base.id })
-  return Admitted.make({
+  return PromptEntry.make({
     ...base,
     type: "prompt",
     prompt: decodePrompt(row.prompt),
@@ -46,6 +46,17 @@ const fromRow = (row: typeof SessionInputTable.$inferSelect): Entry => {
     ...(row.promoted_seq === null ? {} : { promotedSeq: row.promoted_seq }),
   })
 }
+
+const toAdmitted = (entry: PromptEntry): Admitted =>
+  Admitted.make({
+    admittedSeq: entry.admittedSeq,
+    id: entry.id,
+    sessionID: entry.sessionID,
+    prompt: entry.prompt,
+    delivery: entry.delivery,
+    timeCreated: entry.timeCreated,
+    ...(entry.promotedSeq === undefined ? {} : { promotedSeq: entry.promotedSeq }),
+  })
 
 export const find = Effect.fn("SessionInput.find")(function* (db: DatabaseService, id: SessionMessage.ID) {
   const row = yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie)
@@ -88,7 +99,7 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
   const existing = yield* find(db, input.id)
   if (existing !== undefined) {
     if (existing.type !== "prompt") return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-    return existing
+    return toAdmitted(existing)
   }
   return yield* events
     .publish(SessionEvent.PromptAdmitted, {
@@ -103,7 +114,6 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
           ? Effect.die(new Error("Prompt admission event is missing aggregate sequence"))
           : Effect.succeed(
               Admitted.make({
-                type: "prompt",
                 admittedSeq: event.durable.seq,
                 id: input.id,
                 sessionID: input.sessionID,
@@ -115,7 +125,9 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
       ),
       Effect.catchDefect((defect) =>
         find(db, input.id).pipe(
-          Effect.flatMap((stored) => (stored?.type === "prompt" ? Effect.succeed(stored) : Effect.die(defect))),
+          Effect.flatMap((stored) =>
+            stored?.type === "prompt" ? Effect.succeed(toAdmitted(stored)) : Effect.die(defect),
+          ),
         ),
       ),
     )

@@ -356,7 +356,6 @@ const session = {
 
 const admission = {
   data: {
-    type: "prompt",
     admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",

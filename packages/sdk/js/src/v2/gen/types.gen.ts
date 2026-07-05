@@ -4417,7 +4417,6 @@ export type PromptInputFileAttachment = {
 }
 
 export type SessionInputAdmitted = {
-  type: "prompt"
   admittedSeq: number
   id: string
   sessionID: string
@@ -8693,7 +8692,6 @@ export type SessionV2InfoV2 = {
 export type PromptBase64V2 = string
 
 export type SessionInputAdmittedV2 = {
-  type: "prompt"
   admittedSeq: number
   id: string
   sessionID: string
