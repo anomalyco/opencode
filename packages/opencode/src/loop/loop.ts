@@ -16,8 +16,8 @@ import { Context, Effect, Layer, Ref, Result, Schema, Scope } from "effect"
 
 export const COMPLETE_SIGNAL = "<promise>COMPLETE</promise>"
 
-export const DefaultMaxIterations = 10
-export const DefaultNoProgressLimit = 3
+export const DefaultMaxIterations = 1000
+export const DefaultNoProgressLimit = 0
 export const DefaultIntervalSeconds = 2
 
 // Consecutive-iteration output comparison uses this as "near-identical" —
@@ -58,7 +58,8 @@ export type IterationInfo = Schema.Schema.Type<typeof IterationInfo>
 export const Info = Schema.Struct({
   id: LoopID,
   directory: Schema.String,
-  parentSessionID: SessionID,
+  sessionID: SessionID,
+  parentSessionID: Schema.optional(SessionID),
   prompt: Schema.String,
   status: Status,
   maxIterations: Schema.Int,
@@ -74,6 +75,7 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 export const CreateInput = Schema.Struct({
   prompt: Schema.String,
+  sessionID: Schema.optional(SessionID),
   maxIterations: Schema.optional(Schema.Int),
   interval: Schema.optional(Schema.Finite),
   noProgressLimit: Schema.optional(Schema.Int),
@@ -163,20 +165,16 @@ export const layer = Layer.effect(
     const runIteration = (record: Record_) =>
       Effect.gen(function* () {
         const iterationNumber = record.info.iteration + 1
-        const child = yield* session.create({
-          parentID: record.info.parentSessionID,
-          title: `loop iteration ${iterationNumber}`,
-        })
         const startedAt = Date.now()
         const outcome = yield* promptSvc
-          .prompt({ sessionID: child.id, parts: [{ type: "text", text: record.info.prompt }] })
+          .prompt({ sessionID: record.info.sessionID, parts: [{ type: "text", text: record.info.prompt }] })
           .pipe(Effect.result)
         const finishedAt = Date.now()
 
         if (Result.isFailure(outcome)) {
           return {
             iteration: iterationNumber,
-            sessionID: child.id,
+            sessionID: record.info.sessionID,
             toolCalls: 0,
             outputLength: 0,
             output: "",
@@ -196,7 +194,7 @@ export const layer = Layer.effect(
 
         return {
           iteration: iterationNumber,
-          sessionID: child.id,
+          sessionID: record.info.sessionID,
           toolCalls,
           outputLength: output.length,
           output,
@@ -309,13 +307,31 @@ export const layer = Layer.effect(
     const create = (input: CreateInput) =>
       Effect.gen(function* () {
         const prompt = input.prompt.trim()
-        const parent = yield* session.create({ title: `loop: ${promptHead(prompt)}` })
         const id = LoopID.ascending()
         const now = Date.now()
+        let sessionID: SessionID
+        let parentSessionID: SessionID | undefined
+        let directory: string
+        if (input.sessionID) {
+          // Loop inside the caller's existing session. The lookup is only for
+          // bookkeeping (directory scoping in `list`, parent link) — a missing
+          // session must not block the loop; the iteration prompt surfaces the
+          // real error if the session is truly gone.
+          sessionID = input.sessionID
+          const existing = yield* session.get(input.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+          parentSessionID = existing?.parentID
+          directory = existing?.directory ?? ""
+        } else {
+          const parent = yield* session.create({ title: `loop: ${promptHead(prompt)}` })
+          sessionID = parent.id
+          parentSessionID = undefined
+          directory = parent.directory
+        }
         const info: Info = {
           id,
-          directory: parent.directory,
-          parentSessionID: parent.id,
+          directory,
+          sessionID,
+          parentSessionID,
           prompt,
           status: "running",
           maxIterations: input.maxIterations ?? DefaultMaxIterations,

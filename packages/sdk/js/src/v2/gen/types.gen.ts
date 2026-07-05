@@ -729,7 +729,8 @@ export type QuestionAnswer = Array<string>
 export type Loop = {
   id: string
   directory: string
-  parentSessionID: string
+  sessionID: string
+  parentSessionID?: string
   prompt: string
   status: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
   maxIterations: number
@@ -6753,6 +6754,7 @@ export type LoopListResponse = LoopListResponses[keyof LoopListResponses]
 export type LoopCreateData = {
   body?: {
     prompt: string
+    sessionID?: string
     maxIterations?: number
     interval?: number
     noProgressLimit?: number

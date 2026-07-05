@@ -305,6 +305,41 @@ it.instance(
 )
 
 it.instance(
+  "runs iterations in the caller's session when sessionID is given",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const loop = yield* Loop.Service
+      const session = yield* Session.Service
+
+      const existing = yield* session.create({ title: "my working session" })
+
+      yield* llm.text("all done <promise>COMPLETE</promise>")
+
+      const info = yield* loop.create({
+        prompt: "do the thing",
+        sessionID: existing.id,
+        maxIterations: 5,
+        interval: 0,
+      })
+      expect(info.sessionID).toBe(existing.id)
+      expect(info.directory).toBe(existing.directory)
+
+      const final = yield* waitForTerminal(info.id)
+      expect(final.status).toBe("completed")
+      expect(final.iterations).toHaveLength(1)
+      // The iteration ran inside the given session — no loop-owned session
+      // was created for it.
+      expect(final.iterations[0]?.sessionID).toBe(existing.id)
+      const sessions = yield* session.list()
+      expect(sessions.filter((item) => item.title?.startsWith("loop:"))).toHaveLength(0)
+    }),
+  { config: {} },
+)
+
+it.instance(
   "pause, resume, and cancel transition loop status",
   () =>
     Effect.gen(function* () {

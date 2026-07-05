@@ -1092,6 +1092,7 @@ export function Prompt(props: PromptProps) {
           sdk.client.loop
             .create({
               prompt: parsed.prompt,
+              sessionID: props.sessionID,
               interval: parsed.interval,
               maxIterations: parsed.max,
               noProgressLimit: parsed.noProgressLimit,

@@ -2487,6 +2487,7 @@ export class Loop extends HeyApiClient {
       directory?: string
       workspace?: string
       prompt?: string
+      sessionID?: string
       maxIterations?: number
       interval?: number
       noProgressLimit?: number
@@ -2501,6 +2502,7 @@ export class Loop extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "prompt" },
+            { in: "body", key: "sessionID" },
             { in: "body", key: "maxIterations" },
             { in: "body", key: "interval" },
             { in: "body", key: "noProgressLimit" },

@@ -5,8 +5,8 @@
 // arg-parsing library for a single `/loop <rest of line>` string, so it
 // calls parseLoopArgs directly.
 export const LoopArgDefaults = {
-  maxIterations: 10,
-  noProgressLimit: 3,
+  maxIterations: 1000,
+  noProgressLimit: 0,
 } as const
 
 export interface ParsedLoopArgs {
