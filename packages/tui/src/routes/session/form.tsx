@@ -271,26 +271,30 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     setStore("error", "")
   }
 
+  function replySingle(field: Field, value: FormValue) {
+    sdk.api.form
+      .reply({
+        sessionID: props.form.sessionID,
+        formID: props.form.id,
+        answer: { [field.key]: value },
+      })
+      .catch((error: unknown) => {
+        setStore(
+          "error",
+          typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+            ? error.message
+            : "Invalid answer",
+        )
+      })
+  }
+
   function pick(value: FormValue, customValue?: string) {
     const current = field()
     if (!current) return
     answer(current.key, value)
     if (customValue !== undefined) setStore("custom", { ...store.custom, [current.key]: customValue })
     if (single()) {
-      sdk.api.form
-        .reply({
-          sessionID: props.form.sessionID,
-          formID: props.form.id,
-          answer: { [current.key]: value },
-        })
-        .catch((error: unknown) => {
-          setStore(
-            "error",
-            typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-              ? error.message
-              : "Invalid answer",
-          )
-        })
+      replySingle(current, value)
       return
     }
     selectTab(store.tab + 1)
@@ -338,42 +342,90 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     pick(row.value)
   }
 
-  function submitText(text: string, direction: 1 | -1 = 1) {
+  function commitInput(text: string) {
     const current = field()
-    if (!current) return
-    const move = () => selectTab((store.tab + direction + tabs()) % tabs())
+    if (!current) return false
+    const isTextual = textual()
+    const isMulti = multi()
     if (!text) {
-      answer(current.key, undefined)
+      const previous = store.custom[current.key]
+      const existing = store.answers[current.key]
+      const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
+      answer(current.key, !isTextual && isMulti && values.length > 0 ? values : undefined)
+      setStore("custom", { ...store.custom, [current.key]: "" })
       setStore("editing", false)
-      if (!single()) move()
-      return
+      return true
     }
-    if (current.type === "number" || current.type === "integer") {
+
+    if (isTextual && (current.type === "number" || current.type === "integer")) {
       const value = Number(text)
       if (!Number.isFinite(value) || (current.type === "integer" && !Number.isInteger(value))) {
         setStore("error", current.type === "integer" ? "Expected an integer" : "Expected a number")
-        return
+        return false
       }
       if (typeof current.minimum === "number" && value < current.minimum) {
         setStore("error", `Must be at least ${current.minimum}`)
-        return
+        return false
       }
       if (typeof current.maximum === "number" && value > current.maximum) {
         setStore("error", `Must be at most ${current.maximum}`)
-        return
+        return false
       }
       answer(current.key, value)
     }
-    if (current.type === "string") {
+
+    if (isTextual && current.type === "string") {
       const invalid = validateText(current, text)
       if (invalid) {
         setStore("error", invalid)
-        return
+        return false
       }
       answer(current.key, text)
     }
+
+    if (!isTextual && isMulti) {
+      const previous = store.custom[current.key]
+      const existing = store.answers[current.key]
+      const values = Array.isArray(existing) ? [...existing] : []
+      if (previous) {
+        const index = values.indexOf(previous)
+        if (index !== -1) values.splice(index, 1)
+      }
+      if (!values.includes(text)) values.push(text)
+      answer(current.key, values)
+    }
+
+    if (!isTextual && !isMulti) {
+      if (current.type === "string") {
+        const invalid = validateText(current, text)
+        if (invalid) {
+          setStore("error", invalid)
+          return false
+        }
+      }
+      answer(current.key, text)
+    }
+
     setStore("custom", { ...store.custom, [current.key]: text })
     setStore("editing", false)
+    return true
+  }
+
+  function submitText(text: string, direction: 1 | -1 = 1) {
+    if (!commitInput(text)) return
+    if (!single()) selectTab((store.tab + direction + tabs()) % tabs())
+  }
+
+  function selectTabFromMouse(target?: Field) {
+    const move = () => {
+      const index = target ? fields().findIndex((field) => field.key === target.key) : fields().length
+      selectTab(index === -1 ? fields().length : index)
+    }
+    if (!textual() && !store.editing) {
+      move()
+      return
+    }
+    if (!commitInput(textarea?.plainText?.trim() ?? "")) return
     move()
   }
 
@@ -439,52 +491,17 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
           const text = textarea?.plainText?.trim() ?? ""
           const current = field()
           if (!current) return
-
-          if (multi()) {
-            const prev = store.custom[current.key]
-            if (!text) {
-              if (prev) {
-                const existing = store.answers[current.key]
-                const list = Array.isArray(existing) ? existing.filter((item) => item !== prev) : []
-                answer(current.key, list.length === 0 ? undefined : list)
-                setStore("custom", { ...store.custom, [current.key]: "" })
-              }
-              setStore("editing", false)
-              return
-            }
-            const existing = store.answers[current.key]
-            const list = Array.isArray(existing) ? [...existing] : []
-            if (prev) {
-              const index = list.indexOf(prev)
-              if (index !== -1) list.splice(index, 1)
-            }
-            if (!list.includes(text)) list.push(text)
-            answer(current.key, list)
-            setStore("custom", { ...store.custom, [current.key]: text })
-            setStore("editing", false)
-            return
-          }
-
           if (textual()) {
             submitText(text)
             return
           }
-
-          if (!text) {
-            answer(current.key, undefined)
-            setStore("custom", { ...store.custom, [current.key]: "" })
-            setStore("editing", false)
+          const wasMulti = multi()
+          if (!commitInput(text) || wasMulti || !text) return
+          if (single()) {
+            replySingle(current, text)
             return
           }
-          if (current.type === "string") {
-            const invalid = validateText(current, text)
-            if (invalid) {
-              setStore("error", invalid)
-              return
-            }
-          }
-          pick(text, text)
-          setStore("editing", false)
+          selectTab(store.tab + 1)
         },
       },
     ],
@@ -673,7 +690,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                     onMouseOut={() => setTabHover(null)}
                     onMouseUp={() => {
                       if (renderer.getSelection()?.getSelectedText()) return
-                      selectTab(index())
+                      selectTabFromMouse(item)
                     }}
                   >
                     <text
@@ -697,7 +714,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
               onMouseOut={() => setTabHover(null)}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
-                selectTab(fields().length)
+                selectTabFromMouse()
               }}
             >
               <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
