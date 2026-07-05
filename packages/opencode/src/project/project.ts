@@ -210,6 +210,44 @@ const layer = Layer.effect(
         )
     })
 
+    // When a project is reopened at a new path, sessions whose stored
+    // `directory` no longer exists on disk are relinked to the new path. This
+    // is best-effort: only sessions under the same project_id are touched, and
+    // only when the old directory is unreachable. Sessions in intentional
+    // sandboxes or alternate roots are left alone.
+    const relinkStaleSessions = Effect.fn("Project.relinkStaleSessions")(function* (input: {
+      projectID: ProjectV2.ID
+      currentDirectory: string
+    }) {
+      const rows = yield* db
+        .select({ id: SessionTable.id, directory: SessionTable.directory })
+        .from(SessionTable)
+        .where(eq(SessionTable.project_id, input.projectID))
+        .all()
+        .pipe(Effect.orDie)
+
+      let relinked = 0
+      for (const row of rows) {
+        if (row.directory === input.currentDirectory) continue
+        const exists = yield* fs.existsSafe(row.directory)
+        if (exists) continue
+        yield* db
+          .update(SessionTable)
+          .set({ directory: input.currentDirectory, time_updated: Date.now() })
+          .where(eq(SessionTable.id, row.id))
+          .run()
+          .pipe(Effect.orDie)
+        relinked++
+      }
+      if (relinked > 0) {
+        yield* Effect.logInfo("relinked stale sessions to current project directory", {
+          projectID: input.projectID,
+          currentDirectory: input.currentDirectory,
+          count: relinked,
+        })
+      }
+    })
+
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
       yield* Effect.logInfo("fromDirectory", { directory })
 
@@ -295,6 +333,14 @@ const layer = Layer.effect(
           .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, data.directory)))
           .run()
           .pipe(Effect.orDie)
+
+        // Auto-relink stale sessions: when a project's worktree moves, sessions
+        // whose stored `directory` no longer exists on disk are updated to the
+        // new worktree. This addresses issue #23248 (orphaned sessions after a
+        // project directory rename) by surfacing the session under the new
+        // project path. Sessions whose directory still exists (intentional
+        // sandboxes, alternate roots) are left untouched.
+        yield* relinkStaleSessions({ projectID, currentDirectory: data.directory })
       }
 
       yield* saveProjectDirectory({

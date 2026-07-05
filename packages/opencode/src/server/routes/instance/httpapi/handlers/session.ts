@@ -4,6 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -59,6 +60,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
+    const fs = yield* FSUtil.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -79,7 +81,22 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const requireSession = Effect.fn("SessionHttpApi.requireSession")(function* (sessionID: SessionID) {
-      return yield* SessionError.mapStorageNotFound(session.get(sessionID))
+      const sess = yield* SessionError.mapStorageNotFound(session.get(sessionID))
+      // Fail fast when the session's stored directory is unreachable. Without
+      // this check, downstream services (SystemPrompt.environment, file
+      // watcher, snapshot tracking) crash with internal errors because the
+      // Location services can't boot a FileSystem rooted at a missing path.
+      // Surfaces issues #33909 (silent hang) and #35427 (HTTP 500) clearly to
+      // the user instead of letting the request die mid-flight.
+      const exists = yield* fs.existsSafe(sess.directory)
+      if (!exists) {
+        yield* Effect.logWarning("session directory no longer exists", {
+          sessionID,
+          directory: sess.directory,
+        })
+        return yield* new HttpApiError.BadRequest({})
+      }
+      return sess
     })
 
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -380,7 +397,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const deleteMessage = Effect.fn("SessionHttpApi.deleteMessage")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
-      yield* requireSession(ctx.params.sessionID)
+      yield* requireSession(ctx.params.sessionID).pipe(Effect.asVoid)
       yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
       yield* session.removeMessage(ctx.params)
       return true
@@ -389,7 +406,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const deletePart = Effect.fn("SessionHttpApi.deletePart")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
     }) {
-      yield* requireSession(ctx.params.sessionID)
+      yield* requireSession(ctx.params.sessionID).pipe(Effect.asVoid)
       yield* session.removePart(ctx.params)
       return true
     })

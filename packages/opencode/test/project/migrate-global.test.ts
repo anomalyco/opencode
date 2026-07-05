@@ -166,3 +166,80 @@ describe("migrateFromGlobal", () => {
     }),
   )
 })
+
+// Regression test for #23248: when a project's worktree moves, sessions under
+// the same project_id whose stored directory no longer exists on disk should
+// be auto-relinked to the new worktree path.
+describe("relinkStaleSessions", () => {
+  it.live("relinks sessions whose directory no longer exists", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const { project } = yield* projects.fromDirectory(tmp)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
+
+      // Seed a session under the real project_id pointing at a directory
+      // that does not exist on disk (simulating a moved/renamed project).
+      const id = legacySessionID()
+      yield* seed({ id, dir: "/nonexistent/old/path", project: project.id })
+
+      yield* projects.fromDirectory(tmp)
+
+      const row = yield* Database.Service.use(({ db }) =>
+        db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie),
+      )
+      expect(row).toBeDefined()
+      expect(row!.directory).toBe(tmp)
+      expect(row!.project_id).toBe(project.id)
+    }),
+  )
+
+  it.live("does not relink sessions whose directory still exists", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const { project } = yield* projects.fromDirectory(tmp)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
+
+      // Create an alternate sandbox directory that DOES exist on disk.
+      const sandbox = yield* tmpdirScoped()
+      const id = legacySessionID()
+      yield* seed({ id, dir: sandbox, project: project.id })
+
+      yield* projects.fromDirectory(tmp)
+
+      // Directory should be untouched — intentional alternate root.
+      const row = yield* Database.Service.use(({ db }) =>
+        db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie),
+      )
+      expect(row).toBeDefined()
+      expect(row!.directory).toBe(sandbox)
+    }),
+  )
+
+  it.live("only relinks sessions under the matching project_id", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const { project } = yield* projects.fromDirectory(tmp)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
+
+      yield* ensureGlobal()
+
+      // Seed a session under "global" whose directory doesn't exist. It must
+      // not be touched by this project's relink pass (it belongs to a
+      // different project).
+      const otherId = legacySessionID()
+      yield* seed({ id: otherId, dir: "/nonexistent/other", project: ProjectV2.ID.global })
+
+      yield* projects.fromDirectory(tmp)
+
+      const row = yield* Database.Service.use(({ db }) =>
+        db.select().from(SessionTable).where(eq(SessionTable.id, otherId)).get().pipe(Effect.orDie),
+      )
+      expect(row).toBeDefined()
+      expect(row!.directory).toBe("/nonexistent/other")
+      expect(row!.project_id).toBe(ProjectV2.ID.global)
+    }),
+  )
+})

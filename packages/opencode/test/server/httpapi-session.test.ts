@@ -207,6 +207,12 @@ const clearSessionPath = (sessionID: SessionIDType) =>
     yield* db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
   })
 
+const setSessionDirectory = (sessionID: SessionIDType, directory: string) =>
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.update(SessionTable).set({ directory }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+  })
+
 function request(path: string, init?: RequestInit) {
   const url = new URL(path, "http://localhost")
   return HttpClientRequest.fromWeb(new Request(url, init)).pipe(
@@ -1084,6 +1090,27 @@ describe("session HttpApi", () => {
           requestID: permissionID,
           message: `Permission request not found: ${permissionID}`,
         })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  // Regression test for #33909 (silent hang) and #35427 (HTTP 500): a session
+  // whose stored directory no longer exists on disk must fail fast with a
+  // clear BadRequest at the handler boundary instead of crashing mid-request
+  // while downstream services try to boot a FileSystem at the missing path.
+  it.instance(
+    "returns 400 when session.directory no longer exists",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "stale" })
+
+        // Move the session's directory column to a path that does not exist.
+        yield* setSessionDirectory(session.id, "/nonexistent/path/that/does/not/exist")
+
+        const get = yield* request(pathFor(SessionPaths.get, { sessionID: session.id }), { headers })
+        expect(get.status).toBe(400)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
