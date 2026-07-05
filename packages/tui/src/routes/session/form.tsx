@@ -77,9 +77,18 @@ function fieldRows(field: Field): { value: FormValue; label: string; description
 
 function selectedRow(field: Field | undefined, value: FormValue | undefined) {
   if (!field || value === undefined || Array.isArray(value)) return 0
-  return Math.max(
-    fieldRows(field).findIndex((row) => row.value === value),
-    0,
+  const rows = fieldRows(field)
+  const index = rows.findIndex((row) => row.value === value)
+  if (index !== -1) return index
+  if (typeof value === "string" && field.custom && (field.type === "multiselect" || field.options)) return rows.length
+  return 0
+}
+
+function customDefault(field: Field) {
+  if (!field.custom || (field.type !== "multiselect" && !(field.type === "string" && field.options))) return
+  const values = Array.isArray(field.default) ? field.default : [field.default]
+  return values.find(
+    (value): value is string => typeof value === "string" && !field.options?.some((option) => option.value === value),
   )
 }
 
@@ -179,7 +188,12 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     answers: Object.fromEntries(
       props.form.fields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
     ) as Record<string, FormValue | undefined>,
-    custom: {} as Record<string, string>,
+    custom: Object.fromEntries(
+      props.form.fields.flatMap((field) => {
+        const value = customDefault(field)
+        return value === undefined ? [] : [[field.key, value]]
+      }),
+    ) as Record<string, string>,
     selected: selectedRow(props.form.fields[0], props.form.fields[0]?.default),
     editing: false,
     error: "",
@@ -351,7 +365,17 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
       const previous = store.custom[current.key]
       const existing = store.answers[current.key]
       const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
-      answer(current.key, !isTextual && isMulti && values.length > 0 ? values : undefined)
+      const value = !isTextual && isMulti && values.length > 0 ? values : undefined
+      if (current.required && value === undefined) {
+        setStore("error", "Answer required")
+        return false
+      }
+      const invalid = validateSelection(current, value)
+      if (invalid) {
+        setStore("error", invalid)
+        return false
+      }
+      answer(current.key, value)
       setStore("custom", { ...store.custom, [current.key]: "" })
       setStore("editing", false)
       return true
