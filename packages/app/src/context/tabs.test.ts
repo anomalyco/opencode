@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./tab-memory"
-import { pushClosedTab, takeClosedTab, type ClosedTab } from "./closed-tabs"
+import {
+  nextTabAfterClose,
+  pushClosedTab,
+  removeClosedTabs,
+  takeClosedTab,
+  type ClosedTab,
+} from "./closed-tabs"
 import type { SessionTab, Tab } from "./tabs"
 import type { ServerConnection } from "./server"
 
@@ -84,5 +90,22 @@ describe("closed tab stack", () => {
     const result = takeClosedTab([{ tab: sessionTab("a"), index: 0 }], [sessionTab("a")])
     expect(result.entry).toBeUndefined()
     expect(result.stack).toEqual([])
+  })
+
+  test("purges removed sessions", () => {
+    const stack = [
+      { tab: sessionTab("a"), index: 0 },
+      { tab: sessionTab("b"), index: 1 },
+    ]
+
+    expect(removeClosedTabs(stack, server, ["a"])).toEqual([{ tab: sessionTab("b"), index: 1 }])
+  })
+
+  test("does not navigate when a background tab closes", () => {
+    const tabs = [sessionTab("a"), sessionTab("b"), sessionTab("c")]
+
+    expect(nextTabAfterClose(tabs, 1, false)).toBeUndefined()
+    expect(nextTabAfterClose(tabs, 1, true)).toEqual(sessionTab("c"))
+    expect(nextTabAfterClose([sessionTab("a")], 0, true)).toBeNull()
   })
 })

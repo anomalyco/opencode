@@ -10,7 +10,7 @@ import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
 import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
-import { pushClosedTab, takeClosedTab, type ClosedTab } from "./closed-tabs"
+import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 
 export type SessionTab = {
   type: "session"
@@ -64,7 +64,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       createStore<Tab[]>([]),
     )
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
-    const [closed, setClosed, , closedReady] = persisted(Persist.global("tabs.closed"), createStore<ClosedTab[]>([]))
+    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
 
     const params = useParams()
     const navigate = useNavigate()
@@ -87,6 +87,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       void recentReady.promise?.then(() => {
         if (write === recentWrite) setRecent("key", key)
       })
+    }
+
+    const updateClosed = (update: (stack: ClosedTab[]) => ClosedTab[]) => {
+      const apply = () => setClosed((stack) => update(stack))
+      if (closedReady()) {
+        apply()
+        return
+      }
+      void closedReady.promise?.then(apply)
     }
 
     const removeDraftPersisted = (draftID: string) => {
@@ -126,7 +135,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (!tab) return
       const key = tabKey(tab)
       const draftID = tab.type === "draft" ? tab.draftID : undefined
-      const nextTab = store[index + 1] ?? store[index - 1]
+      const nextTab = nextTabAfterClose(store, index, recentKey() === key && location.pathname !== "/")
       closing.add(key)
       void startTransition(() => {
         setStore(
@@ -134,9 +143,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             tabs.splice(index, 1)
           }),
         )
-        if (recent.key === key) setRecentKey(nextTab && tabKey(nextTab))
+        if (nextTab === null) {
+          setRecentKey(undefined)
+          navigate("/")
+        }
         if (nextTab) navigateTab(nextTab)
-        else navigate("/")
       }).finally(() => closing.delete(key))
       memory.remove(key)
       if (draftID) removeDraftPersisted(draftID)
@@ -216,10 +227,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       closeTab(index: number) {
         const tab = store[index]
         if (!tab) return
-        if (tab.type === "session") setClosed((stack) => pushClosedTab(stack, tab, index))
+        if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index))
         removeTab(index)
       },
       reopenClosedTab() {
+        if (!closedReady()) {
+          void closedReady.promise?.then(() => actions.reopenClosedTab())
+          return
+        }
         const result = takeClosedTab(closed, store)
         if (result.stack.length === closed.length) return
         setClosed(() => result.stack)
@@ -237,12 +252,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
       },
       removeSessionTab(input: Omit<SessionTab, "type">) {
+        updateClosed((stack) => removeClosedTabs(stack, input.server, [input.sessionId]))
         const index = store.findIndex(
           (tab) => tab.type === "session" && tab.server === input.server && tab.sessionId === input.sessionId,
         )
         if (index !== -1) removeTab(index)
       },
       removeServer(key: ServerConnection.Key) {
+        updateClosed((stack) => stack.filter((entry) => entry.tab.server !== key))
         const drafts = store.flatMap((tab) => (tab.type === "draft" && tab.server === key ? [tab.draftID] : []))
         const removed = store.filter((tab) => tab.server === key).map(tabKey)
         setStore((tabs) => tabs.filter((tab) => tab.server !== key))
@@ -253,6 +270,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       removeSessions: (input: SessionTabsRemovedDetail) => {
         const targetServer = input.server ?? server.key
+        updateClosed((stack) => removeClosedTabs(stack, targetServer, input.sessionIDs))
         const removed = store
           .filter(
             (tab) => tab.type === "session" && tab.server === targetServer && input.sessionIDs.includes(tab.sessionId),

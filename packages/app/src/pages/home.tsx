@@ -66,6 +66,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { useMarked } from "@opencode-ai/ui/context/marked"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
+import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 
 const HOME_SESSION_LIMIT = 64
@@ -238,12 +239,16 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
   return { setViewport, setContentRef, setHeaderRef, update, titleOpacity }
 }
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
-
 // Cmd+click on macOS (Ctrl+click elsewhere) opens a session tab in the
 // background without navigating, matching browser conventions.
 function isBackgroundOpen(event: MouseEvent) {
-  return IS_MAC ? event.metaKey : event.ctrlKey
+  return shouldOpenSessionInBackground({
+    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    meta: event.metaKey,
+    ctrl: event.ctrlKey,
+    shift: event.shiftKey,
+    alt: event.altKey,
+  })
 }
 
 type OpenSessionOptions = { background?: boolean }
@@ -479,11 +484,11 @@ export function NewHome() {
     const directory = project?.worktree ?? session.directory
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
-    ctx.projects.touch(directory)
     if (options?.background) {
       tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
       return
     }
+    ctx.projects.touch(directory)
     startTransition(() => {
       const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
       tabs.select(tab)
