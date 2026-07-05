@@ -172,6 +172,16 @@ export function Session() {
   })
   onCleanup(() => setEpilogue())
   const messages = sessionMessages
+  const transientCompaction = createMemo(() => {
+    if (
+      messages().some(
+        (message) => message.type === "compaction" && (message.status === "queued" || message.status === "running"),
+      )
+    )
+      return
+    const text = data.session.compaction(route.sessionID)
+    return text === undefined ? undefined : { text }
+  })
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
@@ -926,8 +936,8 @@ export function Session() {
                     />
                   )}
                 </For>
-                <Show when={data.session.compaction(route.sessionID)}>
-                  {(text) => <CompactionMessage text={text()} />}
+                <Show when={transientCompaction()}>
+                  {(compaction) => <CompactionMessage status="running" text={compaction().text} />}
                 </Show>
                 <BackgroundToolHint messages={messages()} />
                 <Show when={session()?.revert?.messageID}>
@@ -1100,7 +1110,7 @@ function SessionMessageView(props: { message: SessionMessage }) {
         </Show>
       </Match>
       <Match when={props.message.type === "compaction"}>
-        <CompactionMessage />
+        <CompactionMessage message={props.message as Extract<SessionMessage, { type: "compaction" }>} />
       </Match>
     </Switch>
   )
@@ -1285,14 +1295,51 @@ function SessionSkillMessage(props: { message: Extract<SessionMessage, { type: "
   )
 }
 
-function CompactionMessage(props: { text?: string }) {
-  const { theme } = useTheme()
+function CompactionMessage(props: {
+  message?: Extract<SessionMessage, { type: "compaction" }>
+  status?: "running"
+  text?: string
+}) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const status = () => props.message?.status ?? props.status
+  const text = () => props.message?.summary ?? props.text ?? ""
   return (
-    <box border={["top"]} title=" Compaction " titleAlignment="center" borderColor={theme.borderActive}>
-      <Show when={props.text}>
-        <text fg={theme.textMuted}>{props.text}</text>
-      </Show>
-    </box>
+    <Switch>
+      <Match when={status() === "queued"}>
+        <text fg={theme.textMuted}>◇ Compaction queued</text>
+      </Match>
+      <Match when={status() === "failed"}>
+        <box border={["top"]} title=" Compaction failed " titleAlignment="center" borderColor={theme.error} />
+      </Match>
+      <Match when={status() === "running" || status() === "completed"}>
+        <box
+          border={["top"]}
+          title={status() === "completed" ? " Compacted " : " Compaction "}
+          titleAlignment="center"
+          borderColor={theme.borderActive}
+          gap={1}
+        >
+          <Show when={status() === "running"}>
+            <Spinner>Compacting conversation...</Spinner>
+          </Show>
+          <Show when={text().trim()}>
+            <box paddingLeft={3}>
+              <markdown
+                syntaxStyle={syntax()}
+                streaming={status() === "running"}
+                internalBlockMode="top-level"
+                content={text().trim()}
+                tableOptions={{ style: "grid" }}
+                conceal={ctx.conceal()}
+                fg={theme.markdownText}
+                bg={theme.background}
+              />
+            </box>
+          </Show>
+        </box>
+      </Match>
+    </Switch>
   )
 }
 

@@ -75,7 +75,7 @@ const it = testEffect(
 )
 
 describe("SessionV2.compact", () => {
-  it.effect("manually compacts the active session context", () =>
+  it.effect("durably admits and coalesces manual compaction", () =>
     Effect.gen(function* () {
       requests = []
       const session = yield* SessionV2.Service
@@ -95,13 +95,22 @@ describe("SessionV2.compact", () => {
         inputID: messageID,
       })
 
-      yield* session.compact({ sessionID: created.id })
+      expect(yield* session.compact({ id: messageID, sessionID: created.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.CompactionConflictError",
+        inputID: messageID,
+      })
+      const first = yield* session.compact({ sessionID: created.id })
+      const second = yield* session.compact({ sessionID: created.id })
 
-      expect(requests).toHaveLength(1)
-      expect(JSON.stringify(requests[0]?.messages)).toContain("Please compact this session history.")
-      expect(yield* session.context(created.id)).toMatchObject([
-        { type: "compaction", reason: "manual", summary: "manual session summary", recent: "" },
-      ])
+      expect(second.id).toBe(first.id)
+      expect(requests).toHaveLength(0)
+      expect((yield* session.context(created.id)).find((message) => message.id === first.id)).toMatchObject({
+        type: "compaction",
+        status: "queued",
+        reason: "manual",
+        summary: "",
+        recent: "",
+      })
     }),
   )
 })

@@ -436,6 +436,16 @@ export const RetryScheduled = Event.durable({
 export type RetryScheduled = typeof RetryScheduled.Type
 
 export namespace Compaction {
+  export const Admitted = Event.durable({
+    type: "session.compaction.admitted",
+    ...options,
+    schema: {
+      ...Base,
+      inputID: SessionMessage.ID,
+    },
+  })
+  export type Admitted = typeof Admitted.Type
+
   export const Started = Event.durable({
     type: "session.compaction.started",
     ...options,
@@ -466,6 +476,13 @@ export namespace Compaction {
     },
   })
   export type Ended = typeof Ended.Type
+
+  export const Failed = Event.durable({
+    type: "session.compaction.failed",
+    ...options,
+    schema: Base,
+  })
+  export type Failed = typeof Failed.Type
 }
 
 export namespace RevertEvent {
@@ -517,9 +534,11 @@ export const Definitions = Event.inventory(
   Tool.Success,
   Tool.Failed,
   RetryScheduled,
+  Compaction.Admitted,
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,
+  Compaction.Failed,
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,

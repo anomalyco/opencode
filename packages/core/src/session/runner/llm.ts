@@ -228,7 +228,10 @@ const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
       })
       // Automatic compaction completed; rebuild the request from compacted history.
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request }))
+      if (
+        !(yield* SessionInput.pendingCompaction(db, session.id)) &&
+        (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request }))
+      )
         return { _tag: "RestartAfterCompaction", step: currentStep } as const
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
@@ -511,11 +514,36 @@ const layer = Layer.effect(
       }
     })
 
+    const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      const pending = yield* SessionInput.pendingCompaction(db, sessionID)
+      if (!pending) return false
+      const session = yield* getSession(sessionID)
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const compacted = yield* restore(
+            Effect.gen(function* () {
+              return yield* compaction.compactManual({
+                session,
+                messages: yield* store.context(sessionID),
+              })
+            }),
+          ).pipe(Effect.exit)
+          if (Exit.isSuccess(compacted) && compacted.value) return true
+          yield* events.publish(SessionEvent.Compaction.Failed, { sessionID })
+          if (Exit.isFailure(compacted)) return yield* Effect.failCause(compacted.cause)
+          return true
+        }),
+      )
+    })
+
     // Execution lifecycle is published per busy period by SessionExecution, not per drain here.
     const drain = Effect.fn("SessionRunner.drain")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
+      yield* runPendingCompaction(input.sessionID)
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
@@ -539,11 +567,19 @@ const layer = Layer.effect(
           }
           needsContinuation = result.needsContinuation
           step = result.step + 1
+          if (needsContinuation) {
+            promotion = (yield* SessionInput.pendingCompaction(db, input.sessionID)) ? undefined : "steer"
+            continue
+          }
+          yield* runPendingCompaction(input.sessionID)
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
         }
-        shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
-        promotion = shouldRun ? "queue" : undefined
+        yield* runPendingCompaction(input.sessionID)
+        const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+        const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        shouldRun = hasSteer || hasQueue
+        promotion = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       }
     })
 

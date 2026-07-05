@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, ne, or } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, ne, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database"
 import { MessageDecodeError } from "./error"
@@ -14,7 +14,13 @@ export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService
   return yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
-    .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "compaction"),
+        sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
+      ),
+    )
     .orderBy(desc(SessionMessageTable.seq))
     .limit(1)
     .get()

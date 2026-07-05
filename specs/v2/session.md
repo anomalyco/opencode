@@ -32,7 +32,7 @@ sessions.active()
   -> absence means inactive; activity is not durable across process restarts
 ```
 
-`session_input` is the durable admission inbox. `PromptAdmitted` records and projects accepted input so pending queue state can be replayed, replicated, and observed by clients. Admitted inputs remain outside model-visible Session history until the serialized runner publishes `Prompted`. Its projector atomically writes the visible user message and marks the inbox row promoted in the same event transaction. The V1-to-V2 shadow bridge publishes the same `Prompted` event for already-visible V1 prompts.
+`session_input` is the typed durable admission inbox for prompts and Session control operations. `PromptAdmitted` records accepted user input; `Compaction.Admitted` records one coalesced manual compaction barrier. Admitted prompts remain outside model-visible Session history until the serialized runner publishes `Prompted`. Its projector atomically writes the visible user message and marks the inbox row promoted in the same event transaction. A pending compaction blocks all unpromoted prompts, runs before the Session would otherwise become idle, and releases the backlog only after its durable ended or failed event settles the barrier. The V1-to-V2 shadow bridge publishes the same `Prompted` event for already-visible V1 prompts.
 
 `admittedSeq` is the durable Session event sequence of `PromptAdmitted`. Clients may use the admission event to represent queued input before `Prompted` makes it part of visible conversation history.
 
@@ -120,7 +120,6 @@ Current instruction follow-ups:
 
 - Add configured and remote instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash continuation recovery for promoted or provider-dispatched work.
-- Add explicit manual compaction on top of automatic request-budget compaction.
 - Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
 - Consider watcher-backed per-file caching only if measurements show direct step-boundary observation is too expensive.
 - Design any plugin-defined instruction contribution as an explicit runner composition boundary; do not reintroduce a registry implicitly.
@@ -134,7 +133,7 @@ Compaction keeps the full transcript durable while replacing its active model re
 
 The rolling summary is a continuation checkpoint with this complete heading order: `Objective`, `Important Details`, `Work State`, and `Next Move`. `Work State` records completed, active, and blocked work, while `Next Move` records the immediate and following actions. Every heading remains present even when its value is `(none)`.
 
-`session.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.compaction.ended.1` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next physical attempt, the runner observes that completed compaction and directly renders a fresh instruction baseline through `InstructionCheckpoint`. A failed or interrupted attempt therefore leaves the previous history boundary active.
+`session.compaction.admitted.1` durably records a manual request and projects its queued transcript row. `session.compaction.started.1` identifies the attempt and transforms that row into a running divider. Compaction deltas are live-only progress rendered beneath it. `session.compaction.ended.1` durably stores the final summary and serialized recent context, completes the same row, and settles the manual barrier. `session.compaction.failed.1` settles an unsuccessful manual barrier without changing the previous history boundary. On the next physical attempt, the runner observes a completed compaction and directly renders a fresh instruction baseline through `InstructionCheckpoint`.
 
 Assistant text and reasoning follow a strict `started` / live-only `delta` / durable full-value `ended` lifecycle. A publisher permits at most one open fragment of each kind in a step and fails on a second start before the matching end. Provider block IDs remain internal to LLM adapters; each fragment event carries a Session-assigned kind-specific ordinal, matching the ordinal derived from projected content. UI identity is therefore the assistant message ID plus content kind and ordinal. Tool calls retain step-scoped `callID` because settlements and provider replay correlate through it.
 

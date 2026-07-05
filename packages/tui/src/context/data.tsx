@@ -55,6 +55,7 @@ type Data = {
     family: Record<string, string[]>
     status: Record<string, DataSessionStatus>
     compaction: Partial<Record<string, string>>
+    compactionReason: Partial<Record<string, "auto" | "manual">>
     message: Record<string, SessionMessage[]>
     input: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
@@ -92,6 +93,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         family: {},
         status: {},
         compaction: {},
+        compactionReason: {},
         message: {},
         input: {},
         permission: {},
@@ -144,6 +146,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       shell(messages: SessionMessage[], shellID: string) {
         const item = messages.findLast((item) => item.type === "shell" && item.shell.id === shellID)
         return item?.type === "shell" ? item : undefined
+      },
+      compaction(messages: SessionMessage[]) {
+        const item = messages.findLast(
+          (item) => item.type === "compaction" && (item.status === "queued" || item.status === "running"),
+        )
+        return item?.type === "compaction" ? item : undefined
       },
       latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
         return assistant?.content.findLast(
@@ -580,8 +588,28 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.execution.started":
           setSessionStatus(event.data.sessionID, "running")
           break
+        case "session.compaction.admitted":
+          message.update(event.data.sessionID, (draft, index) => {
+            if (message.compaction(draft)) return
+            message.append(draft, index, {
+              id: event.data.inputID,
+              type: "compaction",
+              status: "queued",
+              reason: "manual",
+              summary: "",
+              recent: "",
+              time: { created: event.created },
+            })
+          })
+          break
         case "session.compaction.started":
           setStore("session", "compaction", event.data.sessionID, "")
+          setStore("session", "compactionReason", event.data.sessionID, event.data.reason)
+          if (event.data.reason === "manual")
+            message.update(event.data.sessionID, (draft) => {
+              const current = message.compaction(draft)
+              if (current) current.status = "running"
+            })
           break
         case "session.execution.succeeded":
         case "session.execution.failed":
@@ -589,6 +617,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           setSessionStatus(event.data.sessionID, "idle")
           if (store.session.compaction[event.data.sessionID] !== undefined)
             setStore("session", "compaction", event.data.sessionID, undefined)
+          if (store.session.compactionReason[event.data.sessionID] !== undefined)
+            setStore("session", "compactionReason", event.data.sessionID, undefined)
           message.update(event.data.sessionID, (draft) => {
             const currentAssistant = message.activeAssistant(draft)
             if (currentAssistant) currentAssistant.retry = undefined
@@ -619,18 +649,41 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.compaction.delta":
           setStore("session", "compaction", event.data.sessionID, (text) => (text ?? "") + event.data.text)
+          if (store.session.compactionReason[event.data.sessionID] === "manual")
+            message.update(event.data.sessionID, (draft) => {
+              const current = message.compaction(draft)
+              if (current) current.summary += event.data.text
+            })
           break
         case "session.compaction.ended":
           setStore("session", "compaction", event.data.sessionID, undefined)
+          setStore("session", "compactionReason", event.data.sessionID, undefined)
           message.update(event.data.sessionID, (draft, index) => {
+            const current = event.data.reason === "manual" ? message.compaction(draft) : undefined
+            if (current) {
+              current.status = "completed"
+              current.reason = event.data.reason
+              current.summary = event.data.text
+              current.recent = event.data.recent
+              return
+            }
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
               type: "compaction",
+              status: "completed",
               reason: event.data.reason,
               summary: event.data.text,
               recent: event.data.recent,
               time: { created: event.created },
             })
+          })
+          break
+        case "session.compaction.failed":
+          setStore("session", "compaction", event.data.sessionID, undefined)
+          setStore("session", "compactionReason", event.data.sessionID, undefined)
+          message.update(event.data.sessionID, (draft) => {
+            const current = message.compaction(draft)
+            if (current) current.status = "failed"
           })
           break
         case "permission.v2.asked":

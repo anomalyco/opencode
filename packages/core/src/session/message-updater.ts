@@ -16,8 +16,10 @@ export interface Adapter {
   readonly getShell: (
     shellID: SessionMessage.Shell["shell"]["id"],
   ) => Effect.Effect<SessionMessage.Shell | undefined, never, never>
+  readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined, never, never>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void, never, never>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void, never, never>
+  readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void, never, never>
   readonly appendMessage: (message: SessionMessage.Message) => Effect.Effect<void, never, never>
 }
 
@@ -26,6 +28,10 @@ export function memory(state: MemoryState): Adapter {
     state.messages.findLastIndex((message) => message.id === messageID)
   const shellIndex = (messageID: SessionMessage.ID) =>
     state.messages.findLastIndex((message) => message.id === messageID)
+  const compactionIndex = () =>
+    state.messages.findLastIndex(
+      (message) => message.type === "compaction" && (message.status === "queued" || message.status === "running"),
+    )
   // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
   const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
 
@@ -62,6 +68,13 @@ export function memory(state: MemoryState): Adapter {
         })
       })
     },
+    getCompaction() {
+      return Effect.sync(() => {
+        const index = compactionIndex()
+        const message = state.messages[index]
+        return message?.type === "compaction" ? message : undefined
+      })
+    },
     updateAssistant(assistant) {
       return Effect.sync(() => {
         const index = assistantIndex(assistant.id)
@@ -78,6 +91,12 @@ export function memory(state: MemoryState): Adapter {
         const current = state.messages[index]
         if (current?.type !== "shell") return
         state.messages[index] = shell
+      })
+    },
+    updateCompaction(compaction) {
+      return Effect.sync(() => {
+        const index = state.messages.findLastIndex((message) => message.id === compaction.id)
+        if (index >= 0) state.messages[index] = compaction
       })
     },
     appendMessage(message) {
@@ -424,21 +443,60 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.compaction.started": () => Effect.void,
-      "session.compaction.delta": () => Effect.void,
-      "session.compaction.ended": (event) => {
-        return adapter.appendMessage(
+      "session.compaction.admitted": (event) =>
+        adapter.appendMessage(
           SessionMessage.Compaction.make({
-            id: SessionMessage.ID.fromEvent(event.id),
+            id: event.data.inputID,
             type: "compaction",
+            status: "queued",
             metadata: event.metadata,
-            reason: event.data.reason,
-            summary: event.data.text,
-            recent: event.data.recent,
+            reason: "manual",
+            summary: "",
+            recent: "",
             time: { created: event.created },
           }),
-        )
+        ),
+      "session.compaction.started": (event) =>
+        Effect.gen(function* () {
+          if (event.data.reason !== "manual") return
+          const current = yield* adapter.getCompaction()
+          if (!current) return
+          yield* adapter.updateCompaction({ ...current, status: "running" })
+        }),
+      "session.compaction.delta": () => Effect.void,
+      "session.compaction.ended": (event) => {
+        return Effect.gen(function* () {
+          const current = event.data.reason === "manual" ? yield* adapter.getCompaction() : undefined
+          if (current) {
+            yield* adapter.updateCompaction({
+              ...current,
+              status: "completed",
+              reason: event.data.reason,
+              summary: event.data.text,
+              recent: event.data.recent,
+            })
+            return
+          }
+          yield* adapter.appendMessage(
+            SessionMessage.Compaction.make({
+              id: SessionMessage.ID.fromEvent(event.id),
+              type: "compaction",
+              status: "completed",
+              metadata: event.metadata,
+              reason: event.data.reason,
+              summary: event.data.text,
+              recent: event.data.recent,
+              time: { created: event.created },
+            }),
+          )
+        })
       },
+      "session.compaction.failed": () =>
+        Effect.gen(function* () {
+          const current = yield* adapter.getCompaction()
+          if (!current) return
+          yield* adapter.updateCompaction({ ...current, status: "failed" })
+        }),
       "session.revert.staged": () => Effect.void,
       "session.revert.cleared": () => Effect.void,
       "session.revert.committed": () => Effect.void,

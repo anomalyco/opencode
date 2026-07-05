@@ -611,6 +611,46 @@ test("tracks session status from active sessions and execution events", async ()
     expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
 
     emitEvent(events, {
+      id: "evt_compaction_admitted",
+      created: 0,
+      type: "session.compaction.admitted",
+      durable: durable("session-manual", 1),
+      data: { sessionID: "session-manual", inputID: "message-compaction" },
+    })
+    await wait(() => {
+      const message = data.session.message.get("session-manual", "message-compaction")
+      return message?.type === "compaction" && message.status === "queued"
+    })
+    emitEvent(events, {
+      id: "evt_manual_compaction_started",
+      created: 1,
+      type: "session.compaction.started",
+      durable: durable("session-manual", 2),
+      data: { sessionID: "session-manual", reason: "manual" },
+    })
+    emitEvent(events, {
+      id: "evt_manual_compaction_delta",
+      created: 2,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-manual", text: "Streamed summary" },
+    })
+    await wait(() => {
+      const message = data.session.message.get("session-manual", "message-compaction")
+      return message?.type === "compaction" && message.summary === "Streamed summary"
+    })
+    emitEvent(events, {
+      id: "evt_manual_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      durable: durable("session-manual", 3),
+      data: { sessionID: "session-manual", reason: "manual", text: "Streamed summary", recent: "recent" },
+    })
+    await wait(() => {
+      const message = data.session.message.get("session-manual", "message-compaction")
+      return message?.type === "compaction" && message.status === "completed"
+    })
+
+    emitEvent(events, {
       id: "evt_compaction_started",
       created: 0,
       type: "session.compaction.started",

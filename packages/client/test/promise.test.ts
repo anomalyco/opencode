@@ -240,6 +240,7 @@ test("session methods use the public HTTP contract", async () => {
         })
       }
       if (url.includes("/prompt")) return Response.json(admission)
+      if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
       if (url.endsWith("/api/session/active"))
@@ -355,11 +356,22 @@ const session = {
 
 const admission = {
   data: {
+    type: "prompt",
     admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
     prompt: { text: "Hello" },
     delivery: "steer",
+    timeCreated: 1_717_171_717_000,
+  },
+}
+
+const compactionAdmission = {
+  data: {
+    type: "compaction",
+    admittedSeq: 1,
+    id: "msg_compaction",
+    sessionID: "ses_test",
     timeCreated: 1_717_171_717_000,
   },
 }

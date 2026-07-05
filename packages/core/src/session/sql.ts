@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
@@ -147,8 +148,9 @@ export const SessionInputTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    prompt: text({ mode: "json" }).notNull().$type<Prompt>(),
-    delivery: text().$type<SessionInput.Delivery>().notNull(),
+    type: text().$type<SessionInput.Entry["type"]>().notNull(),
+    prompt: text({ mode: "json" }).$type<Prompt>(),
+    delivery: text().$type<SessionInput.Delivery>(),
     admitted_seq: integer().notNull(),
     promoted_seq: integer(),
     time_created: integer()
@@ -156,12 +158,16 @@ export const SessionInputTable = sqliteTable(
       .$default(() => Date.now()),
   },
   (table) => [
-    index("session_input_session_pending_delivery_seq_idx").on(
+    index("session_input_session_pending_type_delivery_seq_idx").on(
       table.session_id,
       table.promoted_seq,
+      table.type,
       table.delivery,
       table.admitted_seq,
     ),
+    uniqueIndex("session_input_session_pending_compaction_idx")
+      .on(table.session_id)
+      .where(sql`${table.type} = 'compaction' and ${table.promoted_seq} is null`),
     uniqueIndex("session_input_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
     uniqueIndex("session_input_session_promoted_seq_idx").on(table.session_id, table.promoted_seq),
   ],

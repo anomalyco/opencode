@@ -140,6 +140,9 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     if (url.includes("/prompt")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(admission)))
     }
+    if (url.endsWith("/compact")) {
+      return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(compactionAdmission)))
+    }
     if (url.includes("/context")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ data: [] })))
     }
@@ -259,11 +262,22 @@ const session = {
 
 const admission = {
   data: {
+    type: "prompt",
     admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
     prompt: { text: "Hello" },
     delivery: "steer",
+    timeCreated: 1_717_171_717_000,
+  },
+}
+
+const compactionAdmission = {
+  data: {
+    type: "compaction",
+    admittedSeq: 1,
+    id: "msg_compaction",
+    sessionID: "ses_test",
     timeCreated: 1_717_171_717_000,
   },
 }

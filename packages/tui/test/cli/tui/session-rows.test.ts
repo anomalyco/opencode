@@ -209,6 +209,35 @@ test("renders a footer for a pre-output retry assistant after replay", () => {
   expect(reduceSessionRows([message])).toEqual([{ type: "assistant-footer", messageID: "assistant-retry" }])
 })
 
+test("places a pending compaction barrier before every queued user message", () => {
+  const queued = (id: string, text: string, created: number): SessionMessage => ({
+    type: "user",
+    id,
+    text,
+    metadata: { queued: true },
+    time: { created },
+  })
+  const messages: SessionMessage[] = [
+    queued("user-before", "Before", 1),
+    {
+      type: "compaction",
+      id: "compaction",
+      status: "queued",
+      reason: "manual",
+      summary: "",
+      recent: "",
+      time: { created: 2 },
+    },
+    queued("user-after", "After", 3),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    { type: "message", messageID: "compaction" },
+    { type: "message", messageID: "user-before" },
+    { type: "message", messageID: "user-after" },
+  ])
+})
+
 function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
   return {
     type: "assistant",

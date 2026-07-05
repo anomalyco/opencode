@@ -105,8 +105,9 @@ describe("toLLMMessages", () => {
         }),
         SessionMessage.Compaction.make({
           id: id("compaction"),
-          type: "compaction",
-          reason: "auto",
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
           summary: "Earlier work",
           recent: "Recent work",
           time: { created },

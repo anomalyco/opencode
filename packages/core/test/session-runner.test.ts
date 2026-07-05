@@ -1324,6 +1324,97 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("runs one durable compaction barrier before later steer and queued prompts", () =>
+    Effect.gen(function* () {
+      yield* setup
+      requests.length = 0
+      currentModel = recoveryModel
+      const session = yield* SessionV2.Service
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+      responses = [
+        fragmentFixture("text", "text-active", ["Active complete"]).completeEvents,
+        [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
+        fragmentFixture("text", "text-steer", ["Steer complete"]).completeEvents,
+        fragmentFixture("text", "text-queue", ["Queue complete"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Active work" }), resume: false })
+      const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+
+      const first = yield* session.compact({ sessionID })
+      const second = yield* session.compact({ sessionID })
+      expect(second.id).toBe(first.id)
+      expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toMatchObject({
+        id: first.id,
+      })
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toMatchObject({
+        type: "compaction",
+        status: "queued",
+      })
+
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Steer after compaction" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Queue after compaction" }),
+        delivery: "queue",
+        resume: false,
+      })
+      expect(yield* SessionInput.hasPending((yield* Database.Service).db, sessionID, "steer")).toBe(false)
+
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(active)
+
+      expect(requests).toHaveLength(4)
+      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(userTexts(requests[2])).toContain("Steer after compaction")
+      expect(userTexts(requests[3])).toContain("Queue after compaction")
+      expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toMatchObject({
+        type: "compaction",
+        status: "completed",
+        summary: "durable summary",
+      })
+    }),
+  )
+
+  it.effect("releases queued prompts when durable compaction fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      requests.length = 0
+      currentModel = recoveryModel
+      const session = yield* SessionV2.Service
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+      responses = [
+        fragmentFixture("text", "text-active-failure", ["Active complete"]).completeEvents,
+        [],
+        fragmentFixture("text", "text-after-failure", ["Continued"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Active work" }), resume: false })
+      const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+
+      const compaction = yield* session.compact({ sessionID })
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Continue after failure" }),
+        delivery: "queue",
+        resume: false,
+      })
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(active)
+
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[2])).toContain("Continue after failure")
+      expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+      })
+    }),
+  )
+
   it.effect("automatically compacts into a completed summary and retained recent turn", () =>
     Effect.gen(function* () {
       yield* setup

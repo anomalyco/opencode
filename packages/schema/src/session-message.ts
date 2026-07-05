@@ -210,6 +210,7 @@ export const Assistant = Schema.Struct({
 export interface Compaction extends Schema.Schema.Type<typeof Compaction> {}
 export const Compaction = Schema.Struct({
   type: Schema.Literal("compaction"),
+  status: Schema.Literals(["queued", "running", "completed", "failed"]),
   reason: Schema.Literals(["auto", "manual"]),
   summary: Schema.String,
   recent: Schema.String,

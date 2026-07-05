@@ -260,7 +260,9 @@ const make = (dependencies: Dependencies) => {
     if (context === undefined || context <= 0) return false
     const selected = select(input.messages, config.tokens)
     if (!selected) return false
-    const previousSummary = input.messages.find((message) => message.type === "compaction")
+    const previousSummary = input.messages.find(
+      (message) => message.type === "compaction" && message.status === "completed",
+    )
     const hasHead = selected.head.length > 0
     if (!hasHead && previousSummary?.type !== "compaction" && !input.force) return false
     const forcedShortContext = input.force && !hasHead

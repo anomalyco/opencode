@@ -556,16 +556,17 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
       compact: (input: SessionCompactInput, requestOptions?: RequestOptions) =>
-        request<SessionCompactOutput>(
+        request<{ readonly data: SessionCompactOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
-            successStatus: 204,
-            declaredStatuses: [404, 409, 503, 500, 400, 401],
-            empty: true,
+            body: { id: input["id"] },
+            successStatus: 200,
+            declaredStatuses: [409, 404, 400, 401],
+            empty: false,
           },
           requestOptions,
-        ),
+        ).then((value) => value.data),
       wait: (input: SessionWaitInput, requestOptions?: RequestOptions) =>
         request<SessionWaitOutput>(
           {
