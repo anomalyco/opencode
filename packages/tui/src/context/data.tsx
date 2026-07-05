@@ -703,17 +703,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
           registerSession(sessionID)
         },
-        async refreshChildren(sessionID: string) {
-          const visit = async (parentID: string, seen: Set<string>): Promise<void> => {
-            const children = mutable((await sdk.api.session.list({ parentID, limit: 200 })).data).filter(
-              (session) => !seen.has(session.id),
-            )
-            for (const session of children) setStore("session", "info", session.id, session)
-            for (const session of children) registerSession(session.id)
-            await Promise.all(children.map((session) => visit(session.id, new Set([...seen, session.id]))))
-          }
-          await visit(sessionID, new Set([sessionID]))
-        },
         message: {
           ids(sessionID: string) {
             return (store.session.message[sessionID] ?? []).map((message) => message.id)
@@ -920,11 +909,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               }),
             )
             for (const session of response.data) registerSession(session.id)
-            await Promise.all(
-              Object.values(store.session.info).flatMap((session) =>
-                session.parentID ? [] : [result.session.refreshChildren(session.id)],
-              ),
-            )
             await Promise.all(
               Object.keys(store.session.info).flatMap((sessionID) => [
                 result.session.permission.refresh(sessionID),
