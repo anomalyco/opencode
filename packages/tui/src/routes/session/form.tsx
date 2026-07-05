@@ -75,6 +75,14 @@ function fieldRows(field: Field): { value: FormValue; label: string; description
   return []
 }
 
+function selectedRow(field: Field | undefined, value: FormValue | undefined) {
+  if (!field || value === undefined || Array.isArray(value)) return 0
+  return Math.max(
+    fieldRows(field).findIndex((row) => row.value === value),
+    0,
+  )
+}
+
 function display(field: Field, value: FormValue | undefined) {
   if (value === undefined) return ""
   const label = (item: string | number | boolean) =>
@@ -172,7 +180,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
       props.form.fields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
     ) as Record<string, FormValue | undefined>,
     custom: {} as Record<string, string>,
-    selected: 0,
+    selected: selectedRow(props.form.fields[0], props.form.fields[0]?.default),
     editing: false,
     error: "",
   })
@@ -285,8 +293,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         })
       return
     }
-    setStore("tab", store.tab + 1)
-    setStore("selected", 0)
+    selectTab(store.tab + 1)
   }
 
   function toggle(value: string) {
@@ -301,8 +308,9 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function selectTab(index: number) {
+    const next = fields()[index]
     setStore("tab", index)
-    setStore("selected", 0)
+    setStore("selected", selectedRow(next, next ? store.answers[next.key] : undefined))
     setStore("editing", false)
     setStore("error", "")
   }
