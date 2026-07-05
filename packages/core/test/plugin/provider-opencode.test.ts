@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -28,20 +28,6 @@ const addPlugin = Effect.fn(function* () {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function eventually<A>(
-  effect: Effect.Effect<A>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
 }
 
 function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
@@ -78,6 +64,7 @@ describe("OpencodePlugin", () => {
           label: "OpenCode Console account",
         },
         { type: "key", label: "API key (service account)" },
+        { type: "env", names: ["OPENCODE_CONSOLE_TOKEN"] },
       ])
     }),
   )
@@ -159,16 +146,12 @@ describe("OpencodePlugin", () => {
             }),
           })
 
-          yield* addPlugin()
+          const loading = yield* Effect.forkScoped(addPlugin())
           expect(authorization).toEqual([])
           release()
+          yield* Fiber.join(loading)
 
-          const provider = required(
-            yield* eventually(
-              catalog.provider.get(ProviderV2.ID.make("remote")),
-              (item) => item?.integrationID === Integration.ID.make("opencode"),
-            ),
-          )
+          const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("remote")))
           expect(provider).toMatchObject({
             name: "Remote",
             integrationID: "opencode",
@@ -215,7 +198,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses a public key and disables paid models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -241,7 +224,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("keeps free models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -267,7 +250,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("treats output-only cost as free without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -295,7 +278,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses OPENCODE_API_KEY as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: "secret" }, () =>
+    withEnv({ OPENCODE_API_KEY: "secret", OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -321,7 +304,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured provider env vars as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         const integrations = yield* Integration.Service
@@ -354,7 +337,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured apiKey as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -387,7 +370,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("ignores non-opencode providers and models", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {

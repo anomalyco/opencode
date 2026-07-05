@@ -104,6 +104,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       })
       draft.method.update(oauth(http))
       draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+      const env = draft.method.list("opencode").find((method) => method.type === "env")
+      draft.method.update({
+        integrationID: "opencode",
+        method: { type: "env", names: Array.from(new Set([...(env?.names ?? []), "OPENCODE_CONSOLE_TOKEN"])) },
+      })
     })
 
     connected = (yield* ctx.integration.connection.active("opencode")) !== undefined
@@ -188,7 +193,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh().pipe(Effect.forkScoped)
+    yield* refresh()
   }),
 })
 
