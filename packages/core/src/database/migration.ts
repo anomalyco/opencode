@@ -66,6 +66,31 @@ export function applyOnly(db: Database, input: Migration[]) {
       }
     }
 
+    // Reverse sync: if __drizzle_migrations is behind the migration table,
+    // backfill it so Drizzle's schema tracker stays coherent. This happens
+    // when the CLI binary ships more migrations than the plugin has tracked.
+    if (
+      completed.size > 0 &&
+      (yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`))
+    ) {
+      const maxId = (yield* db.get<{ maxId: number }>(
+        sql`SELECT COALESCE(MAX(id), 0) as maxId FROM __drizzle_migrations`,
+      ))?.maxId ?? 0
+      yield* db.run(sql`
+        INSERT OR IGNORE INTO __drizzle_migrations (id, hash, created_at, name, applied_at)
+        SELECT
+          ${maxId} + ROW_NUMBER() OVER (ORDER BY m.id) - 1,
+          'synced',
+          CAST(strftime('%s', 'now') AS INTEGER),
+          m.id,
+          CAST(strftime('%s', 'now') AS INTEGER)
+        FROM migration m
+        WHERE m.id NOT IN (
+          SELECT d.name FROM __drizzle_migrations d WHERE d.name IS NOT NULL
+        )
+      `)
+    }
+
     for (const migration of input) {
       if (completed.has(migration.id)) continue
       yield* db.transaction((tx) =>
