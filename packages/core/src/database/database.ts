@@ -26,7 +26,12 @@ export const layer = Layer.effect(
 
     yield* db.run("PRAGMA journal_mode = WAL")
     yield* db.run("PRAGMA synchronous = NORMAL")
-    yield* db.run("PRAGMA busy_timeout = 5000")
+    // fork: 5s was not enough headroom on a multi-GB database with a cold
+    // page cache (first boot after maintenance/VACUUM, Spotlight re-indexing)
+    // — ~30 project instances race their boot upserts and the losers hard-fail
+    // startup with "database is locked". 30s trades a slower worst-case boot
+    // for never failing it.
+    yield* db.run("PRAGMA busy_timeout = 30000")
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
