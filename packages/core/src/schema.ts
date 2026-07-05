@@ -43,37 +43,47 @@ export type DeepMutable<T> = T extends string | number | boolean | bigint | symb
  * Nominal wrapper for scalar types. The class itself is a valid schema —
  * pass it directly to `Schema.decode`, `Schema.decodeEffect`, etc.
  *
- * Overrides `~type.make` on the derived `Schema.Opaque` so `Schema.Schema.Type`
- * of a field using this newtype resolves to `Self` rather than the underlying
- * branded phantom. Without that override, passing a class instance to code
- * typed against `Schema.Schema.Type<FieldSchema>` would require a cast even
- * though the values are structurally equivalent at runtime.
+ * The runtime value remains an unwrapped primitive. `Schema.brand` supplies
+ * the primitive schema behavior and constructor validation, while the class
+ * supplies the nominal TypeScript identity.
+ * Apply checks and annotations to the underlying schema before wrapping it;
+ * schema rebuild operations intentionally return the underlying schema shape.
  *
  * @example
- *   class QuestionID extends Newtype<QuestionID>()("QuestionID", Schema.String) {
- *     static make(id: string): QuestionID {
- *       return this.make(id)
- *     }
- *   }
+ *   class QuestionID extends Newtype<QuestionID>()("QuestionID", Schema.String) {}
  *
- *   Schema.decodeEffect(QuestionID)(input)
+ *   const id = QuestionID.make("question-1")
+ *   Schema.decodeUnknownEffect(QuestionID)(input)
  */
+type NewtypeSchema<Self, Tag extends string, S extends Schema.Top> = (abstract new (_: never) => {
+  readonly _newtype: Tag
+}) &
+  Schema.Bottom<
+    Self,
+    S["Encoded"],
+    S["DecodingServices"],
+    S["EncodingServices"],
+    S["ast"],
+    S["Rebuild"],
+    S["~type.make.in"],
+    Self,
+    S["~type.parameters"],
+    Self,
+    S["~type.mutability"],
+    S["~type.optionality"],
+    S["~type.constructor.default"],
+    S["~encoded.mutability"],
+    S["~encoded.optionality"]
+  > &
+  Omit<S, keyof Schema.Top>
+
 export function Newtype<Self>() {
-  return <const Tag extends string, S extends Schema.Top>(tag: Tag, schema: S) => {
+  return <const Tag extends string, S extends Schema.Top>(tag: Tag, schema: S): NewtypeSchema<Self, Tag, S> => {
     abstract class Base {
       declare readonly _newtype: Tag
-
-      static make(value: Schema.Schema.Type<S>): Self {
-        return value as unknown as Self
-      }
     }
 
-    Object.setPrototypeOf(Base, schema)
-
-    return Base as unknown as (abstract new (_: never) => { readonly _newtype: Tag }) & {
-      readonly make: (value: Schema.Schema.Type<S>) => Self
-    } & Omit<Schema.Opaque<Self, S, {}>, "make" | "~type.make"> & {
-        readonly "~type.make": Self
-      }
+    Object.setPrototypeOf(Base, schema.pipe(Schema.brand(tag)))
+    return Base as unknown as NewtypeSchema<Self, Tag, S>
   }
 }
