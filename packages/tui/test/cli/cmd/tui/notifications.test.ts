@@ -173,6 +173,14 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([formNotification, questionNotification, permissionNotification])
   })
 
+  test("ignores global forms until the TUI can render them", async () => {
+    const harness = await setup()
+
+    harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1", "global") } })
+
+    expect(harness.notifications).toEqual([])
+  })
+
   test("dedupes pending forms, questions, and permissions until they are resolved", async () => {
     const harness = await setup()
 

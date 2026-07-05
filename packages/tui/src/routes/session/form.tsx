@@ -456,7 +456,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     return true
   }
 
-  function submitText(text: string, direction: 1 | -1 = 1) {
+  function submitInput(text: string, direction: 1 | -1 = 1) {
     if (!commitInput(text)) return
     if (!single()) selectTab((store.tab + direction + tabs()) % tabs())
   }
@@ -513,9 +513,8 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         desc: "Next field",
         group: "Form",
         cmd: () => {
-          if (!textual()) return
           const text = textarea?.plainText?.trim() ?? ""
-          submitText(text)
+          submitInput(text)
         },
       },
       {
@@ -523,9 +522,8 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         desc: "Previous field",
         group: "Form",
         cmd: () => {
-          if (!textual()) return
           const text = textarea?.plainText?.trim() ?? ""
-          submitText(text, -1)
+          submitInput(text, -1)
         },
       },
       {
@@ -537,7 +535,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
           const current = field()
           if (!current) return
           if (textual()) {
-            submitText(text)
+            submitInput(text)
             return
           }
           const wasMulti = multi()

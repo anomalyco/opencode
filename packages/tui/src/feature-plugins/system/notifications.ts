@@ -34,6 +34,7 @@ const tui: TuiPlugin = async (api) => {
   const permissions = new Set<string>()
 
   api.event.on("form.created", (event) => {
+    if (event.data.form.sessionID === "global") return
     if (forms.has(event.data.form.id)) return
     forms.add(event.data.form.id)
     notify(api, event.data.form.sessionID, "Input needs response", "question")
