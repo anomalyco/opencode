@@ -27,6 +27,7 @@ describe("public event manifest", () => {
       Agent.Event.Updated,
     ])
     expect(EventManifest.Definitions).toContain(Agent.Event.Updated)
+    expect(EventManifest.ServerDefinitions).toContain(McpEvent.ToolsChanged)
     expect(EventManifest.Definitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])

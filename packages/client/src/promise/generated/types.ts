@@ -5406,6 +5406,14 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "mcp.tools.changed"
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: { readonly server: string }
+    }
+  | {
+      readonly id: string
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "mcp.status.changed"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly server: string }
