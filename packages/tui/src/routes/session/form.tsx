@@ -481,12 +481,11 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function submitInput(text: string, direction: 1 | -1 = 1) {
-    const index = (store.tab + direction + tabs()) % tabs()
     if (!commitInput(text)) {
-      if (direction === -1) selectTab(index)
+      if (direction === -1) selectTab((store.tab + direction + tabs()) % tabs())
       return
     }
-    if (!single()) selectTab(index)
+    if (!single()) selectTab((store.tab + direction + tabs()) % tabs())
   }
 
   function selectTabFromMouse(target?: Field) {
