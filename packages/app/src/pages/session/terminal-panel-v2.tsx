@@ -1,15 +1,20 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createMediaQuery } from "@solid-primitives/media"
+import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
+import { isSortable } from "@dnd-kit/solid/sortable"
+import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
+import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
+import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
-import type { DragEvent } from "@thisbeyond/solid-dnd"
-import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 
-import { SortableTerminalTab } from "@/components/session"
+import { SortableTerminalTabV2 } from "@/components/session/session-sortable-terminal-tab-v2"
 import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -22,7 +27,7 @@ import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
-export function TerminalPanel() {
+export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
@@ -32,21 +37,27 @@ export function TerminalPanel() {
   const settings = useSettings()
   const { workspaceKey, view } = useSessionLayout()
 
+  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const newLayout = createMemo(() => settings.general.newLayoutDesigns())
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
+  let tabList: HTMLDivElement | undefined
 
   const [store, setStore] = createStore({
     autoCreated: false,
-    activeDraggable: undefined as string | undefined,
     recovered: {} as Record<string, boolean>,
     view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
   const max = () => store.view * 0.6
   const pane = () => Math.min(height(), max())
+  const stacked = createMemo(() => isDesktop() && props.stacked)
+  const panelHeight = createMemo(() => (isDesktop() ? (stacked() ? `${pane()}px` : "100%") : opened() ? `${pane()}px` : "0px"))
+  const contentHeight = createMemo(() => (isDesktop() ? (stacked() ? `${pane()}px` : "100%") : `${pane()}px`))
+  const newTerminalKeybind = createMemo(() => command.keybindParts("terminal.new"))
 
   onMount(() => {
     if (typeof window === "undefined") return
@@ -165,27 +176,7 @@ export function TerminalPanel() {
     trim(id)
   }
 
-  const handleTerminalDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeDraggable", id)
-  }
-
-  const handleTerminalDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (!draggable || !droppable) return
-
-    const terminals = terminal.all()
-    const fromIndex = terminals.findIndex((t) => t.id === draggable.id.toString())
-    const toIndex = terminals.findIndex((t) => t.id === droppable.id.toString())
-    if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-      terminal.move(draggable.id.toString(), toIndex)
-    }
-  }
-
   const handleTerminalDragEnd = () => {
-    setStore("activeDraggable", undefined)
-
     const activeId = terminal.active()
     if (!activeId) return
     requestAnimationFrame(() => {
@@ -195,24 +186,28 @@ export function TerminalPanel() {
   }
 
   return (
-    <div
+    <aside
       ref={root}
       id="terminal-panel"
       role="region"
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative w-full shrink-0 bg-background-stronger"
+      class="relative shrink-0 overflow-hidden bg-background-stronger"
       classList={{
+        "w-full": !isDesktop() || stacked(),
+        "min-w-0 h-full flex-1": isDesktop() && opened() && !stacked(),
+        "w-0 h-full pointer-events-none": isDesktop() && !opened(),
+        "rounded-[10px] shadow-[var(--v2-elevation-raised)]": isDesktop() && newLayout(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !size.active(),
+          !isDesktop() && !size.active(),
       }}
-      style={{ height: opened() ? `${pane()}px` : "0px" }}
+      style={{ height: panelHeight() }}
     >
-      <div class="hidden md:block" onPointerDown={() => size.start()}>
+      <div classList={{ "md:hidden": !stacked(), hidden: stacked() }} onPointerDown={() => size.start()}>
         <ResizeHandle
           classList={{
-            "-top-1": settings.general.newLayoutDesigns(),
+            "-top-1": newLayout(),
           }}
           direction="vertical"
           size={pane()}
@@ -227,12 +222,14 @@ export function TerminalPanel() {
         />
       </div>
       <div
-        class="absolute inset-x-0 top-0 flex flex-col overflow-hidden"
+        class="absolute inset-0 flex flex-col overflow-hidden"
         classList={{
-          "border-t border-border-weak-base": opened(),
+          "border-t border-border-weak-base": opened() && !isDesktop(),
+          "border-t border-border-weaker-base": opened() && stacked() && !newLayout(),
+          "border-l border-border-weaker-base": opened() && isDesktop() && !newLayout(),
           "pointer-events-none": !opened(),
         }}
-        style={{ height: `${pane()}px` }}
+        style={{ height: contentHeight() }}
       >
         <Show
           when={terminal.ready()}
@@ -257,38 +254,81 @@ export function TerminalPanel() {
           }
         >
           <DragDropProvider
-            onDragStart={handleTerminalDragStart}
-            onDragEnd={handleTerminalDragEnd}
-            onDragOver={handleTerminalDragOver}
-            collisionDetector={closestCenter}
+            sensors={[
+              PointerSensor.configure({
+                activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+                preventActivation: (event) =>
+                  event.target instanceof Element &&
+                  !!event.target.closest('[data-slot="tabs-trigger-close-button"], input, [contenteditable="true"]'),
+              }),
+            ]}
+            modifiers={[RestrictToHorizontalAxis, RestrictToElement.configure({ element: () => tabList ?? null })]}
+            plugins={(defaults) => [
+              ...defaults.filter((plugin) => plugin !== Accessibility),
+              AutoScroller.configure({ acceleration: 8, threshold: { x: 0.05, y: 0 } }),
+              Feedback.configure({ dropAnimation: null }),
+            ]}
+            onDragEnd={(event) => {
+              const source = event.operation.source
+              if (!event.canceled && isSortable(source) && source.initialIndex !== source.index) {
+                terminal.move(source.id.toString(), source.index)
+              }
+              handleTerminalDragEnd()
+            }}
           >
-            <DragDropSensors />
-            <ConstrainDragYAxis />
             <div class="flex flex-col h-full">
               <Tabs
-                variant="alt"
+                variant={newLayout() ? "normal" : "alt"}
                 value={terminal.active()}
                 onChange={(id) => terminal.open(id)}
-                class="!h-auto !flex-none"
+                class={newLayout() ? "!h-[52px] !flex-none" : "!h-auto !flex-none"}
               >
-                <Tabs.List class="h-10 border-b border-border-weaker-base">
-                  <SortableProvider ids={ids()}>
-                    <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
-                  </SortableProvider>
+                <Tabs.List ref={tabList} class={newLayout() ? undefined : "h-10 border-b border-border-weaker-base"}>
+                  <For each={all()}>
+                    {(pty, index) => (
+                      <SortableTerminalTabV2 terminal={pty} index={index} newLayout={newLayout()} onClose={close} />
+                    )}
+                  </For>
                   <div class="h-full flex items-center justify-center">
-                    <TooltipKeybind
-                      title={language.t("command.terminal.new")}
-                      keybind={command.keybind("terminal.new")}
-                      class="flex items-center"
+                    <Show
+                      when={newLayout()}
+                      fallback={
+                        <TooltipKeybind
+                          title={language.t("command.terminal.new")}
+                          keybind={command.keybind("terminal.new")}
+                          class="flex items-center"
+                        >
+                          <IconButton
+                            icon="plus-small"
+                            variant="ghost"
+                            iconSize="large"
+                            onClick={terminal.new}
+                            aria-label={language.t("command.terminal.new")}
+                          />
+                        </TooltipKeybind>
+                      }
                     >
-                      <IconButton
-                        icon="plus-small"
-                        variant="ghost"
-                        iconSize="large"
-                        onClick={terminal.new}
-                        aria-label={language.t("command.terminal.new")}
-                      />
-                    </TooltipKeybind>
+                      <TooltipV2
+                        value={
+                          <>
+                            {language.t("command.terminal.new")}
+                            <Show when={newTerminalKeybind().length > 0}>
+                              <KeybindV2 keys={newTerminalKeybind()} variant="neutral" />
+                            </Show>
+                          </>
+                        }
+                        placement="bottom"
+                        class="flex items-center"
+                      >
+                        <IconButton
+                          icon="plus-small"
+                          variant="ghost"
+                          iconSize="large"
+                          onClick={terminal.new}
+                          aria-label={language.t("command.terminal.new")}
+                        />
+                      </TooltipV2>
+                    </Show>
                   </div>
                 </Tabs.List>
               </Tabs>
@@ -303,6 +343,7 @@ export function TerminalPanel() {
                             <Terminal
                               pty={pty()}
                               autoFocus={opened()}
+                              class="!px-[14px]"
                               onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
                               onCleanup={ops.update}
                               onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}
@@ -315,26 +356,9 @@ export function TerminalPanel() {
                 </Show>
               </div>
             </div>
-            <DragOverlay>
-              <Show when={store.activeDraggable} keyed>
-                {(id) => (
-                  <Show when={all().find((pty) => pty.id === id)}>
-                    {(t) => (
-                      <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                        {terminalTabLabel({
-                          title: t().title,
-                          titleNumber: t().titleNumber,
-                          t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
-                        })}
-                      </div>
-                    )}
-                  </Show>
-                )}
-              </Show>
-            </DragOverlay>
           </DragDropProvider>
         </Show>
       </div>
-    </div>
+    </aside>
   )
 }

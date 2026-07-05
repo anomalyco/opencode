@@ -78,11 +78,13 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -434,13 +436,10 @@ export default function Page() {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
   const desktopTerminalOpen = createMemo(() => isDesktop() && view().terminal.opened())
-  const desktopStackedReviewAndTerminalOpen = createMemo(
-    () => newSessionDesign() && desktopReviewOpen() && desktopTerminalOpen(),
-  )
-  const desktopBottomTerminalOpen = createMemo(() => !newSessionDesign() && desktopTerminalOpen())
   const desktopInlineTerminalOnlyOpen = createMemo(
-    () => newSessionDesign() && desktopTerminalOpen() && !desktopReviewOpen(),
+    () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
   )
   const desktopFileTreeOpen = createMemo(
     () =>
@@ -451,7 +450,7 @@ export default function Page() {
       }),
   )
   const desktopSessionResizeOpen = createMemo(
-    () => desktopReviewOpen() || (newSessionDesign() && desktopTerminalOpen()),
+    () => (newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen()),
   )
   const desktopSidePanelOpen = createMemo(() => desktopSessionResizeOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
@@ -460,6 +459,13 @@ export default function Page() {
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const desktopV2PanelLayout = createMemo(() =>
+    sessionPanelLayout({
+      review: desktopV2ReviewOpen(),
+      terminal: desktopTerminalOpen(),
+      files: desktopFileTreeOpen(),
+    }),
+  )
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -2153,82 +2159,71 @@ export default function Page() {
           </Show>
         </div>
 
-        <Show
-          when={desktopStackedReviewAndTerminalOpen()}
-          fallback={
-            <>
-              <Show when={!isDesktop() || desktopReviewOpen() || desktopFileTreeOpen()}>
-                <SessionSidePanel
-                  canReview={canReview}
-                  diffs={reviewDiffs}
-                  diffsReady={reviewReady}
-                  empty={reviewEmptyText}
-                  hasReview={hasReview}
-                  reviewCount={reviewCount}
-                  reviewPanel={() => (newSessionDesign() ? reviewPanelV2() : reviewPanel())}
-                  activeDiff={tree.activeDiff}
-                  focusReviewDiff={focusReviewDiff}
-                  reviewSnap={ui.reviewSnap}
-                  size={size}
-                />
-              </Show>
-
-              <Show when={!isDesktop() || (desktopTerminalOpen() && !desktopBottomTerminalOpen())}>
-                <TerminalPanel />
-              </Show>
-            </>
-          }
-        >
-          <div class="min-w-0 h-full flex flex-1 flex-col">
-            <SessionSidePanel
-              canReview={canReview}
-              diffs={reviewDiffs}
-              diffsReady={reviewReady}
-              empty={reviewEmptyText}
-              hasReview={hasReview}
-              reviewCount={reviewCount}
-              reviewPanel={() => (newSessionDesign() ? reviewPanelV2() : reviewPanel())}
-              activeDiff={tree.activeDiff}
-              focusReviewDiff={focusReviewDiff}
-              reviewSnap={ui.reviewSnap}
-              size={size}
-              stacked
-            />
-
-            <div class="relative h-2 shrink-0" onPointerDown={() => size.start()}>
-              <ResizeHandle
-                class="!relative !inset-auto !h-full !w-full !transform-none"
-                direction="vertical"
-                size={layout.terminal.height()}
-                min={100}
-                max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                onResize={(height) => {
-                  size.touch()
-                  layout.terminal.resize(height)
-                }}
+        <Show when={!newSessionDesign()}>
+          <SessionSidePanel
+            canReview={canReview}
+            diffs={reviewDiffs}
+            diffsReady={reviewReady}
+            empty={reviewEmptyText}
+            hasReview={hasReview}
+            reviewCount={reviewCount}
+            reviewPanel={reviewPanel}
+            activeDiff={tree.activeDiff}
+            focusReviewDiff={focusReviewDiff}
+            reviewSnap={ui.reviewSnap}
+            size={size}
+          />
+        </Show>
+        <Show when={newSessionDesign()}>
+          <div
+            class="min-w-0 h-full"
+            classList={{
+              hidden: isDesktop() && !desktopV2PanelLayout().visible,
+              "flex flex-1 flex-col": !isDesktop() || desktopV2PanelLayout().visible,
+            }}
+          >
+            <div classList={{ hidden: !isDesktop() || (!desktopV2ReviewOpen() && !desktopFileTreeOpen()) }}>
+              <SessionSidePanel
+                canReview={canReview}
+                diffs={reviewDiffs}
+                diffsReady={reviewReady}
+                empty={reviewEmptyText}
+                hasReview={hasReview}
+                reviewCount={reviewCount}
+                reviewPanel={reviewPanelV2}
+                activeDiff={tree.activeDiff}
+                focusReviewDiff={focusReviewDiff}
+                reviewSnap={ui.reviewSnap}
+                size={size}
+                stacked={desktopV2PanelLayout().stacked}
               />
             </div>
-
-            <TerminalPanel stacked />
+            <Show when={desktopV2PanelLayout().stacked}>
+              <div class="relative h-2 shrink-0" onPointerDown={() => size.start()}>
+                <ResizeHandle
+                  class="!relative !inset-auto !h-full !w-full !transform-none"
+                  direction="vertical"
+                  size={layout.terminal.height()}
+                  min={100}
+                  max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
+                  collapseThreshold={50}
+                  onResize={(height) => {
+                    size.touch()
+                    layout.terminal.resize(height)
+                  }}
+                  onCollapse={() => view().terminal.close()}
+                />
+              </div>
+            </Show>
+            <div classList={{ hidden: isDesktop() && !desktopTerminalOpen(), "min-h-0 flex-1": true }}>
+              <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
+            </div>
           </div>
         </Show>
       </div>
 
-      <Show when={desktopBottomTerminalOpen()}>
-        <div class="relative h-0 shrink-0" onPointerDown={() => size.start()}>
-          <ResizeHandle
-            direction="vertical"
-            size={layout.terminal.height()}
-            min={100}
-            max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-            onResize={(height) => {
-              size.touch()
-              layout.terminal.resize(height)
-            }}
-          />
-        </div>
-
-        <TerminalPanel stacked />
+      <Show when={!newSessionDesign()}>
+        <TerminalPanel />
       </Show>
     </SessionRouteFrame>
   )

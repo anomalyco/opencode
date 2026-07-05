@@ -1,36 +1,20 @@
 import type { JSX } from "solid-js"
 import { Show, createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useSortable } from "@dnd-kit/solid/sortable"
+import { createSortable } from "@thisbeyond/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { isDefaultTitle as isDefaultTerminalTitle } from "@/context/terminal-title"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
-import { useCommand } from "@/context/command"
 import { focusTerminalById } from "@/pages/session/helpers"
 
-export function SortableTerminalTab(props: {
-  terminal: LocalPTY
-  index: () => number
-  newLayout: boolean
-  onClose?: () => void
-}): JSX.Element {
+export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () => void }): JSX.Element {
   const terminal = useTerminal()
   const language = useLanguage()
-  const command = useCommand()
-  const sortable = useSortable({
-    get id() {
-      return props.terminal.id
-    },
-    get index() {
-      return props.index()
-    },
-  })
+  const sortable = createSortable(props.terminal.id)
   const [store, setStore] = createStore({
     editing: false,
     title: props.terminal.title,
@@ -68,7 +52,6 @@ export function SortableTerminalTab(props: {
 
   const focus = () => {
     if (store.editing) return
-    terminal.open(props.terminal.id)
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     focusTerminalById(props.terminal.id)
   }
@@ -131,138 +114,61 @@ export function SortableTerminalTab(props: {
 
   return (
     <div
-      ref={sortable.ref}
+      use:sortable
       class="outline-none focus:outline-none focus-visible:outline-none"
       classList={{
-        "h-full flex items-center": props.newLayout,
-        "h-full": !props.newLayout,
+        "h-full": true,
+        "opacity-0": sortable.isActiveDraggable,
       }}
     >
-      <Show
-        when={props.newLayout}
-        fallback={
-          <div class="relative h-full">
-            <Tabs.Trigger
-              value={props.terminal.id}
-              onClick={focus}
-              onMouseDown={(e) => e.preventDefault()}
-              onContextMenu={menu}
-              class="!shadow-none"
-              classes={{
-                button: "border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
+      <div class="relative h-full">
+        <Tabs.Trigger
+          value={props.terminal.id}
+          onClick={focus}
+          onMouseDown={(e) => e.preventDefault()}
+          onContextMenu={menu}
+          class="!shadow-none"
+          classes={{
+            button: "border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
+          }}
+          closeButton={
+            <IconButton
+              icon="close"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                close()
               }}
-              closeButton={
-                <IconButton
-                  icon="close"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    close()
-                  }}
-                  aria-label={language.t("terminal.close")}
-                />
-              }
-            >
-              <span onDblClick={edit} classList={{ invisible: store.editing }}>
-                {label()}
-              </span>
-            </Tabs.Trigger>
-            <Show when={store.editing}>
-              <div class="absolute inset-0 flex items-center px-3 bg-muted z-10 pointer-events-auto">
-                <input
-                  ref={input}
-                  type="text"
-                  value={store.title}
-                  onInput={(e) => setStore("title", e.currentTarget.value)}
-                  onBlur={save}
-                  onKeyDown={keydown}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  class="bg-transparent border-none outline-none text-sm min-w-0 flex-1"
-                />
-              </div>
-            </Show>
-            <DropdownMenu open={store.menuOpen} onOpenChange={(open) => setStore("menuOpen", open)}>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  class="fixed"
-                  style={{
-                    left: `${store.menuPosition.x}px`,
-                    top: `${store.menuPosition.y}px`,
-                  }}
-                  onCloseAutoFocus={(e) => {
-                    if (!editRequested) return
-                    e.preventDefault()
-                    editRequested = false
-                    requestAnimationFrame(() => edit())
-                  }}
-                >
-                  <DropdownMenu.Item onSelect={() => (editRequested = true)}>
-                    <Icon name="edit" class="w-4 h-4 mr-2" />
-                    {language.t("common.rename")}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item onSelect={close}>
-                    <Icon name="close" class="w-4 h-4 mr-2" />
-                    {language.t("common.close")}
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu>
+              aria-label={language.t("terminal.close")}
+            />
+          }
+        >
+          <span onDblClick={edit} classList={{ invisible: store.editing }}>
+            {label()}
+          </span>
+        </Tabs.Trigger>
+        <Show when={store.editing}>
+          <div class="absolute inset-0 flex items-center px-3 bg-muted z-10 pointer-events-auto">
+            <input
+              ref={input}
+              type="text"
+              value={store.title}
+              onInput={(e) => setStore("title", e.currentTarget.value)}
+              onBlur={save}
+              onKeyDown={keydown}
+              onMouseDown={(e) => e.stopPropagation()}
+              class="bg-transparent border-none outline-none text-sm min-w-0 flex-1"
+            />
           </div>
-        }
-      >
-        <MenuV2.Context>
-          <MenuV2.Context.Trigger class="relative" as="div">
-            <Tabs.Trigger
-              value={props.terminal.id}
-              onClick={focus}
-              closeButton={
-                <TooltipKeybind
-                  title={language.t("terminal.close")}
-                  keybind={command.keybind("tab.close")}
-                  placement="bottom"
-                  gutter={10}
-                >
-                  <IconButton
-                    icon="close-small"
-                    variant="ghost"
-                    class="h-5 w-5"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      close()
-                    }}
-                    aria-label={language.t("terminal.close")}
-                  />
-                </TooltipKeybind>
-              }
-              hideCloseButton
-              onMiddleClick={close}
-            >
-              <span
-                class="truncate"
-                data-slot="terminal-tab-title"
-                onDblClick={edit}
-                classList={{ invisible: store.editing }}
-              >
-                {label()}
-              </span>
-            </Tabs.Trigger>
-            <Show when={store.editing}>
-              <div class="absolute inset-0 flex items-center bg-v2-background-bg-layer-01 z-10 pointer-events-auto rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)] px-2">
-                <input
-                  ref={input}
-                  type="text"
-                  value={store.title}
-                  onInput={(e) => setStore("title", e.currentTarget.value)}
-                  onBlur={save}
-                  onKeyDown={keydown}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  class="bg-transparent border-none outline-none min-w-0 flex-1 p-0 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-base [font-weight:440] [font-variation-settings:'slnt'_0] [font-variant-numeric:tabular-nums]"
-                />
-              </div>
-            </Show>
-          </MenuV2.Context.Trigger>
-          <MenuV2.Context.Portal>
-            <MenuV2.Context.Content
+        </Show>
+        <DropdownMenu open={store.menuOpen} onOpenChange={(open) => setStore("menuOpen", open)}>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              class="fixed"
+              style={{
+                left: `${store.menuPosition.x}px`,
+                top: `${store.menuPosition.y}px`,
+              }}
               onCloseAutoFocus={(e) => {
                 if (!editRequested) return
                 e.preventDefault()
@@ -270,12 +176,18 @@ export function SortableTerminalTab(props: {
                 requestAnimationFrame(() => edit())
               }}
             >
-              <MenuV2.Item onSelect={() => (editRequested = true)}>{language.t("common.rename")}</MenuV2.Item>
-              <MenuV2.Item onSelect={close}>{language.t("common.close")}</MenuV2.Item>
-            </MenuV2.Context.Content>
-          </MenuV2.Context.Portal>
-        </MenuV2.Context>
-      </Show>
+              <DropdownMenu.Item onSelect={() => (editRequested = true)}>
+                <Icon name="edit" class="w-4 h-4 mr-2" />
+                {language.t("common.rename")}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={close}>
+                <Icon name="close" class="w-4 h-4 mr-2" />
+                {language.t("common.close")}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }
