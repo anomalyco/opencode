@@ -272,7 +272,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
               <text fg={theme().text} attributes={TextAttributes.BOLD}>{m().label}</text>
               <Bar
                 segs={vramSegs(m(), state().percent, theme())}
-                percent={Math.round((m().usedMb / (m().totalMb || 1)) * 100)}
+                percent={Math.round(((m().modelMb > 0 ? m().modelMb + m().kvEstMb : m().usedMb) / (m().totalMb || 1)) * 100)}
                 theme={theme()}
               />
               <MemBreakdown mem={m()} theme={theme()} />
