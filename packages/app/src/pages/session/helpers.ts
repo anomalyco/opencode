@@ -1,6 +1,7 @@
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import type { Session } from "@opencode-ai/sdk/v2"
 import { same } from "@/utils/same"
 
 const emptyTabs: string[] = []
@@ -189,3 +190,13 @@ export const createSizing = () => {
 }
 
 export type Sizing = ReturnType<typeof createSizing>
+
+// Pick the session to navigate to after `sessionID` is removed (archived or deleted).
+// Only root, non-archived sessions are navigation candidates, so archiving the only
+// open session lands on the empty/draft view instead of reopening a recent session.
+export function selectNextSessionAfterRemoval(sessions: readonly Session[], sessionID: string): string | undefined {
+  const candidates = sessions.filter((s) => !s.parentID && !s.time?.archived)
+  const index = candidates.findIndex((s) => s.id === sessionID)
+  if (index === -1) return undefined
+  return (candidates[index + 1] ?? candidates[index - 1])?.id
+}

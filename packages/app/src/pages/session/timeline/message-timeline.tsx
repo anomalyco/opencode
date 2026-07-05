@@ -62,6 +62,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
+import { selectNextSessionAfterRemoval } from "@/pages/session/helpers"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -795,9 +796,7 @@ export function MessageTimeline(props: {
     const session = sync().session.get(sessionID)
     if (!session) return
 
-    const sessions = sync().data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+    const nextSessionID = selectNextSessionAfterRemoval(sync().data.session ?? [], sessionID)
 
     await sdk()
       .client.session.update({ sessionID, time: { archived: Date.now() } })
@@ -809,7 +808,7 @@ export function MessageTimeline(props: {
           }),
         )
         sync().session.evict(sessionID)
-        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+        navigateAfterSessionRemoval(sessionID, session.parentID, nextSessionID)
         notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
       })
       .catch((err) => {
@@ -824,9 +823,7 @@ export function MessageTimeline(props: {
     const session = sync().session.get(sessionID)
     if (!session) return false
 
-    const sessions = (sync().data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+    const nextSessionID = selectNextSessionAfterRemoval(sync().data.session ?? [], sessionID)
 
     const result = await sdk()
       .client.session.delete({ sessionID })
@@ -869,7 +866,7 @@ export function MessageTimeline(props: {
       }
     }
 
-    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+    navigateAfterSessionRemoval(sessionID, session.parentID, nextSessionID)
 
     sync().set(
       produce((draft) => {

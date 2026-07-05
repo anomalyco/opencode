@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { Session } from "@opencode-ai/sdk/v2"
 import {
   createOpenReviewFile,
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  selectNextSessionAfterRemoval,
   shouldShowFileTree,
 } from "./helpers"
 
@@ -164,5 +166,57 @@ describe("createSessionTabs", () => {
       expect(result.closableTab()).toBeUndefined()
       dispose()
     })
+  })
+})
+
+describe("selectNextSessionAfterRemoval", () => {
+  const makeSession = (id: string, overrides?: Partial<Session>): Session =>
+    ({
+      id,
+      slug: id,
+      projectID: "prj",
+      directory: "/tmp",
+      title: id,
+      version: "0",
+      time: { created: 0, updated: 0 },
+      ...overrides,
+    }) as Session
+
+  test("returns undefined when archiving the only root session", () => {
+    expect(selectNextSessionAfterRemoval([makeSession("ses_a")], "ses_a")).toBeUndefined()
+  })
+
+  test("excludes child and archived sessions so a lone root still returns undefined", () => {
+    const sessions = [
+      makeSession("ses_a"),
+      makeSession("ses_child", { parentID: "ses_a" }),
+      makeSession("ses_archived", { time: { created: 0, updated: 0, archived: 1 } }),
+    ]
+    expect(selectNextSessionAfterRemoval(sessions, "ses_a")).toBeUndefined()
+  })
+
+  test("picks the following root neighbor when multiple roots exist", () => {
+    const sessions = [makeSession("ses_a"), makeSession("ses_b"), makeSession("ses_c")]
+    expect(selectNextSessionAfterRemoval(sessions, "ses_a")).toBe("ses_b")
+  })
+
+  test("falls back to the previous root neighbor for the last root", () => {
+    const sessions = [makeSession("ses_a"), makeSession("ses_b")]
+    expect(selectNextSessionAfterRemoval(sessions, "ses_b")).toBe("ses_a")
+  })
+
+  test("skips interleaved child and archived rows when picking the neighbor", () => {
+    const sessions = [
+      makeSession("ses_a"),
+      makeSession("ses_child", { parentID: "ses_a" }),
+      makeSession("ses_archived", { time: { created: 0, updated: 0, archived: 1 } }),
+      makeSession("ses_b"),
+    ]
+    expect(selectNextSessionAfterRemoval(sessions, "ses_a")).toBe("ses_b")
+  })
+
+  test("returns undefined when the removed id is not a navigation candidate", () => {
+    const sessions = [makeSession("ses_a"), makeSession("ses_child", { parentID: "ses_a" })]
+    expect(selectNextSessionAfterRemoval(sessions, "ses_child")).toBeUndefined()
   })
 })
