@@ -86,7 +86,7 @@ export type Options<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOp
 export const Input = Schema.Struct({ code: Schema.String })
 export type Input = typeof Input.Type
 
-const DiagnosticKindSchema = Schema.Literals([
+export const DiagnosticKind = Schema.Literals([
   "ParseError",
   "UnsupportedSyntax",
   "UnknownTool",
@@ -99,19 +99,19 @@ const DiagnosticKindSchema = Schema.Literals([
   "ExecutionFailure",
 ])
 /** Stable categories produced by program, schema, tool, and limit failures. */
-export type DiagnosticKind = typeof DiagnosticKindSchema.Type
+export type DiagnosticKind = typeof DiagnosticKind.Type
 
-const DiagnosticSchema = Schema.Struct({
-  kind: DiagnosticKindSchema,
+export const Diagnostic = Schema.Struct({
+  kind: DiagnosticKind,
   message: Schema.String,
   location: Schema.optionalKey(Schema.Struct({ line: Schema.Number, column: Schema.Number })),
   suggestions: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 /** A normalized program diagnostic safe to return across an agent tool boundary. */
-export type Diagnostic = typeof DiagnosticSchema.Type
+export type Diagnostic = typeof Diagnostic.Type
 
 const ToolCallSchema = Schema.Struct({ name: Schema.String })
-const SuccessSchema = Schema.Struct({
+export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
@@ -119,20 +119,20 @@ const SuccessSchema = Schema.Struct({
   toolCalls: Schema.Array(ToolCallSchema),
 })
 /** Successful execution after the result has crossed the plain-data boundary. */
-export type Success = typeof SuccessSchema.Type
+export type Success = typeof Success.Type
 
-const FailureSchema = Schema.Struct({
+export const Failure = Schema.Struct({
   ok: Schema.Literal(false),
-  error: DiagnosticSchema,
+  error: Diagnostic,
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),
   toolCalls: Schema.Array(ToolCallSchema),
 })
 /** Failed execution with calls admitted before the diagnostic was produced. */
-export type Failure = typeof FailureSchema.Type
+export type Failure = typeof Failure.Type
 
 /** Schema for the structured success or diagnostic returned by CodeMode execution. */
-export const Result = Schema.Union([SuccessSchema, FailureSchema])
+export const Result = Schema.Union([Success, Failure])
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type Result = typeof Result.Type
 

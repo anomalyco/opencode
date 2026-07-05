@@ -222,7 +222,7 @@ wave; both packages typecheck clean.
     result is exposed as-is. Discrimination via `Schema.isSchema`. New helpers exported from
     `tool.ts`: `inputTypeScript`/`outputTypeScript`/`decodeInput`/`decodeOutput`/
     `jsonSchemaToTypeScript`; `tool-runtime.ts` consumes them (no direct `Schema.*` use there
-    anymore). Types `Tool.JsonSchema`/`Tool.Schema` exported from the index. Note: an empty
+    anymore). Types `Tool.JsonSchema`/`Tool.SchemaType` exported from the index. Note: an empty
     `Schema.Struct({})` renders as `{  } | Array<unknown>` (effect's JSON Schema emission) -
     cosmetic, fixed in Wave 4.
 - **`output.*` API deleted**: `OutputItem`(+Schema), result `output` fields, the `output`

@@ -83,7 +83,7 @@ const tool = Tool.make({
 
 The description and schemas are part of the model-visible tool contract. Keep descriptions concrete and put authorization in `run` or in the service it calls.
 
-Public tool types are grouped under the same namespace: `Tool.Definition`, `Tool.Options`, `Tool.Schema`, and `Tool.JsonSchema`.
+Public tool types are grouped under the same namespace: `Tool.Definition`, `Tool.Options`, `Tool.SchemaType`, and `Tool.JsonSchema`.
 
 ### `CodeMode.execute`
 
@@ -118,9 +118,9 @@ runtime.instructions() // model-facing syntax and tool guide
 runtime.execute(source) // CodeMode.Result
 ```
 
-`CodeMode.Input` and `CodeMode.Result` are both Effect schemas and their inferred TypeScript types for a host tool input and execution result. Hosts can combine them with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
+`CodeMode.Input`, `CodeMode.Result`, `CodeMode.Success`, `CodeMode.Failure`, `CodeMode.Diagnostic`, and `CodeMode.DiagnosticKind` are both Effect schemas and their inferred TypeScript types. Hosts can combine `CodeMode.Input` and `CodeMode.Result` with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
 
-All other CodeMode types use the same namespace: `CodeMode.Options`, `CodeMode.ExecuteOptions`, `CodeMode.Runtime`, `CodeMode.ExecutionLimits`, `CodeMode.DiscoveryOptions`, `CodeMode.Success`, `CodeMode.Failure`, `CodeMode.DataValue`, `CodeMode.Diagnostic`, `CodeMode.DiagnosticKind`, `CodeMode.ToolDescription`, and the `CodeMode.ToolCall*` observation types.
+All other CodeMode types use the same namespace: `CodeMode.Options`, `CodeMode.ExecuteOptions`, `CodeMode.Runtime`, `CodeMode.ExecutionLimits`, `CodeMode.DiscoveryOptions`, `CodeMode.DataValue`, `CodeMode.ToolDescription`, and the `CodeMode.ToolCall*` observation types.
 
 ### Results
 
