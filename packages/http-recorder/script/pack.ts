@@ -15,10 +15,6 @@ export const pack = async () => {
   }
 
   for (const [key, value] of Object.entries(pkg.exports)) {
-    if (key === "./internal") {
-      delete pkg.exports[key]
-      continue
-    }
     if (typeof value !== "string") continue
     const file = value.replace("./src/", "./dist/").replace(/\.ts$/, "")
     pkg.exports[key] = { import: `${file}.js`, types: `${file}.d.ts` }

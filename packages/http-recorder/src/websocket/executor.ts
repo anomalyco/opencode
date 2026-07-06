@@ -1,32 +1,30 @@
 import { Effect, Option, Ref, Scope, Semaphore, Stream, SynchronizedRef } from "effect"
 import type { Headers } from "effect/unstable/http"
-import * as CassetteService from "./cassette.js"
-import { canonicalizeJson, decodeJson, safeText } from "./matching.js"
-import { makeReplayState, resolveAutoMode } from "./recorder.js"
-import type { RecordReplayMode } from "./internal-effect.js"
-import { make, type Redactor } from "./redactor.js"
-import { webSocketInteractions, type CassetteMetadata, type WebSocketEvent } from "./schema.js"
+import type { Interface } from "../cassette/store.js"
+import { webSocketInteractions, type CassetteMetadata } from "../cassette/model.js"
+import type { RecordReplayMode } from "../http/recorder.js"
+import { make, type Redactor } from "../redaction/redactor.js"
+import { canonicalizeJson, decodeJson, safeText } from "../replay/comparison.js"
+import { makeReplayState, resolveAutoMode } from "../replay/state.js"
+import type { WebSocketEvent } from "./model.js"
 
 export interface WebSocketRequest {
   readonly url: string
   readonly headers: Headers.Headers
 }
-
 export interface WebSocketConnection<E> {
   readonly sendText: (message: string) => Effect.Effect<void, E>
   readonly messages: Stream.Stream<string | Uint8Array, E>
   readonly close: Effect.Effect<void>
 }
-
 export interface WebSocketExecutor<E> {
   readonly open: (request: WebSocketRequest) => Effect.Effect<WebSocketConnection<E>, E>
 }
-
 export interface WebSocketRecordReplayOptions<E> {
   readonly name: string
   readonly mode?: RecordReplayMode
   readonly metadata?: CassetteMetadata
-  readonly cassette: CassetteService.Interface
+  readonly cassette: Interface
   readonly live: WebSocketExecutor<E>
   readonly redactor?: Redactor
   readonly compareClientMessagesAsJson?: boolean
@@ -38,18 +36,10 @@ const headersRecord = (headers: Headers.Headers): Record<string, string> =>
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   )
-
-const textEvent = (direction: "client" | "server", body: string): WebSocketEvent => ({
-  direction,
-  kind: "text",
-  body,
-})
-
+const textEvent = (direction: "client" | "server", body: string): WebSocketEvent => ({ direction, kind: "text", body })
 const decodeEvent = (event: WebSocketEvent) =>
   event.kind === "text" ? event.body : new Uint8Array(Buffer.from(event.body, "base64"))
-
 const jsonOrText = (value: string) => Option.match(decodeJson(value), { onNone: () => value, onSome: canonicalizeJson })
-
 const assertClientEvent = (actual: string, expected: WebSocketEvent | undefined, index: number, asJson: boolean) =>
   Effect.sync(() => {
     const matches =
@@ -65,7 +55,8 @@ export const makeWebSocketExecutor = <E>(
   options: WebSocketRecordReplayOptions<E>,
 ): Effect.Effect<WebSocketExecutor<E>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const mode = options.mode ?? (yield* resolveAutoMode(options.cassette, options.name))
+    const requested = options.mode ?? "auto"
+    const mode = requested === "auto" ? yield* resolveAutoMode(options.cassette, options.name) : requested
     const redactor = options.redactor ?? make()
     const openSnapshot = (request: WebSocketRequest) => {
       const snapshot = redactor.request({
@@ -84,9 +75,7 @@ export const makeWebSocketExecutor = <E>(
           : redactor.response({ status: 101, headers: {}, body: event.body }).body
       return { ...event, body }
     }
-
     if (mode === "passthrough") return options.live
-
     if (mode === "record") {
       return {
         open: (request) =>
@@ -134,16 +123,18 @@ export const makeWebSocketExecutor = <E>(
           }),
       }
     }
-
     const replay = yield* makeReplayState(options.cassette, options.name, webSocketInteractions)
     return {
       open: (request) =>
         Effect.gen(function* () {
+          const incoming = openSnapshot(request)
           const claimed = yield* replay
             .claim((interaction, index) =>
               Effect.sync(() => {
-                const incoming = canonicalizeJson(openSnapshot(request))
-                if (interaction && JSON.stringify(incoming) === JSON.stringify(canonicalizeJson(interaction.open)))
+                if (
+                  interaction?.open &&
+                  JSON.stringify(canonicalizeJson(incoming)) === JSON.stringify(canonicalizeJson(interaction.open))
+                )
                   return
                 throw new Error(`WebSocket open ${index + 1} does not match ${safeText(incoming)}`)
               }),

@@ -1,3 +1,4 @@
+import type { HttpRecorder } from "@opencode-ai/http-recorder"
 import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { Effect, Layer } from "effect"
 import { WebSocketExecutor } from "../src/route"
@@ -7,7 +8,7 @@ const liveWebSocket = WebSocketExecutor.open
 
 export const webSocketCassetteLayer = (
   cassette: string,
-  input: { readonly metadata?: Record<string, unknown>; readonly mode: HttpRecorderInternal.RecordReplayMode },
+  input: { readonly metadata?: HttpRecorder.CassetteMetadata; readonly mode: HttpRecorderInternal.RecordReplayMode },
 ): Layer.Layer<WebSocketExecutorService, never, HttpRecorderInternal.Cassette.Service> =>
   Layer.effect(
     WebSocketExecutor.Service,

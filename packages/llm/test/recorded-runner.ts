@@ -1,3 +1,4 @@
+import type { HttpRecorder } from "@opencode-ai/http-recorder"
 import { test, type TestOptions } from "bun:test"
 import { Effect, type Layer } from "effect"
 import { testEffect } from "./lib/effect"
@@ -11,7 +12,7 @@ export type RecordedGroupOptions = {
   readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly tags?: ReadonlyArray<string>
-  readonly metadata?: Record<string, unknown>
+  readonly metadata?: HttpRecorder.CassetteMetadata
 }
 
 export type RecordedCaseOptions = {
@@ -21,7 +22,7 @@ export type RecordedCaseOptions = {
   readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly tags?: ReadonlyArray<string>
-  readonly metadata?: Record<string, unknown>
+  readonly metadata?: HttpRecorder.CassetteMetadata
 }
 
 export const recordedEffectGroup = <
@@ -36,7 +37,7 @@ export const recordedEffectGroup = <
   readonly layer: (input: {
     readonly cassette: string
     readonly tags: ReadonlyArray<string>
-    readonly metadata: Record<string, unknown>
+    readonly metadata: HttpRecorder.CassetteMetadata
     readonly recording: boolean
     readonly options: Options
     readonly caseOptions: CaseOptions

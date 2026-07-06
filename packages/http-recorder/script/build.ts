@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
-import { readdir, rm } from "node:fs/promises"
+import { rm } from "node:fs/promises"
 
 await rm("dist", { recursive: true, force: true })
 await $`bunx tsc --emitDeclarationOnly`
 
 const build = await Bun.build({
-  entrypoints: ["src/index.ts"],
+  entrypoints: ["src/index.ts", "src/internal.ts"],
   outdir: "dist",
   target: "node",
   format: "esm",
@@ -14,7 +14,7 @@ const build = await Bun.build({
 })
 if (!build.success) throw new AggregateError(build.logs, "Failed to build @opencode-ai/http-recorder")
 
-const publicFiles = new Set(["index.js", "index.d.ts", "effect.d.ts", "socket.d.ts", "types.d.ts"])
-await Promise.all(
-  (await readdir("dist")).filter((file) => !publicFiles.has(file)).map((file) => rm(`dist/${file}`, { force: true })),
-)
+for (const file of ["dist/index.d.ts", "dist/api.d.ts", "dist/internal.d.ts"]) {
+  if ((await Bun.file(file).text()).includes(["import", "("].join("")))
+    throw new Error(`${file} contains dynamic import syntax`)
+}

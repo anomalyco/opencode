@@ -9,13 +9,13 @@ Use it for provider integrations, retries, polling, multi-step flows, and any te
 ## Install
 
 ```sh
-bun add effect@4.0.0-beta.74
-bun add -d @opencode-ai/http-recorder@beta @effect/vitest vitest
+bun add effect@4.0.0-beta.83
+bun add -d @opencode-ai/http-recorder @effect/vitest@4.0.0-beta.83 vitest@^4
 ```
 
 The package supports Node.js 22+ and Bun. It is not intended for browsers, workers, or Deno.
 
-Effect `4.0.0-beta.74` has a known declaration error (`SchemaErrorTypeId` is missing). Until that upstream declaration is fixed, TypeScript consumers need:
+Effect `4.0.0-beta.83` currently contains unresolved symbols in its published declarations. Until those upstream declarations are fixed, TypeScript consumers need:
 
 ```json
 {
@@ -51,7 +51,7 @@ describe("getUser", () => {
 
       assert.strictEqual(user.id, 1)
       assert.strictEqual(user.name, "Leanne Graham")
-    }).pipe(Effect.provide(HttpRecorder.http("users/get-one"))),
+    }).pipe(Effect.provide(HttpRecorder.layerFetch("users/get-one"))),
   )
 })
 ```
@@ -81,11 +81,13 @@ Application code does not need to know whether a response is live or replayed.
 ## API
 
 ```ts
-HttpRecorder.http(name, options?)
-HttpRecorder.socket(name, options?)
+HttpRecorder.layer(name, options?)
+HttpRecorder.layerFetch(name, options?)
+HttpRecorder.layerSocket(name, options?)
+HttpRecorder.layerWebSocketConstructor(name, options?)
 ```
 
-That is the complete public API. `http` provides a fetch-backed recorded `HttpClient`. `socket` decorates a standard Effect `Socket.Socket` supplied beneath it.
+That is the complete public API. `layer` decorates a provided `HttpClient`; `layerFetch` supplies Effect's fetch client. `layerSocket` decorates a provided `Socket.Socket`, while `layerWebSocketConstructor` records dynamic WebSocket URLs and protocols.
 
 ## WebSockets
 
@@ -112,7 +114,7 @@ const echo = Effect.gen(function* () {
   )
 })
 
-const recordedSocket = HttpRecorder.socket("echo/hello").pipe(
+const recordedSocket = HttpRecorder.layerSocket("echo/hello").pipe(
   Layer.provide(
     NodeSocket.layerWebSocket("wss://ws.postman-echo.com/raw", {
       closeCodeIsError: (code) => code !== 1000,
@@ -143,7 +145,7 @@ There is intentionally no public overwrite mode. Deletion makes the set of recor
 Secure defaults remove most headers and redact common credentials in headers, URLs, and JSON bodies. Extend those defaults at layer construction:
 
 ```ts
-HttpRecorder.http("anthropic/messages", {
+HttpRecorder.layerFetch("anthropic/messages", {
   redact: {
     headers: ["x-project-token"],
     allowRequestHeaders: ["anthropic-version"],
@@ -171,16 +173,16 @@ Redaction is defense in depth, not a substitute for review. Inspect cassette dif
 
 ## Matching And Ordering
 
-A cassette contains an ordered sequence of interactions. The first runtime request is checked against the first recorded request, the second against the second, and so on.
+A runtime request atomically claims the first unused recorded interaction that matches it. Distinct requests may replay in any order or concurrently.
 
-This strict ordering correctly models repeated identical requests whose responses change, including retries, polling, and cache tests. JSON object keys are canonicalized before matching.
+Repeated identical requests consume their matching responses in cassette order, which models retries, polling, and cache tests deterministically. A mismatch consumes nothing, and JSON object keys are canonicalized before matching.
 
 Concurrent requests are recorded in request-start order even when their responses complete out of order.
 
 Supply a custom equivalence rule when a request contains intentionally volatile data:
 
 ```ts
-HttpRecorder.http("events/create", {
+HttpRecorder.layerFetch("events/create", {
   match: (incoming, recorded) =>
     incoming.method === recorded.method && new URL(incoming.url).pathname === new URL(recorded.url).pathname,
 })
@@ -191,10 +193,12 @@ HttpRecorder.http("events/create", {
 ```ts
 interface RecorderOptions {
   readonly directory?: string
-  readonly metadata?: Record<string, unknown>
+  readonly metadata?: Readonly<Record<string, JsonValue>>
   readonly redact?: RedactOptions
   readonly match?: RequestMatcher
 }
+
+type SocketRecorderOptions = Omit<RecorderOptions, "match">
 ```
 
 `directory` defaults to `<cwd>/test/fixtures/recordings`.
@@ -207,7 +211,8 @@ Cassettes are readable JSON files intended to be committed with your tests. HTTP
 
 - Responses are buffered while recording and replaying, so this beta is not suitable for tests that assert streaming timing, cancellation, or backpressure.
 - WebSocket replay preserves frame chronology and content, not real network timing or backpressure.
-- WebSocket V1 cassettes do not reproduce terminal close codes, close reasons, or transport failures. Failed and interrupted live runs are not recorded.
+- Constructor-level WebSocket cassettes reproduce terminal close codes and reasons, but not selected subprotocols, handshake headers, transport timing, or transport failures. Lower-level `layerSocket` cassettes contain frames only.
+- Failed and interrupted live WebSocket connections are not recorded.
 - WebSocket transcripts are retained in memory until the connection finishes; avoid using this beta for unbounded sessions.
 - The package currently requires the exact Effect beta listed above.
 - Cassette format version `1` has no migration tooling yet.

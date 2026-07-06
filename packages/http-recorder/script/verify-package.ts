@@ -20,16 +20,27 @@ export const verifyPackage = async (archive: string) => {
     await writeFile(
       path.join(directory, "consumer.ts"),
       `import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { NodeSocket } from "@effect/platform-node"
 import { Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
 
-const options: HttpRecorder.RecorderOptions = { redact: { jsonFields: ["access_token"] } }
+const options: HttpRecorder.RecorderOptions = { match: () => true, redact: { jsonFields: ["access_token"] } }
+const socketOptions: HttpRecorder.SocketRecorderOptions = { redact: { jsonFields: ["access_token"] } }
+HttpRecorder.layer("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient>
+HttpRecorder.layerFetch("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient>
 HttpRecorder.http("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient>
-HttpRecorder.socket("consumer/socket", options).pipe(
+HttpRecorder.layerSocket("consumer/socket", socketOptions).pipe(
   Layer.provide(NodeSocket.layerWebSocket("wss://example.test")),
 ) satisfies Layer.Layer<Socket.Socket>
+HttpRecorder.layerWebSocketConstructor("consumer/websocket", socketOptions).pipe(
+  Layer.provide(NodeSocket.layerWebSocketConstructor),
+) satisfies Layer.Layer<Socket.WebSocketConstructor>
+HttpRecorderInternal.hasCassetteSync satisfies (name: string, options?: { readonly directory?: string }) => boolean
+HttpRecorderInternal.Cassette.memory()
+// @ts-expect-error HTTP request matching does not apply to WebSocket frames.
+HttpRecorder.layerSocket("consumer/socket", { match: () => true })
 `,
     )
     await writeFile(
@@ -49,13 +60,27 @@ HttpRecorder.socket("consumer/socket", options).pipe(
       }),
     )
 
-    await run(["npm", "install", archive, "typescript@5.8.2"], directory)
+    await run(
+      [
+        "npm",
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--package-lock=false",
+        archive,
+        "typescript@5.8.2",
+        "effect@4.0.0-beta.83",
+        "@effect/platform-node@4.0.0-beta.83",
+      ],
+      directory,
+    )
     await run(
       [
         "node",
         "--input-type=module",
         "-e",
-        'import("@opencode-ai/http-recorder").then((module) => { const root = Object.keys(module).sort(); const namespace = Object.keys(module.HttpRecorder).sort(); if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) throw new Error(`Unexpected root exports: ${root}`); if (JSON.stringify(namespace) !== JSON.stringify(["http", "socket"])) throw new Error(`Unexpected namespace exports: ${namespace}`) })',
+        'Promise.all([import("@opencode-ai/http-recorder"), import("@opencode-ai/http-recorder/internal")]).then(([module, internal]) => { const root = Object.keys(module).sort(); const namespace = Object.keys(module.HttpRecorder).sort(); if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) throw new Error(`Unexpected root exports: ${root}`); if (JSON.stringify(namespace) !== JSON.stringify(["http", "layer", "layerFetch", "layerSocket", "layerWebSocketConstructor"])) throw new Error(`Unexpected namespace exports: ${namespace}`); if (!("Cassette" in internal) || !("makeWebSocketExecutor" in internal)) throw new Error("Missing internal compatibility exports") })',
       ],
       directory,
     )

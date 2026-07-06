@@ -3,13 +3,13 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { Headers, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
-import * as fs from "node:fs"
-import * as os from "node:os"
-import * as path from "node:path"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { HttpRecorder } from "../src"
 import { HttpRecorderInternal } from "../src/internal"
-import { redactedErrorRequest } from "../src/internal-effect"
-import type { Interaction } from "../src/schema"
+import type { Interaction } from "../src/cassette/model"
+import { redactedErrorRequest } from "../src/http/recorder"
 
 const seedCassetteDirectory = (directory: string, name: string, interactions: ReadonlyArray<Interaction>) =>
   Effect.runPromise(
@@ -34,13 +34,13 @@ const post = (url: string, body: object) =>
   })
 
 const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.http("record-replay/multi-step"))))
+  Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.layerFetch("record-replay/multi-step"))))
 
 const runWith = <A, E>(
   name: string,
   options: HttpRecorder.RecorderOptions,
   effect: Effect.Effect<A, E, HttpClient.HttpClient>,
-) => Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.http(name, options))))
+) => Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.layerFetch(name, options))))
 
 const runRecorder = <A, E>(effect: Effect.Effect<A, E, HttpRecorderInternal.Cassette.Service | Scope.Scope>) =>
   Effect.runPromise(
@@ -309,6 +309,46 @@ describe("http-recorder", () => {
     expect(received).toEqual(['{"type":"session.created"}', '{"type":"response.completed"}'])
   })
 
+  test("WebSocket replay validates the private socket connection", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    await seedCassetteDirectory(directory, "websocket/open-mismatch", [
+      {
+        transport: "websocket",
+        open: { url: "wss://example.test/expected", headers: {} },
+        events: [],
+      },
+    ])
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const socket = yield* Socket.Socket
+        yield* socket.runRaw(() => {})
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorderInternal.socketLayer(
+            "websocket/open-mismatch",
+            { url: "wss://example.test/received" },
+            { directory, mode: "replay" },
+          ).pipe(
+            Layer.provide(
+              Layer.succeed(
+                Socket.Socket,
+                Socket.make({
+                  runRaw: () => Effect.die(new Error("unexpected live WebSocket run")),
+                  writer: Effect.succeed(() => Effect.die(new Error("unexpected live WebSocket write"))),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(failureText(exit)).toContain("WebSocket open 1 does not match")
+    expect(failureText(exit)).toContain("wss://example.test/received")
+  })
+
   test("the public socket decorator replays a provided Effect socket", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
     await seedCassetteDirectory(directory, "websocket/public-layer", [
@@ -338,7 +378,7 @@ describe("http-recorder", () => {
       }).pipe(
         Effect.scoped,
         Effect.provide(
-          HttpRecorder.socket("websocket/public-layer", { directory }).pipe(
+          HttpRecorder.layerSocket("websocket/public-layer", { directory }).pipe(
             Layer.provide(
               Layer.succeed(
                 Socket.Socket,
@@ -569,6 +609,15 @@ describe("http-recorder", () => {
     )
   })
 
+  test("distinct requests replay in any order", async () => {
+    await run(
+      Effect.gen(function* () {
+        expect(yield* post("https://example.test/echo", { step: 2 })).toBe('{"reply":"second"}')
+        expect(yield* post("https://example.test/echo", { step: 1 })).toBe('{"reply":"first"}')
+      }),
+    )
+  })
+
   test("concurrent replay claims each interaction once", async () => {
     const results = await runWith(
       "record-replay/retry",
@@ -609,7 +658,7 @@ describe("http-recorder", () => {
       const exit = await Effect.runPromise(
         Effect.exit(
           post("https://example.test/echo", { step: 1 }).pipe(
-            Effect.provide(HttpRecorder.http("missing-cassette", { directory })),
+            Effect.provide(HttpRecorder.layerFetch("missing-cassette", { directory })),
           ),
         ),
       )
@@ -686,7 +735,7 @@ describe("http-recorder", () => {
         })
       const responses = await Effect.runPromise(
         Effect.all([request("first"), request("second")], { concurrency: "unbounded" }).pipe(
-          Effect.provide(HttpRecorder.http("concurrent-order", { directory })),
+          Effect.provide(HttpRecorder.layerFetch("concurrent-order", { directory })),
         ),
       )
       const cassette = JSON.parse(fs.readFileSync(path.join(directory, "concurrent-order.json"), "utf8"))
@@ -739,7 +788,7 @@ describe("http-recorder", () => {
         return yield* http.execute(HttpClientRequest.get(`http://127.0.0.1:${server.port}/empty`))
       })
       const response = await Effect.runPromise(
-        program.pipe(Effect.provide(HttpRecorder.http("no-content", { directory }))),
+        program.pipe(Effect.provide(HttpRecorder.layerFetch("no-content", { directory }))),
       )
 
       expect(response.status).toBe(204)
@@ -764,9 +813,13 @@ describe("http-recorder", () => {
         const response = yield* http.execute(HttpClientRequest.get(url))
         return new Uint8Array(yield* response.arrayBuffer)
       })
-      const record = await Effect.runPromise(program.pipe(Effect.provide(HttpRecorder.http("binary", { directory }))))
+      const record = await Effect.runPromise(
+        program.pipe(Effect.provide(HttpRecorder.layerFetch("binary", { directory }))),
+      )
       await server.stop()
-      const replay = await Effect.runPromise(program.pipe(Effect.provide(HttpRecorder.http("binary", { directory }))))
+      const replay = await Effect.runPromise(
+        program.pipe(Effect.provide(HttpRecorder.layerFetch("binary", { directory }))),
+      )
       const cassette = JSON.parse(fs.readFileSync(path.join(directory, "binary.json"), "utf8"))
 
       expect(record).toEqual(expected)
