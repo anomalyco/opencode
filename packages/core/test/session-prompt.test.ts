@@ -565,7 +565,12 @@ describe("SessionV2.prompt", () => {
       const { db } = yield* Database.Service
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* session.prompt({ id: messageID, sessionID, prompt: PromptInput.Prompt.make({ text: "Promote once" }), resume: false })
+      yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Promote once" }),
+        resume: false,
+      })
 
       yield* Effect.all(
         [SessionInput.promoteSteers(db, events, sessionID), SessionInput.promoteSteers(db, events, sessionID)],
@@ -677,7 +682,12 @@ describe("SessionV2.prompt", () => {
         .pipe(Effect.orDie)
 
       const failure = yield* session
-        .prompt({ id: messageID, sessionID, prompt: PromptInput.Prompt.make({ text: "Conflicting prompt" }), resume: false })
+        .prompt({
+          id: messageID,
+          sessionID,
+          prompt: PromptInput.Prompt.make({ text: "Conflicting prompt" }),
+          resume: false,
+        })
         .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID, messageID })
