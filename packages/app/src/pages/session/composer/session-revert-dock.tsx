@@ -50,9 +50,9 @@ export function SessionRevertDock(props: {
         <IconV2 name="outline-reset" size="normal" class="text-v2-icon-icon-muted" />
         <span
           classList={{
-            "shrink-0 cursor-default text-[13px] leading-5 tracking-[-0.04px]": true,
-            "font-[530] text-v2-text-text-base": !store.collapsed,
-            "font-[440] text-v2-text-text-muted": store.collapsed,
+            "font-[440] shrink-0 cursor-default text-[13px] leading-5 tracking-[-0.04px]": true,
+            "text-v2-text-text-base": !store.collapsed,
+            "text-v2-text-text-muted": store.collapsed,
           }}
         >
           {label()}
@@ -84,12 +84,17 @@ export function SessionRevertDock(props: {
         </div>
       </div>
 
+      {/* Sacrificial space the composer overlaps via its negative lift (18px), so the header stays fully visible */}
+      <Show when={store.collapsed}>
+        <div class="h-[16px]" aria-hidden="true" />
+      </Show>
+
       <Show when={!store.collapsed}>
-        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-4 pb-3 no-scrollbar">
+        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-4 pt-px pb-6 no-scrollbar">
           <For each={props.items}>
             {(item) => (
               <div class="flex h-6 min-w-0 items-center gap-2">
-                <span class="min-w-0 flex-1 truncate text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+                <span class="min-w-0 flex-1 truncate text-[13px] font-[400] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
                   {item.text}
                 </span>
                 <ButtonV2
