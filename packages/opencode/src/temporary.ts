@@ -1,5 +1,4 @@
 import yargs from "yargs"
-import { MiniCommand } from "./cli/cmd/mini"
 import { TuiThreadCommand } from "./cli/cmd/tui"
 import { V2ServeCommand } from "./cli/cmd/v2-serve"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -30,6 +29,5 @@ const cli = yargs(hideBin(process.argv))
     if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
   })
   .command(V2ServeCommand)
-  .command(MiniCommand)
   .command(TuiThreadCommand)
   .parse()

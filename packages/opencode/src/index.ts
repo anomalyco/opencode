@@ -19,7 +19,6 @@ import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/attach"
-import { MiniCommand } from "./cli/cmd/mini"
 import { V2ServeCommand } from "./cli/cmd/v2-serve"
 import { TuiThreadCommand } from "./cli/cmd/tui"
 import { AcpCommand } from "./cli/cmd/acp"
@@ -83,7 +82,6 @@ const cli = yargs(args)
   .command(AcpCommand)
   .command(McpCommand)
   .command(V2ServeCommand)
-  .command(MiniCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)
   .command(RunCommand)

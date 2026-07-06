@@ -57,7 +57,6 @@ function normalize(text: string): string {
 const TOP_LEVEL = [
   "acp",
   "mcp",
-  "mini",
   "attach",
   "run",
   "debug",
@@ -82,7 +81,6 @@ const TOP_LEVEL = [
 // distinct argv shape, not every leaf. Add new entries when a subcommand
 // gains user-visible flags that we want to lock in.
 const SUBCOMMANDS = [
-  ["mini", "attach"],
   ["mcp", "list"],
   ["mcp", "add"],
   ["mcp", "auth"],
@@ -115,7 +113,7 @@ describe("opencode CLI help-text snapshots", () => {
         const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
         expect(topLevel.exitCode).toBe(0)
         expect(topLevel.stderr.endsWith("\n")).toBe(true)
-        expect(topLevel.stderr).toContain("opencode mini")
+        expect(topLevel.stderr).not.toContain("opencode mini")
         expect(topLevel.stderr).not.toContain("--mini")
         expect(topLevel.stderr).not.toContain("--thinking")
         expect(topLevel.stderr).not.toContain("--variant")
