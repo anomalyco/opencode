@@ -440,7 +440,6 @@ const layer = Layer.effect(
     )
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
-      let refresh = Promise.resolve()
       client.onclose = () => {
         if (s.clients[name] !== client) return
         delete s.clients[name]
@@ -460,19 +459,15 @@ const layer = Layer.effect(
       )
 
       if (!client.getServerCapabilities()?.tools) return
-      client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
-        const next = refresh.then(async () => {
-          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+      client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-          const listed = await bridge.promise(McpCatalog.defs(client, timeout))
-          if (!listed) return
-          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+        const listed = await bridge.promise(McpCatalog.defs(client, timeout))
+        if (!listed) return
+        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-          s.defs[name] = listed
-          await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
-        })
-        refresh = next.catch(() => {})
-        return next
+        s.defs[name] = listed
+        await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
 
