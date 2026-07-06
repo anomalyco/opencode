@@ -214,7 +214,7 @@ const en = {
   "model.noUsageTitle": "No usage",
   "model.noUsageDescription": "No usage landed in the current window.",
   "model.dailyTokenChart": "Daily token usage chart",
-  "model.usersDescription": "Daily unique OpenCode Go users over the recent two-month window.",
+  "model.usersDescription": "Daily unique users.",
   "model.noUsersTitle": "No user data",
   "model.noUsersDescription": "No user-bearing rows landed in the current window.",
   "model.dailyUserChart": "Daily unique user chart",
