@@ -562,7 +562,7 @@ export const prepare = <R>(
           ? [
               "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
               "2. Call it using the exact signature shown: `const result = await tools.<namespace>.<tool>(input)`; bracket notation and quotes are part of the path.",
-              "3. Return only the fields you need: `return { <field>: result.<field> }` - raw payloads get truncated and waste context.",
+              "3. Return only the fields you need from structured results; narrow unknown results before reading fields, and avoid returning large raw payloads.",
             ]
           : [
               '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
@@ -580,7 +580,7 @@ export const prepare = <R>(
           ? "- Only Code Mode tools listed here and internal runtime tools are available; surrounding agent tools are not implicitly exposed."
           : "- Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
-        "- A result typed `Promise<unknown>` may be structured data or text. Narrow it at runtime before using it.",
+        "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
         ...(complete

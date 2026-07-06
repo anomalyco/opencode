@@ -167,7 +167,7 @@ describe("code mode execute", () => {
     expect(description).toContain("## Workflow")
     expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
     expect(description).not.toContain("JSON.parse(res)")
-    expect(description).toContain("A result typed `Promise<unknown>` may be structured data or text")
+    expect(description).toContain("check that it is a non-null object and not an array")
     expect(description).toContain("Return only the fields you need")
     expect(description).not.toContain("total_count")
   })
@@ -220,7 +220,9 @@ describe("code mode execute", () => {
     expect(description).toContain("  limit?: number,\n  offset?: number,")
     expect(description).toContain("  remaining: number,\n  next: {")
     expect(description).toContain("      offset: number,\n    } | null,")
-    expect(description).toContain("1. If the exact signature is not listed below, first search:")
+    expect(description).toContain(
+      '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+    )
     expect(description).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
     )

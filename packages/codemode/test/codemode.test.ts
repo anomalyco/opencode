@@ -606,11 +606,8 @@ describe("CodeMode public contract", () => {
       instructions.indexOf("\n## Available tools (COMPLETE list"),
     )
     expect(instructions).not.toContain("JSON.parse(res)")
-    expect(instructions).toContain(
-      "A result typed `Promise<unknown>` may be structured data or text. Narrow it at runtime before using it.",
-    )
     expect(instructions).toContain("Return only the fields you need")
-    expect(instructions).toContain("raw payloads get truncated and waste context")
+    expect(instructions).toContain("avoid returning large raw payloads")
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain("bracket notation and quotes are part of the path")
     expect(instructions).toContain("surrounding agent tools are not available")
@@ -618,7 +615,9 @@ describe("CodeMode public contract", () => {
     // Placeholders use generic namespace/tool/field names only - no fabricated real tools
     // and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
-    expect(instructions).toContain("`return { <field>: result.<field> }`")
+    expect(instructions).toContain("Return only the fields you need from structured results")
+    expect(instructions).toContain("check that it is a non-null object and not an array")
+    expect(instructions).not.toContain("result.<field>")
     expect(instructions).not.toContain("data.<field>")
     expect(instructions).not.toContain("total_count")
     expect(instructions).not.toContain("list_issues")
