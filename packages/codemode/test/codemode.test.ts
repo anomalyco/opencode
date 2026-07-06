@@ -533,7 +533,8 @@ describe("CodeMode public contract", () => {
           {
             path: "tools.orders.lookup",
             description: "Look up an order by ID",
-            signature: "tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
+            signature:
+              "tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
           },
         ],
         remaining: 0,

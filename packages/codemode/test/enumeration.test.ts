@@ -146,13 +146,7 @@ describe("for...in", () => {
       }
       return names
     `),
-    ).toEqual([
-      "github.list_issues",
-      "github.get_issue",
-      "memory.search",
-      "playwright.navigate",
-      "$codemode.search",
-    ])
+    ).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate", "$codemode.search"])
   })
 
   test("unsupported values fail with a hint at for...of and Object.keys", async () => {
