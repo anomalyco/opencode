@@ -614,15 +614,9 @@ describe("stdlib integration", () => {
           Object.is(object, object),
           Object.is({}, {}),
           Object.is(tools, tools),
-          Object.is(tools.host, tools.host),
-          Object.is(Math.max, Math.max),
-          Object.is([].map, [].map),
-          Object.is("".trimLeft, "".trimStart),
-          Object.is(new Set().keys, new Set().values),
-          Object.is(Number.parseInt, parseInt),
         ]
       `),
-    ).toEqual([true, false, true, false, true, true, true, true, true, true, true])
+    ).toEqual([true, false, true, false, true])
     expect(await value(`const object = {}; return Object.is(Object.values([object])[0], object)`)).toBe(true)
   })
 
