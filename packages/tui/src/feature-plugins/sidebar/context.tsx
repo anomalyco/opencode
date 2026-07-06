@@ -2,6 +2,7 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo } from "solid-js"
 import { useData } from "../../context/data"
+import { lastAssistantWithUsage } from "../../util/session"
 
 const id = "internal:sidebar-context"
 
@@ -18,8 +19,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const cost = createMemo(() => session()?.cost ?? 0)
 
   const state = createMemo(() => {
-    const last = msg().findLast((item) => item.type === "assistant" && item.tokens !== undefined)
-    if (last?.type !== "assistant" || !last.tokens) {
+    const last = lastAssistantWithUsage(msg(), session()?.revert?.messageID)
+    if (!last) {
       return {
         tokens: 0,
         percent: null,
