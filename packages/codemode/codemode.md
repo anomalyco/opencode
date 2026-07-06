@@ -148,9 +148,6 @@ the adapter TODO. Delete entries when completed.
 The supported JavaScript subset should grow when common model-generated code improves tool orchestration. These are
 current omissions to implement, not intentional product boundaries.
 
-- [ ] Expand common String behavior, starting with function replacers for `String.replace` and `String.replaceAll`,
-      including captures, offsets, named groups, result coercion, zero-length matches, and Effect-aware callbacks.
-      Tracked by [#35451](https://github.com/anomalyco/opencode/issues/35451).
 - [ ] Design proper multi-stage promise pipelines. Supporting `.then`, `.catch`, and `.finally` should preserve promise
       assimilation, cancellation, failure handling, and concurrent per-item pipelines rather than adding syntax-only
       shims. Consider `Promise.any` in the same pass.

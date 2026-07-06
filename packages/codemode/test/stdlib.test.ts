@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
@@ -147,6 +147,67 @@ describe("RegExp", () => {
     expect(await value(`return "a1b2".replace(/\\d/g, "#")`)).toBe("a#b#")
     expect(await value(`return "a1b2".replaceAll(/\\d/g, "#")`)).toBe("a#b#")
     expect(await value(`return "hi bob".replace(/b(o)b/, "[$1]")`)).toBe("hi [o]")
+  })
+
+  test("function replacers receive captures, offsets, input, and named groups", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const output = "a1b22".replace(/(\\d)(\\d)?/g, (match, first, second, offset, input) => {
+          seen.push([match, first, second === undefined, offset, input])
+          return Number(match) * 2
+        })
+        return { output, seen }
+      `),
+    ).toEqual({
+      output: "a2b44",
+      seen: [
+        ["1", "1", true, 1, "a1b22"],
+        ["22", "2", false, 3, "a1b22"],
+      ],
+    })
+    expect(
+      await value(`
+        return "red-blue".replace(
+          /(?<left>[a-z]+)-(?<right>[a-z]+)/,
+          (match, left, right, offset, input, groups) => groups.right + ":" + groups.left,
+        )
+      `),
+    ).toBe("blue:red")
+  })
+
+  test("function replacers support string searches, zero-length matches, and result coercion", async () => {
+    expect(await value(`return "banana".replace("na", (match, offset, input) => "[" + offset + "]")`)).toBe("ba[2]na")
+    expect(await value(`return "ab".replaceAll("", (match, offset) => offset)`)).toBe("0a1b2")
+    expect(await value(`return "😀".replaceAll(/(?:)/gu, (match, offset) => "[" + offset + "]")`)).toBe("[0]😀[2]")
+    expect(
+      await value(`return "123".replace(/\\d/g, (match) => match === "1" ? 7 : match === "2" ? null : { n: 3 })`),
+    ).toBe("7null[object Object]")
+  })
+
+  test("function replacers can await effectful tool calls", async () => {
+    const decorate = Tool.make({
+      description: "Decorate a string",
+      input: Schema.String,
+      output: Schema.String,
+      run: (input) => Effect.succeed(`[${input}]`),
+    })
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        tools: { host: { decorate } },
+        code: `return "a1b22".replace(/\\d+/g, async (match) => await tools.host.decorate(match))`,
+      }),
+    )
+    expect(result.ok && result.value).toBe("a[1]b[22]")
+
+    const missingAwait = await Effect.runPromise(
+      CodeMode.execute({
+        tools: { host: { decorate } },
+        code: `return "a1".replace(/\\d/, (match) => tools.host.decorate(match))`,
+      }),
+    )
+    expect(!missingAwait.ok && missingAwait.error.kind).toBe("InvalidDataValue")
+    expect(!missingAwait.ok && missingAwait.error.message).toContain("un-awaited Promise")
   })
 
   test("replaceAll without the g flag is a catchable error", async () => {

@@ -885,14 +885,6 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       break
     case "replace":
     case "replaceAll": {
-      if (args[0] instanceof CodeModeFunction || args[1] instanceof CodeModeFunction) {
-        throw new InterpreterRuntimeError(
-          `String.${name} does not support function replacers in CodeMode; use match/matchAll and rebuild the string instead.`,
-          node,
-          "UnsupportedSyntax",
-          [supportedSyntaxMessage],
-        )
-      }
       if (args[0] instanceof SandboxRegExp) {
         const pattern = (args[0] as SandboxRegExp).regex
         const replacement = str(1)
@@ -3026,6 +3018,12 @@ class Interpreter<R> {
     node: AstNode,
   ): Effect.Effect<unknown, unknown, R> {
     if (typeof ref.receiver === "string") {
+      if (
+        (ref.name === "replace" || ref.name === "replaceAll") &&
+        (args[1] instanceof CodeModeFunction || args[1] instanceof CoercionFunction)
+      ) {
+        return this.invokeStringReplacer(ref.receiver, ref.name, args, node)
+      }
       return Effect.succeed(invokeStringMethod(ref.receiver, ref.name, args, node))
     }
     if (typeof ref.receiver === "number") {
@@ -3049,8 +3047,68 @@ class Interpreter<R> {
     throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
   }
 
-  // Runs a Map/Set callback (forEach) accepting a user function or a builtin coercion,
-  // mirroring the array-method callback contract.
+  private invokeStringReplacer(
+    value: string,
+    name: "replace" | "replaceAll",
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
+    const apply = this.applyCollectionCallback(args[1], `String.${name}`, node)
+    const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<unknown> }> = []
+    const collect = (...callbackArgs: Array<unknown>): string => {
+      const match = callbackArgs[0]
+      const groups = callbackArgs[callbackArgs.length - 1]
+      const hasGroups = groups !== null && typeof groups === "object"
+      const offset = callbackArgs[callbackArgs.length - (hasGroups ? 3 : 2)]
+      if (typeof match !== "string" || typeof offset !== "number") {
+        throw new InterpreterRuntimeError(`String.${name} produced an invalid replacement match.`, node)
+      }
+      if (hasGroups) {
+        const safeGroups: SafeObject = Object.create(null) as SafeObject
+        for (const [key, group] of Object.entries(groups)) {
+          if (!isBlockedMember(key)) safeGroups[key] = group
+        }
+        callbackArgs[callbackArgs.length - 1] = safeGroups
+      }
+      matches.push({ match, offset, args: callbackArgs })
+      return match
+    }
+
+    const pattern = args[0]
+    if (pattern instanceof SandboxRegExp) {
+      if (name === "replaceAll" && !pattern.regex.global) {
+        throw new InterpreterRuntimeError(
+          `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.regex.source}/${pattern.regex.flags}g, or use String.replace to replace only the first match.`,
+          node,
+        )
+      }
+      if (name === "replace") value.replace(pattern.regex, collect)
+      else value.replaceAll(pattern.regex, collect)
+    } else {
+      if (typeof pattern !== "string") {
+        throw new InterpreterRuntimeError(`String.${name} expects argument 1 to be a string.`, node)
+      }
+      if (name === "replace") value.replace(pattern, collect)
+      else value.replaceAll(pattern, collect)
+    }
+
+    return Effect.gen(function* () {
+      const output: Array<string> = []
+      let end = 0
+      for (const match of matches) {
+        output.push(
+          value.slice(end, match.offset),
+          coerceToString(boundedData(yield* apply(match.args), `String.${name} replacer result`)),
+        )
+        end = match.offset + match.match.length
+      }
+      output.push(value.slice(end))
+      return boundedData(output.join(""), `String.${name} result`)
+    })
+  }
+
+  // Runs a collection callback accepting a user function or a builtin coercion, mirroring
+  // the array-method callback contract.
   private applyCollectionCallback(
     callback: unknown,
     name: string,
