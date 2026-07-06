@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, JsonPointer, Schema } from "effect"
 
 /**
  * JSON Schema subset accepted for render-only tool schemas.
@@ -13,6 +13,7 @@ export type JsonSchema = {
   readonly const?: unknown
   readonly anyOf?: ReadonlyArray<JsonSchema>
   readonly oneOf?: ReadonlyArray<JsonSchema>
+  readonly allOf?: ReadonlyArray<JsonSchema>
   readonly properties?: Readonly<Record<string, JsonSchema>>
   readonly required?: ReadonlyArray<string>
   readonly items?: JsonSchema
@@ -76,6 +77,13 @@ const effectNumberSentinel = (schema: JsonSchema) =>
   schema.enum.length === 1 &&
   (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity")
 
+const intersection = (members: ReadonlyArray<string>): string => {
+  const concrete = members.filter((member) => member !== "unknown")
+  if (concrete.length === 0) return "unknown"
+  if (concrete.length === 1) return concrete[0] ?? "unknown"
+  return concrete.map((member) => (member.includes(" | ") ? `(${member})` : member)).join(" & ")
+}
+
 /**
  * Recursion ceiling for schema rendering. Object, array, and union recursion all increment
  * depth, so this bounds every recursion path - pathological or structurally cyclic schemas
@@ -87,6 +95,30 @@ type RenderContext = {
   readonly definitions: Readonly<Record<string, JsonSchema>>
   /** Indented, JSDoc-annotated multiline rendering (search results); compact single line otherwise. */
   readonly pretty: boolean
+}
+
+const hasUnresolvedRef = (
+  schema: JsonSchema,
+  definitions: Readonly<Record<string, JsonSchema>>,
+  seen: ReadonlySet<string> = new Set(),
+  visited: ReadonlySet<JsonSchema> = new Set(),
+): boolean => {
+  if (visited.has(schema)) return false
+  const nextVisited = new Set([...visited, schema])
+  if (schema.$ref !== undefined) {
+    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
+    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
+    if (hasUnresolvedRef(definitions[name], definitions, new Set([...seen, name]), nextVisited)) return true
+  }
+  return [
+    ...(schema.anyOf ?? []),
+    ...(schema.oneOf ?? []),
+    ...(schema.allOf ?? []),
+    ...Object.values(schema.properties ?? {}),
+    ...(schema.items === undefined ? [] : [schema.items]),
+    ...(typeof schema.additionalProperties === "object" ? [schema.additionalProperties] : []),
+  ].some((item) => hasUnresolvedRef(item, definitions, seen, nextVisited))
 }
 
 /**
@@ -136,11 +168,18 @@ const renderSchema = (
   seen: ReadonlySet<string> = new Set(),
 ): string => {
   if (depth > MAX_RENDER_DEPTH) return "unknown"
+  const nested =
+    schema.definitions === undefined && schema.$defs === undefined
+      ? ctx
+      : { ...ctx, definitions: { ...ctx.definitions, ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) } }
   if (schema.$ref) {
-    const name = schema.$ref.split("/").pop()
-    if (!name || !ctx.definitions[name]) return name ?? "unknown"
-    if (seen.has(name)) return name // recursive type: reference by name rather than loop
-    return renderSchema(ctx.definitions[name], ctx, depth, new Set([...seen, name]))
+    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
+    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    if (!name || !nested.definitions[name] || seen.has(name)) return "unknown"
+    return intersection([
+      renderSchema(nested.definitions[name], nested, depth, new Set([...seen, name])),
+      renderSchema({ ...schema, $ref: undefined }, nested, depth + 1, seen),
+    ])
   }
   if (schema.const !== undefined) return renderLiteral(schema.const)
   if (schema.enum) return schema.enum.map(renderLiteral).join(" | ")
@@ -166,24 +205,34 @@ const renderSchema = (
     ) {
       return "{}"
     }
-    return alternatives.map((item) => renderSchema(item, ctx, depth + 1, seen)).join(" | ")
+    const members = alternatives.map((item) => renderSchema(item, nested, depth + 1, seen))
+    if (members.some((member) => member === "unknown")) return "unknown"
+    return intersection([
+      members.join(" | "),
+      renderSchema({ ...schema, anyOf: undefined, oneOf: undefined }, nested, depth + 1, seen),
+    ])
+  }
+  if (schema.allOf) {
+    const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
+    if (schema.allOf.some((item) => hasUnresolvedRef(item, nested.definitions))) return "unknown"
+    return intersection([renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen), ...members])
   }
   if (Array.isArray(schema.type)) {
-    return schema.type.map((item) => renderSchema({ type: item }, ctx, depth + 1, seen)).join(" | ")
+    return schema.type.map((item) => renderSchema({ ...schema, type: item }, nested, depth + 1, seen)).join(" | ")
   }
   if (schema.type === "string") return "string"
   if (schema.type === "number" || schema.type === "integer") return "number"
   if (schema.type === "boolean") return "boolean"
   if (schema.type === "null") return "null"
-  if (schema.type === "array") return `Array<${renderSchema(schema.items ?? {}, ctx, depth + 1, seen)}>`
+  if (schema.type === "array") return `Array<${renderSchema(schema.items ?? {}, nested, depth + 1, seen)}>`
   if (schema.type === "object" || schema.properties) {
     const required = new Set(schema.required ?? [])
     const properties = Object.entries(schema.properties ?? {})
     const additional = schema.additionalProperties
     const indexType =
-      additional && typeof additional === "object" ? renderSchema(additional, ctx, depth + 1, seen) : undefined
+      additional && typeof additional === "object" ? renderSchema(additional, nested, depth + 1, seen) : undefined
     const field = ([name, value]: readonly [string, JsonSchema]) =>
-      `${renderKey(name)}${required.has(name) ? "" : "?"}: ${renderSchema(value, ctx, depth + 1, seen)}`
+      `${renderKey(name)}${required.has(name) ? "" : "?"}: ${renderSchema(value, nested, depth + 1, seen)}`
 
     if (!ctx.pretty) {
       const fields = properties.map(field)
@@ -253,7 +302,8 @@ export const inputProperties = <R>(definition: Definition<R>): Array<InputProper
     const definitions = document.definitions ?? {}
     let schema = document.schema
     if (schema.$ref !== undefined) {
-      const name = schema.$ref.split("/").pop()
+      const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
+      const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
       const resolved = name === undefined ? undefined : definitions[name]
       if (resolved === undefined) return []
       schema = resolved
