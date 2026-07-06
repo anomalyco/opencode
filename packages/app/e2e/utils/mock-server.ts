@@ -1,7 +1,7 @@
 import type { Page, Route } from "@playwright/test"
 
 const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/vcs/status", "/vcs/diff"])
-const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp"])
+const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/experimental/resource"])
 
 export interface MockServerConfig {
   provider: unknown
@@ -11,7 +11,10 @@ export interface MockServerConfig {
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
   vcsDiff?: unknown[]
   messageDelay?: number
+  beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
+  message?: (sessionID: string, messageID: string) => unknown
+  onMessage?: (input: { sessionID: string; messageID: string }) => void
   events?: () => unknown[]
   eventRetry?: number
   todos?: (sessionID: string) => unknown[]
@@ -52,6 +55,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
     if (path === "/global/health") return json(route, { healthy: true })
+    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: false })
     if (path === "/permission")
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")
@@ -62,6 +66,14 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
     if (path === "/file/content" && config.fileContent)
       return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
+    if (path === "/api/reference")
+      return json(route, {
+        location: {
+          directory: config.directory,
+          project: { id: (config.project as { id?: string }).id, directory: config.directory },
+        },
+        data: [],
+      })
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
@@ -70,6 +82,18 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (sessionMatch) {
       const session = config.sessions.find((s) => s.id === sessionMatch[1])
       return json(route, session ?? {})
+    }
+
+    const projectMatch = path.match(/^\/project\/([^/]+)$/)
+    if (projectMatch) return json(route, config.project)
+
+    const messageMatch = path.match(/^\/session\/([^/]+)\/message\/([^/]+)$/)
+    if (messageMatch) {
+      config.onMessage?.({ sessionID: messageMatch[1]!, messageID: messageMatch[2]! })
+      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      const message = config.message?.(messageMatch[1]!, messageMatch[2]!)
+      if (message === undefined) return json(route, { error: "Message not found" }, undefined, 404)
+      return json(route, message)
     }
 
     const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
@@ -82,7 +106,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       const before = token ? cursors.get(token) : undefined
       if (token && !before) return json(route, { error: "Invalid cursor" }, undefined, 400)
       config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "start" })
-      if (config.messageDelay) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      await config.beforeMessagesResponse?.({ sessionID: messagesMatch[1]!, before })
+      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
       const limit = Number(url.searchParams.get("limit") ?? 80)
       const pageData = config.pageMessages(messagesMatch[1], limit, before)
       config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "end" })

@@ -374,8 +374,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: "mod+w",
                   hidden: true,
                   onSelect: () => {
-                    tabsStoreActions.removeTab(tabsStore.findIndex((tab) => current === tab))
+                    tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
                   },
+                },
+                {
+                  id: "tab.reopenClosed",
+                  category: language.t("command.category.file"),
+                  title: language.t("command.tab.reopenClosed"),
+                  keybind: "mod+shift+t",
+                  onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
                 {
                   id: `tab.prev`,
@@ -464,7 +471,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   }}
                   onClose={(tab) => {
                     const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                    if (index !== -1) tabsStoreActions.removeTab(index)
+                    if (index !== -1) tabsStoreActions.closeTab(index)
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />

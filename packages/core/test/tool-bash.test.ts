@@ -51,7 +51,7 @@ const permission = Layer.succeed(
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(Effect.suspend(() => afterPermission(input))),
         Effect.andThen(
-          input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
+          input.action === denyAction ? Effect.fail(new PermissionV2.BlockedError({ rules: [] })) : Effect.void,
         ),
       ),
     ask: () => Effect.die("unused"),

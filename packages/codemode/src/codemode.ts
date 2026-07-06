@@ -19,8 +19,7 @@ import { ToolError } from "./tool-error.js"
 import { isSandboxValue, SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
 
 /** A tool call admitted during an execution. */
-export type { ToolCall, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
-export { ToolError, toolError } from "./tool-error.js"
+export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
@@ -39,12 +38,12 @@ export type ExecutionLimits = {
 /** Controls how much of the tool catalog is inlined in agent instructions. */
 export type DiscoveryOptions = {
   /**
-   * Estimated-token budget (chars/4, default 2000) for inlined full tool signatures in agent
-   * instructions. Signatures that fit are inlined round-robin across namespaces; every
-   * namespace is always listed with its tool count regardless of budget, and
+   * Approximate budget, in estimated tokens (chars/4, default 2000), for full tool entries in
+   * the instruction catalog. Tool entries are selected round-robin across namespaces. Fixed
+   * instructions and namespace summaries do not count toward the budget, and
    * `tools.$codemode.search` is always registered.
    */
-  readonly maxInlineCatalogTokens?: number
+  readonly catalogBudget?: number
 }
 
 type ToolTree<R = never> = {
@@ -74,50 +73,20 @@ export type ExecuteOptions<Tools extends Record<string, unknown> = {}> = {
   onToolCallEnd?: (call: ToolRuntime.ToolCallEnded) => Effect.Effect<void, never, Services<Tools>>
 }
 
-/** A normalized program diagnostic safe to return across an agent tool boundary. */
-export type Diagnostic = {
-  readonly kind: DiagnosticKind
-  readonly message: string
-  readonly location?: { readonly line: number; readonly column: number }
-  readonly suggestions?: ReadonlyArray<string>
-}
-
 /** A JSON value that can cross the confined interpreter boundary. */
 export type DataValue = Schema.Json
 
-/** Successful execution after the result has crossed the plain-data boundary. */
-export type ExecuteSuccess = {
-  readonly ok: true
-  readonly value: DataValue
-  readonly logs?: ReadonlyArray<string>
-  /** Present when the value or logs were truncated to fit `maxOutputBytes`. */
-  readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<ToolCall>
-}
-
-/** Failed execution with calls admitted before the diagnostic was produced. */
-export type ExecuteFailure = {
-  readonly ok: false
-  readonly error: Diagnostic
-  readonly logs?: ReadonlyArray<string>
-  /** Present when the logs were truncated to fit `maxOutputBytes`. */
-  readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<ToolCall>
-}
-
-/** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
-export type ExecuteResult = ExecuteSuccess | ExecuteFailure
-
-/** Reusable CodeMode configuration shared by `execute` and `agentTool`. */
-export type CodeModeOptions<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Tools>, "code"> & {
+/** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
+export type Options<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Tools>, "code"> & {
   /** Progressive-disclosure configuration for the agent-facing tool catalog. */
   readonly discovery?: DiscoveryOptions
 }
 
-/** Input schema for the single agent-facing tool produced by `runtime.agentTool()`. */
-export const ExecuteInputSchema = Schema.Struct({ code: Schema.String })
+/** Schema for a host tool input containing CodeMode source. */
+export const Input = Schema.Struct({ code: Schema.String })
+export type Input = typeof Input.Type
 
-const DiagnosticKindSchema = Schema.Literals([
+export const DiagnosticKind = Schema.Literals([
   "ParseError",
   "UnsupportedSyntax",
   "UnknownTool",
@@ -129,49 +98,52 @@ const DiagnosticKindSchema = Schema.Literals([
   "ToolFailure",
   "ExecutionFailure",
 ])
+/** Stable categories produced by program, schema, tool, and limit failures. */
+export type DiagnosticKind = typeof DiagnosticKind.Type
 
-/** Structured success or diagnostic result schema returned by CodeMode execution. */
-export const ExecuteResultSchema = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    value: Schema.Json,
-    logs: Schema.optionalKey(Schema.Array(Schema.String)),
-    truncated: Schema.optionalKey(Schema.Boolean),
-    toolCalls: Schema.Array(Schema.Struct({ name: Schema.String })),
-  }),
-  Schema.Struct({
-    ok: Schema.Literal(false),
-    error: Schema.Struct({
-      kind: DiagnosticKindSchema,
-      message: Schema.String,
-      location: Schema.optionalKey(Schema.Struct({ line: Schema.Number, column: Schema.Number })),
-      suggestions: Schema.optionalKey(Schema.Array(Schema.String)),
-    }),
-    logs: Schema.optionalKey(Schema.Array(Schema.String)),
-    truncated: Schema.optionalKey(Schema.Boolean),
-    toolCalls: Schema.Array(Schema.Struct({ name: Schema.String })),
-  }),
-])
+export const Diagnostic = Schema.Struct({
+  kind: DiagnosticKind,
+  message: Schema.String,
+  location: Schema.optionalKey(Schema.Struct({ line: Schema.Number, column: Schema.Number })),
+  suggestions: Schema.optionalKey(Schema.Array(Schema.String)),
+})
+/** A normalized program diagnostic safe to return across an agent tool boundary. */
+export type Diagnostic = typeof Diagnostic.Type
 
-/** Agent-facing projection of a configured CodeMode runtime. */
-export type AgentToolDefinition<R = never> = {
-  readonly name: "code"
-  readonly description: string
-  readonly input: typeof ExecuteInputSchema
-  readonly output: typeof ExecuteResultSchema
-  readonly execute: (input: { readonly code: string }) => Effect.Effect<ExecuteResult, never, R>
-}
+const ToolCallSchema = Schema.Struct({ name: Schema.String })
+export const Success = Schema.Struct({
+  ok: Schema.Literal(true),
+  value: Schema.Json,
+  logs: Schema.optionalKey(Schema.Array(Schema.String)),
+  truncated: Schema.optionalKey(Schema.Boolean),
+  toolCalls: Schema.Array(ToolCallSchema),
+})
+/** Successful execution after the result has crossed the plain-data boundary. */
+export type Success = typeof Success.Type
+
+export const Failure = Schema.Struct({
+  ok: Schema.Literal(false),
+  error: Diagnostic,
+  logs: Schema.optionalKey(Schema.Array(Schema.String)),
+  truncated: Schema.optionalKey(Schema.Boolean),
+  toolCalls: Schema.Array(ToolCallSchema),
+})
+/** Failed execution with calls admitted before the diagnostic was produced. */
+export type Failure = typeof Failure.Type
+
+/** Schema for the structured success or diagnostic returned by CodeMode execution. */
+export const Result = Schema.Union([Success, Failure])
+/** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
+export type Result = typeof Result.Type
 
 /** Reusable confined runtime over one explicit tool tree. */
-export type CodeModeRuntime<R = never> = {
+export type Runtime<R = never> = {
   /** Lists schema-described tool paths provided by the host. */
   readonly catalog: () => ReadonlyArray<ToolDescription>
   /** Builds model-facing syntax guidance and visible tool signatures. */
   readonly instructions: () => string
-  /** Projects the configured runtime as one agent-facing `code` tool. */
-  readonly agentTool: () => AgentToolDefinition<R>
   /** Executes a program using this runtime's configured host tools. */
-  readonly execute: (code: string) => Effect.Effect<ExecuteResult, never, R>
+  readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
 type SourcePosition = {
@@ -285,19 +257,6 @@ const errorBrandName = (value: unknown): string | undefined =>
   value !== null && typeof value === "object"
     ? ((value as Record<PropertyKey, unknown>)[ErrorBrand] as string | undefined)
     : undefined
-
-/** Stable categories produced by program, schema, tool, and limit failures. */
-export type DiagnosticKind =
-  | "ParseError"
-  | "UnsupportedSyntax"
-  | "UnknownTool"
-  | "InvalidToolInput"
-  | "InvalidToolOutput"
-  | "InvalidDataValue"
-  | "ToolCallLimitExceeded"
-  | "TimeoutExceeded"
-  | "ToolFailure"
-  | "ExecutionFailure"
 
 const arrayMethods = new Set([
   "map",
@@ -3954,7 +3913,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
   options: ExecuteOptions<Tools>,
   limits: ResolvedExecutionLimits,
   searchIndex: ToolRuntime.DiscoveryPlan["searchIndex"],
-): Effect.Effect<ExecuteResult, never, Services<Tools>> => {
+): Effect.Effect<Result, never, Services<Tools>> => {
   const hooks = {
     ...(options.onToolCallStart === undefined ? {} : { onToolCallStart: options.onToolCallStart }),
     ...(options.onToolCallEnd === undefined ? {} : { onToolCallEnd: options.onToolCallEnd }),
@@ -3962,8 +3921,8 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
   const tools = ToolRuntime.make(
     (options.tools ?? {}) as HostTools<Services<Tools>>,
     limits.maxToolCalls,
-    hooks,
     searchIndex,
+    hooks,
   )
   const logs: Array<string> = []
   const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
@@ -3986,7 +3945,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
       value: result,
       ...logged(),
       toolCalls: tools.calls,
-    } satisfies ExecuteResult
+    } satisfies Result
   }).pipe((program) => {
     const timeoutMs = limits.timeoutMs
     if (timeoutMs === undefined) return program
@@ -3999,7 +3958,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
             error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
             ...logged(),
             toolCalls: tools.calls,
-          } satisfies ExecuteResult),
+          } satisfies Result),
       }),
     )
   })
@@ -4013,7 +3972,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
             error: normalizeError(Cause.squash(cause)),
             ...logged(),
             toolCalls: tools.calls,
-          } satisfies ExecuteResult),
+          } satisfies Result),
     ),
     Effect.map((result) => (limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes))),
   )
@@ -4037,7 +3996,7 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
  * fails the execution; `truncated: true` marks affected results. Only runs when the host set
  * `maxOutputBytes` - with the limit absent, output passes through unbounded.
  */
-const boundOutput = (result: ExecuteResult, maxOutputBytes: number): ExecuteResult => {
+const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   let truncated = false
 
   let value: DataValue = null
@@ -4079,7 +4038,7 @@ const boundOutput = (result: ExecuteResult, maxOutputBytes: number): ExecuteResu
 
 export const execute = <const Tools extends Record<string, unknown>>(
   options: ExecuteOptions<Tools>,
-): Effect.Effect<ExecuteResult, never, Services<Tools>> => {
+): Effect.Effect<Result, never, Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   return executeWithLimits(options, resolveExecutionLimits(options.limits), ToolRuntime.searchIndex(tools))
@@ -4088,39 +4047,28 @@ export const execute = <const Tools extends Record<string, unknown>>(
 /**
  * Creates an Effect-native runtime over explicit, schema-described tools.
  *
- * Use `execute` for host-driven execution or `agentTool` to expose one confined code tool to an
- * agent framework. Tool requirements remain in the returned Effect environment.
+ * Use `execute` for host-driven execution. Tool requirements remain in the returned Effect environment.
  *
  * @example
  * ```ts
  * const runtime = CodeMode.make({ tools: { orders: { lookup } } })
- * const code = runtime.agentTool()
+ * const result = runtime.execute("return await tools.orders.lookup({ id: 'order_42' })")
  * ```
  */
 export const make = <const Tools extends Record<string, unknown> = {}>(
-  options: CodeModeOptions<Tools> = {} as CodeModeOptions<Tools>,
-): CodeModeRuntime<Services<Tools>> => {
+  options: Options<Tools> = {} as Options<Tools>,
+): Runtime<Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
-  const discovery = ToolRuntime.discoveryPlan(tools, options.discovery?.maxInlineCatalogTokens)
-  const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, discovery.searchIndex)
-  const catalog = discovery.catalog
-  const instructions = discovery.instructions
+  const prepared = ToolRuntime.prepare(tools, options.discovery?.catalogBudget)
+  const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, prepared.searchIndex)
+  const catalog = prepared.catalog
+  const instructions = prepared.instructions
 
   return {
     catalog: () => catalog,
     instructions: () => instructions,
-    agentTool: () => ({
-      name: "code",
-      description: instructions,
-      input: ExecuteInputSchema,
-      output: ExecuteResultSchema,
-      execute: ({ code }) => executeProgram(code),
-    }),
     execute: executeProgram,
   }
 }
-
-/** Constructors for one-shot and reusable CodeMode execution. */
-export const CodeMode = { make, execute }

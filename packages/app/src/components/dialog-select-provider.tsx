@@ -1,5 +1,5 @@
-import { type Accessor, Component, Show } from "solid-js"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { type Accessor, Component, Match, Show, Switch } from "solid-js"
+import { createStore } from "solid-js/store"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
@@ -12,9 +12,13 @@ import { DialogCustomProvider } from "./dialog-custom-provider"
 const CUSTOM_ID = "_custom"
 
 export const DialogSelectProvider: Component<{ directory?: Accessor<string | undefined> }> = (props) => {
-  const dialog = useDialog()
   const providers = useProviders(props.directory)
   const language = useLanguage()
+  const [store, setStore] = createStore({ selected: undefined as string | undefined })
+
+  function showPicker() {
+    setStore("selected", undefined)
+  }
 
   const popularGroup = () => language.t("dialog.provider.group.popular")
   const otherGroup = () => language.t("dialog.provider.group.other")
@@ -27,61 +31,67 @@ export const DialogSelectProvider: Component<{ directory?: Accessor<string | und
   }
 
   return (
-    <Dialog title={language.t("command.provider.connect")} transition>
-      <List
-        class="px-3"
-        search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.provider.empty")}
-        activeIcon="plus-small"
-        key={(x) => x?.id}
-        items={() => {
-          language.locale()
-          return [{ id: CUSTOM_ID, name: customLabel() }, ...providers.all().values()]
-        }}
-        filterKeys={["id", "name"]}
-        groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}
-        sortBy={(a, b) => {
-          if (a.id === CUSTOM_ID) return -1
-          if (b.id === CUSTOM_ID) return 1
-          if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
-            return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-          return a.name.localeCompare(b.name)
-        }}
-        sortGroupsBy={(a, b) => {
-          const popular = popularGroup()
-          if (a.category === popular && b.category !== popular) return -1
-          if (b.category === popular && a.category !== popular) return 1
-          return 0
-        }}
-        onSelect={(x) => {
-          if (!x) return
-          if (x.id === CUSTOM_ID) {
-            dialog.show(() => <DialogCustomProvider back="providers" directory={props.directory} />)
-            return
-          }
-          dialog.show(() => <DialogConnectProvider provider={x.id} directory={props.directory} />)
-        }}
-      >
-        {(i) => (
-          <div class="px-1.25 w-full flex items-center gap-x-3">
-            <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
-            <span>{i.name}</span>
-            <Show when={i.id === "opencode"}>
-              <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
-            </Show>
-            <Show when={i.id === CUSTOM_ID}>
-              <Tag>{language.t("settings.providers.tag.custom")}</Tag>
-            </Show>
-            <Show when={i.id === "opencode"}>
-              <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
-            </Show>
-            <Show when={note(i.id)}>{(value) => <div class="text-14-regular text-text-weak">{value()}</div>}</Show>
-            <Show when={i.id === "opencode-go"}>
-              <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
-            </Show>
-          </div>
-        )}
-      </List>
-    </Dialog>
+    <Switch>
+      <Match when={store.selected === CUSTOM_ID}>
+        <DialogCustomProvider onBack={showPicker} />
+      </Match>
+      <Match when={store.selected && store.selected !== CUSTOM_ID ? store.selected : undefined}>
+        {(provider) => <DialogConnectProvider provider={provider()} directory={props.directory} onBack={showPicker} />}
+      </Match>
+      <Match when={true}>
+        <Dialog class="h-full" transition title={language.t("command.provider.connect")}>
+          <List
+            class="px-3"
+            search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
+            emptyMessage={language.t("dialog.provider.empty")}
+            activeIcon="plus-small"
+            key={(x) => x?.id}
+            items={() => {
+              language.locale()
+              return [{ id: CUSTOM_ID, name: customLabel() }, ...providers.all().values()]
+            }}
+            filterKeys={["id", "name"]}
+            groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}
+            sortBy={(a, b) => {
+              if (a.id === CUSTOM_ID) return -1
+              if (b.id === CUSTOM_ID) return 1
+              if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
+                return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
+              return a.name.localeCompare(b.name)
+            }}
+            sortGroupsBy={(a, b) => {
+              const popular = popularGroup()
+              if (a.category === popular && b.category !== popular) return -1
+              if (b.category === popular && a.category !== popular) return 1
+              return 0
+            }}
+            onSelect={(x) => {
+              if (!x) return
+              setStore("selected", x.id)
+            }}
+          >
+            {(i) => (
+              <div class="px-1.25 w-full flex items-center gap-x-3">
+                <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
+                <span>{i.name}</span>
+                <Show when={i.id === "opencode"}>
+                  <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
+                </Show>
+                <Show when={i.id === CUSTOM_ID}>
+                  <Tag>{language.t("settings.providers.tag.custom")}</Tag>
+                </Show>
+                <Show when={i.id === "opencode"}>
+                  <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                </Show>
+                <Show when={note(i.id)}>{(value) => <div class="text-14-regular text-text-weak">{value()}</div>}</Show>
+                <Show when={i.id === "opencode-go"}>
+                  <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                </Show>
+              </div>
+            )}
+          </List>
+        </Dialog>
+      </Match>
+    </Switch>
   )
 }

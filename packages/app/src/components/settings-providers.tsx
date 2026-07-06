@@ -211,7 +211,12 @@ const SettingsProvidersContent: Component = () => {
                     variant="secondary"
                     icon="plus-small"
                     onClick={() => {
-                      dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                      dialog.show(() => (
+                        <DialogConnectProvider
+                          provider={item.id}
+                          onBack={() => dialog.show(() => <DialogSelectProvider />)}
+                        />
+                      ))
                     }}
                   >
                     {language.t("common.connect")}
@@ -239,7 +244,7 @@ const SettingsProvidersContent: Component = () => {
                 variant="secondary"
                 icon="plus-small"
                 onClick={() => {
-                  dialog.show(() => <DialogCustomProvider back="close" />)
+                  dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
                 }}
               >
                 {language.t("common.connect")}
