@@ -1,5 +1,5 @@
 import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
-import { DateTime, Effect } from "effect"
+import { Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
@@ -64,7 +64,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       providerMetadata?: ProviderMetadata
     }
   >()
-  const timestamp = DateTime.now
   let assistantMessageID: SessionMessage.ID | undefined
   let assistantActive = false
   let assistantFailed = false

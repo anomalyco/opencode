@@ -1,12 +1,12 @@
 export * as ConfigProviderPlugin from "./provider"
 
-import { define } from "../../plugin/internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
 
 export const Plugin = define({
-  id: "config-provider",
+  id: "opencode.config.provider",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const loaded = { entries: yield* config.entries() }

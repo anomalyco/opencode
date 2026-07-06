@@ -5,8 +5,8 @@ import {
   isNewCommand,
   movePromptHistory,
   pushPromptHistory,
-} from "@/cli/cmd/run/prompt.shared"
-import type { RunPrompt } from "@/cli/cmd/run/types"
+} from "@opencode-ai/cli/mini/prompt.shared"
+import type { RunPrompt } from "@opencode-ai/cli/mini/types"
 
 function prompt(text: string, parts: RunPrompt["parts"] = []): RunPrompt {
   return { text, parts }

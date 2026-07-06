@@ -1,6 +1,6 @@
 export * as ConfigCommandPlugin from "./command"
 
-import { define } from "../../plugin/internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
 import { CommandV2 } from "../../command"
@@ -13,7 +13,7 @@ import { ConfigMarkdown } from "../markdown"
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
 
 export const Plugin = define({
-  id: "config-command",
+  id: "opencode.config.command",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service

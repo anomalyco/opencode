@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
 export const OpenAICompatiblePlugin = define({
-  id: "openai-compatible",
+  id: "opencode.provider.openai-compatible",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {

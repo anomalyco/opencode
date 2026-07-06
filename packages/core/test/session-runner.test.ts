@@ -21,7 +21,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { QuestionV2 } from "@opencode-ai/core/question"
+import { Form } from "@opencode-ai/core/form"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
@@ -39,6 +39,7 @@ import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionRunnerSystemPrompt } from "@opencode-ai/core/session/runner/system-prompt"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
@@ -299,7 +300,7 @@ const it = testEffect(
     LayerNode.group([
       Database.node,
       EventV2.node,
-      QuestionV2.node,
+      Form.node,
       SessionProjector.node,
       SessionStore.node,
       AgentV2.node,
@@ -2847,19 +2848,17 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("interrupts runner continuation when a question is dismissed", () =>
+  it.effect("interrupts runner continuation when a question is cancelled", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       const registry = yield* ToolRegistry.Service
-      const questions = yield* QuestionV2.Service
       yield* registry.register({
         question: Tool.make({
           description: "Ask the user",
           input: Schema.Struct({}),
           output: Schema.Struct({}),
-          execute: (_, context) =>
-            questions.ask({ sessionID: context.sessionID, questions: [] }).pipe(Effect.as({}), Effect.orDie),
+          execute: () => Effect.die(new QuestionTool.CancelledError()),
         }),
       })
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Ask then stop" }), resume: false })
@@ -2876,12 +2875,6 @@ describe("SessionRunnerLLM", () => {
       ]
 
       const run = yield* session.resume(sessionID).pipe(Effect.exit, Effect.forkChild)
-      let pending = yield* questions.list()
-      while (pending.length === 0) {
-        yield* Effect.yieldNow
-        pending = yield* questions.list()
-      }
-      yield* questions.reject(pending[0]!.id)
       const exit = yield* Fiber.join(run)
 
       expect(exit._tag).toBe("Failure")

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -65,7 +65,7 @@ export function cortexFetch(upstream: FetchLike = fetch) {
 }
 
 export const SnowflakeCortexPlugin = define({
-  id: "snowflake-cortex",
+  id: "opencode.provider.snowflake-cortex",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {

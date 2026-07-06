@@ -38,7 +38,7 @@ export const ModelGroup = HttpApiGroup.make("server.model")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "models",
+      title: "model",
       description: "Experimental model routes.",
     }),
   )

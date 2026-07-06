@@ -3,6 +3,31 @@ import { Spec } from "../framework/spec"
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
+const MiniParams = {
+  continue: Flag.boolean("continue").pipe(
+    Flag.withAlias("c"),
+    Flag.withDescription("Continue the last session"),
+    Flag.withDefault(false),
+  ),
+  session: Flag.string("session").pipe(
+    Flag.withAlias("s"),
+    Flag.withDescription("Session ID to continue"),
+    Flag.optional,
+  ),
+  fork: Flag.boolean("fork").pipe(
+    Flag.withDescription("Fork the session when continuing"),
+    Flag.withDefault(false),
+  ),
+  replay: Flag.boolean("replay").pipe(
+    Flag.withDescription("Replay session history on resume and after resize"),
+    Flag.withDefault(true),
+  ),
+  replayLimit: Flag.integer("replay-limit").pipe(
+    Flag.withDescription("Cap visible replay to the newest N messages"),
+    Flag.optional,
+  ),
+}
+
 export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "OpenCode 2.0 preview command line interface",
   params: {
@@ -88,6 +113,86 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       ],
     }),
     Spec.make("migrate", { description: "Migrate v1 data to v2" }),
+    Spec.make("mini", {
+      description: "Start the minimal interactive interface",
+      params: {
+        ...MiniParams,
+        project: Argument.string("project").pipe(
+          Argument.withDescription("Path to start OpenCode in"),
+          Argument.optional,
+        ),
+        model: Flag.string("model").pipe(
+          Flag.withAlias("m"),
+          Flag.withDescription("Model to use in the format provider/model"),
+          Flag.optional,
+        ),
+        agent: Flag.string("agent").pipe(Flag.withDescription("Agent to use"), Flag.optional),
+        prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
+        server: Flag.string("server").pipe(
+          Flag.withDescription("Connect to a server URL instead of the background service"),
+          Flag.optional,
+        ),
+        demo: Flag.boolean("demo").pipe(Flag.withDefault(false), Flag.withHidden),
+      },
+    }),
+    Spec.make("run", {
+      description: "Run OpenCode with a message",
+      params: {
+        message: Argument.string("message").pipe(
+          Argument.withDescription("Message to send"),
+          Argument.variadic({ min: 0 }),
+        ),
+        continue: Flag.boolean("continue").pipe(
+          Flag.withAlias("c"),
+          Flag.withDescription("Continue the last session"),
+          Flag.withDefault(false),
+        ),
+        session: Flag.string("session").pipe(
+          Flag.withAlias("s"),
+          Flag.withDescription("Session ID to continue"),
+          Flag.optional,
+        ),
+        fork: Flag.boolean("fork").pipe(
+          Flag.withDescription("Fork the session before continuing"),
+          Flag.withDefault(false),
+        ),
+        model: Flag.string("model").pipe(
+          Flag.withAlias("m"),
+          Flag.withDescription("Model to use in the format provider/model"),
+          Flag.optional,
+        ),
+        agent: Flag.string("agent").pipe(Flag.withDescription("Agent to use"), Flag.optional),
+        format: Flag.choice("format", ["default", "json"]).pipe(
+          Flag.withDescription("Output format"),
+          Flag.withDefault("default"),
+        ),
+        file: Flag.string("file").pipe(
+          Flag.withAlias("f"),
+          Flag.withDescription("File to attach to the message"),
+          Flag.atMost(100),
+        ),
+        title: Flag.string("title").pipe(Flag.withDescription("Session title"), Flag.optional),
+        server: Flag.string("server").pipe(
+          Flag.withDescription("Connect to a server URL instead of the background service"),
+          Flag.optional,
+        ),
+        dir: Flag.string("dir").pipe(Flag.withDescription("Directory to run in"), Flag.optional),
+        variant: Flag.string("variant").pipe(Flag.withDescription("Model variant"), Flag.optional),
+        thinking: Flag.boolean("thinking").pipe(
+          Flag.withDescription("Show thinking blocks"),
+          Flag.withDefault(false),
+        ),
+        auto: Flag.boolean("auto").pipe(
+          Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
+          Flag.withDefault(false),
+        ),
+        yolo: Flag.boolean("yolo").pipe(Flag.withDefault(false), Flag.withHidden),
+        dangerouslySkipPermissions: Flag.boolean("dangerously-skip-permissions").pipe(
+          Flag.withDefault(false),
+          Flag.withHidden,
+        ),
+      },
+    }),
     Spec.make("service", {
       description: "Manage the background server",
       commands: [

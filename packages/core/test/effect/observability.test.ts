@@ -52,6 +52,42 @@ describe("resource", () => {
   })
 })
 
+test("falls back to local logging when OTLP initialization fails", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-observability-test-"))
+  await using _ = {
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--eval",
+      `
+        import { Effect } from "effect"
+        import { Observability } from "./src/observability.ts"
+        await Effect.void.pipe(Effect.provide(Observability.layer), Effect.scoped, Effect.runPromise)
+      `,
+    ],
+    {
+      cwd: path.join(import.meta.dir, "../.."),
+      env: {
+        ...process.env,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "://invalid",
+        XDG_CACHE_HOME: path.join(dir, "cache"),
+        XDG_CONFIG_HOME: path.join(dir, "config"),
+        XDG_DATA_HOME: path.join(dir, "data"),
+        XDG_STATE_HOME: path.join(dir, "state"),
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  )
+  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
+
+  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" })
+})
+
 test("file logger appends concurrent runs with a run on every line", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
   await using _ = {

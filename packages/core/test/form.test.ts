@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Deferred, Effect, Exit, Fiber } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -19,6 +19,27 @@ const input = {
 } satisfies Form.CreateInput
 
 describe("Form", () => {
+  it.effect("returns a terminal cancelled state from ask", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const events = yield* EventV2.Service
+      const created = yield* Deferred.make<Form.Info>()
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === Form.Event.Created.type
+          ? Deferred.succeed(created, (event.data as { readonly form: Form.Info }).form).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const fiber = yield* service.ask(input).pipe(Effect.forkScoped)
+      const form = yield* Deferred.await(created)
+
+      yield* service.cancel(form.id)
+
+      expect(yield* Fiber.join(fiber)).toEqual({ status: "cancelled" })
+      expect(yield* service.state(form.id)).toEqual({ status: "cancelled" })
+    }),
+  )
+
   it.effect("supports the temporary global mcp elicitation owner", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

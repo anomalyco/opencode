@@ -99,7 +99,7 @@ const externalCommandDirectories = Effect.fn("ShellTool.externalCommandDirectori
 })
 
 export const Plugin = {
-  id: "core-shell-tool",
+  id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
     const runtime = yield* PluginRuntime.Service
     const scope = yield* Scope.Scope

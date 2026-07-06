@@ -31,11 +31,14 @@ export type Options = {
 // Read-only lookup: registration file plus health check and version gate.
 // Never spawns; escalation to start() is the caller's policy.
 export const discover = Effect.fn("service.discover")(function* (options: Options = {}) {
+  return (yield* discoverLocal(options))?.transport
+})
+
+const discoverLocal = Effect.fnUntraced(function* (options: Options) {
   const info = yield* read(options.file)
   if (info === undefined) return undefined
   if (options.version !== undefined && info.version !== options.version) return undefined
-  const found = yield* probe(info)
-  return found?.transport
+  return yield* probe(info, options.version)
 })
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
@@ -48,18 +51,29 @@ export const start = Effect.fn("service.start")(function* (options: Options = {}
 
   const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
   if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
-  yield* Effect.try({
+  const child = yield* Effect.try({
     try: () => {
-      spawn(command, args, { detached: true, stdio: "ignore" }).unref()
+      const child = spawn(command, args, { detached: true, stdio: "ignore" })
+      child.unref()
+      return child
     },
     catch: (cause) => new Error("Failed to start server", { cause }),
   })
 
-  return yield* discover(options).pipe(
+  return yield* discoverLocal(options).pipe(
     Effect.flatMap((found) =>
       found === undefined ? Effect.fail(new Error("Server is not ready")) : Effect.succeed(found),
     ),
     Effect.retry(poll),
+    Effect.tap((found) =>
+      found.info.pid === child.pid
+        ? Effect.void
+        : Effect.sync(() => {
+            child.kill("SIGTERM")
+          }),
+    ),
+    Effect.map((found) => found.transport),
+    Effect.tapError(() => Effect.try({ try: () => child.kill("SIGTERM"), catch: () => undefined }).pipe(Effect.ignore)),
     Effect.mapError(() => new Error("Failed to start server")),
   )
 })
@@ -90,6 +104,10 @@ export const Info = Schema.Struct({
 export type Info = typeof Info.Type
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+const decodeHealth = Schema.decodeUnknownOption(
+  Schema.Struct({ healthy: Schema.Literal(true), version: Schema.String, pid: Schema.Int }),
+)
+const decodeLegacyHealth = Schema.decodeUnknownOption(Schema.Struct({ healthy: Schema.Literal(true) }))
 
 // A missing or corrupt file means no valid info; callers treat both
 // the same (the registering server self-evicts, clients rediscover).
@@ -105,18 +123,29 @@ type LocalService = {
   readonly transport: Transport
 }
 
-const probe = Effect.fnUntraced(function* (info: Info) {
+const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLegacy = false) {
   const headers = info.password === undefined ? undefined : auth(info.password)
-  const healthy = yield* Effect.tryPromise(() =>
+  const response = yield* Effect.tryPromise(() =>
     fetch(new URL("/api/health", info.url), {
       headers,
       signal: AbortSignal.timeout(2_000),
     }),
-  ).pipe(
-    Effect.map((response) => response.ok),
-    Effect.orElseSucceed(() => false),
+  ).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+  if (response === undefined || !response.ok) return undefined
+  const body = yield* Effect.tryPromise(() => response.json()).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+  const health = decodeHealth(body)
+  if (Option.isSome(health)) {
+    if (health.value.pid !== info.pid) return undefined
+    if (info.version !== undefined && health.value.version !== info.version) return undefined
+    if (version !== undefined && health.value.version !== version) return undefined
+    return { info, transport: { url: info.url, headers } } satisfies LocalService
+  }
+  if (
+    !allowLegacy ||
+    Option.isNone(decodeLegacyHealth(body)) ||
+    (typeof body === "object" && body !== null && ("version" in body || "pid" in body))
   )
-  if (!healthy) return undefined
+    return undefined
   return { info, transport: { url: info.url, headers } } satisfies LocalService
 })
 
@@ -125,7 +154,7 @@ const probe = Effect.fnUntraced(function* (info: Info) {
 const find = Effect.fnUntraced(function* (options: Options) {
   const info = yield* read(options.file)
   if (info === undefined) return undefined
-  return yield* probe(info)
+  return yield* probe(info, undefined, true)
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and start readiness.

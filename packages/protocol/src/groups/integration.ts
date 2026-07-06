@@ -126,5 +126,5 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       ),
   )
   .annotateMerge(
-    OpenApi.annotations({ title: "integrations", description: "Integration discovery and authentication routes." }),
+    OpenApi.annotations({ title: "integration", description: "Integration discovery and authentication routes." }),
   )

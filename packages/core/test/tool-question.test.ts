@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Form } from "@opencode-ai/core/form"
 import { PermissionV2 } from "@opencode-ai/core/permission"
-import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
@@ -14,7 +14,7 @@ import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefiniti
 
 const sessionID = SessionV2.ID.make("ses_question_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
-let captured: QuestionV2.AskInput | undefined
+let captured: Form.CreateInput | undefined
 let reject = false
 let deny = false
 const capturedInput = () => captured
@@ -32,28 +32,38 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const question = Layer.succeed(
-  QuestionV2.Service,
-  QuestionV2.Service.of({
-    ask: (input: QuestionV2.AskInput) =>
+const form = Layer.succeed(
+  Form.Service,
+  Form.Service.of({
+    ask: (input: Form.CreateInput) =>
       Effect.sync(() => {
         captured = input
-      }).pipe(Effect.andThen(reject ? Effect.fail(new QuestionV2.RejectedError()) : Effect.succeed([["Build"], []]))),
-    reply: () => Effect.die("unused"),
-    reject: () => Effect.die("unused"),
+      }).pipe(
+        Effect.andThen(
+          Effect.sync(
+            (): Form.TerminalState =>
+              reject ? { status: "cancelled" } : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
+          ),
+        ),
+      ),
+    create: () => Effect.die("unused"),
+    get: () => Effect.die("unused"),
     list: () => Effect.die("unused"),
+    state: () => Effect.die("unused"),
+    reply: () => Effect.die("unused"),
+    cancel: () => Effect.die("unused"),
   }),
 )
 const questionToolNode = makeLocationNode({
   name: "test/question-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(QuestionTool.Plugin)),
-  deps: [ToolRegistry.toolsNode, PermissionV2.node, QuestionV2.node],
+  deps: [ToolRegistry.toolsNode, PermissionV2.node, Form.node],
 })
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, questionToolNode]), [
     [PermissionV2.node, permission],
-    [QuestionV2.node, question],
+    [Form.node, form],
     [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
   ]),
 )
@@ -95,6 +105,12 @@ describe("QuestionTool", () => {
           question: "Which environment?",
           header: "Environment",
           options: [{ label: "Dev", description: "Development" }],
+          multiple: true,
+        },
+        {
+          question: "Anything else?",
+          header: "Optional",
+          options: [],
         },
       ]
 
@@ -109,14 +125,14 @@ describe("QuestionTool", () => {
         result: {
           type: "text",
           value:
-            'User has answered your questions: "What should happen?"="Build", "Which environment?"="Unanswered". You can now continue with the user\'s answers in mind.',
+            'User has answered your questions: "What should happen?"="Build", "Which environment?"="Dev", "Anything else?"="Unanswered". You can now continue with the user\'s answers in mind.',
         },
         output: {
-          structured: { answers: [["Build"], []] },
+          structured: { answers: [["Build"], ["Dev"], []] },
           content: [
             {
               type: "text",
-              text: 'User has answered your questions: "What should happen?"="Build", "Which environment?"="Unanswered". You can now continue with the user\'s answers in mind.',
+              text: 'User has answered your questions: "What should happen?"="Build", "Which environment?"="Dev", "Anything else?"="Unanswered". You can now continue with the user\'s answers in mind.',
             },
           ],
         },
@@ -124,8 +140,34 @@ describe("QuestionTool", () => {
       expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
       expect(capturedInput()).toEqual({
         sessionID,
-        questions,
-        tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
+        metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
+        mode: "form",
+        fields: [
+          {
+            key: "q0",
+            title: "Action",
+            description: "What should happen?",
+            options: [{ value: "Build", label: "Build", description: "Build it" }],
+            custom: true,
+            type: "string",
+          },
+          {
+            key: "q1",
+            title: "Environment",
+            description: "Which environment?",
+            options: [{ value: "Dev", label: "Dev", description: "Development" }],
+            custom: true,
+            type: "multiselect",
+          },
+          {
+            key: "q2",
+            title: "Optional",
+            description: "Anything else?",
+            options: [],
+            custom: true,
+            type: "string",
+          },
+        ],
       })
     }),
   )
@@ -144,8 +186,9 @@ describe("QuestionTool", () => {
       })
       expect(capturedInput()).toEqual({
         sessionID,
-        questions: [],
-        tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
+        metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
+        mode: "form",
+        fields: [],
       })
     }),
   )
@@ -164,6 +207,11 @@ describe("QuestionTool", () => {
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(QuestionTool.CancelledError)
+        expect(error).toHaveProperty("message", "The user dismissed this question")
+      }
     }),
   )
 })

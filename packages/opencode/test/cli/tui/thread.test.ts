@@ -4,7 +4,6 @@ import fs from "fs/promises"
 import path from "path"
 import yargs from "yargs"
 import { tmpdir } from "../../fixture/fixture"
-import { MiniLocalCommand } from "../../../src/cli/cmd/mini"
 import { TuiThreadCommand, resolveThreadDirectory } from "../../../src/cli/cmd/tui"
 import { cliIt } from "../../lib/cli-process"
 
@@ -38,24 +37,12 @@ describe("tui thread", () => {
     await check(".")
   })
 
-  test("resolves a relative mini project from PWD when cwd differs", async () => {
+  test("resolves a relative project from PWD when cwd differs", async () => {
     await using pwd = await tmpdir({ git: true })
     await using cwd = await tmpdir({ git: true })
 
     expect(resolveThreadDirectory(".", pwd.path, cwd.path)).toBe(pwd.path)
     expect(resolveThreadDirectory(undefined, pwd.path, cwd.path)).toBe(cwd.path)
-  })
-
-  test("parses supported mini --no-replay forms", async () => {
-    for (const option of ["--no-replay", "--no-replay=true", "--noReplay"]) {
-      const args = await yargs([])
-        .command({ ...MiniLocalCommand, handler: () => {} })
-        .exitProcess(false)
-        .parse([option, "--replay-limit", "10"])
-
-      expect(args.replay === false || args.noReplay === true).toBe(true)
-      expect(args.replayLimit).toBe(10)
-    }
   })
 
   test("preserves boolean negation for existing options", async () => {
@@ -82,24 +69,6 @@ describe("tui thread", () => {
 
       opencode.expectExit(result, 1)
       expect(result.stderr).not.toContain("opencode mini requires a TTY stdout")
-    }),
-  )
-
-  cliIt.live("routes local sessions through mini", ({ opencode }) =>
-    Effect.gen(function* () {
-      const result = yield* opencode.spawn(["mini"])
-
-      opencode.expectExit(result, 1)
-      expect(result.stderr).toContain("opencode mini requires a TTY stdout")
-    }),
-  )
-
-  cliIt.live("routes attached sessions through mini attach", ({ opencode }) =>
-    Effect.gen(function* () {
-      const result = yield* opencode.spawn(["mini", "attach", "http://127.0.0.1:1"])
-
-      opencode.expectExit(result, 1)
-      expect(result.stderr).toContain("opencode mini requires a TTY stdout")
     }),
   )
 

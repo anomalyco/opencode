@@ -2,10 +2,10 @@ export * as VariantPlugin from "./variant"
 
 import type { ModelV2Info } from "@opencode-ai/sdk/v2/types"
 import { Effect } from "effect"
-import { define } from "./internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
 export const Plugin = define({
-  id: "variant",
+  id: "opencode.variant",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((catalog) => {
       for (const record of catalog.provider.list()) {

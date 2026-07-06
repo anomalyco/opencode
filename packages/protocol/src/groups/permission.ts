@@ -134,4 +134,4 @@ export const makePermissionGroup = <
           }),
         ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "permissions", description: "Experimental permission routes." }))
+    .annotateMerge(OpenApi.annotations({ title: "permission", description: "Experimental permission routes." }))

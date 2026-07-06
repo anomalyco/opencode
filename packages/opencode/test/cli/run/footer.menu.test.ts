@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { FOOTER_MENU_ROWS, createFooterMenuState } from "@/cli/cmd/run/footer.menu"
+import { FOOTER_MENU_ROWS, createFooterMenuState } from "@opencode-ai/cli/mini/footer.menu"
 
 function mount(count: number, limit = FOOTER_MENU_ROWS) {
   let dispose!: () => void

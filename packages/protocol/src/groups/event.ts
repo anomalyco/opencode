@@ -55,7 +55,7 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
           }),
         ),
       )
-      .annotateMerge(OpenApi.annotations({ title: "events", description: "Experimental event stream routes." })),
+      .annotateMerge(OpenApi.annotations({ title: "event", description: "Experimental event stream routes." })),
   }
 }
 

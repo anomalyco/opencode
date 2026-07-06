@@ -24,7 +24,7 @@ function required<T>(value: T | undefined): T {
 
 describe("ZenmuxPlugin", () => {
   it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("zenmux"))),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.zenmux")),
   )
 
   it.effect("applies the exact legacy Zenmux headers", () =>

@@ -21,7 +21,7 @@ export type Output = typeof Output.Type
 export const toModelOutput = (output: Output) => JSON.stringify(output.todos, null, 2)
 
 export const Plugin = {
-  id: "core-todowrite-tool",
+  id: "opencode.tool.todowrite",
   effect: Effect.fn("TodoWriteTool.Plugin")(function* (ctx: PluginContext) {
     const todos = yield* SessionTodo.Service
     const permission = yield* PermissionV2.Service

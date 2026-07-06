@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { writeSessionOutput } from "@/cli/cmd/run/stream"
-import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
+import { writeSessionOutput } from "@opencode-ai/cli/mini/stream"
+import type { FooterApi, FooterEvent, StreamCommit } from "@opencode-ai/cli/mini/types"
 
 function footer() {
   const events: FooterEvent[] = []

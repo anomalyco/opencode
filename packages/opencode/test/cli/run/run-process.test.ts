@@ -363,11 +363,11 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
-    "applies a variant to the configured default model",
+    "applies a variant to the selected model",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.text("variant response")
-        const result = yield* opencode.spawn(["run", "--variant", "default", "use the default model"], {
+        const result = yield* opencode.spawn(["run", "--model", "test/test-model", "--variant", "default", "use the model"], {
           config: { ...testProviderConfig(llm.url), model: "test/test-model" },
         })
 

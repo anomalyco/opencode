@@ -224,7 +224,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({ capture, files, diff, preview, restore, checkout })
-  }),
+  }).pipe(Effect.withSpan("Snapshot.boot")),
 )
 
 export const node = makeLocationNode({

@@ -51,7 +51,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "messages",
+      title: "session",
       description: "Experimental message routes.",
     }),
   )

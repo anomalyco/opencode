@@ -59,8 +59,6 @@ export function host(overrides: Overrides = {}): PluginContext {
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
-      add: () => Effect.die("unused plugin.add"),
-      remove: () => Effect.die("unused plugin.remove"),
     },
     reference: overrides.reference ?? {
       list: () => Effect.die("unused reference.list"),

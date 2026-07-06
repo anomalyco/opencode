@@ -700,6 +700,23 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.messageID}`))
+        const revertedUsage = (yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.type, "assistant"),
+              gt(SessionMessageTable.seq, boundary.seq),
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        ).reduce((total, row) => {
+          const value = messageUsage(row)
+          if (value) addUsage(total, value)
+          return total
+        }, emptyUsage())
         yield* db
           .delete(SessionMessageTable)
           .where(
@@ -707,6 +724,7 @@ const layer = Layer.effectDiscard(
           )
           .run()
           .pipe(Effect.orDie)
+        yield* applyUsage(db, event.data.sessionID, revertedUsage, -1)
         yield* db
           .delete(SessionInputTable)
           .where(

@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
 export const KiloPlugin = define({
-  id: "kilo",
+  id: "opencode.provider.kilo",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {

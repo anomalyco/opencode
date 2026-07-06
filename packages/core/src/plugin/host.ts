@@ -273,8 +273,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     },
     plugin: {
       list: () => response(plugin.list()),
-      add: (input) => plugin.add(PluginV2.ID.make(input.id), input.effect),
-      remove: (id) => plugin.remove(PluginV2.ID.make(id)),
     },
     reference: {
       list: () => response(reference.list()),

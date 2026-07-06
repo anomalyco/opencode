@@ -14,9 +14,9 @@ const defaultStore = makeStore()
 
 /**
  * Holds the plugins an embedder (the `@opencode-ai/sdk-next` host) contributes,
- * so `PluginInternal` can add them on every Location boot through the ordinary
- * `ctx.plugin.add` seam — the same path `ConfigExternalPlugin` uses for plugins
- * discovered from config. A plugin registered after a Location has booted only
+ * so `PluginSupervisor` can add them on every Location boot through the ordinary
+ * generation path that `PluginSupervisor` uses for plugins discovered from
+ * config. A plugin registered after a Location has booted only
  * applies to Locations booted afterward, matching config-plugin timing;
  * embedders register at startup before creating Sessions.
  *

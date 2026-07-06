@@ -21,7 +21,7 @@ export const CommandGroup = HttpApiGroup.make("server.command")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "commands",
+      title: "command",
       description: "Experimental command routes.",
     }),
   )

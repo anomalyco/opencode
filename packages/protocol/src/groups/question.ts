@@ -30,7 +30,7 @@ export const makeQuestionGroup = <
           }),
         ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "questions", description: "Experimental question routes." }))
+    .annotateMerge(OpenApi.annotations({ title: "question", description: "Experimental question routes." }))
     // Effect applies group middleware only to endpoints already added; session endpoints use session placement below.
     .middleware(locationMiddleware)
     .add(
@@ -80,5 +80,5 @@ export const makeQuestionGroup = <
         ),
     )
     .annotateMerge(
-      OpenApi.annotations({ title: "session questions", description: "Experimental session question routes." }),
+      OpenApi.annotations({ title: "question", description: "Experimental session question routes." }),
     )

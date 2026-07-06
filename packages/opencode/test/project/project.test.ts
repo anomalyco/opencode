@@ -76,6 +76,7 @@ function projectV2FailureLayer() {
   return Layer.succeed(
     ProjectV2.Service,
     ProjectV2.Service.of({
+      list: () => Effect.succeed([]),
       directories: () => Effect.succeed([]),
       resolve: (input) =>
         Effect.succeed({

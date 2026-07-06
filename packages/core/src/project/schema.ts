@@ -13,6 +13,9 @@ export type Current = typeof Current.Type
 export const Directory = Project.Directory
 export type Directory = typeof Directory.Type
 
+export const Info = Project.Info
+export interface Info extends Schema.Schema.Type<typeof Info> {}
+
 export const DirectoriesInput = Project.DirectoriesInput
 export type DirectoriesInput = typeof DirectoriesInput.Type
 

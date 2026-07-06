@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Schema, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, Schema, Stream } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
+import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { EventV2 } from "@opencode-ai/core/event"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -15,6 +16,8 @@ import { testModel } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSecret") {}
 
 describe("PluginV2", () => {
   it.live("exposes public events through the plugin context", () =>
@@ -35,39 +38,15 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("waits for a plugin and returns immediately once active", () =>
-    Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
-      const id = PluginV2.ID.make("waited")
-      const waiting = yield* plugins.wait(id).pipe(Effect.forkChild)
-
-      yield* plugins.add(id, () => Effect.void)
-      yield* Fiber.join(waiting)
-      yield* plugins.wait(id)
-    }),
-  )
-
-  it.effect("propagates plugin activation defects to waiters", () =>
-    Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
-      const id = PluginV2.ID.make("failed")
-      const waiting = yield* plugins.wait(id).pipe(Effect.exit, Effect.forkChild)
-
-      const added = yield* plugins.add(id, () => Effect.die("boom")).pipe(Effect.exit)
-      const pending = yield* Fiber.join(waiting)
-      const later = yield* plugins.wait(id).pipe(Effect.exit)
-
-      expect(Exit.isFailure(added)).toBe(true)
-      expect(Exit.isFailure(pending)).toBe(true)
-      expect(Exit.isFailure(later)).toBe(true)
-    }),
-  )
-
-  it.effect("adds, replaces, and removes plugins", () =>
+  it.effect("skips identical generations and replaces changed plugin versions", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const agents = yield* AgentV2.Service
+      const events = yield* EventV2.Service
       let description = "first"
+      const updated = yield* events
+        .subscribe(Plugin.Event.Updated)
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
 
       const managed = () =>
         define({
@@ -82,16 +61,99 @@ describe("PluginV2", () => {
               .pipe(Effect.asVoid),
         })
 
-      yield* plugins.add(PluginV2.ID.make("managed"), managed().effect)
+      yield* plugins.activate([{ plugin: managed() }])
 
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
 
       description = "second"
-      yield* plugins.add(PluginV2.ID.make("managed"), managed().effect)
-      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
+      yield* plugins.activate([{ plugin: managed() }])
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
 
-      yield* plugins.remove(PluginV2.ID.make("managed"))
+      yield* plugins.activate([{ plugin: managed(), version: "next" }])
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
+      expect(yield* Fiber.join(updated)).toHaveLength(2)
+
+      yield* plugins.activate([])
       expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("rejects duplicate IDs before replacing the active generation", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const active = Plugin.ID.make("active")
+      const duplicate = "duplicate"
+      yield* plugins.activate([{ plugin: { id: active, effect: () => Effect.void } }])
+
+      const result = yield* plugins
+        .activate([
+          { plugin: { id: duplicate, effect: () => Effect.void } },
+          { plugin: { id: duplicate, effect: () => Effect.void } },
+        ])
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(result)).toBe(true)
+      expect(yield* plugins.list()).toEqual([{ id: active }])
+    }),
+  )
+
+  it.effect("retries the same generation after materialization fails", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      let fail = true
+      const plugin = define({
+        id: "retry",
+        effect: (ctx) =>
+          ctx.agent
+            .transform(() => {
+              if (fail) throw new Error("materialization failed")
+            })
+            .pipe(Effect.asVoid),
+      })
+
+      expect(Exit.isFailure(yield* plugins.activate([{ plugin }]).pipe(Effect.exit))).toBe(true)
+      fail = false
+      yield* plugins.activate([{ plugin }])
+
+      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("retry") }])
+    }),
+  )
+
+  it.effect("closes the previous generation in reverse order", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const closed: string[] = []
+      yield* plugins.activate(
+        ["first", "second"].map((id) => ({
+          plugin: {
+            id,
+            effect: () => Effect.addFinalizer(() => Effect.sync(() => closed.push(id))),
+          },
+        })),
+      )
+
+      yield* plugins.activate([])
+
+      expect(closed).toEqual(["second", "first"])
+    }),
+  )
+
+  it.effect("isolates plugins from ambient services", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      let visible = true
+      const plugin = define({
+        id: "isolated",
+        effect: () =>
+          Effect.serviceOption(Secret).pipe(
+            Effect.tap((secret) => Effect.sync(() => (visible = secret._tag === "Some"))),
+            Effect.asVoid,
+          ),
+      })
+
+      yield* plugins.activate([{ plugin }]).pipe(Effect.provideService(Secret, "secret"))
+
+      expect(visible).toBe(false)
     }),
   )
 
@@ -114,12 +176,12 @@ describe("PluginV2", () => {
             .pipe(Effect.orDie),
       })
 
-      yield* plugins.add(PluginV2.ID.make(plugin.id), plugin.effect)
+      yield* plugins.activate([{ plugin }])
       expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
         "plugin_tool",
       )
 
-      yield* plugins.remove(PluginV2.ID.make(plugin.id))
+      yield* plugins.activate([])
       expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).not.toContain(
         "plugin_tool",
       )
@@ -149,7 +211,7 @@ describe("PluginV2", () => {
           }),
       })
 
-      yield* plugins.add(PluginV2.ID.make(plugin.id), plugin.effect)
+      yield* plugins.activate([{ plugin }])
 
       expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toEqual([
         "plain",
@@ -201,7 +263,7 @@ describe("PluginV2", () => {
           }),
       })
 
-      yield* plugins.add(PluginV2.ID.make(plugin.id), plugin.effect)
+      yield* plugins.activate([{ plugin }])
 
       const materialized = yield* registry.materialize({ model: testModel })
       const settlement = yield* materialized.settle({

@@ -2,15 +2,71 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(ProjectV2.node))
+const it = testEffect(
+  Layer.merge(AppNodeBuilder.build(ProjectV2.node), AppNodeBuilder.build(Database.node)),
+)
+
+describe("ProjectV2.list", () => {
+  it.effect("returns complete projects ordered by recent update", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* ProjectV2.Service
+      yield* db
+        .insert(ProjectTable)
+        .values([
+          {
+            id: ProjectV2.ID.make("older"),
+            worktree: abs("/older"),
+            vcs: "git",
+            name: "Older",
+            icon_color: "#000000",
+            commands: { start: "bun dev" },
+            sandboxes: [abs("/older/sandbox")],
+            time_created: 1,
+            time_updated: 1,
+          },
+          {
+            id: ProjectV2.ID.make("newer"),
+            worktree: abs("/newer"),
+            sandboxes: [],
+            time_created: 2,
+            time_updated: 2,
+            time_initialized: 3,
+          },
+        ])
+        .run()
+
+      expect(yield* project.list()).toEqual([
+        {
+          id: ProjectV2.ID.make("newer"),
+          worktree: abs("/newer"),
+          time: { created: 2, updated: 2, initialized: 3 },
+          sandboxes: [],
+        },
+        {
+          id: ProjectV2.ID.make("older"),
+          worktree: abs("/older"),
+          vcs: "git",
+          name: "Older",
+          icon: { color: "#000000" },
+          commands: { start: "bun dev" },
+          time: { created: 1, updated: 1 },
+          sandboxes: [abs("/older/sandbox")],
+        },
+      ])
+    }),
+  )
+})
 
 function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
@@ -11,7 +11,7 @@ function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
 }
 
 export const AzurePlugin = define({
-  id: "azure",
+  id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
@@ -54,7 +54,7 @@ export const AzurePlugin = define({
 })
 
 export const AzureCognitiveServicesPlugin = define({
-  id: "azure-cognitive-services",
+  id: "opencode.provider.azure-cognitive-services",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME

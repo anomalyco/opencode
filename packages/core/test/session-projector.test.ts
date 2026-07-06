@@ -41,12 +41,15 @@ const assistantRow = (
   id: SessionMessage.ID,
   seq: number,
   time: { created: DateTime.Utc; completed?: DateTime.Utc } = { created },
+  usage?: Pick<SessionMessage.Assistant, "cost" | "tokens">,
 ) => {
   const {
     id: _,
     type,
     ...data
-  } = encodeMessage(SessionMessage.Assistant.make({ id, type: "assistant", agent: "build", model, content: [], time }))
+  } = encodeMessage(
+    SessionMessage.Assistant.make({ id, type: "assistant", agent: "build", model, content: [], time, ...usage }),
+  )
   return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
 }
 
@@ -67,12 +70,29 @@ describe("SessionProjector", () => {
           directory: "/project",
           title: "test",
           version: "test",
+          cost: 1.25,
+          tokens_input: 10,
+          tokens_output: 4,
+          tokens_reasoning: 2,
+          tokens_cache_read: 3,
+          tokens_cache_write: 1,
         })
         .run()
       const boundary = SessionMessage.ID.make("msg_boundary")
       yield* db
         .insert(SessionMessageTable)
-        .values([assistantRow(boundary, 1), assistantRow(SessionMessage.ID.make("msg_later"), 2)])
+        .values([
+          assistantRow(boundary, 1),
+          assistantRow(
+            SessionMessage.ID.make("msg_later"),
+            2,
+            { created },
+            {
+              cost: 1.25,
+              tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
+            },
+          ),
+        ])
         .run()
       yield* db
         .insert(SessionContextCheckpointTable)
@@ -101,6 +121,14 @@ describe("SessionProjector", () => {
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
       ).toEqual([boundary])
+      expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({
+        cost: 0,
+        tokens_input: 0,
+        tokens_output: 0,
+        tokens_reasoning: 0,
+        tokens_cache_read: 0,
+        tokens_cache_write: 0,
+      })
       // A committed revert resets the context checkpoint so the next turn re-initializes.
       expect(yield* db.select().from(SessionContextCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
     }),

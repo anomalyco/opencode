@@ -19,7 +19,7 @@ const addPlugin = Effect.fn(function* () {
 
 describe("KiloPlugin", () => {
   it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("kilo"))),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.kilo")),
   )
 
   it.effect("applies legacy referer headers only to kilo", () =>

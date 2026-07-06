@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 type MantleSDK = {
@@ -60,7 +60,7 @@ function selectMantleModel(sdk: MantleSDK, modelID: string) {
 }
 
 export const AmazonBedrockPlugin = define({
-  id: "amazon-bedrock",
+  id: "opencode.provider.amazon-bedrock",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {

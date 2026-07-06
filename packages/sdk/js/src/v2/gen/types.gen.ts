@@ -63,6 +63,7 @@ export type Event =
   | EventPermissionV2Asked
   | EventPermissionV2Replied
   | EventPluginAdded
+  | EventPluginUpdated
   | EventProjectDirectoriesUpdated
   | EventCommandUpdated
   | EventConfigUpdated
@@ -1323,6 +1324,13 @@ export type GlobalEvent = {
         type: "plugin.added"
         properties: {
           id: string
+        }
+      }
+    | {
+        id: string
+        type: "plugin.updated"
+        properties: {
+          [key: string]: unknown
         }
       }
     | {
@@ -3071,6 +3079,7 @@ export type V2Event =
   | PermissionV2Asked
   | PermissionV2Replied
   | PluginAdded
+  | PluginUpdated
   | ProjectDirectoriesUpdated
   | CommandUpdated
   | ConfigUpdated
@@ -5957,6 +5966,19 @@ export type PluginAdded = {
   }
 }
 
+export type PluginUpdated = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "plugin.updated"
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type ProjectDirectoriesUpdated = {
   id: string
   created: number
@@ -7271,6 +7293,14 @@ export type EventPluginAdded = {
   type: "plugin.added"
   properties: {
     id: string
+  }
+}
+
+export type EventPluginUpdated = {
+  id: string
+  type: "plugin.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -10380,6 +10410,21 @@ export type PluginAdded2 = {
   }
 }
 
+export type PluginUpdated2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "plugin.updated"
+  location?: LocationRef2
+  data:
+    | {
+        [key: string]: unknown
+      }
+    | Array<unknown>
+}
+
 export type ProjectDirectoriesUpdated2 = {
   id: string
   created: number
@@ -11192,6 +11237,7 @@ export type V2EventV2 =
   | PermissionV2Asked2
   | PermissionV2Replied2
   | PluginAdded2
+  | PluginUpdated2
   | ProjectDirectoriesUpdated2
   | CommandUpdated2
   | ConfigUpdated2
@@ -15500,6 +15546,8 @@ export type V2HealthGetResponses = {
    */
   200: {
     healthy: true
+    version: string
+    pid: number
   }
 }
 
@@ -19053,6 +19101,35 @@ export type V2VcsDiffResponses = {
 }
 
 export type V2VcsDiffResponse = V2VcsDiffResponses[keyof V2VcsDiffResponses]
+
+export type V2DebugLocationData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/debug/location"
+}
+
+export type V2DebugLocationErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+}
+
+export type V2DebugLocationError = V2DebugLocationErrors[keyof V2DebugLocationErrors]
+
+export type V2DebugLocationResponses = {
+  /**
+   * Success
+   */
+  200: Array<LocationRef2>
+}
+
+export type V2DebugLocationResponse = V2DebugLocationResponses[keyof V2DebugLocationResponses]
 
 export type PtyConnectData = {
   body?: never

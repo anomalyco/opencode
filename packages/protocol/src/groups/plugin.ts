@@ -21,7 +21,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "plugins",
+      title: "plugin",
       description: "Experimental plugin routes.",
     }),
   )

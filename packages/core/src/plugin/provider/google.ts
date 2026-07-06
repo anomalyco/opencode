@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
 export const GooglePlugin = define({
-  id: "google",
+  id: "opencode.provider.google",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {

@@ -1040,6 +1040,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  event.on("plugin.updated", (_evt, { directory, workspace }) => {
+    if (directory !== project.instance.directory()) return
+    if (workspace !== project.workspace.current()) return
+    toast.show({ variant: "success", message: "Plugins reloaded" })
+  })
+
   event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     route.navigate({

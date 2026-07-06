@@ -1,10 +1,22 @@
 import { Project } from "@opencode-ai/schema/project"
+import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const root = "/api/project"
 
 export const ProjectGroup = HttpApiGroup.make("server.project")
+  .add(
+    HttpApiEndpoint.get("project.list", root, {
+      success: Schema.Array(Project.Info),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.project.list",
+        summary: "List projects",
+        description: "List known projects.",
+      }),
+    ),
+  )
   .add(
     HttpApiEndpoint.get("project.current", `${root}/current`, {
       query: LocationQuery,
@@ -36,7 +48,7 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "projects",
+      title: "project",
       description: "Location-scoped project routes.",
     }),
   )

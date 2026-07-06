@@ -39,7 +39,7 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "providers",
+      title: "provider",
       description: "Experimental provider routes.",
     }),
   )

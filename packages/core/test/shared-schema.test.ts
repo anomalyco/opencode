@@ -22,14 +22,12 @@ import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Integration } from "@opencode-ai/schema/integration"
 import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
-import { Plugin } from "@opencode-ai/schema/plugin"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Reference } from "@opencode-ai/schema/reference"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Skill } from "@opencode-ai/schema/skill"
 import { AbsolutePath, DateTimeUtcFromMillis, optional, statics } from "@opencode-ai/schema/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { PluginV2 } from "@opencode-ai/core/plugin"
 
 test("Core reuses the canonical shared schemas", async () => {
   const [
@@ -129,8 +127,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [corePermission.Ruleset, Permission.Ruleset],
     [corePermissionV1.Event, PermissionV1.Event],
     [coreProjectCopy.Event, ProjectDirectories.Event],
-    [PluginV2.ID, Plugin.ID],
-    [PluginV2.Event, Plugin.Event],
     [corePty.Info, Pty.Info],
     [corePty.Event, Pty.Event],
     [coreProject.ID, Project.ID],

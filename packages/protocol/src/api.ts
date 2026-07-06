@@ -16,6 +16,7 @@ import type { Definition } from "@opencode-ai/schema/event"
 import { AgentGroup } from "./groups/agent.js"
 import { PluginGroup } from "./groups/plugin.js"
 import { HealthGroup } from "./groups/health.js"
+import { DebugGroup } from "./groups/debug.js"
 import { PtyGroup } from "./groups/pty.js"
 import { ShellGroup } from "./groups/shell.js"
 import { makeQuestionGroup } from "./groups/question.js"
@@ -81,6 +82,7 @@ type ApiGroups<
   Event extends HttpApiGroup.Any,
 > =
   | typeof HealthGroup
+  | typeof DebugGroup
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -165,6 +167,7 @@ const makeApiFromGroup = <
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(ProjectCopyGroup.middleware(locationMiddleware))
     .add(VcsGroup.middleware(locationMiddleware))
+    .add(DebugGroup)
     .annotateMerge(
       OpenApi.annotations({
         title: "opencode HttpApi",

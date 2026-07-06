@@ -49,7 +49,7 @@ export const toModelOutput = (output: ModelOutput) => {
 
 /** Grep leaf that defaults its filesystem root to the active Location. */
 export const Plugin = {
-  id: "core-grep-tool",
+  id: "opencode.tool.grep",
   effect: Effect.fn("GrepTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
     const ripgrep = yield* Ripgrep.Service

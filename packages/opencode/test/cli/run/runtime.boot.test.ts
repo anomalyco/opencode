@@ -1,17 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient } from "@opencode-ai/sdk/v2"
+import { OpenCode } from "@opencode-ai/client/promise"
 import type { Resolved } from "@opencode-ai/tui/config"
-import { TuiConfig } from "@/config/tui"
-import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@/cli/cmd/run/runtime.boot"
+import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@opencode-ai/cli/mini/runtime.boot"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 function ok<T>(data: T) {
-  return Promise.resolve({
-    data,
-    error: undefined,
-    request: new Request("https://opencode.test"),
-    response: new Response(),
-  })
+  return Promise.resolve(data)
 }
 
 function provider(id: string, name: string) {
@@ -108,23 +102,21 @@ describe("run runtime boot", () => {
   })
 
   test("reads footer keybinds from resolved keybind config", async () => {
-    spyOn(TuiConfig, "get").mockResolvedValue(
-      config({
-        leader: "ctrl+g",
-        bindings: {
-          commandList: ["ctrl+p"],
-          variantCycle: ["ctrl+t", "alt+t"],
-          interrupt: ["ctrl+c"],
-          historyPrevious: ["k"],
-          historyNext: ["j"],
-          inputClear: ["ctrl+l"],
-          inputSubmit: ["ctrl+s"],
-          inputNewline: ["alt+return"],
-        },
-      }),
-    )
+    const input = config({
+      leader: "ctrl+g",
+      bindings: {
+        commandList: ["ctrl+p"],
+        variantCycle: ["ctrl+t", "alt+t"],
+        interrupt: ["ctrl+c"],
+        historyPrevious: ["k"],
+        historyNext: ["j"],
+        inputClear: ["ctrl+l"],
+        inputSubmit: ["ctrl+s"],
+        inputNewline: ["alt+return"],
+      },
+    })
 
-    const result = await resolveRunTuiConfig()
+    const result = await resolveRunTuiConfig(input)
 
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
     expect(result.leader_timeout).toBe(2000)
@@ -139,9 +131,7 @@ describe("run runtime boot", () => {
   })
 
   test("falls back to default tui keymap config when config load fails", async () => {
-    spyOn(TuiConfig, "get").mockRejectedValue(new Error("boom"))
-
-    const result = await resolveRunTuiConfig()
+    const result = await resolveRunTuiConfig(Promise.reject(new Error("boom")))
 
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+x")
     expect(result.leader_timeout).toBe(2000)
@@ -157,31 +147,23 @@ describe("run runtime boot", () => {
   })
 
   test("preserves disabled leader from resolved tui config", async () => {
-    spyOn(TuiConfig, "get").mockResolvedValue(config({ leader: "none" }))
-
-    const result = await resolveRunTuiConfig()
+    const result = await resolveRunTuiConfig(config({ leader: "none" }))
 
     expect(result.keybinds.get("leader")).toEqual([])
   })
 
   test("reads diff style and falls back to auto", async () => {
-    spyOn(TuiConfig, "get").mockResolvedValue(config({ diff_style: "stacked" }))
-    await expect(resolveDiffStyle()).resolves.toBe("stacked")
+    await expect(resolveDiffStyle(config({ diff_style: "stacked" }))).resolves.toBe("stacked")
 
-    mock.restore()
-    spyOn(TuiConfig, "get").mockRejectedValue(new Error("boom"))
-    await expect(resolveDiffStyle()).resolves.toBe("auto")
+    await expect(resolveDiffStyle(Promise.reject(new Error("boom")))).resolves.toBe("auto")
   })
 
   test("loads v2 providers and models for model selector data", async () => {
-    const sdk = new OpencodeClient()
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const providers = [provider("openai", "OpenAI")]
     const models = [model("gpt-5", "openai", 128000, ["high", "minimal"])]
-    // The generated methods have conditional return types for throwOnError; these mocks represent the successful branch.
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
-    const providerList = spyOn(sdk.v2.provider, "list").mockImplementation(() => ok({ data: providers }))
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(sdk.v2.model, "list").mockImplementation(() => ok({ data: models }))
+    const providerList = spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
+    spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
 
     await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
       providers: [
@@ -230,19 +212,15 @@ describe("run runtime boot", () => {
           directory: "/workspace",
         },
       },
-      { throwOnError: true },
     )
   })
 
   test("loads context limits across v2 providers", async () => {
-    const sdk = new OpencodeClient()
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const providers = [provider("openai", "OpenAI"), provider("anthropic", "Anthropic")]
     const models = [model("gpt-5", "openai", 128000, ["high", "minimal"]), model("sonnet", "anthropic", 200000)]
-    // The generated methods have conditional return types for throwOnError; these mocks represent the successful branch.
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(sdk.v2.provider, "list").mockImplementation(() => ok({ data: providers }))
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(sdk.v2.model, "list").mockImplementation(() => ok({ data: models }))
+    spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
+    spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
 
     await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
       providers: [

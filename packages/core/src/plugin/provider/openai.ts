@@ -2,7 +2,6 @@ import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import type { Scope } from "effect"
 import { Credential } from "../../credential"
 import { EventV2 } from "../../event"
 import { InstallationVersion } from "../../installation/version"
@@ -159,7 +158,7 @@ const headless = {
 } satisfies IntegrationOAuthMethodRegistration
 
 export const OpenAIPlugin = define({
-  id: "openai",
+  id: "opencode.provider.openai",
   effect: Effect.fn(function* (ctx) {
     const events = yield* EventV2.Service
     const loading = Semaphore.makeUnsafe(1)
@@ -225,7 +224,7 @@ export const OpenAIPlugin = define({
       }),
     )
   }),
-} satisfies PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>)
+} satisfies PluginInternal.InternalPlugin)
 
 function headers(contentType: string) {
   return { "Content-Type": contentType, "User-Agent": `opencode/${InstallationVersion}` }

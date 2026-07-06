@@ -10,7 +10,4 @@ export function define(plugin: Plugin) {
   return plugin
 }
 
-export interface PluginDomain extends PluginApi {
-  readonly add: (plugin: Plugin) => Promise<void>
-  readonly remove: (id: string) => Promise<void>
-}
+export interface PluginDomain extends PluginApi {}

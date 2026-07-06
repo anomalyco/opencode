@@ -34,46 +34,53 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const configService = yield* Config.Service
-    const config = (yield* configService.entries())
-      .filter((entry): entry is Config.Document => entry.type === "document")
-      .flatMap((item) => item.info.watcher?.ignore ?? [])
     const publish = (update: { type: "create" | "update" | "delete"; path: string }) =>
       events.publish(FileSystem.Event.Changed, {
         file: update.path,
         event: update.type === "create" ? "add" : update.type === "update" ? "change" : "unlink",
       })
 
-    if (path.resolve(location.directory) !== path.resolve(os.homedir())) {
-      yield* watcher
-        .subscribe({
-          path: location.directory,
-          type: "directory",
-          ignore: [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)],
-        })
-        .pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
-    } else {
-      yield* Effect.logInfo("location watcher skipped home directory", { directory: location.directory })
-    }
+    yield* Effect.gen(function* () {
+      const config = (yield* configService.entries())
+        .filter((entry): entry is Config.Document => entry.type === "document")
+        .flatMap((item) => item.info.watcher?.ignore ?? [])
+      const home = path.resolve(location.directory) === path.resolve(os.homedir())
 
-    if (location.vcs?.type === "git") {
-      const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
-      const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
-      if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
-        const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
-          (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
-        )
+      if (!home) {
         yield* watcher
-          .subscribe({ path: vcs, type: "directory", ignore })
-          .pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
+          .subscribe({
+            path: location.directory,
+            type: "directory",
+            ignore: [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)],
+          })
+          .pipe(Stream.runForEach(publish), Effect.forkScoped)
       }
-    }
+      if (home) {
+        yield* Effect.logInfo("location watcher skipped home directory", { directory: location.directory })
+      }
+
+      if (location.vcs?.type === "git") {
+        const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
+        const vcs = resolved
+          ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
+          : undefined
+        if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
+          const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
+            (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
+          )
+          yield* watcher
+            .subscribe({ path: vcs, type: "directory", ignore })
+            .pipe(Stream.runForEach(publish), Effect.forkScoped)
+        }
+      }
+    }).pipe(
+      Effect.withSpan("LocationWatcher.start", { attributes: { directory: location.directory } }),
+      Effect.catchCause((cause) => Effect.logError("failed to init location watcher service", { cause })),
+      Effect.forkScoped,
+    )
 
     return Service.of({})
-  }).pipe(
-    Effect.catchCause((cause) =>
-      Effect.logError("failed to init location watcher service", { cause }).pipe(Effect.as(Service.of({}))),
-    ),
-  ),
+  }),
 )
 
 export const node = makeLocationNode({

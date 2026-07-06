@@ -1,10 +1,10 @@
 import { Effect } from "effect"
 import { pathToFileURL } from "url"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Npm } from "../../npm"
 
 export const DynamicProviderPlugin = define({
-  id: "dynamic-provider",
+  id: "opencode.provider.dynamic",
   effect: Effect.fn(function* (ctx) {
     const npm = yield* Npm.Service
     yield* ctx.aisdk.sdk(

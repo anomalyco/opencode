@@ -1,56 +1,164 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Intro"
+description: "Get started with OpenCode."
 ---
 
-## Setting up
+[**OpenCode**](https://opencode.ai) is an open source AI coding agent. It's available as a terminal-based interface or
+desktop app.
 
-Get your documentation site up and running in minutes.
+<img
+  src="https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/web/src/assets/lander/screenshot.png"
+  alt="OpenCode TUI with the opencode theme"
+/>
 
-<Card title="Start here" icon="rocket" href="/quickstart" horizontal>
-  Follow our three step quickstart guide.
-</Card>
+Let's get started.
 
-## Make it yours
+---
 
-Design a docs site that looks great and empowers your users.
+#### Prerequisites
 
-<Columns cols={2}>
-  <Card title="Edit locally" icon="pen-to-square" href="/development">
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card title="Customize your site" icon="palette" href="/essentials/settings">
-    Customize the design and colors of your site to match your brand.
-  </Card>
-  <Card title="Set up navigation" icon="map" href="/essentials/navigation">
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card title="API documentation" icon="terminal" href="/api-reference/introduction">
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+To use OpenCode in your terminal, you'll need:
 
-## Create beautiful pages
+1. A modern terminal emulator like:
+   - [Ghostty](https://ghostty.org), Linux and macOS
+   - [WezTerm](https://wezterm.org), cross-platform
+   - [Alacritty](https://alacritty.org), cross-platform
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux and macOS
+2. API keys for the LLM providers you want to use.
 
-Everything you need to create world-class documentation.
+---
 
-<Columns cols={2}>
-  <Card title="Write with MDX" icon="pen-fancy" href="/essentials/markdown">
-    Use MDX to style your docs pages.
-  </Card>
-  <Card title="Code samples" icon="code" href="/essentials/code">
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card title="Images" icon="image" href="/essentials/images">
-    Display images and other media.
-  </Card>
-  <Card title="Reusable snippets" icon="recycle" href="/essentials/reusable-snippets">
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Install
 
-## Need inspiration?
+<Note>The curl install script is not available in beta.</Note>
 
-<Card title="See complete examples" icon="stars" href="https://mintlify.com/customers">
-  Browse our showcase of exceptional documentation sites.
-</Card>
+You can also install it with the following package managers.
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install -g @opencode-ai/cli@next
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun install -g @opencode-ai/cli@next
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm install -g @opencode-ai/cli@next
+    ```
+  </Tab>
+  <Tab title="Yarn">
+    ```bash
+    yarn global add @opencode-ai/cli@next
+    ```
+  </Tab>
+</Tabs>
+
+<Note>During beta, the executable is named `opencode2`.</Note>
+
+### Homebrew
+
+Homebrew installation is not available in beta.
+
+### Arch Linux
+
+Arch Linux installation is not available in beta.
+
+### Windows
+
+<Tip>
+  For the best experience on Windows, use [Windows Subsystem for Linux
+  (WSL)](https://opencode.ai/docs/windows-wsl). It provides better performance and full compatibility with OpenCode's
+  features.
+</Tip>
+
+<Tabs>
+  <Tab title="chocolatey">
+    Chocolatey installation is not available in beta.
+  </Tab>
+  <Tab title="scoop">
+    Scoop installation is not available in beta.
+  </Tab>
+  <Tab title="mise">
+    Mise installation is not available in beta.
+  </Tab>
+  <Tab title="docker">
+    Docker installation is not available in beta.
+  </Tab>
+</Tabs>
+
+Standalone binaries are not available in beta.
+
+---
+
+## Connect
+
+With OpenCode you can use any LLM provider by configuring its API key.
+
+Run `/connect` in the TUI and select your provider.
+
+```text
+/connect
+```
+
+If you'd like easy access to all the best coding models you can try out
+[OpenCode Console](https://console.opencode.ai).
+
+You can also try [OpenCode Go](https://opencode.ai/go) a $10/month subscription
+plan that grants you access to the best open source models.
+
+See the current [provider directory](https://opencode.ai/docs/providers#directory).
+
+---
+
+## Usage
+
+You are now ready to use OpenCode in your project. Here are a few common workflows.
+
+### Ask questions
+
+Ask OpenCode to explain your codebase.
+
+<Tip>Use `@` to fuzzy search for files in the project.</Tip>
+
+```text
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+### Add features
+
+Ask OpenCode to add a feature by describing the desired behavior and providing relevant context.
+
+```text
+When a user deletes a note, flag it as deleted in the database.
+Create a screen that shows recently deleted notes.
+From this screen, the user can restore a note or permanently delete it.
+```
+
+<Tip>Give OpenCode plenty of context and examples.</Tip>
+
+### Undo changes
+
+Use `/undo` when a change isn't what you wanted.
+
+```text
+/undo
+```
+
+OpenCode reverts the changes and restores your original message so you can revise it. Run `/undo` multiple times to undo
+multiple changes, or use `/redo` to reapply them.
+
+```text
+/redo
+```
+
+---
+
+## Customize
+
+Make OpenCode your own by [picking a theme](https://opencode.ai/docs/themes), [customizing
+keybinds](https://opencode.ai/docs/keybinds), [configuring formatters](https://opencode.ai/docs/formatters), [creating
+commands](https://opencode.ai/docs/commands), or editing the [OpenCode config](https://opencode.ai/docs/config).

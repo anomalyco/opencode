@@ -1,13 +1,13 @@
 import os from "os"
 import { InstallationVersion } from "../../installation/version"
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 const providerID = ProviderV2.ID.make("cloudflare-workers-ai")
 
 export const CloudflareWorkersAIPlugin = define({
-  id: "cloudflare-workers-ai",
+  id: "opencode.provider.cloudflare-workers-ai",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(providerID)

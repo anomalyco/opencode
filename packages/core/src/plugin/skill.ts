@@ -2,7 +2,7 @@
 
 export * as SkillPlugin from "./skill"
 
-import { define } from "./internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
@@ -25,7 +25,7 @@ const REPORT_DESCRIPTION =
   "Use when the user wants to report an opencode issue or bug. Collect standard diagnostics, add user-specific reproduction context, and publish the issue with GitHub CLI."
 
 export const Plugin = define({
-  id: "skill",
+  id: "opencode.skill",
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics()
     yield* ctx.skill.transform((draft) => {

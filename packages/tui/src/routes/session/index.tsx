@@ -58,7 +58,7 @@ import { usePromptRef } from "../../context/prompt"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
-import { QuestionPrompt } from "./question"
+import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { sessionEpilogue } from "../../util/presentation"
 import { useTuiConfig } from "../../config"
@@ -181,15 +181,15 @@ export function Session() {
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
   })
-  const questions = createMemo(() => {
+  const forms = createMemo(() => {
     if (session()?.parentID) return []
-    return data.session.question.list(route.sessionID) ?? []
+    return data.session.form.list(route.sessionID) ?? []
   })
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
   })
-  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+  const disabled = createMemo(() => permissions().length > 0 || forms().length > 0)
 
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.type === "assistant" && x.time.completed)?.id
@@ -246,7 +246,7 @@ export function Session() {
       await Promise.all([
         data.session.refresh(sessionID),
         data.session.permission.refresh(sessionID),
-        data.session.question.refresh(sessionID),
+        data.session.form.refresh(sessionID),
       ])
       const info = data.session.get(sessionID)
       if (!info) {
@@ -258,7 +258,6 @@ export function Session() {
         navigate({ type: "home" })
         return
       }
-
       project.workspace.set(info.location.workspaceID)
       editor.reconnect(info.location.directory)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
@@ -939,8 +938,13 @@ export function Session() {
                   <Match when={permissions().length > 0}>
                     <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
                   </Match>
-                  <Match when={questions().length > 0}>
-                    <QuestionPrompt request={questions()[0]} directory={session()?.location.directory} />
+                  <Match when={forms().length > 0}>
+                    <Show when={forms()[0]?.id} keyed>
+                      {(_) => {
+                        const form = forms()[0]
+                        return form ? <FormPrompt form={form} /> : null
+                      }}
+                    </Show>
                   </Match>
                   <Match when={!disabled()}>
                     <pluginRuntime.Slot
@@ -1196,9 +1200,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const duration = createMemo(() =>
     props.message.time.completed ? props.message.time.completed - props.message.time.created : 0,
   )
+  const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
     <>
-      <Show when={props.message.error}>
+      <Show when={props.message.error && !interrupted()}>
         <box
           border={["left"]}
           paddingTop={1}
@@ -1211,7 +1216,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
-      <box paddingLeft={3} marginTop={props.message.error ? 1 : 0}>
+      <box paddingLeft={3} marginTop={props.message.error && !interrupted() ? 1 : 0}>
         <text>
           <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
@@ -1219,6 +1224,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <span style={{ fg: theme.textMuted }}> · {model()}</span>
           <Show when={duration()}>
             <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+          </Show>
+          <Show when={interrupted()}>
+            <span style={{ fg: theme.textMuted }}> · interrupted</span>
           </Show>
         </text>
       </box>

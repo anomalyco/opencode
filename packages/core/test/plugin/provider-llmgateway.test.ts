@@ -21,7 +21,7 @@ const addPlugin = Effect.fn(function* () {
 
 describe("LLMGatewayPlugin", () => {
   it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("llmgateway"))),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.llmgateway")),
   )
 
   it.effect("applies legacy referer headers only to enabled llmgateway", () =>

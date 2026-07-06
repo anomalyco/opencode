@@ -15,10 +15,10 @@ import {
   RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
-} from "@/cli/cmd/run/footer.command"
-import { RunFooterView } from "@/cli/cmd/run/footer.view"
-import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
-import { RUN_THEME_FALLBACK, type RunTheme } from "@/cli/cmd/run/theme"
+} from "@opencode-ai/cli/mini/footer.command"
+import { RunFooterView } from "@opencode-ai/cli/mini/footer.view"
+import { RunEntryContent } from "@opencode-ai/cli/mini/scrollback.writer"
+import { RUN_THEME_FALLBACK, type RunTheme } from "@opencode-ai/cli/mini/theme"
 import type {
   FooterState,
   FooterSubagentState,
@@ -30,10 +30,10 @@ import type {
   RunProvider,
   RunTuiConfig,
   StreamCommit,
-} from "@/cli/cmd/run/types"
-import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
-import { selectedCommand } from "@/cli/cmd/run/footer.prompt"
-import { RejectField } from "@/cli/cmd/run/footer.permission"
+} from "@opencode-ai/cli/mini/types"
+import { RunQuestionBody } from "@opencode-ai/cli/mini/footer.question"
+import { selectedCommand } from "@opencode-ai/cli/mini/footer.prompt"
+import { RejectField } from "@opencode-ai/cli/mini/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const tuiConfig = createTuiResolvedConfig()

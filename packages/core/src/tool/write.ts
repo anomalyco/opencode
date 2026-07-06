@@ -43,7 +43,7 @@ export const toModelOutput = (output: Output) =>
 // TODO: Add LSP notification and diagnostics after V2 LSP runtime exists.
 
 export const Plugin = {
-  id: "core-write-tool",
+  id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service

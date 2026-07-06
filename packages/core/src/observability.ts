@@ -8,6 +8,12 @@ import { OtlpSerialization } from "effect/unstable/observability"
 import { Logging } from "./observability/logging"
 import { Otlp } from "./observability/otlp"
 
+const local = Logger.layer(Logging.loggers(), { mergeWithExisting: false }).pipe(
+  Layer.provide(NodeFileSystem.layer),
+  Layer.orDie,
+  Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
+)
+
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const logs = Logger.layer([...Logging.loggers(), ...Otlp.loggers()], { mergeWithExisting: false }).pipe(
@@ -19,6 +25,6 @@ export const layer = Layer.unwrap(
     )
     return Layer.merge(logs, yield* Effect.promise(Otlp.tracingLayer))
   }),
-)
+).pipe(Layer.catchCause(() => local))
 
 export const node = LayerNode.make({ name: "observability", layer, deps: [] })

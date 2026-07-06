@@ -75,7 +75,7 @@ function oauth(http: HttpClient.HttpClient) {
 }
 
 export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | Scope.Scope>({
-  id: "opencode",
+  id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const events = yield* EventV2.Service
     const http = yield* HttpClient.HttpClient

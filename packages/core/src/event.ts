@@ -583,12 +583,32 @@ export const layerWith = (options?: LayerOptions) =>
           .pipe(Effect.orDie)
       }
 
+      const local = <A extends Payload>(stream: Stream.Stream<A>) =>
+        Stream.unwrap(
+          Effect.serviceOption(Location.Service).pipe(
+            Effect.map((location) =>
+              Option.match(location, {
+                onNone: () => stream,
+                onSome: (location) =>
+                  stream.pipe(
+                    Stream.filter(
+                      (event) =>
+                        !event.location ||
+                        (event.location.directory === location.directory &&
+                          event.location.workspaceID === location.workspaceID),
+                    ),
+                  ),
+              }),
+            ),
+          ),
+        )
+
       const subscribe = <D extends Definition>(definition: D): Stream.Stream<Payload<D>> =>
-        Stream.unwrap(getOrCreate(definition).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))).pipe(
+        local(Stream.unwrap(getOrCreate(definition).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))))).pipe(
           Stream.map((event) => event as Payload<D>),
         )
 
-      const streamLive = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.live)
+      const streamLive = (): Stream.Stream<Payload> => local(Stream.fromPubSub(pubsub.live))
 
       const readAfter = (
         aggregateID: string,

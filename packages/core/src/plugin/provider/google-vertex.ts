@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 function resolveProject(options: Record<string, any>) {
@@ -55,7 +55,7 @@ function authFetch(fetchWithRuntimeOptions?: unknown) {
 }
 
 export const GoogleVertexPlugin = define({
-  id: "google-vertex",
+  id: "opencode.provider.google-vertex",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
@@ -111,7 +111,7 @@ export const GoogleVertexPlugin = define({
 })
 
 export const GoogleVertexAnthropicPlugin = define({
-  id: "google-vertex-anthropic",
+  id: "opencode.provider.google-vertex-anthropic",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {

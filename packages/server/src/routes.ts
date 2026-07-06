@@ -3,6 +3,8 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventLogger } from "@opencode-ai/core/event-logger"
+import { Observability } from "@opencode-ai/core/observability"
 import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
@@ -31,6 +33,7 @@ import { sessionLocationLayer } from "./middleware/session-location"
 const applicationServices = LayerNode.group([
   Database.node,
   EventV2.node,
+  EventLogger.node,
   httpClient,
   ToolOutputStore.cleanupNode,
   Job.node,
@@ -81,7 +84,7 @@ function makeRoutes<AuthError, AuthServices>(
     : AppNodeBuilder.build(applicationServices, replacements)
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
-    Layer.provide(handlers),
+    Layer.provide(handlers.pipe(Layer.provide(serviceLayer))),
     Layer.provide(formLocationLayer),
     Layer.provide(sessionLocationLayer),
     Layer.provide(layer),
@@ -89,6 +92,7 @@ function makeRoutes<AuthError, AuthServices>(
     Layer.provide(schemaErrorLayer),
     Layer.provide(auth),
     Layer.provide(serviceLayer),
+    Layer.provide(Observability.layer),
   )
 }
 

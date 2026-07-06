@@ -8,7 +8,7 @@ import {
   permissionInfo,
   permissionReject,
   permissionRun,
-} from "@/cli/cmd/run/permission.shared"
+} from "@opencode-ai/cli/mini/permission.shared"
 
 function req(input: Partial<PermissionRequest> = {}): PermissionRequest {
   return {

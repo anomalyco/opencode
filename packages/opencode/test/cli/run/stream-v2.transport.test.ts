@@ -2,12 +2,12 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "node:url"
-import { OpencodeClient, type V2Event } from "@opencode-ai/sdk/v2"
-import { createSessionTransport } from "@/cli/cmd/run/stream-v2.transport"
-import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
+import { OpenCode, type EventSubscribeOutput, type MessageListOutput, type OpenCodeClient } from "@opencode-ai/client/promise"
+import { createSessionTransport } from "@opencode-ai/cli/mini/stream-v2.transport"
+import type { FooterApi, FooterEvent, StreamCommit } from "@opencode-ai/cli/mini/types"
 import { tmpdir } from "../../fixture/fixture"
 
-type RunV2Event = V2Event
+type RunV2Event = EventSubscribeOutput
 
 function feed() {
   const values: RunV2Event[] = []
@@ -41,16 +41,11 @@ function feed() {
 }
 
 function ok<T>(data: T) {
-  return Promise.resolve({
-    data,
-    error: undefined,
-    request: new Request("https://opencode.test"),
-    response: new Response(),
-  })
+  return Promise.resolve(data)
 }
 
 function connected(id = "evt_connected") {
-  return { id, created: 0, type: "server.connected", data: {} } satisfies RunV2Event
+  return { id, type: "server.connected", data: {} } satisfies RunV2Event
 }
 
 function durable(sessionID: string, seq = 0, version = 1) {
@@ -85,9 +80,7 @@ function footer() {
   return { api, commits, events }
 }
 
-type SessionMessages = NonNullable<
-  Awaited<ReturnType<OpencodeClient["v2"]["session"]["messages"]>>["data"]
->["data"][number][]
+type SessionMessages = MessageListOutput["data"]
 
 function sdk(input: {
   streams: ReturnType<typeof feed>[]
@@ -95,15 +88,10 @@ function sdk(input: {
   messages?: Record<string, SessionMessages>
   sessions?: Array<{ id: string; parentID?: string; title?: string; agent?: string; time: { updated: number } }>
 }) {
-  const client = new OpencodeClient()
+  const client = OpenCode.make({ baseUrl: "https://opencode.test" })
   let subscription = 0
-  spyOn(client.v2.event, "subscribe").mockImplementation(
-    () =>
-      Promise.resolve({ stream: input.streams[subscription++]?.stream ?? feed().stream }) as ReturnType<
-        typeof client.v2.event.subscribe
-      >,
-  )
-  spyOn(client.v2.session, "messages").mockImplementation((request) =>
+  spyOn(client.event, "subscribe").mockImplementation(() => input.streams[subscription++]?.stream ?? feed().stream)
+  spyOn(client.message, "list").mockImplementation((request) =>
     ok({
       data: input.messages?.[request.sessionID] ?? [
         {
@@ -118,14 +106,14 @@ function sdk(input: {
       cursor: {},
     }),
   )
-  spyOn(client.v2.session.permission, "list").mockImplementation(() => ok({ data: [] }))
-  spyOn(client.v2.session.question, "list").mockImplementation(() => ok({ data: [] }))
-  spyOn(client.v2.session, "active").mockImplementation(() => ok({ data: input.active?.() ?? {}, watermarks: {} }))
-  spyOn(client.v2.session, "switchAgent").mockImplementation(() => ok(undefined))
-  spyOn(client.v2.session, "switchModel").mockImplementation(() => ok(undefined))
+  spyOn(client.permission, "list").mockImplementation(() => ok([]))
+  spyOn(client.question, "list").mockImplementation(() => ok([]))
+  spyOn(client.session, "active").mockImplementation(() => ok({ data: input.active?.() ?? {}, watermarks: {} }))
+  spyOn(client.session, "switchAgent").mockImplementation(() => ok(undefined))
+  spyOn(client.session, "switchModel").mockImplementation(() => ok(undefined))
   // The generated methods have conditional return types for throwOnError; the
   // minimal shapes below are enough for family discovery and model fallback.
-  spyOn(client.v2.session, "list").mockImplementation((request) => {
+  spyOn(client.session, "list").mockImplementation((request) => {
     const parentID = request?.parentID
     return ok({
       location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
@@ -139,7 +127,7 @@ function sdk(input: {
         ) ?? [],
     }) as never
   })
-  spyOn(client.v2.model, "default").mockImplementation(
+  spyOn(client.model, "default").mockImplementation(
     () =>
       ok({
         location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
@@ -170,9 +158,7 @@ describe("V2 mini transport", () => {
     expect(ui.commits.map((item) => item.text)).toEqual(["previous prompt"])
 
     let admitted = false
-    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+    spyOn(client.session, "prompt").mockImplementation((request) => {
       const messageID = request.id ?? "msg_prompt"
       const prompt = request.prompt ?? { text: "" }
       admitted = true
@@ -185,7 +171,7 @@ describe("V2 mini transport", () => {
           delivery: "steer" as const,
           timeCreated: 2,
         },
-      })
+      }) as never
     })
 
     const turn = transport.runPromptTurn({
@@ -250,10 +236,8 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["prompt"]>[0] | undefined
-    // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
-    // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((input) => {
+    let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
+    spyOn(client.session, "prompt").mockImplementation((input) => {
       request = input
       queueMicrotask(() => {
         events.push({
@@ -282,7 +266,7 @@ describe("V2 mini transport", () => {
           delivery: "steer" as const,
           timeCreated: 2,
         },
-      })
+      }) as never
     })
 
     await transport.runPromptTurn({
@@ -344,10 +328,10 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["prompt"]>[0] | undefined
+    let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((input) => {
+    spyOn(client.session, "prompt").mockImplementation((input) => {
       request = input
       queueMicrotask(() => {
         events.push({
@@ -441,10 +425,10 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["prompt"]>[0] | undefined
+    let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((input) => {
+    spyOn(client.session, "prompt").mockImplementation((input) => {
       request = input
       queueMicrotask(() => {
         events.push({
@@ -561,7 +545,7 @@ describe("V2 mini transport", () => {
       },
     })
     let projected = false
-    spyOn(client.v2.session, "messages").mockImplementation(() =>
+    spyOn(client.message, "list").mockImplementation(() =>
       ok({
         data: projected
           ? [
@@ -589,7 +573,7 @@ describe("V2 mini transport", () => {
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+    spyOn(client.session, "prompt").mockImplementation((request) => {
       const messageID = request.id ?? "msg_prompt"
       const prompt = request.prompt ?? { text: "" }
       admitted = true
@@ -632,7 +616,7 @@ describe("V2 mini transport", () => {
         return active
       },
     })
-    spyOn(client.v2.session, "messages").mockImplementation(() =>
+    spyOn(client.message, "list").mockImplementation(() =>
       ok({
         data: projected
           ? [
@@ -661,7 +645,7 @@ describe("V2 mini transport", () => {
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+    spyOn(client.session, "prompt").mockImplementation((request) => {
       const messageID = request.id ?? "msg_prompt"
       const prompt = request.prompt ?? { text: "" }
       admitted = true
@@ -701,7 +685,7 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    spyOn(client.v2.session, "messages").mockImplementation(() =>
+    spyOn(client.message, "list").mockImplementation(() =>
       ok({
         data: [
           {
@@ -745,7 +729,7 @@ describe("V2 mini transport", () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })
-    spyOn(client.v2.session, "messages").mockImplementation(() =>
+    spyOn(client.message, "list").mockImplementation(() =>
       ok({
         data: [
           {
@@ -842,7 +826,7 @@ describe("V2 mini transport", () => {
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+    spyOn(client.session, "prompt").mockImplementation((request) => {
       const messageID = request.id ?? "msg_prompt"
       const prompt = request.prompt ?? { text: "" }
       admitted = true
@@ -850,7 +834,7 @@ describe("V2 mini transport", () => {
         data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
       })
     })
-    const interrupted = spyOn(client.v2.session, "interrupt").mockImplementation(() => ok(undefined))
+    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
 
     const turn = transport.runPromptTurn({
       agent: undefined,
@@ -886,21 +870,19 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    // The generated method has conditional return types for throwOnError; the test only needs the nested model field.
-    // @ts-expect-error minimal session shape is enough for this lookup
-    spyOn(client.v2.session, "get").mockImplementation(() => ok({ data: { model: undefined } }))
-    spyOn(client.v2.model, "default").mockImplementation(
+    spyOn(client.session, "get").mockImplementation(() => ok({ model: undefined }) as never)
+    spyOn(client.model, "default").mockImplementation(
       () =>
         ok({
           location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
           data: { id: "gpt-5", providerID: "openai" },
         }) as never,
     )
-    const switched = spyOn(client.v2.session, "switchModel").mockImplementation(() => ok(undefined))
+    const switched = spyOn(client.session, "switchModel").mockImplementation(() => ok(undefined))
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+    spyOn(client.session, "prompt").mockImplementation((request) => {
       const messageID = request.id ?? "msg_prompt"
       const prompt = request.prompt ?? { text: "" }
       admitted = true
@@ -938,7 +920,7 @@ describe("V2 mini transport", () => {
 
     expect(switched).toHaveBeenCalledWith(
       { sessionID: "ses_1", model: { providerID: "openai", id: "gpt-5", variant: "high" } },
-      expect.objectContaining({ throwOnError: true }),
+      { signal: undefined },
     )
     await transport.close()
   })
@@ -958,7 +940,7 @@ describe("V2 mini transport", () => {
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
-    spyOn(client.v2.session, "prompt").mockImplementation((request) => {
+    spyOn(client.session, "prompt").mockImplementation((request) => {
       const messageID = request.id ?? "msg_prompt"
       const prompt = request.prompt ?? { text: "" }
       admitted = true
@@ -966,7 +948,7 @@ describe("V2 mini transport", () => {
         data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
       })
     })
-    const interrupted = spyOn(client.v2.session, "interrupt").mockImplementation(() => ok(undefined))
+    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
     const controller = new AbortController()
     const turn = transport.runPromptTurn({
       agent: undefined,
@@ -1014,8 +996,8 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["shell"]>[0] | undefined
-    spyOn(client.v2.session, "shell").mockImplementation((input) => {
+    let request: Parameters<OpenCodeClient["session"]["shell"]>[0] | undefined
+    spyOn(client.session, "shell").mockImplementation((input) => {
       request = input
       queueMicrotask(() => {
         events.push({
@@ -1094,7 +1076,7 @@ describe("V2 mini transport", () => {
     })
     let started = false
     let aborted = false
-    spyOn(client.v2.session, "shell").mockImplementation(
+    spyOn(client.session, "shell").mockImplementation(
       (_input, options) =>
         new Promise((_, reject) => {
           started = true
@@ -1104,7 +1086,7 @@ describe("V2 mini transport", () => {
           })
         }) as never,
     )
-    const interrupted = spyOn(client.v2.session, "interrupt").mockImplementation(() => ok(undefined))
+    const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
 
     const turn = transport.runPromptTurn({
       agent: undefined,
@@ -1135,9 +1117,9 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["shell"]>[0] | undefined
+    let request: Parameters<OpenCodeClient["session"]["shell"]>[0] | undefined
     let complete!: () => void
-    spyOn(client.v2.session, "shell").mockImplementation((input) => {
+    spyOn(client.session, "shell").mockImplementation((input) => {
       request = input
       return new Promise<void>((resolve) => {
         complete = resolve
@@ -1414,8 +1396,8 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["command"]>[0] | undefined
-    spyOn(client.v2.session, "command").mockImplementation((input) => {
+    let request: Parameters<OpenCodeClient["session"]["command"]>[0] | undefined
+    spyOn(client.session, "command").mockImplementation((input) => {
       request = input
       queueMicrotask(() => {
         events.push({
@@ -1436,14 +1418,12 @@ describe("V2 mini transport", () => {
         })
       })
       return ok({
-        data: {
-          admittedSeq: 1,
-          id: input.id ?? "msg_cmd",
-          sessionID: "ses_1",
-          prompt: { text: "evaluated template" },
-          delivery: "steer" as const,
-          timeCreated: 2,
-        },
+        admittedSeq: 1,
+        id: input.id ?? "msg_cmd",
+        sessionID: "ses_1",
+        prompt: { text: "evaluated template" },
+        delivery: "steer" as const,
+        timeCreated: 2,
       })
     })
 
@@ -1471,8 +1451,8 @@ describe("V2 mini transport", () => {
       delivery: "steer",
     })
     // Selection rides the command payload; no separate client-side switch.
-    expect(client.v2.session.switchAgent).not.toHaveBeenCalled()
-    expect(client.v2.session.switchModel).not.toHaveBeenCalled()
+    expect(client.session.switchAgent).not.toHaveBeenCalled()
+    expect(client.session.switchModel).not.toHaveBeenCalled()
     await transport.close()
   })
 
@@ -1488,10 +1468,10 @@ describe("V2 mini transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    let request: Parameters<OpencodeClient["v2"]["session"]["skill"]>[0] | undefined
-    const command = spyOn(client.v2.session, "command")
-    const prompt = spyOn(client.v2.session, "prompt")
-    spyOn(client.v2.session, "skill").mockImplementation((input) => {
+    let request: Parameters<OpenCodeClient["session"]["skill"]>[0] | undefined
+    const command = spyOn(client.session, "command")
+    const prompt = spyOn(client.session, "prompt")
+    spyOn(client.session, "skill").mockImplementation((input) => {
       request = input
       queueMicrotask(() => {
         events.push({
@@ -1551,7 +1531,7 @@ describe("V2 mini transport", () => {
       footer: ui.api,
     })
     let sent = false
-    spyOn(client.v2.session, "skill").mockImplementation(() => {
+    spyOn(client.session, "skill").mockImplementation(() => {
       sent = true
       return ok(undefined) as never
     })
@@ -1721,20 +1701,18 @@ describe("V2 mini transport", () => {
         ],
       },
     })
-    spyOn(client.v2.session, "get").mockImplementation(() =>
+    spyOn(client.session, "get").mockImplementation(() =>
       ok({
-        data: {
-          id: "ses_child",
-          parentID: "ses_1",
-          projectID: "proj_1",
-          agent: "explore",
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          time: { created: 1, updated: 1 },
-          title: "Find files",
-          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
-        },
-      }),
+        id: "ses_child",
+        parentID: "ses_1",
+        projectID: "proj_1",
+        agent: "explore",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 1 },
+        title: "Find files",
+        location: { directory: "/tmp" },
+      }) as never,
     )
     const ui = footer()
     const transport = await createSessionTransport({
@@ -1857,7 +1835,7 @@ describe("V2 mini transport", () => {
     const hydration = new Promise<void>((resolve) => {
       releaseHydration = resolve
     })
-    spyOn(client.v2.session, "messages").mockImplementation(async (request) => {
+    spyOn(client.message, "list").mockImplementation(async (request) => {
       if (request.sessionID === "ses_child") {
         childHydrating = true
         await hydration
@@ -1927,7 +1905,7 @@ describe("V2 mini transport", () => {
     const retry = new Promise<void>((resolve) => {
       releaseRetry = resolve
     })
-    spyOn(client.v2.session, "messages").mockImplementation(async (request) => {
+    spyOn(client.message, "list").mockImplementation(async (request) => {
       if (request.sessionID !== "ses_child") return ok({ data: [], cursor: {} })
       childRequests++
       if (childRequests === 1) {
@@ -2006,7 +1984,7 @@ describe("V2 mini transport", () => {
     const hydration = new Promise<void>((resolve) => {
       releaseHydration = resolve
     })
-    spyOn(client.v2.session, "messages").mockImplementation(async (request) => {
+    spyOn(client.message, "list").mockImplementation(async (request) => {
       if (request.sessionID !== "ses_child") return ok({ data: [], cursor: {} })
       childHydrating = true
       await hydration
@@ -2119,21 +2097,19 @@ describe("V2 mini transport", () => {
     const gate = new Promise<void>((resolve) => {
       resolveGet = resolve
     })
-    spyOn(client.v2.session, "get").mockImplementation(async () => {
+    spyOn(client.session, "get").mockImplementation(async () => {
       await gate
       return ok({
-        data: {
-          id: "ses_child",
-          parentID: "ses_1",
-          projectID: "proj_1",
-          agent: "explore",
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          time: { created: 1, updated: 1 },
-          title: "Find files",
-          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
-        },
-      })
+        id: "ses_child",
+        parentID: "ses_1",
+        projectID: "proj_1",
+        agent: "explore",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 1 },
+        title: "Find files",
+        location: { directory: "/tmp" },
+      }) as never
     })
     const ui = footer()
     const transport = await createSessionTransport({
@@ -2178,21 +2154,19 @@ describe("V2 mini transport", () => {
     const gate = new Promise<void>((resolve) => {
       resolveGet = resolve
     })
-    spyOn(client.v2.session, "get").mockImplementation(async () => {
+    spyOn(client.session, "get").mockImplementation(async () => {
       await gate
       return ok({
-        data: {
-          id: "ses_child",
-          parentID: "ses_1",
-          projectID: "proj_1",
-          agent: "explore",
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          time: { created: 1, updated: 1 },
-          title: "Find files",
-          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
-        },
-      })
+        id: "ses_child",
+        parentID: "ses_1",
+        projectID: "proj_1",
+        agent: "explore",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 1 },
+        title: "Find files",
+        location: { directory: "/tmp" },
+      }) as never
     })
     const ui = footer()
     const transport = await createSessionTransport({
@@ -2286,10 +2260,7 @@ describe("V2 mini transport", () => {
       footer: ui.api,
     })
     const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
-    expect(client.v2.session.list).toHaveBeenCalledWith(
-      { parentID: "ses_1", limit: 100, order: "desc" },
-      { throwOnError: true },
-    )
+    expect(client.session.list).toHaveBeenCalledWith({ parentID: "ses_1", limit: 100, order: "desc" })
     expect(states.at(-1)?.tabs).toMatchObject([
       {
         sessionID: "ses_child_old",

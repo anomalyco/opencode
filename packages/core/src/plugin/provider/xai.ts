@@ -1,9 +1,9 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 export const XAIPlugin = define({
-  id: "xai",
+  id: "opencode.provider.xai",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {

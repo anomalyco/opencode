@@ -22,7 +22,7 @@ const addPlugin = Effect.fn(function* () {
 
 describe("OpenRouterPlugin", () => {
   it.effect("is registered so legacy OpenRouter behavior can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("openrouter"))),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.openrouter")),
   )
 
   it.effect("applies legacy referer headers only to openrouter", () =>

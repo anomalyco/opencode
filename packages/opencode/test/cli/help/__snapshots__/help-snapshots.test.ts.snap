@@ -41,34 +41,6 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mini --help 1`] = `
-"opencode mini
-
-start the minimal interactive interface
-
-Commands:
-  opencode mini [project]     start the minimal interactive interface                      [default]
-  opencode mini attach <url>  attach to a running opencode server with the minimal interface
-
-Positionals:
-  project  path to start opencode in                                                        [string]
-
-Options:
-  -h, --help          show help                                                            [boolean]
-  -v, --version       show version number                                                  [boolean]
-      --print-logs    print logs to stderr                                                 [boolean]
-      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure          run without external plugins                                         [boolean]
-  -m, --model         model to use in the format of provider/model                          [string]
-      --agent         agent to use                                                          [string]
-      --prompt        prompt to use                                                         [string]
-  -c, --continue      continue the last session                                            [boolean]
-  -s, --session       session id to continue                                                [string]
-      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
-      --no-replay     disable session history replay on resume and after resize            [boolean]
-      --replay-limit  cap visible replay to the newest N messages                           [number]"
-`;
-
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode attach --help 1`] = `
 "opencode attach <url>
 
@@ -100,33 +72,25 @@ Positionals:
   message  message to send                                                     [array] [default: []]
 
 Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure         run without external plugins                                          [boolean]
-      --command      the command to run, use message for args                               [string]
-  -c, --continue     continue the last session                                             [boolean]
-  -s, --session      session id to continue                                                 [string]
-      --fork         fork the session before continuing (requires --continue or --session) [boolean]
-  -m, --model        model to use in the format of provider/model                           [string]
-      --agent        agent to use                                                           [string]
-      --format       format: default (formatted) or json (raw JSON events)
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+  -c, --continue    continue the last session                                              [boolean]
+  -s, --session     session id to continue                                                  [string]
+      --fork        fork the session before continuing (requires --continue or --session)  [boolean]
+  -m, --model       model to use in the format of provider/model                            [string]
+      --agent       agent to use                                                            [string]
+      --format      format: default (formatted) or json (raw JSON events)
                                           [string] [choices: "default", "json"] [default: "default"]
-  -f, --file         file(s) to attach to message                                            [array]
-      --title        title for the session (uses truncated prompt if no value provided)     [string]
-      --attach       attach to a running opencode server (e.g., http://localhost:4096)      [string]
-  -p, --password     basic auth password (defaults to OPENCODE_SERVER_PASSWORD)             [string]
-  -u, --username     basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
-                                                                                            [string]
-      --dir          directory to run in, path on remote server if attaching                [string]
-      --port         port for the local server (defaults to random port if no value provided)
-                                                                                            [number]
-      --variant      model variant (provider-specific reasoning effort, e.g., high, max, minimal)
-                                                                                            [string]
-      --thinking     show thinking blocks                                                  [boolean]
-  -i, --interactive  run in direct interactive split-footer mode          [boolean] [default: false]
-      --auto         auto-approve permissions that are not explicitly denied (dangerous!)
+  -f, --file        file(s) to attach to message                                             [array]
+      --title       title for the session (uses truncated prompt if no value provided)      [string]
+      --server      connect to a running opencode server                                    [string]
+      --dir         directory to run in, or a path on the remote server                     [string]
+      --variant     model variant                                                           [string]
+      --thinking    show thinking blocks                                                   [boolean]
+      --auto        auto-approve permissions that are not explicitly denied (dangerous!)
                                                                           [boolean] [default: false]"
 `;
 
@@ -424,31 +388,6 @@ Options:
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
       --format      Output format                 [string] [choices: "json", "tsv"] [default: "tsv"]"
-`;
-
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mini attach --help 1`] = `
-"opencode mini attach <url>
-
-attach to a running opencode server with the minimal interface
-
-Positionals:
-  url  http://localhost:4096                                                     [string] [required]
-
-Options:
-  -h, --help          show help                                                            [boolean]
-  -v, --version       show version number                                                  [boolean]
-      --print-logs    print logs to stderr                                                 [boolean]
-      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure          run without external plugins                                         [boolean]
-      --dir           directory on the remote server                                        [string]
-  -p, --password      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)            [string]
-  -u, --username      basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
-                                                                                            [string]
-  -c, --continue      continue the last session                                            [boolean]
-  -s, --session       session id to continue                                                [string]
-      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
-      --no-replay     disable session history replay on resume and after resize            [boolean]
-      --replay-limit  cap visible replay to the newest N messages                           [number]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp list --help 1`] = `

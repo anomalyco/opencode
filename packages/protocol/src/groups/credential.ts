@@ -20,6 +20,7 @@ export const CredentialGroup = HttpApiGroup.make("server.credential")
         }),
       ),
   )
+  .annotateMerge(OpenApi.annotations({ title: "credential" }))
   .add(
     HttpApiEndpoint.delete("credential.remove", "/api/credential/:credentialID", {
       params: { credentialID: Credential.ID },

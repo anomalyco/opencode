@@ -55,7 +55,7 @@ type Prepared =
     })
 
 export const Plugin = {
-  id: "core-apply-patch-tool",
+  id: "opencode.tool.apply-patch",
   effect: Effect.fn("ApplyPatchTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service

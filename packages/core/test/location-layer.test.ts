@@ -1,7 +1,9 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Equal, Hash, Schema } from "effect"
+import { Config } from "@opencode-ai/schema/config"
+import { Plugin } from "@opencode-ai/schema/plugin"
+import { Context, DateTime, Effect, Equal, Hash, Schema, Stream } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -10,6 +12,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -27,6 +30,124 @@ import { ToolRegistry } from "../src/tool/registry"
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])))
 
 describe("LocationServiceMap", () => {
+  it.live("applies ordered plugin config operations during boot", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(dir.path, "opencode.json"), JSON.stringify({ plugins: ["-*", "opencode.agent"] })),
+          )
+          const plugins = yield* Effect.gen(function* () {
+            const plugins = yield* PluginV2.Service
+            yield* (yield* PluginSupervisor.Service).ready
+            return yield* plugins.list()
+          }).pipe(
+            Effect.scoped,
+            Effect.provide(
+              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
+            ),
+          )
+
+          expect(plugins.map((plugin) => plugin.id)).toEqual([Plugin.ID.make("opencode.agent")])
+        }),
+      ),
+    ),
+  )
+
+  it.live("reloads the plugin generation after config updates", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const file = path.join(dir.path, "opencode.json")
+          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
+          yield* Effect.gen(function* () {
+            const registry = yield* PluginV2.Service
+            const supervisor = yield* PluginSupervisor.Service
+            yield* supervisor.ready
+            expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
+
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.command"] })))
+            for (let attempt = 0; attempt < 100; attempt++) {
+              if ((yield* registry.list()).some((plugin) => plugin.id === "opencode.command")) break
+              yield* Effect.sleep("20 millis")
+            }
+
+            expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.command"])
+
+            yield* Effect.promise(() =>
+              fs.writeFile(
+                file,
+                JSON.stringify({
+                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts")],
+                }),
+              ),
+            )
+            for (let attempt = 0; attempt < 100; attempt++) {
+              if ((yield* registry.list()).length === 0) break
+              yield* Effect.sleep("20 millis")
+            }
+            expect(yield* registry.list()).toEqual([])
+
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
+            for (let attempt = 0; attempt < 100; attempt++) {
+              if ((yield* registry.list()).some((plugin) => plugin.id === "opencode.agent")) break
+              yield* Effect.sleep("20 millis")
+            }
+            expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
+          }).pipe(
+            Effect.scoped,
+            Effect.provide(
+              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
+            ),
+          )
+        }),
+      ),
+    ),
+  )
+
+  it.live("routes located events only to their location", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      (dirs) => Effect.promise(() => Promise.all(dirs.map((dir) => dir[Symbol.asyncDispose]())).then(() => undefined)),
+    ).pipe(
+      Effect.flatMap(([first, second]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const locations = yield* LocationServiceMap.Service
+            const events = yield* EventV2.Service
+            const firstRef = Location.Ref.make({ directory: AbsolutePath.make(first.path) })
+            const secondRef = Location.Ref.make({ directory: AbsolutePath.make(second.path) })
+            const firstContext = yield* locations.contextEffect(firstRef)
+            const secondContext = yield* locations.contextEffect(secondRef)
+            const received = { first: 0, second: 0 }
+            yield* events.subscribe(Config.Event.Updated).pipe(
+              Stream.runForEach(() => Effect.sync(() => received.first++)),
+              Effect.provideContext(firstContext),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* events.subscribe(Config.Event.Updated).pipe(
+              Stream.runForEach(() => Effect.sync(() => received.second++)),
+              Effect.provideContext(secondContext),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* Effect.sleep("10 millis")
+
+            yield* events.publish(Config.Event.Updated, {}, { location: firstRef })
+            yield* Effect.sleep("10 millis")
+
+            expect(received).toEqual({ first: 1, second: 0 })
+          }),
+        ),
+      ),
+    ),
+  )
+
   it.live("reuses cached services for constructed and decoded location refs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -64,7 +185,7 @@ describe("LocationServiceMap", () => {
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
               const registry = yield* ToolRegistry.Service
-              // Tool plugins register during the forked PluginInternal boot; wait for
+              // Tool plugins register during the forked PluginSupervisor boot; wait for
               // every expected tool rather than relying on batch ordering.
               yield* Effect.forEach(
                 [
@@ -257,7 +378,7 @@ describe("LocationServiceMap", () => {
                 })
                 .pipe(Effect.asVoid),
           })
-          yield* plugins.add(PluginV2.ID.make(reviewer.id), reviewer.effect)
+          yield* plugins.activate([{ plugin: reviewer }])
 
           expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",

@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
 export const GatewayPlugin = define({
-  id: "gateway",
+  id: "opencode.provider.gateway",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {

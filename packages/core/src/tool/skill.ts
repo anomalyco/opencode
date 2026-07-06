@@ -53,7 +53,7 @@ const unableToLoad = (name: string, error?: unknown) =>
   new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
 export const Plugin = {
-  id: "core-skill-tool",
+  id: "opencode.tool.skill",
   effect: Effect.fn("SkillTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
     const skills = yield* SkillV2.Service

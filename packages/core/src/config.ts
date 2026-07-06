@@ -102,7 +102,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     description: "Named local directories or Git repositories available as external context",
   }),
   plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
-    description: "Ordered external plugin packages to load",
+    description: "Ordered plugin enablement directives and external package declarations",
   }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}

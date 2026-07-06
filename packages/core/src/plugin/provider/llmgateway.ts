@@ -1,9 +1,9 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Integration } from "../../integration"
 
 export const LLMGatewayPlugin = define({
-  id: "llmgateway",
+  id: "opencode.provider.llmgateway",
   effect: Effect.fn(function* (ctx) {
     const integrations = yield* Integration.Service
     const configured = new Set((yield* integrations.list()).map((integration) => integration.id))

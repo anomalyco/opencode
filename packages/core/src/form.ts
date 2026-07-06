@@ -21,6 +21,7 @@ export type When = Form.When
 
 export const State = Form.State
 export type State = typeof State.Type
+export type TerminalState = Exclude<State, { readonly status: "pending" }>
 
 export const Answer = Form.Answer
 export type Answer = typeof Answer.Type
@@ -78,7 +79,7 @@ export interface ListInput {
 
 export interface Interface {
   readonly create: (input: CreateInput) => Effect.Effect<Info, AlreadyExistsError | InvalidFormError>
-  readonly ask: (input: CreateInput) => Effect.Effect<State, AlreadyExistsError | InvalidFormError>
+  readonly ask: (input: CreateInput) => Effect.Effect<TerminalState, AlreadyExistsError | InvalidFormError>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly state: (id: ID) => Effect.Effect<State, NotFoundError>
@@ -91,7 +92,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fo
 interface Entry {
   readonly form: Info
   readonly state: State
-  readonly deferred: Deferred.Deferred<State>
+  readonly deferred: Deferred.Deferred<TerminalState>
 }
 
 export const layer = Layer.effect(
@@ -141,7 +142,7 @@ export const layer = Layer.effect(
           const entry: Entry = {
             form,
             state: { status: "pending" },
-            deferred: yield* Deferred.make<State>(),
+            deferred: yield* Deferred.make<TerminalState>(),
           }
           yield* Cache.set(forms, id, entry)
           yield* events.publish(Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
@@ -185,7 +186,7 @@ export const layer = Layer.effect(
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
           const invalid = validateAnswer(entry.form, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
-          const next: State = { status: "answered", answer: input.answer }
+          const next: TerminalState = { status: "answered", answer: input.answer }
           yield* events.publish(Event.Replied, { id: input.id, sessionID: entry.form.sessionID, answer: input.answer })
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
@@ -198,7 +199,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const entry = yield* find(id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
-          const next: State = { status: "cancelled" }
+          const next: TerminalState = { status: "cancelled" }
           yield* events.publish(Event.Cancelled, { id, sessionID: entry.form.sessionID })
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)

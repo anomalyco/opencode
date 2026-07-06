@@ -1,6 +1,6 @@
 export * as ConfigReferencePlugin from "./reference"
 
-import { define } from "../../plugin/internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import path from "path"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
@@ -11,7 +11,7 @@ import { Global } from "../../global"
 import { Location } from "../../location"
 
 export const Plugin = define({
-  id: "core/config-reference",
+  id: "opencode.config.reference",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const location = yield* Location.Service

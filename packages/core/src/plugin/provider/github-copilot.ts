@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { ModelV2 } from "../../model"
-import { define } from "../internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
 
 function shouldUseResponses(modelID: string) {
@@ -12,7 +12,7 @@ function shouldUseResponses(modelID: string) {
 }
 
 export const GithubCopilotPlugin = define({
-  id: "github-copilot",
+  id: "opencode.provider.github-copilot",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(ProviderV2.ID.githubCopilot)

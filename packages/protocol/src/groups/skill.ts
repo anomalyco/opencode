@@ -21,7 +21,7 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "skills",
+      title: "skill",
       description: "Experimental skill routes.",
     }),
   )

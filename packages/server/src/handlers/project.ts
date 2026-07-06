@@ -6,6 +6,7 @@ import { Api } from "../api"
 
 export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handlers) =>
   handlers
+    .handle("project.list", () => Project.Service.use((project) => project.list()))
     .handle("project.current", () =>
       Location.Service.use((location) =>
         Effect.succeed({ id: location.project.id, directory: location.project.directory }),

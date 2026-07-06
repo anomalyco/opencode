@@ -40,21 +40,21 @@ describe("pretty signature rendering", () => {
       [
         "{",
         "  /** Repository owner */",
-        "  owner: string",
+        "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
-        "  after?: string",
+        "  after?: string,",
         "  /**",
         "   * Results per page",
         "   * @default 30",
         "   */",
-        "  perPage?: number",
+        "  perPage?: number,",
         "  /**",
         "   * Filter by labels",
         "   * @minItems 1",
         "   * @maxItems 10",
         "   */",
-        "  labels?: Array<string>",
-        '  state?: "open" | "closed"',
+        "  labels?: Array<string>,",
+        '  state?: "open" | "closed",',
         "}",
       ].join("\n"),
     )
@@ -83,18 +83,24 @@ describe("pretty signature rendering", () => {
       true,
     )
     expect(pretty).toBe(
-      ["{", "  /** Search filter */", "  filter?: {", "    /** Issue state */", "    state?: string", "  }", "}"].join(
-        "\n",
-      ),
+      [
+        "{",
+        "  /** Search filter */",
+        "  filter?: {",
+        "    /** Issue state */",
+        "    state?: string,",
+        "  },",
+        "}",
+      ].join("\n"),
     )
   })
 
   test("Effect Schema annotations become JSDoc on input and output fields", () => {
     expect(inputTypeScript(lookupOrder, true)).toBe(
-      ["{", "  /** Order identifier */", "  id: string", "  verbose?: boolean", "}"].join("\n"),
+      ["{", "  /** Order identifier */", "  id: string,", "  verbose?: boolean,", "}"].join("\n"),
     )
     expect(outputTypeScript(lookupOrder, true)).toBe(
-      ["{", "  /** Current order status */", "  status: string", "}"].join("\n"),
+      ["{", "  /** Current order status */", "  status: string,", "}"].join("\n"),
     )
   })
 
@@ -129,7 +135,7 @@ describe("pretty signature rendering", () => {
       { type: "object", properties: { size: { type: "number", default: 1n } } },
       true,
     )
-    expect(pretty).toBe(["{", "  size?: number", "}"].join("\n"))
+    expect(pretty).toBe(["{", "  size?: number,", "}"].join("\n"))
   })
 
   test("neutralizes */ inside descriptions so nothing closes the comment early", () => {
@@ -150,7 +156,7 @@ describe("pretty signature rendering", () => {
       true,
     )
     expect(pretty).toBe(
-      ["{", "  /**", "   * First line", "   *", "   * Second line", "   */", "  query?: string", "}"].join("\n"),
+      ["{", "  /**", "   * First line", "   *", "   * Second line", "   */", "  query?: string,", "}"].join("\n"),
     )
   })
 
@@ -235,12 +241,12 @@ describe("non-identifier property names render as quoted keys", () => {
     expect(jsonSchemaToTypeScript(rawSchema, true)).toBe(
       [
         "{",
-        '  "123"?: number',
-        '  "foo-bar"?: string',
-        '  "@type": string',
+        '  "123"?: number,',
+        '  "foo-bar"?: string,',
+        '  "@type": string,',
         "  /** Dotted name */",
-        '  "x.y"?: number',
-        "  plain?: boolean",
+        '  "x.y"?: number,',
+        "  plain?: boolean,",
         "}",
       ].join("\n"),
     )
@@ -259,7 +265,7 @@ describe("non-identifier property names render as quoted keys", () => {
     })
     expect(inputTypeScript(tool)).toContain('"foo-bar"?: string')
     expect(outputTypeScript(tool)).toBe('{ "content-type": string }')
-    expect(outputTypeScript(tool, true)).toBe(["{", '  "content-type": string', "}"].join("\n"))
+    expect(outputTypeScript(tool, true)).toBe(["{", '  "content-type": string,', "}"].join("\n"))
   })
 
   test("Effect Schema structs with non-identifier field names quote too", () => {
@@ -269,7 +275,7 @@ describe("non-identifier property names render as quoted keys", () => {
       run: () => Effect.succeed(null),
     })
     expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
-    expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string', "  plain?: number", "}"].join("\n"))
+    expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string,', "  plain?: number,", "}"].join("\n"))
   })
 })
 
@@ -308,10 +314,7 @@ describe("union schemas render every alternative", () => {
 
   test("allOf renders intersections with parenthesized union members", () => {
     const schema = {
-      allOf: [
-        { type: "object", properties: { id: { type: "string" } } },
-        { type: ["string", "null"] },
-      ],
+      allOf: [{ type: "object", properties: { id: { type: "string" } } }, { type: ["string", "null"] }],
     } as const
     expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
   })
@@ -321,7 +324,9 @@ describe("union schemas render every alternative", () => {
       "unknown",
     )
     expect(
-      jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }] }),
+      jsonSchemaToTypeScript({
+        allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }],
+      }),
     ).toBe("unknown")
     expect(
       jsonSchemaToTypeScript({
@@ -333,7 +338,7 @@ describe("union schemas render every alternative", () => {
   })
 })
 
-describe("pretty signatures in search results", () => {
+describe("JSDoc signatures in catalogs and search results", () => {
   const runtime = CodeMode.make({ tools: { github: { list_issues: listIssues }, orders: { lookup: lookupOrder } } })
 
   const search = async (query: string) => {
@@ -342,7 +347,7 @@ describe("pretty signatures in search results", () => {
     )
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
-    return result.value as { items: Array<{ path: string; signature: string }>; total: number }
+    return result.value as { items: Array<{ path: string; signature: string }>; remaining: number }
   }
 
   test("a raw JSON Schema (MCP-style) tool's result signature carries field JSDoc and tags", async () => {
@@ -352,21 +357,21 @@ describe("pretty signatures in search results", () => {
       [
         "tools.github.list_issues(input: {",
         "  /** Repository owner */",
-        "  owner: string",
+        "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
-        "  after?: string",
+        "  after?: string,",
         "  /**",
         "   * Results per page",
         "   * @default 30",
         "   */",
-        "  perPage?: number",
+        "  perPage?: number,",
         "  /**",
         "   * Filter by labels",
         "   * @minItems 1",
         "   * @maxItems 10",
         "   */",
-        "  labels?: Array<string>",
-        '  state?: "open" | "closed"',
+        "  labels?: Array<string>,",
+        '  state?: "open" | "closed",',
         "}): Promise<unknown>",
       ].join("\n"),
     )
@@ -380,26 +385,26 @@ describe("pretty signatures in search results", () => {
         [
           "tools.orders.lookup(input: {",
           "  /** Order identifier */",
-          "  id: string",
-          "  verbose?: boolean",
+          "  id: string,",
+          "  verbose?: boolean,",
           "}): Promise<{",
           "  /** Current order status */",
-          "  status: string",
+          "  status: string,",
           "}>",
         ].join("\n"),
       )
     }
   })
 
-  test("the inline catalog line for the same tool stays single-line compact", () => {
+  test("the inline catalog uses the same JSDoc signatures", async () => {
     const instructions = runtime.instructions()
-    expect(instructions).toContain(
-      '  - tools.github.list_issues(input: { owner: string; after?: string; perPage?: number; labels?: Array<string>; state?: "open" | "closed" }): Promise<unknown> // List issues in a repository',
-    )
-    expect(instructions).toContain(
-      "  - tools.orders.lookup(input: { id: string; verbose?: boolean }): Promise<{ status: string }> // Look up an order",
-    )
-    expect(instructions).not.toContain("/**")
+    const github = (await search("list issues repository")).items.find(
+      ({ path }) => path === "tools.github.list_issues",
+    )!
+    const orders = (await search("look up order")).items.find(({ path }) => path === "tools.orders.lookup")!
+    expect(instructions).toContain(`  - ${github.signature} // List issues in a repository`)
+    expect(instructions).toContain(`  - ${orders.signature} // Look up an order`)
+    expect(instructions).toContain("/** Repository owner */")
   })
 })
 
@@ -422,7 +427,7 @@ describe("non-identifier tool paths", () => {
     const instructions = runtime.instructions()
 
     expect(instructions).toContain(
-      'tools.context7["resolve-library-id"](input: { query: string; libraryName: string }): Promise<unknown>',
+      'tools.context7["resolve-library-id"](input: {\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
     )
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain("bracket notation and quotes are part of the path")

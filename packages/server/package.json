@@ -12,6 +12,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",

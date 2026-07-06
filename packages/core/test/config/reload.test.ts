@@ -7,7 +7,6 @@ import { CommandV2 } from "@opencode-ai/core/command"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { ConfigCommandPlugin } from "@opencode-ai/core/config/plugin/command"
-import { ConfigExternalPlugin } from "@opencode-ai/core/config/plugin/external"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
 import { ConfigReferencePlugin } from "@opencode-ai/core/config/plugin/reference"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
@@ -37,7 +36,7 @@ describe("config plugin reloads", () => {
       const references = yield* Reference.Service
       const skills = yield* SkillV2.Service
       const host = yield* PluginHost.make(plugins)
-      let entries: Config.Entry[] = [config("first", "First plugin")]
+      let entries: Config.Entry[] = [config("first")]
       const service = Config.Service.of({ entries: () => Effect.sync(() => entries) })
       const setup = <R>(effect: Effect.Effect<void, never, R>) =>
         effect.pipe(Effect.provideService(Config.Service, service))
@@ -47,7 +46,6 @@ describe("config plugin reloads", () => {
       yield* setup(ConfigSkillPlugin.Plugin.effect(host))
       yield* setup(ConfigReferencePlugin.Plugin.effect(host))
       yield* setup(ConfigProviderPlugin.Plugin.effect(host))
-      yield* setup(ConfigExternalPlugin.Plugin.effect(host))
 
       expect((yield* agents.get(AgentV2.ID.make("first")))?.description).toBe("First agent")
       expect((yield* commands.get("first"))?.description).toBe("First command")
@@ -56,9 +54,8 @@ describe("config plugin reloads", () => {
       ).toBe(true)
       expect((yield* references.list()).map((reference) => reference.name)).toEqual(["first"])
       expect(yield* catalog.provider.get(ProviderV2.ID.make("first"))).toBeDefined()
-      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("First plugin")
 
-      entries = [config("second", "Second plugin")]
+      entries = [config("second")]
       yield* events.publish(ConfigSchema.Event.Updated, {})
       yield* waitUntil(
         Effect.gen(function* () {
@@ -80,12 +77,11 @@ describe("config plugin reloads", () => {
       expect(
         (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/second"),
       ).toBe(true)
-      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("First plugin")
     }).pipe(Effect.provideService(Global.Service, Global.Service.of(Global.make()))),
   )
 })
 
-function config(name: string, pluginDescription?: string) {
+function config(name: string) {
   return new Config.Document({
     type: "document",
     path: document,
@@ -95,15 +91,6 @@ function config(name: string, pluginDescription?: string) {
       skills: [`/skills/${name}`],
       references: { [name]: `/references/${name}` },
       providers: { [name]: { models: { chat: { name: `${title(name)} model` } } } },
-      plugins:
-        pluginDescription === undefined
-          ? []
-          : [
-              {
-                package: "../plugin/fixtures/config-promise-plugin.ts",
-                options: { description: pluginDescription },
-              },
-            ],
     }),
   })
 }

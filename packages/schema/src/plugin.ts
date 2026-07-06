@@ -15,4 +15,8 @@ const Added = ephemeral({
   type: "plugin.added",
   schema: { id: ID },
 })
-export const Event = { Added, Definitions: inventory(Added) }
+const Updated = ephemeral({
+  type: "plugin.updated",
+  schema: {},
+})
+export const Event = { Added, Updated, Definitions: inventory(Added, Updated) }

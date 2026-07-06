@@ -11,7 +11,4 @@ export function define<R = Scope.Scope>(plugin: Plugin<R>) {
   return plugin
 }
 
-export interface PluginDomain extends PluginApi<unknown> {
-  readonly add: (plugin: Plugin) => Effect.Effect<void>
-  readonly remove: (id: string) => Effect.Effect<void>
-}
+export interface PluginDomain extends PluginApi<unknown> {}

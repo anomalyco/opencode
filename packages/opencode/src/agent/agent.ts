@@ -29,8 +29,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Reference } from "@opencode-ai/core/reference"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Location } from "@opencode-ai/core/location"
-import { PluginV2 } from "@opencode-ai/core/plugin"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -101,7 +101,7 @@ const layer = Layer.effect(
         const skillDirs = yield* skill.dirs()
         const referenceDirs = Object.keys(cfg.references ?? cfg.reference ?? {}).length
           ? yield* Effect.gen(function* () {
-              yield* (yield* PluginV2.Service).wait(PluginV2.ID.make("core/config-reference"))
+              yield* (yield* PluginSupervisor.Service).ready
               return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
             }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
           : []

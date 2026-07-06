@@ -450,20 +450,24 @@ export interface CredentialApi<E = never> {
   readonly remove: CredentialRemoveOperation<E>
 }
 
-type Endpoint12_0Request = Parameters<RawClient["server.project"]["project.current"]>[0]
-export type Endpoint12_0Input = { readonly location?: Endpoint12_0Request["query"]["location"] }
-export type Endpoint12_0Output = EffectValue<ReturnType<RawClient["server.project"]["project.current"]>>
-export type ProjectCurrentOperation<E = never> = (input?: Endpoint12_0Input) => Effect.Effect<Endpoint12_0Output, E>
+export type Endpoint12_0Output = EffectValue<ReturnType<RawClient["server.project"]["project.list"]>>
+export type ProjectListOperation<E = never> = () => Effect.Effect<Endpoint12_0Output, E>
 
-type Endpoint12_1Request = Parameters<RawClient["server.project"]["project.directories"]>[0]
-export type Endpoint12_1Input = {
-  readonly projectID: Endpoint12_1Request["params"]["projectID"]
-  readonly location?: Endpoint12_1Request["query"]["location"]
+type Endpoint12_1Request = Parameters<RawClient["server.project"]["project.current"]>[0]
+export type Endpoint12_1Input = { readonly location?: Endpoint12_1Request["query"]["location"] }
+export type Endpoint12_1Output = EffectValue<ReturnType<RawClient["server.project"]["project.current"]>>
+export type ProjectCurrentOperation<E = never> = (input?: Endpoint12_1Input) => Effect.Effect<Endpoint12_1Output, E>
+
+type Endpoint12_2Request = Parameters<RawClient["server.project"]["project.directories"]>[0]
+export type Endpoint12_2Input = {
+  readonly projectID: Endpoint12_2Request["params"]["projectID"]
+  readonly location?: Endpoint12_2Request["query"]["location"]
 }
-export type Endpoint12_1Output = EffectValue<ReturnType<RawClient["server.project"]["project.directories"]>>
-export type ProjectDirectoriesOperation<E = never> = (input: Endpoint12_1Input) => Effect.Effect<Endpoint12_1Output, E>
+export type Endpoint12_2Output = EffectValue<ReturnType<RawClient["server.project"]["project.directories"]>>
+export type ProjectDirectoriesOperation<E = never> = (input: Endpoint12_2Input) => Effect.Effect<Endpoint12_2Output, E>
 
 export interface ProjectApi<E = never> {
+  readonly list: ProjectListOperation<E>
   readonly current: ProjectCurrentOperation<E>
   readonly directories: ProjectDirectoriesOperation<E>
 }
@@ -862,6 +866,13 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
+export type Endpoint25_0Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.location"]>>
+export type DebugLocationOperation<E = never> = () => Effect.Effect<Endpoint25_0Output, E>
+
+export interface DebugApi<E = never> {
+  readonly location: DebugLocationOperation<E>
+}
+
 export interface AppApi<E = never> {
   readonly health: HealthApi<E>
   readonly location: LocationApi<E>
@@ -888,4 +899,5 @@ export interface AppApi<E = never> {
   readonly reference: ReferenceApi<E>
   readonly projectCopy: ProjectCopyApi<E>
   readonly vcs: VcsApi<E>
+  readonly debug: DebugApi<E>
 }

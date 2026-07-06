@@ -31,7 +31,7 @@ const Input = LocationInput
 const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 
 export const Plugin = {
-  id: "core-read-tool",
+  id: "opencode.tool.read",
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: PluginContext) {
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service

@@ -188,7 +188,7 @@ const Output = Schema.Struct({
 })
 
 export const Plugin = {
-  id: "core-websearch-tool",
+  id: "opencode.tool.websearch",
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
     const http = yield* HttpClient.HttpClient
     const config = yield* ConfigService

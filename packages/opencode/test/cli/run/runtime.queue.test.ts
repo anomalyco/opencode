@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { runPromptQueue } from "@/cli/cmd/run/runtime.queue"
-import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "@/cli/cmd/run/types"
+import { runPromptQueue } from "@opencode-ai/cli/mini/runtime.queue"
+import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "@opencode-ai/cli/mini/types"
 
 function footer() {
   const prompts = new Set<(input: RunPrompt) => void>()

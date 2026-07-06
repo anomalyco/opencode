@@ -276,6 +276,8 @@ import type {
   V2CredentialRemoveResponses,
   V2CredentialUpdateErrors,
   V2CredentialUpdateResponses,
+  V2DebugLocationErrors,
+  V2DebugLocationResponses,
   V2EventChangesErrors,
   V2EventChangesResponses,
   V2EventSubscribeErrors,
@@ -8036,6 +8038,20 @@ export class Vcs2 extends HeyApiClient {
   }
 }
 
+export class Debug extends HeyApiClient {
+  /**
+   * List loaded locations
+   *
+   * List locations currently loaded by the server.
+   */
+  public location<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2DebugLocationResponses, V2DebugLocationErrors, ThrowOnError>({
+      url: "/api/debug/location",
+      ...options,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -8155,6 +8171,11 @@ export class V2 extends HeyApiClient {
   private _vcs?: Vcs2
   get vcs(): Vcs2 {
     return (this._vcs ??= new Vcs2({ client: this.client }))
+  }
+
+  private _debug?: Debug
+  get debug(): Debug {
+    return (this._debug ??= new Debug({ client: this.client }))
   }
 }
 

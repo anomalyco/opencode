@@ -38,7 +38,7 @@ export const description = [
 ].join("\n")
 
 export const Plugin = {
-  id: "core-subagent-tool",
+  id: "opencode.tool.subagent",
   effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: PluginContext) {
     const runtime = yield* PluginRuntime.Service
     const agents = yield* AgentV2.Service

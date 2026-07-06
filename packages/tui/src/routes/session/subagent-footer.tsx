@@ -82,10 +82,10 @@ export function SubagentFooter() {
           </box>
           <box flexDirection="row" gap={2}>
             <box
-               onMouseOver={() => setHover("parent")}
-               onMouseOut={() => setHover(null)}
+              onMouseOver={() => setHover("parent")}
+              onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.parent")}
-               backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
                 Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>

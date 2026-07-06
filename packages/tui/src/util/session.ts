@@ -6,7 +6,7 @@ export function isDefaultTitle(title: string) {
 
 export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessage>, boundary?: string) {
   const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
-  if (boundary && boundaryIndex === -1) return
+  if (boundary && boundaryIndex === -1) return undefined
   return messages.findLast(
     (
       message,

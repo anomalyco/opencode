@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { RGBA, SyntaxStyle } from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
-import { RunScrollbackStream } from "@/cli/cmd/run/scrollback.surface"
-import { RUN_THEME_FALLBACK, type RunTheme } from "@/cli/cmd/run/theme"
-import type { StreamCommit } from "@/cli/cmd/run/types"
+import { RunScrollbackStream } from "@opencode-ai/cli/mini/scrollback.surface"
+import { RUN_THEME_FALLBACK, type RunTheme } from "@opencode-ai/cli/mini/theme"
+import type { StreamCommit } from "@opencode-ai/cli/mini/types"
 
 type ClaimedCommit = {
   snapshot: {

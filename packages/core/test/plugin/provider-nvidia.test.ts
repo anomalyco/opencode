@@ -19,7 +19,7 @@ const addPlugin = Effect.fn(function* () {
 
 describe("NvidiaPlugin", () => {
   it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("nvidia"))),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.nvidia")),
   )
 
   it.effect("applies NVIDIA tracking headers only to nvidia", () =>

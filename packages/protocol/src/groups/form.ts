@@ -144,4 +144,4 @@ export const makeFormGroup = <
           }),
         ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "forms", description: "Session form routes." }))
+    .annotateMerge(OpenApi.annotations({ title: "form", description: "Session form routes." }))

@@ -13,6 +13,7 @@ import { EventHandler } from "./handlers/event"
 import { AgentHandler } from "./handlers/agent"
 import { PluginHandler } from "./handlers/plugin"
 import { HealthHandler } from "./handlers/health"
+import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
 import { ShellHandler } from "./handlers/shell"
 import { QuestionHandler } from "./handlers/question"
@@ -27,6 +28,7 @@ import { VcsHandler } from "./handlers/vcs"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
+  DebugHandler,
   LocationHandler,
   AgentHandler,
   PluginHandler,

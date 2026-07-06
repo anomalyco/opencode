@@ -157,7 +157,7 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
-export type HealthGetOutput = { readonly healthy: true }
+export type HealthGetOutput = { readonly healthy: true; readonly version: string; readonly pid: number }
 
 export type LocationGetInput = {
   readonly location?: {
@@ -2457,6 +2457,17 @@ export type CredentialRemoveInput = {
 }
 
 export type CredentialRemoveOutput = void
+
+export type ProjectListOutput = ReadonlyArray<{
+  readonly id: string
+  readonly worktree: string
+  readonly vcs?: "git" | "hg"
+  readonly name?: string
+  readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+  readonly commands?: { readonly start?: string }
+  readonly time: { readonly created: number; readonly updated: number; readonly initialized?: number }
+  readonly sandboxes: ReadonlyArray<string>
+}>
 
 export type ProjectCurrentInput = {
   readonly location?: {
@@ -4978,6 +4989,14 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "plugin.updated"
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {}
+    }
+  | {
+      readonly id: string
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "project.directories.updated"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly projectID: string }
@@ -6003,3 +6022,5 @@ export type VcsDiffOutput = {
     readonly status?: "added" | "deleted" | "modified"
   }>
 }
+
+export type DebugLocationOutput = ReadonlyArray<{ readonly directory: string; readonly workspaceID?: string }>

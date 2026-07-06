@@ -1,4 +1,4 @@
-import { define } from "./internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import type { ModelV2Info } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 import { EventV2 } from "../event"
@@ -197,7 +197,7 @@ function applyModel(
 }
 
 export const ModelsDevPlugin = define({
-  id: "models-dev",
+  id: "opencode.models-dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service

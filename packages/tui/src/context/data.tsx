@@ -1,6 +1,8 @@
 import type {
   AgentV2Info,
   CommandV2Info,
+  FormFormInfo,
+  FormUrlInfo,
   IntegrationInfo,
   LocationRef,
   McpServer,
@@ -8,7 +10,6 @@ import type {
   PermissionSavedInfo,
   PermissionV2Request,
   ProviderV2Info,
-  QuestionV2Request,
   ReferenceInfo,
   SessionMessage,
   SessionMessageAssistant,
@@ -28,6 +29,8 @@ import { createSignal, onCleanup } from "solid-js"
 export type DataSessionStatus = "idle" | "running"
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
+
+export type FormInfo = FormFormInfo | FormUrlInfo
 
 type LocationData = {
   agent?: AgentV2Info[]
@@ -53,7 +56,8 @@ type Data = {
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessage[]>
     permission: Record<string, PermissionV2Request[]>
-    question: Record<string, QuestionV2Request[]>
+    // Pending forms keyed by session ID.
+    form: Record<string, FormInfo[]>
   }
   project: {
     permission: Record<string, PermissionSavedInfo[]>
@@ -87,7 +91,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         status: {},
         message: {},
         permission: {},
-        question: {},
+        form: {},
       },
       project: {
         permission: {},
@@ -100,7 +104,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
-    const sessionRefreshGeneration = new Map<string, number>()
+    const sessionUsageGeneration = new Map<string, number>()
+    const sessionUsageApplied = new Map<string, number>()
     let connectionGeneration = 0
     let statusChanges: Set<string> | undefined
     let bootstrapping: Promise<void> | undefined
@@ -372,7 +377,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.data.snapshot }
           })
           void result.session
-            .refresh(event.data.sessionID)
+            .refreshUsage(event.data.sessionID)
             .catch((error) => console.error("Failed to refresh session usage", error))
           break
         }
@@ -554,9 +559,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "info", event.data.sessionID, "revert", event.data.revert)
           break
         case "session.revert.cleared":
-        case "session.revert.committed":
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "revert", undefined)
+          break
+        case "session.revert.committed":
+          message.update(event.data.sessionID, (draft, index) => {
+            const position = index.get(event.data.messageID)
+            if (position === undefined) return
+            draft.splice(position + 1)
+            index.clear()
+            draft.forEach((item, itemIndex) => index.set(item.id, itemIndex))
+          })
+          if (store.session.info[event.data.sessionID])
+            setStore("session", "info", event.data.sessionID, "revert", undefined)
+          void Promise.all([
+            result.session.refreshUsage(event.data.sessionID),
+            result.session.message.refresh(event.data.sessionID),
+          ]).catch((error) => console.error("Failed to refresh session after revert", error))
           break
         case "session.compaction.delta":
           break
@@ -589,22 +608,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             ),
           )
           break
-        case "question.v2.asked":
-          if (store.session.question[event.data.sessionID]?.some((request) => request.id === event.data.id)) break
-          setStore("session", "question", event.data.sessionID, [
-            ...(store.session.question[event.data.sessionID] ?? []),
-            event.data,
+        case "form.created":
+          if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
+          setStore("session", "form", event.data.form.sessionID, [
+            ...(store.session.form[event.data.form.sessionID] ?? []),
+            mutable(event.data.form),
           ])
           break
-        case "question.v2.replied":
-        case "question.v2.rejected":
+        case "form.replied":
+        case "form.cancelled":
           setStore(
             "session",
-            "question",
+            "form",
             event.data.sessionID,
-            (store.session.question[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.requestID,
-            ),
+            (store.session.form[event.data.sessionID] ?? []).filter((form) => form.id !== event.data.id),
           )
           break
         case "shell.created":
@@ -682,11 +699,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           return store.session.status[sessionID] ?? "idle"
         },
         async refresh(sessionID: string) {
-          const generation = (sessionRefreshGeneration.get(sessionID) ?? 0) + 1
-          sessionRefreshGeneration.set(sessionID, generation)
+          setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
+          registerSession(sessionID)
+        },
+        async refreshUsage(sessionID: string) {
+          const generation = (sessionUsageGeneration.get(sessionID) ?? 0) + 1
+          sessionUsageGeneration.set(sessionID, generation)
           const info = mutable(await sdk.api.session.get({ sessionID }))
-          if (sessionRefreshGeneration.get(sessionID) !== generation) return
-          setStore("session", "info", sessionID, info)
+          if ((sessionUsageApplied.get(sessionID) ?? 0) > generation) return
+          sessionUsageApplied.set(sessionID, generation)
+          setStore("session", "info", sessionID, (current) =>
+            current ? { ...current, cost: info.cost, tokens: info.tokens } : info,
+          )
           registerSession(sessionID)
         },
         message: {
@@ -729,12 +753,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "permission", sessionID, mutable(await sdk.api.permission.list({ sessionID })))
           },
         },
-        question: {
+        form: {
           list(sessionID: string) {
-            return store.session.question[sessionID]
+            return store.session.form[sessionID]
           },
           async refresh(sessionID: string) {
-            setStore("session", "question", sessionID, mutable(await sdk.api.question.list({ sessionID })))
+            setStore("session", "form", sessionID, mutable(await sdk.api.form.list({ sessionID })))
           },
         },
       },
@@ -870,7 +894,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     async function bootstrap() {
       if (bootstrapping) return bootstrapping
-      const generation = new Map(sessionRefreshGeneration)
+      const usageApplied = new Map(sessionUsageApplied)
       bootstrapping = Promise.allSettled([
         sdk.api.session
           .list({
@@ -885,8 +909,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               "info",
               produce((draft) => {
                 for (const session of response.data) {
-                  if ((sessionRefreshGeneration.get(session.id) ?? 0) !== (generation.get(session.id) ?? 0)) continue
+                  const current = draft[session.id]
                   draft[session.id] = mutable(session)
+                  if ((sessionUsageApplied.get(session.id) ?? 0) === (usageApplied.get(session.id) ?? 0) || !current)
+                    continue
+                  draft[session.id].cost = current.cost
+                  draft[session.id].tokens = current.tokens
                 }
               }),
             )

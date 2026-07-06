@@ -567,7 +567,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     )
     .annotateMerge(
       OpenApi.annotations({
-        title: "sessions",
+        title: "session",
         description: "Experimental session routes.",
       }),
     )

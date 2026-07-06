@@ -8,7 +8,8 @@ await Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
       const transport = yield* Standalone.transport()
-      console.log(`${transport.pid} ${transport.url}`)
+      const response = yield* Effect.promise(() => fetch(new URL("/api/health", transport.url), { headers: transport.headers }))
+      console.log(`${transport.pid} ${transport.url} ${response.status}`)
       return yield* Effect.never
     }),
   ),

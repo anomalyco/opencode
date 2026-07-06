@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { footerWidthPolicy } from "@/cli/cmd/run/footer.width"
+import { footerWidthPolicy } from "@opencode-ai/cli/mini/footer.width"
 
 describe("run footer width", () => {
   test("preserves shared dialog and statusline breakpoints", () => {

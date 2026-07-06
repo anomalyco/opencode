@@ -1,7 +1,7 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
-import { define } from "./internal"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { Global } from "../global"
@@ -100,7 +100,7 @@ Rules:
 - If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
 
 export const Plugin = define({
-  id: "agent",
+  id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
     const location = yield* Location.Service
     const worktree = location.directory

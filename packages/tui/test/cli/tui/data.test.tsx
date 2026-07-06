@@ -179,7 +179,7 @@ test("refreshes usage without applying stale session snapshots", async () => {
         cursor: {},
       }),
     )
-    resolveSession[0]!(
+    resolveSession[0](
       json({
         data: {
           id: sessionID,
@@ -227,7 +227,14 @@ test("refreshes usage without applying stale session snapshots", async () => {
       },
     })
     await wait(() => resolveSession.length === 3)
-    resolveSession[2]!(
+    emitEvent(events, {
+      id: "evt_usage_rename",
+      created: 5,
+      type: "session.renamed",
+      durable: durable(sessionID, 5),
+      data: { sessionID, title: "Live title" },
+    })
+    resolveSession[2](
       json({
         data: {
           id: sessionID,
@@ -241,7 +248,7 @@ test("refreshes usage without applying stale session snapshots", async () => {
       }),
     )
     await wait(() => data.session.get(sessionID)?.cost === 1)
-    resolveSession[1]!(
+    resolveSession[1](
       json({
         data: {
           id: sessionID,
@@ -256,6 +263,188 @@ test("refreshes usage without applying stale session snapshots", async () => {
     )
     await Bun.sleep(20)
     expect(data.session.get(sessionID)?.cost).toBe(1)
+    expect(data.session.get(sessionID)?.title).toBe("Live title")
+
+    emitEvent(events, {
+      id: "evt_usage_6",
+      created: 6,
+      type: "session.step.ended",
+      durable: durable(sessionID, 6),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_usage_6",
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_usage_7",
+      created: 7,
+      type: "session.step.ended",
+      durable: durable(sessionID, 7),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_usage_7",
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    await wait(() => resolveSession.length === 5)
+    resolveSession[3](
+      json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 1.25,
+          tokens: { input: 12, output: 5, reasoning: 1, cache: { read: 1, write: 1 } },
+          time: { created: 0, updated: 0 },
+          title: "Stale title",
+          location: { directory },
+        },
+      }),
+    )
+    await wait(() => data.session.get(sessionID)?.cost === 1.25)
+    expect(data.session.get(sessionID)?.title).toBe("Live title")
+    resolveSession[4](
+      json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 1.25,
+          tokens: { input: 12, output: 5, reasoning: 1, cache: { read: 1, write: 1 } },
+          time: { created: 0, updated: 0 },
+          title: "Stale title",
+          location: { directory },
+        },
+      }),
+    )
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("truncates committed revert messages and refreshes usage", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_revert_usage"
+  let cost = 0
+  let tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname !== `/api/session/${sessionID}`) return
+    return json({
+      data: {
+        id: sessionID,
+        projectID: "proj_test",
+        cost,
+        tokens,
+        time: { created: 0, updated: 0 },
+        title: "Revert usage",
+        location: { directory },
+      },
+    })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.refresh(sessionID)
+    emitEvent(events, {
+      id: "evt_revert_boundary_started",
+      created: 1,
+      type: "session.step.started",
+      durable: durable(sessionID, 1),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_revert_boundary",
+        agent: "build",
+        model: { providerID: "provider", id: "model" },
+      },
+    })
+    cost = 0.5
+    tokens = { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } }
+    emitEvent(events, {
+      id: "evt_revert_boundary_ended",
+      created: 2,
+      type: "session.step.ended",
+      durable: durable(sessionID, 2),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_revert_boundary",
+        finish: "stop",
+        cost: 0.5,
+        tokens,
+      },
+    })
+    await wait(() => data.session.get(sessionID)?.cost === 0.5)
+
+    emitEvent(events, {
+      id: "evt_revert_later_started",
+      created: 3,
+      type: "session.step.started",
+      durable: durable(sessionID, 3),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_revert_later",
+        agent: "build",
+        model: { providerID: "provider", id: "model" },
+      },
+    })
+    cost = 0.75
+    tokens = { input: 8, output: 3, reasoning: 1, cache: { read: 1, write: 1 } }
+    emitEvent(events, {
+      id: "evt_revert_later_ended",
+      created: 4,
+      type: "session.step.ended",
+      durable: durable(sessionID, 4),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_revert_later",
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 3, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    await wait(() => data.session.get(sessionID)?.cost === 0.75)
+    emitEvent(events, {
+      id: "evt_revert_staged",
+      created: 5,
+      type: "session.revert.staged",
+      durable: durable(sessionID, 5),
+      data: { sessionID, revert: { messageID: "msg_revert_boundary" } },
+    })
+    await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_boundary")
+
+    cost = 0.5
+    tokens = { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } }
+    emitEvent(events, {
+      id: "evt_revert_committed",
+      created: 6,
+      type: "session.revert.committed",
+      durable: durable(sessionID, 6),
+      data: { sessionID, messageID: "msg_revert_boundary" },
+    })
+    await wait(() => data.session.get(sessionID)?.cost === 0.5)
+    expect(data.session.message.ids(sessionID)).toEqual(["msg_revert_boundary"])
+    expect(data.session.get(sessionID)?.revert).toBeUndefined()
+    expect(data.session.get(sessionID)?.tokens).toEqual(tokens)
   } finally {
     app.renderer.destroy()
   }
@@ -982,9 +1171,12 @@ test("adds and dismisses permission requests from live events", async () => {
   }
 })
 
-test("adds and dismisses question requests from live events", async () => {
+test("adds, dismisses, and refreshes form requests", async () => {
   const events = createEventStream()
-  const calls = createFetch(undefined, events)
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/session/ses_1/form") return
+    return json({ data: [{ id: "frm_remote", sessionID: "ses_1", mode: "form", fields: [] }] })
+  }, events)
   let data!: ReturnType<typeof useData>
 
   function Probe() {
@@ -1007,43 +1199,43 @@ test("adds and dismisses question requests from live events", async () => {
   try {
     await wait(() => data.connection.status() === "connected")
     emitEvent(events, {
-      id: "evt_question_asked_1",
+      id: "evt_form_created_1",
       created: 0,
-      type: "question.v2.asked",
-      data: {
-        id: "que_1",
-        sessionID: "ses_1",
-        questions: [{ question: "Which option?", header: "Option", options: [], multiple: false }],
-      },
+      type: "form.created",
+      data: { form: { id: "frm_1", sessionID: "ses_1", mode: "form", fields: [] } },
     })
     emitEvent(events, {
-      id: "evt_question_asked_2",
-      created: 0,
-      type: "question.v2.asked",
-      data: {
-        id: "que_2",
-        sessionID: "ses_1",
-        questions: [{ question: "Which environment?", header: "Environment", options: [], multiple: false }],
-      },
+      id: "evt_form_created_duplicate",
+      created: 1,
+      type: "form.created",
+      data: { form: { id: "frm_1", sessionID: "ses_1", mode: "form", fields: [] } },
     })
-    await wait(() => data.session.question.list("ses_1")?.length === 2)
+    await wait(() => data.session.form.list("ses_1")?.length === 1)
 
     emitEvent(events, {
-      id: "evt_question_replied_1",
-      created: 0,
-      type: "question.v2.replied",
-      data: { sessionID: "ses_1", requestID: "que_1", answers: [["First"]] },
+      id: "evt_form_replied_1",
+      created: 2,
+      type: "form.replied",
+      data: { sessionID: "ses_1", id: "frm_1", answer: {} },
     })
-    await wait(() => data.session.question.list("ses_1")?.length === 1)
-    expect(data.session.question.list("ses_1")?.[0]?.id).toBe("que_2")
+    await wait(() => data.session.form.list("ses_1")?.length === 0)
 
     emitEvent(events, {
-      id: "evt_question_rejected_2",
-      created: 0,
-      type: "question.v2.rejected",
-      data: { sessionID: "ses_1", requestID: "que_2" },
+      id: "evt_form_created_2",
+      created: 3,
+      type: "form.created",
+      data: { form: { id: "frm_2", sessionID: "ses_1", mode: "form", fields: [] } },
     })
-    await wait(() => data.session.question.list("ses_1")?.length === 0)
+    emitEvent(events, {
+      id: "evt_form_cancelled_2",
+      created: 4,
+      type: "form.cancelled",
+      data: { sessionID: "ses_1", id: "frm_2" },
+    })
+    await wait(() => data.session.form.list("ses_1")?.length === 0)
+
+    await data.session.form.refresh("ses_1")
+    expect(data.session.form.list("ses_1")?.map((form) => form.id)).toEqual(["frm_remote"])
   } finally {
     app.renderer.destroy()
   }
