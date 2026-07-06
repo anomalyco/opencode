@@ -662,6 +662,37 @@ rm -f "$HOME/Library/Application Support/opencode/auth.json"
 
 This forces the gate to re-prompt on the next launch.
 
+### Validation on read
+
+`checkExistingAuth()` (line 574) not only verifies the file structure — it now
+**validates the refresh token** against the Microsoft Entra ID token endpoint
+before accepting it:
+
+1. POST `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` with
+   `grant_type=refresh_token`.
+2. **200 OK** → updates stored tokens with the fresh `access_token` and returns
+   `true`.
+3. **400 invalid_grant** → continues to the next candidate path (token may have
+   been revoked).
+4. **Network error** → returns `true` leniently — the token might work when
+   connectivity is restored.
+
+This prevents stale or revoked tokens from silently failing later.
+
+### Windows XDG fallback
+
+On some Windows packaged builds the `xdg-basedir` package resolves data paths
+to `~/.local/share` instead of `%APPDATA%` (observed when `env-paths`
+resolution fails inside the bundled asar). The `checkExistingAuth()` function
+scans **all** candidate locations:
+
+- `XDG_DATA_HOME` env var (if set)
+- `%APPDATA%` (Windows) / `~/Library/Application Support` (macOS)
+- `~/.local/share` (XDG fallback for all platforms)
+
+This ensures the login gate finds the auth file regardless of where
+`xdg-basedir` decided to store it.
+
 ---
 
 ## See also
