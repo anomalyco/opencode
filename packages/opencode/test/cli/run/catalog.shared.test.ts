@@ -59,34 +59,21 @@ describe("run catalog shared", () => {
         {
           id: "openai",
           name: "OpenAI",
-          api: { type: "native", settings: {} },
-          request: { settings: {}, headers: {}, body: {} },
+          package: "",
         },
       ],
       [
         {
           id: "gpt-5",
+          modelID: "openai",
           providerID: "openai",
           name: "Little Frank",
-          api: { id: "openai", type: "native", settings: {} },
           capabilities: {
             tools: true,
             input: ["text"],
             output: ["text"],
           },
-          request: {
-            settings: {},
-            headers: {},
-            body: {},
-          },
-          variants: [
-            {
-              id: "high",
-              settings: {},
-              headers: {},
-              body: {},
-            },
-          ],
+          variants: [{ id: "high" }],
           time: {
             released: 1,
           },
