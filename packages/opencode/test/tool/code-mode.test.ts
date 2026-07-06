@@ -124,7 +124,7 @@ describe("code mode execute", () => {
       },
       ["weather"],
     )
-    expect(description).toContain("tools.weather.current(input: {\n  city: string\n}): Promise<{\n  tempC: number\n}>")
+    expect(description).toContain("tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n}>")
   })
 
   test("the static base description carries no catalog; the registry appends it", async () => {
@@ -150,7 +150,7 @@ describe("code mode execute", () => {
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
     expect(description).toContain(
-      "tools.github.create_issue(input: {\n  title: string\n  body?: string\n}): Promise<unknown>",
+      "tools.github.create_issue(input: {\n  title: string,\n  body?: string,\n}): Promise<unknown>",
     )
     expect(description).toContain("tools.github.list_issues(")
     expect(description).toContain("tools.linear.search(")
@@ -180,7 +180,7 @@ describe("code mode execute", () => {
       ),
     })
     expect(description).toContain(
-      "tools.weather.current(input: {\n  city: string\n}): Promise<{\n  tempC: number\n  summary?: string\n}>",
+      "tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n  summary?: string,\n}>",
     )
   })
 
@@ -208,9 +208,11 @@ describe("code mode execute", () => {
     expect(description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
     expect(description).toContain("- zeta (1 tool)\n")
     expect(description).toContain(
-      "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string\n}): Promise<unknown>",
+      "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string,\n}): Promise<unknown>",
     )
     expect(description).toContain("tools.$codemode.search(")
+    expect(description).toContain("limit?: number, offset?: number")
+    expect(description).toContain("remaining: number; next: { offset: number } | null")
     expect(description).toContain("1. If the exact signature is not listed below, first search:")
     expect(description).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
@@ -221,17 +223,18 @@ describe("code mode execute", () => {
 
     const tool = await build(tools, ["alpha", "zeta"])
     const out = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3 })" }, ctx),
+      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3, offset: 0 })" }, ctx),
     )
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toContain("tools.zeta.only_tool")
+    expect(result).toMatchObject({ remaining: 0, next: null })
     expect(result.items[0].signature).toContain("tools.")
     const signature = result.items.find((i: any) => i.path === "tools.zeta.only_tool").signature
     expect(signature).toContain("tools.zeta.only_tool(input: {\n")
     expect(signature).toContain("  /** Subject to look up */\n  topic: string")
     expect(description).toContain("/** Subject to look up */")
     expect(out.metadata.toolCalls).toEqual([
-      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3 } },
+      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3, offset: 0 } },
     ])
   })
 

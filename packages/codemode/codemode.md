@@ -65,8 +65,9 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 ### Discovery / search
 
 - **Search only - no separate `describe`.** `tools.$codemode.search({ query?, namespace?,
-limit? })` over the final tool tree, owned by this package.
-- Search result item shape: `{ path, description, signature }` in an `{ items, total }`
+limit?, offset? })` over the final tool tree, owned by this package.
+- Search result item shape: `{ path, description, signature }` in an
+  `{ items, remaining, next }`
   wrapper. The `signature` string embeds the full input/output TypeScript types and uses the
   same pretty, JSDoc-annotated multiline form in inline catalogs and search results, so
   per-field schema `description`s and constraints (`@default`, `@format`, `@deprecated`,
@@ -76,6 +77,8 @@ limit? })` over the final tool tree, owned by this package.
   deviated. Result `path`s render a JavaScript expression rooted at `tools` (for example
   `tools.github.list_issues` or `tools.context7["resolve-library-id"]`) so each is directly
   usable as the call site; the internal `ToolDescription.path` stays unprefixed.
+- `offset` is zero-based and defaults to 0. `remaining` counts matches after the current page;
+  `next` is `{ offset }` when another page exists and `null` on the final page.
 - Default limit: **10** (done). Exact-path lookup goes through search too: a query equal to a
   canonical tool path, `tools.`-prefixed path, or rendered JavaScript expression returns that
   tool alone (done).
@@ -251,7 +254,7 @@ output limit; return a smaller value]`; logs keep leading lines within the remai
     truncation is now the only result-size mechanism.)
 - **Search polish**: default limit 12 -> **10** (`defaultSearchLimit`); exact-path lookup - a
   trimmed query equal to one tool path (optionally `tools.`-prefixed) returns that tool alone
-  (`total: 1`), bypassing ranking. Tokenization/ranking/shape unchanged.
+  (`remaining: 0`, `next: null`), bypassing ranking. Tokenization/ranking/shape unchanged.
 
 ### Wave 3 - OpenCode MCP adapter (done)
 
@@ -480,7 +483,7 @@ adapter needed **no changes**.
     An empty query now browses ALPHABETICALLY by path (was declaration order). Kept:
     `{ path, description, signature }` result items, default limit 10, exact-path instant
     lookup, input validation errors.
-  - **Namespace scoping**: `tools.$codemode.search({ query?, namespace?, limit? })` -
+  - **Namespace scoping**: `tools.$codemode.search({ query?, namespace?, limit?, offset? })` -
     `namespace` (validated as a string when provided) filters `SearchEntry`s to one top-level
     namespace before ranking; `{ query: "", namespace: "github" }` lists that namespace
     alphabetically. `searchSignature` updated.

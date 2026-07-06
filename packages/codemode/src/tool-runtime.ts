@@ -79,7 +79,7 @@ const reservedNamespace = "$codemode"
 const defaultCatalogBudget = 2_000
 const defaultSearchLimit = 10
 const searchSignature =
-  "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
+  "tools.$codemode.search({ query?: string, namespace?: string, limit?: number, offset?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; remaining: number; next: { offset: number } | null }>"
 const toolExpression = (path: string) =>
   "tools" +
   path
@@ -503,7 +503,10 @@ export const prepare = <R>(
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
         ...(complete
           ? []
-          : ['- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.']),
+          : [
+              '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
+              "- Search results are paginated from zero-based offset 0. When `page.next` is not null, continue with `await tools.$codemode.search({ ...request, ...page.next })`.",
+            ]),
       ]
 
   const syntax = [
@@ -694,10 +697,10 @@ export const make = <R>(
           if (externalArgs.length !== 1 || input === null || typeof input !== "object" || Array.isArray(input)) {
             throw new ToolRuntimeError(
               "InvalidToolInput",
-              "tools.$codemode.search expects { query?: string; namespace?: string; limit?: number }.",
+              "tools.$codemode.search expects { query?: string; namespace?: string; limit?: number; offset?: number }.",
             )
           }
-          const request = input as { query?: unknown; namespace?: unknown; limit?: unknown }
+          const request = input as { query?: unknown; namespace?: unknown; limit?: unknown; offset?: unknown }
           if (request.query !== undefined && typeof request.query !== "string") {
             throw new ToolRuntimeError(
               "InvalidToolInput",
@@ -719,6 +722,15 @@ export const make = <R>(
               "tools.$codemode.search limit must be a positive safe integer when provided.",
             )
           }
+          if (
+            request.offset !== undefined &&
+            (typeof request.offset !== "number" || !Number.isSafeInteger(request.offset) || request.offset < 0)
+          ) {
+            throw new ToolRuntimeError(
+              "InvalidToolInput",
+              "tools.$codemode.search offset must be a non-negative safe integer when provided.",
+            )
+          }
           const query = typeof request.query === "string" ? request.query : ""
           const namespace = typeof request.namespace === "string" ? request.namespace : undefined
           const index = yield* recordAndObserve(request)
@@ -726,6 +738,7 @@ export const make = <R>(
             Effect.try({
               try: () => {
                 const limit = typeof request.limit === "number" ? request.limit : defaultSearchLimit
+                const offset = typeof request.offset === "number" ? request.offset : 0
                 const scoped =
                   namespace === undefined ? searchIndex : searchIndex.filter((entry) => entry.namespace === namespace)
                 // A query that names one tool path exactly (canonical path or rendered
@@ -774,11 +787,19 @@ export const make = <R>(
                 // directly usable as the call site (`await tools.github.list({ ... })` or
                 // `await tools.ns["dashed-name"]({ ... })`). Search returns the same
                 // JSDoc-annotated signature used by the inline catalog.
-                const items = ranked.slice(0, limit).map(({ description }) => ({
+                const items = ranked.slice(offset, offset + limit).map(({ description }) => ({
                   ...description,
                   path: toolExpression(description.path),
                 }))
-                return copyIn({ items, total: ranked.length }, "Result from tool '$codemode.search'")
+                const remaining = Math.max(0, ranked.length - offset - items.length)
+                return copyIn(
+                  {
+                    items,
+                    remaining,
+                    next: remaining > 0 ? { offset: offset + items.length } : null,
+                  },
+                  "Result from tool '$codemode.search'",
+                )
               },
               catch: (cause) => cause,
             }),
