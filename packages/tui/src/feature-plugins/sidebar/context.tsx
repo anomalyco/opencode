@@ -181,15 +181,24 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       const llamaClient = new LlamaSkeinClient({
         client: createClient(createConfig({ baseUrl: normalizeBaseURL(url) })),
       })
+      // A sample may only render for the provider it was requested from: on
+      // provider switch, a slow in-flight response from the old baseURL must
+      // not overwrite the new provider's reading (fork: stale-sample fix).
+      let cancelled = false
+      const aborter = new AbortController()
       const poll = async () => {
         try {
-          const res = await llamaClient.getHardware()
-          if (res.data) setMem(extractMem(res.data))
+          const res = await llamaClient.getHardware({ signal: aborter.signal })
+          if (!cancelled && res.data) setMem(extractMem(res.data))
         } catch { /* backend may not support /api/hardware */ }
       }
       poll()
       const pollId = setInterval(poll, 30_000)
-      onCleanup(() => clearInterval(pollId))
+      onCleanup(() => {
+        cancelled = true
+        aborter.abort()
+        clearInterval(pollId)
+      })
     },
   ))
 

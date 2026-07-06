@@ -2,6 +2,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import os from "os"
 import { Config } from "@/config/config"
 import { Effect, Layer } from "effect"
+import { withGlobalConfigLock } from "./config-lock"
 import { scanLlamaSwap } from "./mdns"
 
 const log = Log.create({ service: "local-provider-sync" })
@@ -78,92 +79,99 @@ const syncLocalProviders = Effect.gen(function* () {
 
   log.info("found local providers", { count: online.length, names: online.map((s) => s.name) })
 
-  const global = yield* configSvc.getGlobal()
-  const providers = { ...(global.provider ?? {}) }
+  // The read-modify-write below runs under the global config lock — the scan
+  // above is lock-free (slow, network), but the config must be read and
+  // written back atomically w.r.t. /connect and /disconnect.
+  yield* withGlobalConfigLock(
+    Effect.gen(function* () {
+      const global = yield* configSvc.getGlobal()
+      const providers = { ...(global.provider ?? {}) }
 
-  const selfIPs = ownIPs()
-  const selfSlug = providerIDFromName(canonicalName(os.hostname()))
-  let changed = false
+      const selfIPs = ownIPs()
+      const selfSlug = providerIDFromName(canonicalName(os.hostname()))
+      let changed = false
 
-  // Prune auto-discovered entries that point at one of this machine's own LAN
-  // IPs under a different machine's name (e.g. "m5" left pointing at an
-  // address DHCP later reassigned to this host). Such an entry is definitively
-  // wrong — it dispatches another machine's traffic to us — and it can never
-  // be healed by the loop below because own IPs are skipped there. Loopback
-  // entries (an intentional local provider) are kept.
-  for (const [id, p] of Object.entries(providers)) {
-    if (!isAutoDiscovered(p)) continue
-    const host = baseURLHost((p as ProviderEntry).options?.baseURL)
-    if (!host || host === "localhost" || host.startsWith("127.")) continue
-    if (selfIPs.has(host) && id !== selfSlug) {
-      delete providers[id]
-      log.info("removed stale provider pointing at own IP", { id, host })
-      changed = true
-    }
-  }
-
-  for (const svc of online) {
-    // Skip own IPs — this machine's own llama-swap is configured via
-    // localhost, not via a LAN address that DHCP may reassign.
-    if (selfIPs.has(svc.host)) continue
-
-    const norm = normalizeBaseURL(svc.baseURL)
-    const name = canonicalName(svc.name)
-    const slug = providerIDFromName(name || svc.name)
-    const urlOwner = Object.entries(providers).find(
-      ([, p]) => normalizeBaseURL(String((p as ProviderEntry).options?.baseURL ?? "")) === norm,
-    )?.[0]
-
-    if (urlOwner === slug) {
-      // Already configured correctly at this exact URL — nothing to do.
-      continue
-    }
-
-    if (svc.source === "lan") {
-      // Reverse-DNS identity: only add when neither this URL nor this name is
-      // known. Never rename or re-point existing entries on a weak name.
-      if (urlOwner || slug in providers) continue
-      providers[slug] = {
-        npm: "@ai-sdk/openai-compatible",
-        name,
-        options: { baseURL: svc.baseURL, apiKey: "skein" },
-        discoverModels: true,
+      // Prune auto-discovered entries that point at one of this machine's own LAN
+      // IPs under a different machine's name (e.g. "m5" left pointing at an
+      // address DHCP later reassigned to this host). Such an entry is definitively
+      // wrong — it dispatches another machine's traffic to us — and it can never
+      // be healed by the loop below because own IPs are skipped there. Loopback
+      // entries (an intentional local provider) are kept.
+      for (const [id, p] of Object.entries(providers)) {
+        if (!isAutoDiscovered(p)) continue
+        const host = baseURLHost((p as ProviderEntry).options?.baseURL)
+        if (!host || host === "localhost" || host.startsWith("127.")) continue
+        if (selfIPs.has(host) && id !== selfSlug) {
+          delete providers[id]
+          log.info("removed stale provider pointing at own IP", { id, host })
+          changed = true
+        }
       }
-      log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
-      changed = true
-      continue
-    }
 
-    // mDNS identity is authoritative for slug → URL.
-    if (slug in providers) {
-      // Provider exists but IP has changed — update baseURL in place.
-      const existing = providers[slug] as ProviderEntry
-      const oldURL = existing.options?.baseURL ?? ""
-      providers[slug] = { ...(existing as object), options: { ...(existing.options ?? {}), baseURL: svc.baseURL } }
-      log.info("updated provider baseURL", { slug, old: oldURL, new: svc.baseURL, defaultModel: svc.defaultModel })
-      changed = true
-    } else {
-      providers[slug] = {
-        npm: "@ai-sdk/openai-compatible",
-        name,
-        options: { baseURL: svc.baseURL, apiKey: "skein" },
-        discoverModels: true,
+      for (const svc of online) {
+        // Skip own IPs — this machine's own llama-swap is configured via
+        // localhost, not via a LAN address that DHCP may reassign.
+        if (selfIPs.has(svc.host)) continue
+
+        const norm = normalizeBaseURL(svc.baseURL)
+        const name = canonicalName(svc.name)
+        const slug = providerIDFromName(name || svc.name)
+        const urlOwner = Object.entries(providers).find(
+          ([, p]) => normalizeBaseURL(String((p as ProviderEntry).options?.baseURL ?? "")) === norm,
+        )?.[0]
+
+        if (urlOwner === slug) {
+          // Already configured correctly at this exact URL — nothing to do.
+          continue
+        }
+
+        if (svc.source === "lan") {
+          // Reverse-DNS identity: only add when neither this URL nor this name is
+          // known. Never rename or re-point existing entries on a weak name.
+          if (urlOwner || slug in providers) continue
+          providers[slug] = {
+            npm: "@ai-sdk/openai-compatible",
+            name,
+            options: { baseURL: svc.baseURL, apiKey: "skein" },
+            discoverModels: true,
+          }
+          log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
+          changed = true
+          continue
+        }
+
+        // mDNS identity is authoritative for slug → URL.
+        if (slug in providers) {
+          // Provider exists but IP has changed — update baseURL in place.
+          const existing = providers[slug] as ProviderEntry
+          const oldURL = existing.options?.baseURL ?? ""
+          providers[slug] = { ...(existing as object), options: { ...(existing.options ?? {}), baseURL: svc.baseURL } }
+          log.info("updated provider baseURL", { slug, old: oldURL, new: svc.baseURL, defaultModel: svc.defaultModel })
+          changed = true
+        } else {
+          providers[slug] = {
+            npm: "@ai-sdk/openai-compatible",
+            name,
+            options: { baseURL: svc.baseURL, apiKey: "skein" },
+            discoverModels: true,
+          }
+          log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
+          changed = true
+        }
+
+        // A different auto-discovered entry occupying this machine's URL is a
+        // stale duplicate (e.g. "mac" → the IP that mDNS just proved belongs to
+        // "m5"). Remove it so it stops shadowing the canonical entry.
+        if (urlOwner && urlOwner !== slug && isAutoDiscovered(providers[urlOwner])) {
+          delete providers[urlOwner]
+          log.info("removed duplicate provider for same baseURL", { id: urlOwner, kept: slug, baseURL: svc.baseURL })
+          changed = true
+        }
       }
-      log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
-      changed = true
-    }
 
-    // A different auto-discovered entry occupying this machine's URL is a
-    // stale duplicate (e.g. "mac" → the IP that mDNS just proved belongs to
-    // "m5"). Remove it so it stops shadowing the canonical entry.
-    if (urlOwner && urlOwner !== slug && isAutoDiscovered(providers[urlOwner])) {
-      delete providers[urlOwner]
-      log.info("removed duplicate provider for same baseURL", { id: urlOwner, kept: slug, baseURL: svc.baseURL })
-      changed = true
-    }
-  }
-
-  if (changed) yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
+      if (changed) yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
+    }),
+  )
 })
 
 export const layer = Layer.effectDiscard(

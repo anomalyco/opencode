@@ -1861,6 +1861,59 @@ test("openai-compatible: discovers models from /v1/models", async () => {
   }
 })
 
+test("openai-compatible: discovery completes when /api/fit hangs forever", async () => {
+  // fork: the fit fetch must share the /models 2s abort budget — a host that
+  // accepts TCP but never answers /api/fit must not stall discovery.
+  const server = Bun.serve({
+    port: 0,
+    idleTimeout: 30,
+    async fetch(req) {
+      const pathname = new URL(req.url).pathname
+      if (pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [{ id: "hung-fit-model", name: "Hung Fit Model", context_length: 65536 }],
+        })
+      }
+      if (pathname === "/api/fit") {
+        await new Promise(() => {}) // never resolves
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "hung-fit": {
+                name: "Hung Fit",
+                npm: "@ai-sdk/openai-compatible",
+                options: { apiKey: "test", baseURL },
+              },
+            },
+          }),
+        )
+      },
+    })
+    const started = Date.now()
+    const providers = await runList(tmp.path)
+    const elapsed = Date.now() - started
+    const provider = providers[ProviderV2.ID.make("hung-fit")]
+    expect(provider).toBeDefined()
+    expect(provider.models["hung-fit-model"]).toBeDefined()
+    // fit unavailable -> fall back to the model-reported context
+    expect(provider.models["hung-fit-model"].limit.context).toBe(65536)
+    expect(elapsed).toBeLessThan(5000)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("openai-compatible: discoverModels:true merges discovered models without overriding manual models", async () => {
   let called = false
   const server = Bun.serve({

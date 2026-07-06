@@ -1387,11 +1387,16 @@ async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string
  */
 async function fetchLocalModelFit(
   controlBase: string,
+  signal?: AbortSignal,
 ): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number }>> {
   const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number }>()
   try {
     const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: controlBase })) })
-    const res = await client.getFitReport()
+    // fork: bounded by the caller's discovery abort budget — a host that
+    // accepts TCP but never answers /api/fit (z4 mid rootfs-swap) must not
+    // stall model discovery; fit data is an enhancement, never worth waiting
+    // for longer than the model list itself.
+    const res = await client.getFitReport({ signal })
     if (res.error || !res.data?.models) return out
     for (const fit of res.data.models) {
       // `max_safe_ctx` is the authoritative prompt ceiling whenever the engine
@@ -1446,11 +1451,12 @@ async function discoverOpenAICompatibleModels(input: {
   if (!base) return {}
   const url = `${base}/models`
   // fork: control-plane root for /api/fit lives one level up from the openai-compatible
-  // `/v1` path. Fetched in parallel; empty for non-llama-skein backends.
+  // `/v1` path. Fetched in parallel under the same 2s abort budget as the
+  // /models fetch; empty for non-llama-skein backends or on timeout.
   const controlBase = base.replace(/\/v1$/, "")
-  const fitPromise = fetchLocalModelFit(controlBase)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 2000)
+  const fitPromise = fetchLocalModelFit(controlBase, controller.signal)
   const apiKey = typeof input.provider.options?.apiKey === "string" ? input.provider.options.apiKey : undefined
   return fetch(url, {
     signal: controller.signal,

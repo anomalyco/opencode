@@ -3,6 +3,7 @@ import { Provider } from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import type { MtpMetadata } from "@/local/llama-skein/gen/types.gen"
+import { withGlobalConfigLock } from "@/local/config-lock"
 import { probeModelIDs, scanLlamaSwap } from "@/local/mdns"
 import { createClient, createConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
@@ -228,35 +229,46 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
 
     const connect = Effect.fn("LocalHttpApi.connect")(function* (ctx) {
       const { id, name, baseURL } = ctx.payload
-      const global = yield* configSvc.getGlobal()
-      const providers = { ...(global.provider ?? {}) }
-      const normalised = normalizeBaseURL(baseURL)
-      const existingKey = Object.entries(providers).find(
-        ([, p]) =>
-          normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) === normalised,
-      )?.[0]
-      const existing = (providers[id] ?? (existingKey ? providers[existingKey] : undefined) ?? {}) as ProviderEntry
-      if (existingKey && existingKey !== id) delete providers[existingKey]
+      // Read-modify-write under the global config lock so a concurrent
+      // auto-sync pass cannot clobber this connect (or vice versa).
+      yield* withGlobalConfigLock(
+        Effect.gen(function* () {
+          const global = yield* configSvc.getGlobal()
+          const providers = { ...(global.provider ?? {}) }
+          const normalised = normalizeBaseURL(baseURL)
+          const existingKey = Object.entries(providers).find(
+            ([, p]) =>
+              normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) ===
+              normalised,
+          )?.[0]
+          const existing = (providers[id] ?? (existingKey ? providers[existingKey] : undefined) ?? {}) as ProviderEntry
+          if (existingKey && existingKey !== id) delete providers[existingKey]
 
-      providers[id] = {
-        ...existing,
-        npm: "@ai-sdk/openai-compatible",
-        name,
-        options: { ...(existing.options ?? {}), baseURL, apiKey: existing.options?.apiKey ?? "skein" },
-        discoverModels: true,
-      }
-      yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
+          providers[id] = {
+            ...existing,
+            npm: "@ai-sdk/openai-compatible",
+            name,
+            options: { ...(existing.options ?? {}), baseURL, apiKey: existing.options?.apiKey ?? "skein" },
+            discoverModels: true,
+          }
+          yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
+        }),
+      )
       return id
     })
 
     const disconnect = Effect.fn("LocalHttpApi.disconnect")(function* (ctx) {
       const { providerID } = ctx.params
-      const global = yield* configSvc.getGlobal()
-      const providers = { ...(global.provider ?? {}) }
-      delete providers[providerID]
-      // replace: mergeDeep alone cannot remove keys, which made disconnect a
-      // silent no-op for providers already on disk.
-      yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
+      yield* withGlobalConfigLock(
+        Effect.gen(function* () {
+          const global = yield* configSvc.getGlobal()
+          const providers = { ...(global.provider ?? {}) }
+          delete providers[providerID]
+          // replace: mergeDeep alone cannot remove keys, which made disconnect a
+          // silent no-op for providers already on disk.
+          yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
+        }),
+      )
       return providerID
     })
 
