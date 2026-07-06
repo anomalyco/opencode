@@ -605,9 +605,9 @@ describe("CodeMode public contract", () => {
     expect(instructions.indexOf("## Language")).toBeLessThan(
       instructions.indexOf("\n## Available tools (COMPLETE list"),
     )
-    // The workflow carries the result-shape guidance; Rules only add content beyond it.
+    expect(instructions).not.toContain("JSON.parse(res)")
     expect(instructions).toContain(
-      '`const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string',
+      "A result typed `Promise<unknown>` may be structured data or text. Narrow it at runtime before using it.",
     )
     expect(instructions).toContain("Return only the fields you need")
     expect(instructions).toContain("raw payloads get truncated and waste context")

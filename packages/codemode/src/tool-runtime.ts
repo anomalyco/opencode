@@ -562,15 +562,13 @@ export const prepare = <R>(
           ? [
               "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
               "2. Call it using the exact signature shown; bracket notation and quotes are part of the path.",
-              '3. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string.',
-              "4. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
+              "3. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
             ]
           : [
               '1. If the exact signature is not listed below, first search: `const request = { query: "<intent + key nouns>" }; const page = await tools.$codemode.search(request)`.',
               "2. Read `page.items`: each match is `{ path, description, signature }` - read the description before using an unfamiliar tool.",
               "3. Call the result's `path` as-is; bracket notation and quotes are part of the path.",
-              '4. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string.',
-              "5. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
+              "4. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
             ]),
       ]
 
@@ -584,7 +582,7 @@ export const prepare = <R>(
           ? "- Only Code Mode tools listed here and internal runtime tools are available; surrounding agent tools are not implicitly exposed."
           : "- Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
-        "- A result typed `Promise<unknown>` has no guaranteed shape - verify what actually came back before relying on its fields.",
+        "- A result typed `Promise<unknown>` may be structured data or text. Narrow it at runtime before using it.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
         ...(complete

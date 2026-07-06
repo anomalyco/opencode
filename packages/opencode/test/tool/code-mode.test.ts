@@ -166,9 +166,8 @@ describe("code mode execute", () => {
     expect(description).not.toContain("Browse one namespace")
     expect(description).toContain("## Workflow")
     expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(description).toContain(
-      '`const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string',
-    )
+    expect(description).not.toContain("JSON.parse(res)")
+    expect(description).toContain("A result typed `Promise<unknown>` may be structured data or text")
     expect(description).toContain("Return only the fields you need")
     expect(description).not.toContain("total_count")
   })

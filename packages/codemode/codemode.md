@@ -510,15 +510,13 @@ adapter needed **no changes**.
   ordered so the workflow sits at the top (the least likely part of a long description to
   be truncated or skimmed away) and the catalog at the bottom (the per-section content
   described here was later condensed by Fix 8 and the language-accuracy pass):
-  - **Intro** (2 lines): asks for orchestration source only, then identifies the language
-    as restricted JavaScript for calling tools rather than a general-purpose runtime.
+  - **Intro**: identifies the language as restricted JavaScript for calling tools rather than
+    a general-purpose runtime.
   - **`## Workflow`**: numbered steps - find a tool via `tools.$codemode.search` -> read
-    the `{ path, description, signature }` matches -> call by path -> `typeof res ===
-"string" ? JSON.parse(res) : res` -> return only the needed fields. When the catalog is
+    the `{ path, description, signature }` matches -> call by path -> return only the needed fields. When the catalog is
     COMPLETE the search/read steps collapse into "Pick a tool from the list under
-    `## Available tools`" and the steps renumber (4 instead of 5).
-  - **`## Rules`**: call-by-exact-path; TEXT-is-JSON -> JSON.parse; return small (never raw
-    payloads); filter/aggregate large collections in code instead of per-item round-trips;
+    `## Available tools`" and the steps renumber.
+  - **`## Rules`**: narrow unknown results at runtime; filter/aggregate large collections in code instead of per-item round-trips;
     console.log/warn/error/dir/table for intermediates; `Promise.all` parallelism (no
     .then/.catch - await + try/catch); `Object.keys(tools)`/`for...in` enumeration;
     browse-one-namespace via search (PARTIAL only); and host-side media handling (files/
@@ -677,10 +675,8 @@ along). All in `tool-runtime.ts`; no interpreter changes.
   interfaces/type aliases are stripped and TS **enums actually work** (transpileModule
   compiles them to an IIFE the interpreter runs), hence enums deliberately unmentioned.
   `supportedSyntaxMessage` (the in-diagnostic text in `codemode.ts`) is untouched.
-- **Workflow/Rules deduped**: the call-by-exact-path, JSON.parse-string-results, and
-  return-small content now lives ONLY in the numbered Workflow steps (with their
-  compliance-driving justifications inline: "most tools return JSON as a string", "raw
-  payloads get truncated and waste context"); Rules keeps only bullets adding new
+- **Workflow/Rules deduped**: the call-by-exact-path and return-small content now lives ONLY
+  in the numbered Workflow steps; Rules keeps only bullets adding new
   content - filter/aggregate collections in code, console.\* intermediates (logs ride
   back), Promise.all parallelism, Object.keys/for...in enumeration, browse-namespace
   (PARTIAL only), and the media rule compressed to one line. The no-.then/.catch
