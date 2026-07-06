@@ -304,7 +304,7 @@ export interface Hooks {
    */
   "experimental.session.compacting"?: (
     input: { sessionID: string },
-    output: { context: string[]; prompt?: string },
+    output: { context: string[]; prompt?: string; skip?: boolean },
   ) => Promise<void>
   /**
    * Called after compaction succeeds and before a synthetic user

@@ -343,8 +343,9 @@ const layer = Layer.effect(
       const compacting = yield* plugin.trigger(
         "experimental.session.compacting",
         { sessionID: input.sessionID },
-        { context: [], prompt: undefined },
+        { context: [], prompt: undefined, skip: false },
       )
+      if (compacting.skip) return "continue"
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
