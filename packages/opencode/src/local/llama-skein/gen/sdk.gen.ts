@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetFitReportResponses, GetHardwareResponses, GetModelFitErrors, GetModelFitResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses } from './types.gen';
+import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetFitReportResponses, GetHardwareResponses, GetModelFitErrors, GetModelFitResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, GetTuningResponses, ListModelsResponses, ListTuningProfilesResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, PatchTuningResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses, TuningPatchRequest } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -241,5 +241,38 @@ export class LlamaSkeinClient extends HeyApiClient {
             ...options,
             ...params
         });
+    }
+    
+    /**
+     * Effective GPU tuning for this host (detected arch, enabled state, resolved profile, provenance).
+     */
+    public getTuning<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetTuningResponses, unknown, ThrowOnError>({ url: '/api/tuning', ...options });
+    }
+    
+    /**
+     * Override or disable the recommended tuning for this host (persisted; applied on next model reload).
+     */
+    public patchTuning<ThrowOnError extends boolean = false>(parameters: {
+        tuningPatchRequest: TuningPatchRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'tuningPatchRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).patch<PatchTuningResponses, unknown, ThrowOnError>({
+            url: '/api/tuning',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * The full tuning database (all gfx x use-case profiles) for client pickers.
+     */
+    public listTuningProfiles<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<ListTuningProfilesResponses, unknown, ThrowOnError>({ url: '/api/tuning/profiles', ...options });
     }
 }

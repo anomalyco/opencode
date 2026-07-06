@@ -36,7 +36,7 @@ export type ResourceSnapshot = {
 
 export type LoadedModelInfo = {
     /**
-     * Model ID as defined in config.
+     * Model ID as defined in config. With several models loaded, the one with the largest weights is reported (ties: smallest ID) — selection is deterministic across calls.
      */
     id?: string;
     /**
@@ -287,6 +287,10 @@ export type ConfigModelDetail = {
         mtp?: MtpMetadata;
         [key: string]: unknown | MtpMetadata | undefined;
     };
+    /**
+     * Read-only: the launch command after GPU-tuning profile injection. The stored `cmd` is unchanged; compare the two to see what the profile added.
+     */
+    effective_flags?: string;
 };
 
 export type ReloadResponse = {
@@ -427,7 +431,7 @@ export type ModelFit = {
      */
     configured_ctx?: number;
     /**
-     * Max context callers should fill: reserves the output budget plus compute/overhead so prompt+generation never exceed the backend's hard n_ctx. THIS is the number opencode/skein should trim to, not configured_ctx.
+     * Max context callers should fill: reserves the output budget plus compute/overhead so prompt+generation never exceed the backend's hard n_ctx, and accounts for llama-server dividing n_ctx across --parallel slots (per-request share). THIS is the number opencode/skein should trim to, not configured_ctx.
      */
     max_safe_ctx: number;
     /**
@@ -473,6 +477,123 @@ export type FitReport = {
      * Per-model fit results.
      */
     models: Array<ModelFit>;
+};
+
+/**
+ * Additive, safe-to-inject llama-server flags. Omitted fields are not set.
+ */
+export type TuningFlags = {
+    /**
+     * Inject --flash-attn on/off.
+     */
+    flash_attn?: boolean;
+    /**
+     * Inject --parallel N (server slots).
+     */
+    parallel?: number;
+};
+
+/**
+ * MTP speculative-decoding flags, applied only to MTP-capable models.
+ */
+export type TuningMtp = {
+    apply_to_mtp_models?: boolean;
+    /**
+     * --spec-draft-n-max
+     */
+    draft_n_max?: number;
+    /**
+     * --draft-p-min
+     */
+    draft_p_min?: number;
+};
+
+/**
+ * One (gfx, use-case) entry in the tuning database: recommended defaults + provenance notes.
+ */
+export type TuningProfile = {
+    /**
+     * gfx target, e.g. gfx1201.
+     */
+    gfx: string;
+    /**
+     * Tuning scenario, e.g. agentic-single.
+     */
+    usecase: string;
+    /**
+     * True only if measured in-repo on this arch.
+     */
+    verified: boolean;
+    verified_on?: string;
+    flags?: TuningFlags;
+    mtp?: TuningMtp;
+    notes?: string;
+    device_ids?: Array<string>;
+    sources?: Array<string>;
+};
+
+/**
+ * Effective GPU tuning for this host: detected arch, whether enabled, the resolved profile after user overrides, and per-value provenance. Profiles are recommendations the operator can override or disable.
+ */
+export type TuningStatus = {
+    /**
+     * Empty when no known AMD GPU is detected.
+     */
+    detected_gfx?: string;
+    /**
+     * PCI device ID, e.g. 0x7551.
+     */
+    device_id?: string;
+    /**
+     * False disables all auto-injection; the model cmd launches verbatim.
+     */
+    enabled: boolean;
+    usecase: string;
+    profile?: TuningProfile;
+    /**
+     * Per-field origin: 'recommended' (from the profile) or 'override' (set by the user).
+     */
+    provenance?: {
+        [key: string]: 'recommended' | 'override';
+    };
+    /**
+     * User-supplied flags appended at launch.
+     */
+    extra_args?: Array<string>;
+};
+
+export type TuningProfilesResponse = {
+    usecases?: {
+        [key: string]: {
+            description?: string;
+            default?: boolean;
+        };
+    };
+    profiles: Array<TuningProfile>;
+};
+
+/**
+ * Partial per-host tuning override. A set field forces that value (including disabling a recommendation); a null field resets it to the built-in recommendation. Profiles are never forced.
+ */
+export type TuningPatchRequest = {
+    /**
+     * Master switch for auto-injection.
+     */
+    enabled?: boolean | null;
+    flash_attn?: boolean | null;
+    parallel?: number | null;
+    /**
+     * Force MTP on/off regardless of the profile.
+     */
+    mtp?: boolean | null;
+    /**
+     * Arbitrary extra flags the curated profile does not model.
+     */
+    extra_args?: Array<string> | null;
+    /**
+     * Override GPU detection.
+     */
+    gfx_target?: string | null;
 };
 
 export type GetSystemVersionData = {
@@ -907,3 +1028,51 @@ export type GetModelFitResponses = {
 };
 
 export type GetModelFitResponse = GetModelFitResponses[keyof GetModelFitResponses];
+
+export type GetTuningData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tuning';
+};
+
+export type GetTuningResponses = {
+    /**
+     * Tuning status.
+     */
+    200: TuningStatus;
+};
+
+export type GetTuningResponse = GetTuningResponses[keyof GetTuningResponses];
+
+export type PatchTuningData = {
+    body: TuningPatchRequest;
+    path?: never;
+    query?: never;
+    url: '/api/tuning';
+};
+
+export type PatchTuningResponses = {
+    /**
+     * Updated tuning status.
+     */
+    200: TuningStatus;
+};
+
+export type PatchTuningResponse = PatchTuningResponses[keyof PatchTuningResponses];
+
+export type ListTuningProfilesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tuning/profiles';
+};
+
+export type ListTuningProfilesResponses = {
+    /**
+     * Tuning database.
+     */
+    200: TuningProfilesResponse;
+};
+
+export type ListTuningProfilesResponse = ListTuningProfilesResponses[keyof ListTuningProfilesResponses];
