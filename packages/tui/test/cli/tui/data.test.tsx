@@ -403,8 +403,7 @@ test("connectedOnce is false until first connect and persists across disconnect"
 test("tracks session status from active sessions and execution events", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
-    if (url.pathname === "/api/session/active")
-      return json({ data: { "session-active": { type: "running" } } })
+    if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
   }, events)
   let data!: ReturnType<typeof useData>
 
@@ -1082,7 +1081,7 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders admitted prompts immediately with queued marker and clears when promoted", async () => {
+test("renders admitted prompts immediately and tracks them until promoted", async () => {
   const events = createEventStream()
   const sessionID = "session-1"
   const messageID = "msg_user_1"
@@ -1135,10 +1134,12 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
     const admitted = sync.session.message.list(sessionID)?.[0]
-    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello", metadata: { queued: true } })
+    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello" })
+    expect(admitted?.metadata).toBeUndefined()
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
 
     await sync.session.message.refresh(sessionID)
-    expect(sync.session.message.list(sessionID)?.[0]?.metadata?.queued).toBeUndefined()
+    expect(sync.session.message.list(sessionID)?.[0]?.metadata).toBeUndefined()
 
     emitEvent(events, {
       id: "evt_prompted_1",
@@ -1158,7 +1159,8 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     expect(message?.type).toBe("user")
     if (message?.type !== "user") return
     expect(message).toMatchObject({ id: messageID, text: "hello" })
-    expect(message.metadata?.queued).toBeUndefined()
+    expect(message.metadata).toBeUndefined()
+    expect(sync.session.input.list(sessionID)).toEqual([])
     expect(sync.session.message.ids(sessionID)).toEqual([messageID])
     expect(sync.session.message.ids("missing")).toEqual([])
     expect(sync.session.message.get(sessionID, messageID)).toBe(message)

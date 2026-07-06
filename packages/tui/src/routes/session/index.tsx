@@ -22,7 +22,7 @@ import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
-import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
+import { createSyntaxStyleMemo, generateSubtleSyntax, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -1384,9 +1384,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
-  const queued = createMemo(() => props.message.metadata?.queued === true)
-  const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const queued = createMemo(
+    () => data.session.status(ctx.sessionID) === "running" && data.session.input.has(ctx.sessionID, props.message.id),
+  )
   const dialog = useDialog()
   const renderer = useRenderer()
 
@@ -1395,7 +1395,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
       <box
         id={props.message.id}
         border={["left"]}
-        borderColor={color()}
+        borderColor={queued() ? theme.textMuted : color()}
         customBorderChars={SplitBorder.customBorderChars}
       >
         <box
@@ -1417,15 +1417,19 @@ function UserMessage(props: { message: SessionMessageUser }) {
         >
           <text fg={theme.text}>{props.message.text}</text>
           <Show when={files().length}>
-            <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+            <box
+              flexDirection="row"
+              paddingBottom={ctx.showTimestamps() ? 1 : 0}
+              paddingTop={1}
+              gap={1}
+              flexWrap="wrap"
+            >
               <For each={files()}>
                 {(file) => {
                   const label = file.mime === "application/x-directory" ? "Directory" : file.mime
                   return (
                     <text fg={theme.text}>
-                      <span style={{ bg: theme.secondary, fg: theme.background }}>
-                        {` ${label} `}
-                      </span>
+                      <span style={{ bg: theme.secondary, fg: theme.background }}>{` ${label} `}</span>
                       <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
@@ -1436,18 +1440,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
               </For>
             </box>
           </Show>
-          <Show
-            when={queued()}
-            fallback={
-              <Show when={ctx.showTimestamps()}>
-                <text fg={theme.textMuted}>
-                  <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
-                </text>
-              </Show>
-            }
-          >
+          <Show when={ctx.showTimestamps()}>
             <text fg={theme.textMuted}>
-              <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+              <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
             </text>
           </Show>
         </box>
@@ -2287,7 +2282,7 @@ function Subagent(props: ToolProps) {
       {formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General"),
         description() ?? "Subagent",
-        props.metadata.background === true,
+        props.input.background === true || props.metadata.status === "running",
       )}
     </InlineTool>
   )

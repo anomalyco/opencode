@@ -55,6 +55,7 @@ type Data = {
     family: Record<string, string[]>
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessage[]>
+    input: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
     // Pending forms keyed by session ID.
     form: Record<string, FormInfo[]>
@@ -90,6 +91,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         family: {},
         status: {},
         message: {},
+        input: {},
         permission: {},
         form: {},
       },
@@ -276,10 +278,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const position = index.get(event.data.inputID)
             if (position === undefined) return
             const existing = draft[position]
-            if (existing?.type === "user" && existing.metadata?.queued === true) {
+            if (existing?.type === "user" && store.session.input[event.data.sessionID]?.includes(event.data.inputID)) {
               existing.time.created = event.created
-              delete existing.metadata.queued
-              if (Object.keys(existing.metadata).length === 0) existing.metadata = undefined
               draft.splice(position, 1)
               draft.push(existing)
               index.clear()
@@ -287,9 +287,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               return
             }
           })
+          setStore(
+            "session",
+            "input",
+            event.data.sessionID,
+            (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
+          )
           break
         }
         case "session.prompt.admitted":
+          if (!store.session.input[event.data.sessionID]?.includes(event.data.inputID))
+            setStore("session", "input", event.data.sessionID, [
+              ...(store.session.input[event.data.sessionID] ?? []),
+              event.data.inputID,
+            ])
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: event.data.inputID,
@@ -297,7 +308,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               text: event.data.prompt.text,
               files: event.data.prompt.files,
               agents: event.data.prompt.agents,
-              metadata: { queued: true },
               time: { created: event.created },
             })
           })
@@ -559,6 +569,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.revert.committed":
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "revert", undefined)
+          setStore(
+            "session",
+            "input",
+            event.data.sessionID,
+            (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.messageID),
+          )
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findIndex((item) => item.id >= event.data.messageID)
             if (position === -1) return
@@ -685,6 +701,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
         status(sessionID: string) {
           return store.session.status[sessionID] ?? "idle"
+        },
+        input: {
+          list(sessionID: string) {
+            return store.session.input[sessionID] ?? []
+          },
+          has(sessionID: string, inputID: string) {
+            return store.session.input[sessionID]?.includes(inputID) ?? false
+          },
         },
         async refresh(sessionID: string) {
           setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
