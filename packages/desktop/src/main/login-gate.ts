@@ -599,7 +599,37 @@ async function checkExistingAuth(): Promise<boolean> {
       if (!fs.existsSync(authPath)) continue
       const content = fs.readFileSync(authPath, "utf-8")
       const data = JSON.parse(content)
-      if (data?.microsoft?.type === "oauth" && data.microsoft.access && data.microsoft.refresh) {
+      if (!(data?.microsoft?.type === "oauth" && data.microsoft.access && data.microsoft.refresh)) continue
+
+      // Validate the refresh token against Microsoft before accepting it.
+      // A stale or revoked token has the right structure but won't work, and
+      // silently skipping the login gate would leave the user stuck.
+      try {
+        const config = resolveMicrosoftConfig()
+        const response = await fetch(`https://login.microsoftonline.com/${config.tenant}/oauth2/v2.0/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            client_id: config.clientId,
+            refresh_token: data.microsoft.refresh,
+            scope: config.scopes,
+          }).toString(),
+        })
+        if (response.ok) {
+          // Refresh succeeded — update stored tokens so we start with a fresh
+          // access token and avoid an immediate refresh round-trip on first use.
+          const tokens: { access_token: string; refresh_token?: string } = await response.json()
+          data.microsoft.access = tokens.access_token
+          if (tokens.refresh_token) data.microsoft.refresh = tokens.refresh_token
+          fs.writeFileSync(authPath, JSON.stringify(data, null, 2))
+          return true
+        }
+        // Token rejected by Microsoft — try the next candidate path
+        continue
+      } catch {
+        // Network unavailable — be lenient, the token might work once the user
+        // is back online or the server-side refresh handles a transient outage.
         return true
       }
     }
