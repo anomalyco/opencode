@@ -670,7 +670,7 @@ export async function clearAuth(): Promise<number> {
 
 function showLoginDialog(serverUrl: string, serverPassword: string): Promise<void> {
   const logger = getLogger()
-  const preloadPath = join(PRELOAD_ROOT, "../preload/login.cjs")
+  const preloadPath = join(PRELOAD_ROOT, "../preload/login.js")
   logger.log("login dialog preload path", { preloadPath, packaged: app.isPackaged })
 
   return new Promise<void>((resolve, reject) => {
