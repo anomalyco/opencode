@@ -45,6 +45,7 @@ export class CodeModeFunction {
     readonly parameters: ReadonlyArray<AstNode>,
     readonly body: AstNode,
     readonly capturedScopes: ReadonlyArray<Map<string, Binding>>,
+    readonly async: boolean,
   ) {}
 }
 
@@ -153,7 +154,8 @@ export const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRunti
     [supportedSyntaxMessage],
   )
 
-export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null
 
 export const asNode = (value: unknown, context: string): AstNode => {
   if (!isRecord(value) || typeof value.type !== "string") {

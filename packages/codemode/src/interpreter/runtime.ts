@@ -612,12 +612,13 @@ class Interpreter<R> {
   // Fiber-backed promises whose settlement no program construct has observed yet. Successful
   // program completion drains these (like a runtime waiting on in-flight work at exit) and
   // surfaces a never-awaited failure as an unhandled-rejection diagnostic.
-  private readonly pendingSettlements = new Set<SandboxPromise>()
+  private readonly pendingSettlements: Set<SandboxPromise>
 
   constructor(
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
     logs: Array<string> = [],
+    shared?: { callPermits: Semaphore.Semaphore; pendingSettlements: Set<SandboxPromise> },
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = [globalScope]
@@ -625,7 +626,8 @@ class Interpreter<R> {
     this.toolKeys = toolKeys
     this.logs = logs
     this.lastValue = undefined
-    this.callPermits = Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY)
+    this.callPermits = shared?.callPermits ?? Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY)
+    this.pendingSettlements = shared?.pendingSettlements ?? new Set<SandboxPromise>()
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
     globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
     globalScope.set("undefined", { mutable: false, value: undefined })
@@ -705,15 +707,17 @@ class Interpreter<R> {
   private drainPendingSettlements(): Effect.Effect<void, unknown, never> {
     const self = this
     return Effect.gen(function* () {
-      for (const promise of [...self.pendingSettlements]) {
+      while (self.pendingSettlements.size > 0) {
+        const promise = self.pendingSettlements.values().next().value
+        if (promise === undefined) break
         const exit = yield* self.observePromise(promise)
         if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) continue
         const failure = normalizeError(Cause.squash(exit.cause))
         throw new InterpreterRuntimeError(
-          `Unhandled rejection from an un-awaited tool call: ${failure.message}`,
+          `Unhandled rejection from an un-awaited promise: ${failure.message}`,
           undefined,
           failure.kind,
-          ["Await tool calls - `const result = await tools.ns.tool(...)` - so failures can be caught and handled."],
+          ["Await promises so failures can be caught and handled."],
         )
       }
     })
@@ -727,17 +731,15 @@ class Interpreter<R> {
     path: ReadonlyArray<string>,
     args: Array<unknown>,
   ): Effect.Effect<SandboxPromise, never, R> {
-    const self = this
-    return Effect.map(
-      Effect.forkChild(this.callPermits.withPermit(Effect.suspend(() => self.invokeTool(path, args))), {
-        startImmediately: true,
-      }),
-      (fiber) => {
-        const promise = new SandboxPromise(fiber)
-        self.pendingSettlements.add(promise)
-        return promise
-      },
-    )
+    return this.createPromise(this.callPermits.withPermit(Effect.suspend(() => this.invokeTool(path, args))))
+  }
+
+  private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
+    return Effect.map(Effect.forkChild(effect, { startImmediately: true }), (fiber) => {
+      const promise = new SandboxPromise(fiber)
+      this.pendingSettlements.add(promise)
+      return promise
+    })
   }
 
   // The promise's settlement as an Exit, marking it observed for unhandled-rejection tracking.
@@ -858,6 +860,7 @@ class Interpreter<R> {
       getArray(node, "params").map((parameter, index) => asNode(parameter, `params[${index}]`)),
       getNode(node, "body"),
       this.scopes.slice(),
+      node.async === true,
     )
   }
 
@@ -2307,43 +2310,42 @@ class Interpreter<R> {
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
-    const self = this
-    return Effect.suspend(() => {
-      const savedScopes = self.scopes
-      self.scopes = [...fn.capturedScopes, new Map<string, Binding>()]
-      const run = Effect.gen(function* () {
-        // Seed every parameter name into the scope as a TDZ slot first, so a default that
-        // references another parameter resolves to that (uninitialized) param rather than
-        // silently falling through to an outer binding of the same name - matching JS.
-        const paramScope = self.currentScope()
-        for (const parameter of fn.parameters) {
-          for (const name of collectPatternNames(parameter)) {
-            paramScope.set(name, { mutable: true, value: undefined, initialized: false })
-          }
-        }
-        for (const [index, parameter] of fn.parameters.entries()) {
-          if (parameter.type === "RestElement") {
-            yield* self.declarePattern(getNode(parameter, "argument"), args.slice(index), true, parameter)
-            break
-          }
-          yield* self.declarePattern(parameter, args[index], true, parameter)
-        }
-
-        if (fn.body.type === "BlockStatement") {
-          const result = yield* self.evaluateStatement(fn.body)
-          return result.kind === "return" || result.kind === "value" ? result.value : undefined
-        }
-
-        return yield* self.evaluateExpression(fn.body)
-      })
-      return run.pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            self.scopes = savedScopes
-          }),
-        ),
-      )
+    const invocation = new Interpreter(this.invokeTool, this.toolKeys, this.logs, {
+      callPermits: this.callPermits,
+      pendingSettlements: this.pendingSettlements,
     })
+    invocation.scopes = [...fn.capturedScopes, new Map<string, Binding>()]
+    const run = Effect.gen(function* () {
+      // Seed every parameter name into the scope as a TDZ slot first, so a default that
+      // references another parameter resolves to that (uninitialized) param rather than
+      // silently falling through to an outer binding of the same name - matching JS.
+      const paramScope = invocation.currentScope()
+      for (const parameter of fn.parameters) {
+        for (const name of collectPatternNames(parameter)) {
+          paramScope.set(name, { mutable: true, value: undefined, initialized: false })
+        }
+      }
+      for (const [index, parameter] of fn.parameters.entries()) {
+        if (parameter.type === "RestElement") {
+          yield* invocation.declarePattern(getNode(parameter, "argument"), args.slice(index), true, parameter)
+          break
+        }
+        yield* invocation.declarePattern(parameter, args[index], true, parameter)
+      }
+
+      if (fn.body.type === "BlockStatement") {
+        const result = yield* invocation.evaluateStatement(fn.body)
+        return result.kind === "return" || result.kind === "value" ? result.value : undefined
+      }
+
+      return yield* invocation.evaluateExpression(fn.body)
+    })
+    if (!fn.async) return run
+    return this.createPromise(
+      Effect.flatMap(run, (value) =>
+        value instanceof SandboxPromise ? invocation.settlePromise(value) : Effect.succeed(value),
+      ),
+    )
   }
 
   private invokeIntrinsic(
@@ -2432,13 +2434,19 @@ class Interpreter<R> {
       else value.replaceAll(pattern, collect)
     }
 
+    const self = this
     return Effect.gen(function* () {
       const output: Array<string> = []
       let end = 0
       for (const match of matches) {
+        const replacement = yield* apply(match.args)
+        const resolved =
+          args[1] instanceof CodeModeFunction && args[1].async && replacement instanceof SandboxPromise
+            ? yield* self.settlePromise(replacement)
+            : replacement
         output.push(
           value.slice(end, match.offset),
-          coerceToString(boundedData(yield* apply(match.args), `String.${name} replacer result`)),
+          coerceToString(boundedData(resolved, `String.${name} replacer result`)),
         )
         end = match.offset + match.match.length
       }
