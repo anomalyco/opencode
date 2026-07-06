@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
+import * as pty from "@lydell/node-pty"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "../../preload/types"
 import { wslTerminalArgs } from "./policy"
 
@@ -109,29 +110,16 @@ function runCommand(command: string, args: string[], opts: RunWslOptions = {}) {
   })
 }
 
-let ptyModule: { spawn: Function } | undefined
-async function getPty() {
-  if (!ptyModule) {
-    const mod = await import(`@lydell/node-pty-${process.platform}-${process.arch}`)
-    ptyModule = mod as { spawn: Function }
-  }
-  return ptyModule
-}
-
 function runInteractiveCommand(command: string, args: string[], opts: RunWslOptions = {}, defaultTimeoutMs: number) {
-  // Lazy-load the platform-specific pty module before entering the Promise
-  // executor to avoid unhandled rejection from an async executor.
-  const loadPty = getPty()
   return new Promise<WslCommandResult>((resolve, reject) => {
-    loadPty.then((pty) => {
-      const child = pty.spawn(command, args, {
-        name: "xterm-color",
-        cols: 80,
-        rows: 24,
-        cwd: process.cwd(),
-        env: process.env,
-        useConpty: true,
-      })
+    const child = pty.spawn(command, args, {
+      name: "xterm-color",
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      env: process.env,
+      useConpty: true,
+    })
 
     let settled = false
     let stdout = ""
@@ -181,7 +169,6 @@ function runInteractiveCommand(command: string, args: string[], opts: RunWslOpti
       cleanup()
       resolve({ code: event.exitCode, signal: null, stdout, stderr: "" })
     })
-    }).catch(reject)
   })
 }
 
