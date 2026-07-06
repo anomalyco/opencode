@@ -5,8 +5,13 @@ export function isDefaultTitle(title: string) {
 }
 
 export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessage>, boundary?: string) {
+  const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
+  if (boundary && boundaryIndex === -1) return
   return messages.findLast(
-    (message): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } =>
-      message.type === "assistant" && message.tokens !== undefined && (!boundary || message.id < boundary),
+    (
+      message,
+      index,
+    ): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } =>
+      message.type === "assistant" && message.tokens !== undefined && (boundaryIndex === -1 || index < boundaryIndex),
   )
 }

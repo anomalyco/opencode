@@ -108,6 +108,159 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("refreshes usage without applying stale session snapshots", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_usage_refresh"
+  let resolveSessions!: (response: Response) => void
+  const resolveSession: Array<(response: Response) => void> = []
+  let sessionsRequested = false
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") {
+      sessionsRequested = true
+      return new Promise<Response>((resolve) => {
+        resolveSessions = resolve
+      })
+    }
+    if (url.pathname === `/api/session/${sessionID}`) {
+      return new Promise<Response>((resolve) => {
+        resolveSession.push(resolve)
+      })
+    }
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => sessionsRequested)
+    emitEvent(events, {
+      id: "evt_usage_2",
+      created: 2,
+      type: "session.step.ended",
+      durable: durable(sessionID, 2),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_usage_2",
+        finish: "stop",
+        cost: 0.5,
+        tokens: { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } },
+      },
+    })
+    await wait(() => resolveSession.length === 1)
+    resolveSessions(
+      json({
+        data: [
+          {
+            id: sessionID,
+            projectID: "proj_test",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+            title: "Stale usage",
+            location: { directory },
+          },
+        ],
+        watermarks: {},
+        cursor: {},
+      }),
+    )
+    resolveSession[0]!(
+      json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0.5,
+          tokens: { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } },
+          time: { created: 0, updated: 0 },
+          title: "Current usage",
+          location: { directory },
+        },
+      }),
+    )
+    await wait(() => data.session.get(sessionID)?.cost === 0.5)
+    expect(data.session.get(sessionID)?.tokens).toEqual({
+      input: 5,
+      output: 2,
+      reasoning: 1,
+      cache: { read: 1, write: 1 },
+    })
+
+    emitEvent(events, {
+      id: "evt_usage_3",
+      created: 3,
+      type: "session.step.ended",
+      durable: durable(sessionID, 3),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_usage_3",
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 3, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_usage_4",
+      created: 4,
+      type: "session.step.ended",
+      durable: durable(sessionID, 4),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_usage_4",
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    await wait(() => resolveSession.length === 3)
+    resolveSession[2]!(
+      json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 1,
+          tokens: { input: 10, output: 4, reasoning: 1, cache: { read: 1, write: 1 } },
+          time: { created: 0, updated: 0 },
+          title: "Latest usage",
+          location: { directory },
+        },
+      }),
+    )
+    await wait(() => data.session.get(sessionID)?.cost === 1)
+    resolveSession[1]!(
+      json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0.75,
+          tokens: { input: 8, output: 3, reasoning: 1, cache: { read: 1, write: 1 } },
+          time: { created: 0, updated: 0 },
+          title: "Older usage",
+          location: { directory },
+        },
+      }),
+    )
+    await Bun.sleep(20)
+    expect(data.session.get(sessionID)?.cost).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("reconnects the event stream and bootstraps fresh data", async () => {
   const events = createEventStream()
   const requests = { active: 0, event: 0, model: 0 }
@@ -348,6 +501,7 @@ test("connectedOnce is false until first connect and persists across disconnect"
 
 test("tracks session status from active sessions and execution events", async () => {
   const events = createEventStream()
+  let settled = false
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session/active")
       return json({ data: { "session-active": { type: "running" } }, watermarks: {} })
@@ -356,8 +510,10 @@ test("tracks session status from active sessions and execution events", async ()
         data: {
           id: "session-live",
           projectID: "proj_test",
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: settled ? 0.75 : 0,
+          tokens: settled
+            ? { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } }
+            : { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
           title: "Live session",
           location: { directory },
@@ -388,6 +544,7 @@ test("tracks session status from active sessions and execution events", async ()
     expect(data.session.status("session-idle")).toBe("idle")
     await data.session.refresh("session-live")
 
+    settled = true
     emitEvent(events, {
       id: "evt_step_started",
       created: 0,
@@ -419,6 +576,7 @@ test("tracks session status from active sessions and execution events", async ()
       const assistant = data.session.message.get("session-live", "message-live")
       return assistant?.type === "assistant" && assistant.finish === "stop"
     })
+    await wait(() => data.session.get("session-live")?.cost === 0.75)
     expect(data.session.status("session-live")).toBe("running")
     expect(data.session.get("session-live")).toMatchObject({
       cost: 0.75,

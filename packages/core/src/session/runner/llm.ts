@@ -8,6 +8,7 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
+  type ProviderMetadata,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, Exit, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -52,7 +53,10 @@ type StepTokens = {
   readonly cache: { readonly read: number; readonly write: number }
 }
 
-export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
+export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens, metadata?: ProviderMetadata) {
+  const totalNanoAiu = metadata?.copilot?.totalNanoAiu
+  if (typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0)
+    return totalNanoAiu / 100_000_000_000
   const context = tokens.input + tokens.cache.read + tokens.cache.write
   const tier = costs
     .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
@@ -322,7 +326,7 @@ const layer = Layer.effect(
               sessionID: session.id,
               assistantMessageID: yield* publisher.startAssistant(),
               finish: settlement.finish,
-              cost: calculateCost(resolved.cost, settlement.tokens),
+              cost: calculateCost(resolved.cost, settlement.tokens, settlement.providerMetadata),
               tokens: settlement.tokens,
               snapshot: endSnapshot,
               files,

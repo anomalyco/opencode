@@ -19,10 +19,11 @@ describe("util.session", () => {
       tokens: { input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0 },
     })
-    const messages = [assistant("msg_1", 10), assistant("msg_3", 30)]
+    const messages = [assistant("msg_z", 10), assistant("msg_a", 30)]
 
     expect(lastAssistantWithUsage(messages)?.tokens.input).toBe(30)
-    expect(lastAssistantWithUsage(messages, "msg_2")?.tokens.input).toBe(10)
+    expect(lastAssistantWithUsage(messages, "msg_a")?.tokens.input).toBe(10)
+    expect(lastAssistantWithUsage(messages, "msg_missing")).toBeUndefined()
     expect(lastAssistantWithUsage(messages)?.tokens.input).toBe(30)
   })
 })

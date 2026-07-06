@@ -128,6 +128,16 @@ test("calculates step cost using the matching context tier", () => {
   ).toBeCloseTo(0.0002926)
 })
 
+test("prefers Copilot billed cost over token estimation", () => {
+  expect(
+    SessionRunnerLLM.calculateCost(
+      [{ input: 1, output: 2, cache: { read: 0.1, write: 0.5 } }],
+      { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
+      { copilot: { totalNanoAiu: 4_473_525_000 } },
+    ),
+  ).toBeCloseTo(0.04473525)
+})
+
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
 const permission = Layer.succeed(
@@ -1543,6 +1553,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.stepFinish({
           index: 0,
           reason: "tool-calls",
+          providerMetadata: { copilot: { totalNanoAiu: 4_473_525_000 } },
           usage: {
             inputTokens: 10,
             nonCachedInputTokens: 8,
@@ -1563,6 +1574,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           finish: "tool-calls",
+          cost: 0.04473525,
           tokens: { input: 8, output: 3, reasoning: 1, cache: { read: 2, write: 0 } },
           content: [
             { type: "reasoning", id: "reasoning-1", text: "Think" },

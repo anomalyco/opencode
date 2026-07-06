@@ -100,6 +100,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
+    const sessionRefreshGeneration = new Map<string, number>()
     let connectionGeneration = 0
     let statusChanges: Set<string> | undefined
     let bootstrapping: Promise<void> | undefined
@@ -358,22 +359,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             })
           })
           break
-        case "session.step.ended":
+        case "session.step.ended": {
           setSessionStatus(event.data.sessionID, "running")
-          if (store.session.info[event.data.sessionID])
-            setStore(
-              "session",
-              "info",
-              event.data.sessionID,
-              produce((draft) => {
-                draft.cost += event.data.cost
-                draft.tokens.input += event.data.tokens.input
-                draft.tokens.output += event.data.tokens.output
-                draft.tokens.reasoning += event.data.tokens.reasoning
-                draft.tokens.cache.read += event.data.tokens.cache.read
-                draft.tokens.cache.write += event.data.tokens.cache.write
-              }),
-            )
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
             if (!currentAssistant) return
@@ -384,7 +371,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             if (event.data.snapshot)
               currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.data.snapshot }
           })
+          void result.session
+            .refresh(event.data.sessionID)
+            .catch((error) => console.error("Failed to refresh session usage", error))
           break
+        }
         case "session.step.failed":
           message.update(event.data.sessionID, (draft, index) => {
             const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
@@ -691,7 +682,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           return store.session.status[sessionID] ?? "idle"
         },
         async refresh(sessionID: string) {
-          setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
+          const generation = (sessionRefreshGeneration.get(sessionID) ?? 0) + 1
+          sessionRefreshGeneration.set(sessionID, generation)
+          const info = mutable(await sdk.api.session.get({ sessionID }))
+          if (sessionRefreshGeneration.get(sessionID) !== generation) return
+          setStore("session", "info", sessionID, info)
           registerSession(sessionID)
         },
         message: {
@@ -875,6 +870,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     async function bootstrap() {
       if (bootstrapping) return bootstrapping
+      const generation = new Map(sessionRefreshGeneration)
       bootstrapping = Promise.allSettled([
         sdk.api.session
           .list({
@@ -888,7 +884,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               "session",
               "info",
               produce((draft) => {
-                for (const session of response.data) draft[session.id] = mutable(session)
+                for (const session of response.data) {
+                  if ((sessionRefreshGeneration.get(session.id) ?? 0) !== (generation.get(session.id) ?? 0)) continue
+                  draft[session.id] = mutable(session)
+                }
               }),
             )
             for (const session of response.data) registerSession(session.id)
