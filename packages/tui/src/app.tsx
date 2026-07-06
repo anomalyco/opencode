@@ -500,7 +500,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }
 
     if (route.data.type === "session") {
-      const session = sync.session.get(route.data.sessionID)
+      const session = data.session.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
         return
