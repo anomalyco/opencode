@@ -1,4 +1,4 @@
-import { Cause, Effect } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import { ToolError, toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -8,6 +8,7 @@ import {
   inputTypeScript,
   isDefinition as isToolDefinition,
   outputTypeScript,
+  Tool,
   type Definition,
 } from "./tool.js"
 import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
@@ -76,10 +77,26 @@ export type ToolDescription = {
 export type SafeObject = Record<string, unknown>
 
 const reservedNamespace = "$codemode"
-const defaultMaxInlineCatalogTokens = 2_000
+const defaultCatalogBudget = 2_000
 const defaultSearchLimit = 10
-const searchSignature =
-  "tools.$codemode.search({ query?: string, namespace?: string, limit?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; total: number }>"
+const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+const SearchInput = Schema.Struct({
+  query: Schema.optionalKey(Schema.String),
+  namespace: Schema.optionalKey(Schema.String),
+  limit: Schema.optionalKey(PositiveInt),
+  offset: Schema.optionalKey(NonNegativeInt),
+})
+const SearchItem = Schema.Struct({
+  path: Schema.String,
+  description: Schema.String,
+  signature: Schema.String,
+})
+const SearchOutput = Schema.Struct({
+  items: Schema.Array(SearchItem),
+  remaining: NonNegativeInt,
+  next: Schema.NullOr(Schema.Struct({ offset: NonNegativeInt })),
+})
 const toolExpression = (path: string) =>
   "tools" +
   path
@@ -295,15 +312,17 @@ const definitions = <R>(
   return entries
 }
 
+const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDescription => ({
+  path,
+  description: definition.description,
+  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
+})
+
 const visibleDefinitions = <R>(tools: HostTools<R>) =>
   definitions(tools).map(({ path, definition }) => ({
     path,
     definition,
-    description: {
-      path,
-      description: definition.description,
-      signature: `${toolExpression(path)}(input: ${inputTypeScript(definition)}): Promise<${outputTypeScript(definition)}>`,
-    },
+    description: describeDefinition(path, definition),
   }))
 
 export const catalog = <R>(tools: HostTools<R>): ReadonlyArray<ToolDescription> =>
@@ -317,11 +336,6 @@ export type DiscoveryPlan = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
-  /**
-   * JSDoc-annotated multiline signature shown on search-result items; the compact
-   * single-line form (inline catalog lines) stays in `description.signature`.
-   */
-  readonly signature: string
   /** Top-level namespace (first path segment), matched by the search `namespace` option. */
   readonly namespace: string
   /** Lowercased path + description + input property names/descriptions, for substring matching. */
@@ -355,8 +369,74 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
+const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>) =>
+  Tool.make({
+    description: "Search available Code Mode tools",
+    input: SearchInput,
+    output: SearchOutput,
+    run: (request) =>
+      Effect.sync(() => {
+        const query = request.query ?? ""
+        const offset = request.offset ?? 0
+        const scoped =
+          request.namespace === undefined
+            ? searchIndex
+            : searchIndex.filter((entry) => entry.namespace === request.namespace)
+        // A query that names one tool path exactly (canonical path or rendered JavaScript
+        // expression) is a lookup, not a search: return that tool alone.
+        const trimmed = query.trim()
+        const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
+        const exact =
+          pathQuery === ""
+            ? undefined
+            : scoped.find(
+                (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+              )
+        const terms = tokenize(query).map(termForms)
+        // Additive field-weighted scoring, summed across terms: exact path or path segment
+        // (20) > path substring (8) > description substring (4) > any searchable text,
+        // including input parameter names and descriptions (2).
+        const ranked =
+          exact !== undefined
+            ? [exact]
+            : scoped
+                .map((entry) => {
+                  const path = entry.description.path.toLowerCase()
+                  const description = entry.description.description.toLowerCase()
+                  const score = terms.reduce(
+                    (total, forms) =>
+                      total +
+                      (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+                      (forms.some((form) => path.includes(form)) ? 8 : 0) +
+                      (forms.some((form) => description.includes(form)) ? 4 : 0) +
+                      (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
+                    0,
+                  )
+                  return { entry, score }
+                })
+                .filter(({ score }) => terms.length === 0 || score > 0)
+                .sort(
+                  (left, right) =>
+                    right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path),
+                )
+                .map(({ entry }) => entry)
+        const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
+          ...description,
+          path: toolExpression(description.path),
+        }))
+        const remaining = Math.max(0, ranked.length - offset - items.length)
+        return {
+          items,
+          remaining,
+          next: remaining > 0 ? { offset: offset + items.length } : null,
+        }
+      }),
+  })
+
+const searchDescription = describeDefinition(`${reservedNamespace}.search`, makeSearchTool([]))
+
 const catalogLine = (tool: ToolDescription) => {
-  // Inline catalog lines use only a compact first line; full text stays in search results.
+  // Keep the tool description concise; the full schema documentation remains in the signature.
   const line = tool.description.split("\n", 1)[0]!.trim()
   const description = line.length > 120 ? line.slice(0, 119) + "..." : line
   return description === "" ? `  - ${tool.signature}` : `  - ${tool.signature} // ${description}`
@@ -364,7 +444,6 @@ const catalogLine = (tool: ToolDescription) => {
 
 const toSearchEntry = <R>(path: string, definition: Definition<R>, description: ToolDescription): SearchEntry => ({
   description,
-  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
   namespace: path.split(".", 1)[0]!,
   searchText: [
     path,
@@ -389,7 +468,7 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
 
 /**
  * Budgeted catalog: every namespace is always listed with its tool count; full call
- * signatures are inlined against the `maxInlineCatalogTokens` budget (estimated tokens,
+ * signatures are inlined against the `catalogBudget` (estimated tokens,
  * chars/4) round-robin across namespaces - in each round (namespaces alphabetical), every
  * namespace still holding un-inlined tools attempts to place its next-cheapest line, and
  * a namespace whose next line does not fit is done while the others keep going - so every
@@ -398,12 +477,9 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
  * namespace. Namespace stub lines are never budgeted: every namespace appears with its
  * tool count even at budget 0.
  */
-export const discoveryPlan = <R>(
-  tools: HostTools<R>,
-  maxInlineCatalogTokens = defaultMaxInlineCatalogTokens,
-): DiscoveryPlan => {
-  if (!Number.isSafeInteger(maxInlineCatalogTokens) || maxInlineCatalogTokens < 0) {
-    throw new RangeError("discovery.maxInlineCatalogTokens must be a non-negative safe integer")
+export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBudget): DiscoveryPlan => {
+  if (!Number.isSafeInteger(catalogBudget) || catalogBudget < 0) {
+    throw new RangeError("discovery.catalogBudget must be a non-negative safe integer")
   }
   const visible = visibleDefinitions(tools)
   const described = visible.map(({ description }) => description)
@@ -438,7 +514,7 @@ export const discoveryPlan = <R>(
     for (const selection of active) {
       const tool = selection.queue[0]!
       const cost = estimateTokens(catalogLine(tool))
-      if (used + cost > maxInlineCatalogTokens) continue
+      if (used + cost > catalogBudget) continue
       selection.queue.shift()
       selection.picked.add(tool)
       used += cost
@@ -459,12 +535,11 @@ export const discoveryPlan = <R>(
   // catalog at the bottom. Example call forms use placeholders - never a real or fabricated
   // tool name - and show both dot and bracket notation so non-identifier names are not normalized.
   const intro = [
-    "Write a CodeMode program to answer the request. Return code only.",
     empty
-      ? "Execute JavaScript in a confined runtime."
+      ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime."
       : complete
-        ? "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed below; surrounding agent tools are not available unless listed here."
-        : "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed or searchable below; surrounding agent tools are not available unless listed here.",
+        ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed below and internal runtime tools; surrounding agent tools are not available."
+        : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed or searchable below and internal runtime tools; surrounding agent tools are not available.",
     ...(empty
       ? []
       : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
@@ -481,16 +556,12 @@ export const discoveryPlan = <R>(
         ...(complete
           ? [
               "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
-              "2. Call it using the exact signature shown; bracket notation and quotes are part of the path.",
-              '3. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string.',
-              "4. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
+              "2. Call it using the exact signature shown: `const result = await tools.<namespace>.<tool>(input)`; bracket notation and quotes are part of the path.",
+              "3. Return only the fields you need from structured results; narrow unknown results before reading fields, and avoid returning large raw payloads.",
             ]
           : [
-              '1. If the exact signature is not listed below, first search: `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
-              "2. Read the matches: each item is `{ path, description, signature }` - read the description before using an unfamiliar tool.",
-              "3. Call the result's `path` as-is; bracket notation and quotes are part of the path.",
-              '4. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string.',
-              "5. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
+              '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+              "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
             ]),
       ]
 
@@ -501,24 +572,26 @@ export const discoveryPlan = <R>(
         "## Rules",
         "",
         complete
-          ? "- Only tools listed here are available inside `tools`; tools from the surrounding agent/runtime are not implicitly exposed."
-          : "- Only tools listed here or returned by `tools.$codemode.search` are available inside `tools`; tools from the surrounding agent/runtime are not implicitly exposed.",
+          ? "- Only Code Mode tools listed here and internal runtime tools are available; surrounding agent tools are not implicitly exposed."
+          : "- Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
-        "- A result typed `Promise<unknown>` has no guaranteed shape - verify what actually came back before relying on its fields.",
+        "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
         ...(complete
           ? []
-          : ['- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.']),
+          : [
+              '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
+              "- If search returns `next`, repeat the same search with `offset: next.offset`.",
+            ]),
       ]
 
-  const syntax = [
+  const language = [
     "",
-    "## Syntax",
+    "## Language",
     "",
-    "Standard modern JavaScript works: functions/closures, destructuring, template literals, loops, try/catch, spread, optional chaining, the usual Array/String/Object/Math/JSON methods, plus Date, RegExp, Map, Set, and Promise.all/allSettled/race/resolve/reject.",
-    "TypeScript type annotations are allowed and stripped before execution (decorators are not supported).",
-    "Not supported (each fails with a message naming the alternative): classes, generators, for await...of, .then/.catch/.finally (use await with try/catch).",
+    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls.",
+    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, arbitrary methods, and promise chaining are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
     "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
   ]
 
@@ -547,11 +620,11 @@ export const discoveryPlan = <R>(
       for (const tool of group) if (picked.has(tool)) toolSection.push(catalogLine(tool))
     }
     if (!complete) {
-      toolSection.push("", "Search returns complete callable signatures:", `- ${searchSignature}`)
+      toolSection.push("", "Search returns complete callable signatures:", `- ${searchDescription.signature}`)
     }
   }
 
-  const lines = [...intro, ...workflow, ...rules, ...syntax, ...toolSection]
+  const lines = [...intro, ...workflow, ...rules, ...language, ...toolSection]
   return {
     catalog: described,
     instructions: lines.join("\n"),
@@ -560,20 +633,13 @@ export const discoveryPlan = <R>(
 }
 
 /**
- * The enumerable names at one node of the host tool tree - namespace names at the root,
+ * The enumerable names at one node of the callable tool tree - namespace names at the root,
  * tool/namespace names below - powering `Object.keys(tools)` and `for...in` over tool
  * references. A callable tool is a leaf and enumerates as `[]` (like `Object.keys` of a
  * function in JS). An unknown path is an `UnknownTool` error pointing at the working
  * discovery idioms, mirroring how calling an unknown tool fails.
  */
-const namespaceKeys = <R>(
-  tools: HostTools<R>,
-  path: ReadonlyArray<string>,
-  searchEnabled: boolean,
-): ReadonlyArray<string> => {
-  // The reserved discovery namespace is virtual (never present in the host tree); enumerate
-  // it explicitly so `Object.keys(tools.$codemode)` matches the callable surface.
-  if (searchEnabled && path.length === 1 && path[0] === reservedNamespace) return ["search"]
+const namespaceKeys = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): ReadonlyArray<string> => {
   let value: HostTool<R> | Definition<R> | HostTools<R> = tools
   for (const segment of path) {
     if (
@@ -582,15 +648,9 @@ const namespaceKeys = <R>(
       isDefinition(value) ||
       !Object.hasOwn(value, segment)
     ) {
-      throw new ToolRuntimeError(
-        "UnknownTool",
-        `Unknown tool namespace '${path.join(".")}'.`,
-        searchEnabled
-          ? [
-              "Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools.",
-            ]
-          : ["Object.keys(tools) lists the available namespaces."],
-      )
+      throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${path.join(".")}'.`, [
+        "Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools.",
+      ])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
   }
@@ -598,11 +658,7 @@ const namespaceKeys = <R>(
   return Object.keys(value)
 }
 
-const resolve = <R>(
-  tools: HostTools<R>,
-  path: ReadonlyArray<string>,
-  searchEnabled: boolean,
-): HostTool<R> | Definition<R> => {
+const resolve = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): HostTool<R> | Definition<R> => {
   let value: HostTool<R> | Definition<R> | HostTools<R> = tools
 
   for (const segment of path) {
@@ -612,11 +668,9 @@ const resolve = <R>(
       isDefinition(value) ||
       !Object.hasOwn(value, segment)
     ) {
-      throw new ToolRuntimeError(
-        "UnknownTool",
-        `Unknown tool '${path.join(".")}'.`,
-        searchEnabled ? ["Use tools.$codemode.search({ query }) to find available described tools."] : [],
-      )
+      throw new ToolRuntimeError("UnknownTool", `Unknown tool '${path.join(".")}'.`, [
+        "Use tools.$codemode.search({ query }) to find available described tools.",
+      ])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
   }
@@ -632,7 +686,7 @@ export type ToolRuntime<R = never> = {
   readonly root: ToolReference
   readonly calls: Array<ToolCall>
   readonly invoke: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  /** Enumerable namespace/tool names at one node of the host tool tree; see `namespaceKeys`. */
+  /** Enumerable namespace/tool names at one node of the callable tool tree; see `namespaceKeys`. */
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
@@ -640,11 +694,14 @@ export const make = <R>(
   tools: HostTools<R>,
   /** Undefined means unlimited tool calls. */
   maxToolCalls: number | undefined,
+  searchIndex: ReadonlyArray<SearchEntry>,
   hooks?: ToolCallHooks<R>,
-  searchIndex?: ReadonlyArray<SearchEntry>,
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
-  const searchEnabled = searchIndex !== undefined
+  const callableTools = {
+    ...tools,
+    [reservedNamespace]: { search: makeSearchTool(searchIndex) },
+  }
 
   // Wraps the settling portion of a tool call so onToolCallEnd observes success and failure
   // symmetrically. Interruption (e.g. the execution timeout) fires neither outcome.
@@ -683,7 +740,7 @@ export const make = <R>(
   return {
     root: new ToolReference([]),
     calls,
-    keys: (path) => namespaceKeys(tools, path, searchEnabled),
+    keys: (path) => namespaceKeys(callableTools, path),
     invoke: (path, args) =>
       Effect.gen(function* () {
         const name = path.join(".")
@@ -694,107 +751,7 @@ export const make = <R>(
             recordCall(call)
             return calls.length - 1
           }).pipe(Effect.tap((index) => hooks?.onToolCallStart?.({ index, name, input }) ?? Effect.void))
-        if (name === "$codemode.search") {
-          if (!searchEnabled) throw new ToolRuntimeError("UnknownTool", `Unknown tool '${name}'.`)
-          const input = externalArgs[0]
-          if (externalArgs.length !== 1 || input === null || typeof input !== "object" || Array.isArray(input)) {
-            throw new ToolRuntimeError(
-              "InvalidToolInput",
-              "tools.$codemode.search expects { query?: string; namespace?: string; limit?: number }.",
-            )
-          }
-          const request = input as { query?: unknown; namespace?: unknown; limit?: unknown }
-          if (request.query !== undefined && typeof request.query !== "string") {
-            throw new ToolRuntimeError(
-              "InvalidToolInput",
-              "tools.$codemode.search query must be a string when provided.",
-            )
-          }
-          if (request.namespace !== undefined && typeof request.namespace !== "string") {
-            throw new ToolRuntimeError(
-              "InvalidToolInput",
-              "tools.$codemode.search namespace must be a string when provided.",
-            )
-          }
-          if (
-            request.limit !== undefined &&
-            (typeof request.limit !== "number" || !Number.isSafeInteger(request.limit) || request.limit <= 0)
-          ) {
-            throw new ToolRuntimeError(
-              "InvalidToolInput",
-              "tools.$codemode.search limit must be a positive safe integer when provided.",
-            )
-          }
-          const query = typeof request.query === "string" ? request.query : ""
-          const namespace = typeof request.namespace === "string" ? request.namespace : undefined
-          const index = yield* recordAndObserve(request)
-          return yield* observeEnd(
-            Effect.try({
-              try: () => {
-                const limit = typeof request.limit === "number" ? request.limit : defaultSearchLimit
-                const scoped =
-                  namespace === undefined ? searchIndex : searchIndex.filter((entry) => entry.namespace === namespace)
-                // A query that names one tool path exactly (canonical path or rendered
-                // JavaScript expression) is a lookup, not a search: return that tool alone.
-                const trimmed = query.trim()
-                const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
-                const exact =
-                  pathQuery === ""
-                    ? undefined
-                    : scoped.find(
-                        (entry) =>
-                          entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
-                      )
-                const terms = tokenize(query).map(termForms)
-                // Additive field-weighted scoring, summed across terms: exact path or path
-                // segment (20) > path substring (8) > description substring (4) > any
-                // searchable text, incl. input parameter names/descriptions (2). Each term
-                // matches a field when any of its forms (the term or a singular variant)
-                // does. An empty query browses everything, alphabetical by path.
-                const ranked =
-                  exact !== undefined
-                    ? [exact]
-                    : scoped
-                        .map((entry) => {
-                          const path = entry.description.path.toLowerCase()
-                          const description = entry.description.description.toLowerCase()
-                          const score = terms.reduce(
-                            (total, forms) =>
-                              total +
-                              (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
-                              (forms.some((form) => path.includes(form)) ? 8 : 0) +
-                              (forms.some((form) => description.includes(form)) ? 4 : 0) +
-                              (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
-                            0,
-                          )
-                          return { entry, score }
-                        })
-                        .filter(({ score }) => terms.length === 0 || score > 0)
-                        .sort(
-                          (left, right) =>
-                            right.score - left.score ||
-                            left.entry.description.path.localeCompare(right.entry.description.path),
-                        )
-                        .map(({ entry }) => entry)
-                // Result paths are rendered as JavaScript expressions so each `path` is
-                // directly usable as the call site (`await tools.github.list({ ... })` or
-                // `await tools.ns["dashed-name"]({ ... })`). The signature is the pretty,
-                // JSDoc-annotated form (schema descriptions and constraints ride along as
-                // field comments).
-                const items = ranked.slice(0, limit).map(({ description, signature }) => ({
-                  ...description,
-                  path: toolExpression(description.path),
-                  signature,
-                }))
-                return copyIn({ items, total: ranked.length }, "Result from tool '$codemode.search'")
-              },
-              catch: (cause) => cause,
-            }),
-            { index, name, input: request },
-          )
-        }
-
-        const tool = resolve(tools, path, searchEnabled)
+        const tool = resolve(callableTools, path)
         let describedInput: unknown
         if (isDefinition(tool)) {
           if (externalArgs.length !== 1)

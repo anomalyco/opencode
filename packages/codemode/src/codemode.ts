@@ -38,12 +38,12 @@ export type ExecutionLimits = {
 /** Controls how much of the tool catalog is inlined in agent instructions. */
 export type DiscoveryOptions = {
   /**
-   * Estimated-token budget (chars/4, default 2000) for inlined full tool signatures in agent
-   * instructions. Signatures that fit are inlined round-robin across namespaces; every
-   * namespace is always listed with its tool count regardless of budget, and
+   * Approximate budget, in estimated tokens (chars/4, default 2000), for full tool entries in
+   * the instruction catalog. Tool entries are selected round-robin across namespaces. Fixed
+   * instructions and namespace summaries do not count toward the budget, and
    * `tools.$codemode.search` is always registered.
    */
-  readonly maxInlineCatalogTokens?: number
+  readonly catalogBudget?: number
 }
 
 type ToolTree<R = never> = {
@@ -3921,8 +3921,8 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
   const tools = ToolRuntime.make(
     (options.tools ?? {}) as HostTools<Services<Tools>>,
     limits.maxToolCalls,
-    hooks,
     searchIndex,
+    hooks,
   )
   const logs: Array<string> = []
   const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
@@ -4061,10 +4061,10 @@ export const make = <const Tools extends Record<string, unknown> = {}>(
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
-  const discovery = ToolRuntime.discoveryPlan(tools, options.discovery?.maxInlineCatalogTokens)
-  const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, discovery.searchIndex)
-  const catalog = discovery.catalog
-  const instructions = discovery.instructions
+  const prepared = ToolRuntime.prepare(tools, options.discovery?.catalogBudget)
+  const executeProgram = (code: string) => executeWithLimits<Tools>({ ...options, code }, limits, prepared.searchIndex)
+  const catalog = prepared.catalog
+  const instructions = prepared.instructions
 
   return {
     catalog: () => catalog,

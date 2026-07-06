@@ -2157,6 +2157,7 @@ export default function Page() {
             diffsReady={reviewReady}
             empty={reviewEmptyText}
             hasReview={hasReview}
+            reviewHasFocusableContent={hasReview}
             reviewCount={reviewCount}
             reviewPanel={reviewPanel}
             activeDiff={tree.activeDiff}
@@ -2168,14 +2169,20 @@ export default function Page() {
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
-                <div class="min-h-0 flex-1">
+              <Show when={isDesktop()}>
+                <div
+                  classList={{
+                    "min-h-0 flex-1": desktopV2ReviewOpen() || desktopFileTreeOpen(),
+                    "size-0 shrink-0 overflow-hidden": !(desktopV2ReviewOpen() || desktopFileTreeOpen()),
+                  }}
+                >
                   <SessionSidePanel
                     canReview={canReview}
                     diffs={reviewDiffs}
                     diffsReady={reviewReady}
                     empty={reviewEmptyText}
                     hasReview={hasReview}
+                    reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
                     activeDiff={tree.activeDiff}
@@ -2204,7 +2211,12 @@ export default function Page() {
                 </div>
               </Show>
               <Show when={terminalOpen()}>
-                <div class="min-h-0 flex-1">
+                <div
+                  classList={{
+                    "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
+                    "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                  }}
+                >
                   <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
                 </div>
               </Show>
