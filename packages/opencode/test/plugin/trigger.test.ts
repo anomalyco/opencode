@@ -105,4 +105,21 @@ describe("plugin.trigger", () => {
       }),
     ),
   )
+
+  it.instance("loads a plugin module that also exports non-function values", () =>
+    withProject(
+      [
+        'export const VERSION = "1.0.0"',
+        "export const plugin = async () => ({",
+        `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+        '    output.system.unshift("sync")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["sync"])
+      }),
+    ),
+  )
 })

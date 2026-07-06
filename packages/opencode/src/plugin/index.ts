@@ -100,7 +100,9 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
     if (seen.has(entry)) continue
     seen.add(entry)
     const plugin = getServerPlugin(entry)
-    if (!plugin) throw new TypeError("Plugin export is not a function")
+    // Skip non-plugin exports (constants, helpers, etc.) instead of throwing —
+    // a single non-function export must not discard the module's real plugins.
+    if (!plugin) continue
     result.push(plugin)
   }
 
