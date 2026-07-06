@@ -85,6 +85,10 @@ attach them to the outer result, but the program receives only the structured to
 
 ### V2 OpenCode adapter
 
+This section describes the `v2` branch integration. On `dev`, CodeMode is integrated through
+`packages/opencode/src/tool/code-mode.ts`, where nested MCP calls run the `tool.execute.before` and
+`tool.execute.after` plugin hooks.
+
 CodeMode is integrated into V2 through `packages/core/src/tool/registry.ts` and
 `packages/core/src/tool/execute.ts`:
 
