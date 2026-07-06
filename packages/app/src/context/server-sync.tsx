@@ -46,6 +46,7 @@ import type { ServerScope } from "@/utils/server-scope"
 import { persisted } from "@/utils/persist"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession } from "./server-session"
+import { listValue } from "@/utils/list-value"
 
 type GlobalStore = {
   ready: boolean
@@ -225,7 +226,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       void retry(() =>
         sdkFor(directory)
           .command.list()
-          .then((x) => setStore("command", x.data ?? [])),
+          .then((x) => setStore("command", listValue(x.data))),
       ).catch((err) => {
         showToast({
           variant: "error",
@@ -261,11 +262,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const meta = sessionMeta.get(key)
     const retainedLimit = Math.max(store.limit, options?.limit ?? 0, meta?.limit ?? 0)
     if (meta && meta.limit >= retainedLimit) {
-      const next = trimSessions(store.session, {
+      const sessions = listValue(store.session)
+      const next = trimSessions(sessions, {
         limit: retainedLimit,
         permission: session.data.permission,
       })
-      if (next.length !== store.session.length) {
+      if (next.length !== sessions.length) {
         setStore("session", reconcile(next, { key: "id" }))
       }
       children.unpin(key)
@@ -283,12 +285,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
             list: (query) => serverSDK.client.session.list(query),
           })
             .then((x) => {
-              const nonArchived = (x.data ?? [])
+              const nonArchived = listValue(x.data)
                 .filter((s) => !!s?.id)
                 .filter((s) => !s.time?.archived)
                 .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
               const limit = Math.max(store.limit, options?.limit ?? 0, sessionMeta.get(key)?.limit ?? 0)
-              const childSessions = store.session.filter((s) => !!s.parentID)
+              const childSessions = listValue(store.session).filter((s) => !!s.parentID)
               const next = trimSessions([...nonArchived, ...childSessions], {
                 limit,
                 permission: session.data.permission,

@@ -5,6 +5,7 @@ import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"
 import type { createServerSyncContextInner } from "./server-sync"
 import type { State } from "./global-sync/types"
+import { listValue } from "@/utils/list-value"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const sessionFields = new Set([
@@ -124,14 +125,14 @@ export const createDirSyncContext = (
         const [store, setStore] = current()
         setStore("limit", (value) => value + count)
         const response = await client.session.list()
-        const sessions = (response.data ?? [])
+        const sessions = listValue(response.data)
           .filter((session) => !!session?.id)
           .sort((a, b) => cmp(a.id, b.id))
           .slice(0, store.limit)
         sessions.forEach(serverSync.session.remember)
         setStore("session", reconcile(sessions, { key: "id" }))
       },
-      more: createMemo(() => current()[0].session.length >= current()[0].limit),
+      more: createMemo(() => listValue(current()[0].session).length >= current()[0].limit),
       archive: async (sessionID: string) => {
         await serverSDK.client.session.update({ sessionID, time: { archived: Date.now() } })
         current()[1](

@@ -82,6 +82,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { listValue } from "@/utils/list-value"
 
 export default function LegacyLayout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -488,7 +489,7 @@ export default function LegacyLayout(props: ParentProps) {
         const sessionKey = `${currentDir()}:${currentSession}`
         dismissSessionAlert(sessionKey)
         const [store] = serverSync().child(currentDir(), { bootstrap: false })
-        const childSessions = store.session.filter((s) => s.parentID === currentSession)
+        const childSessions = listValue(store.session).filter((s) => s.parentID === currentSession)
         for (const child of childSessions) {
           dismissSessionAlert(`${currentDir()}:${child.id}`)
         }

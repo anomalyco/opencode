@@ -22,6 +22,7 @@ import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { listValue } from "@/utils/list-value"
 
 type GlobalStore = {
   ready: boolean
@@ -94,7 +95,7 @@ export const loadProjectsQuery = (scope: ServerScope, sdk: OpencodeClient) =>
     queryFn: () =>
       retry(() =>
         sdk.project.list().then((x) => {
-          return (x.data ?? [])
+          return listValue(x.data)
             .filter((p) => !!p?.id)
             .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
             .slice()
@@ -164,7 +165,7 @@ function warmSessions(input: {
   setStore: SetStoreFunction<State>
   sdk: OpencodeClient
 }) {
-  const known = new Set(input.store.session.map((item) => item.id))
+  const known = new Set(listValue(input.store.session).map((item) => item.id))
   const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
   if (ids.length === 0) return Promise.resolve()
   return Promise.all(
@@ -288,14 +289,16 @@ export async function bootstrapDirectory(input: {
             if (next) input.vcsCache.setStore("value", next)
           }),
         ),
-      input.mcp && (() => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? [])))),
+      input.mcp &&
+        (() => retry(() => input.sdk.command.list().then((x) => input.setStore("command", listValue(x.data))))),
       () => input.queryClient.fetchQuery(loadReferencesQuery(input.scope, input.directory, input.sdk)),
       () =>
         retry(() =>
           input.sdk.permission.list().then((x) => {
-            const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
+            const permissions = listValue(x.data)
+            const ids = permissions.map((perm) => perm?.sessionID).filter((id): id is string => !!id)
             const grouped = groupBySession(
-              (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
+              permissions.filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
             )
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
@@ -324,8 +327,9 @@ export async function bootstrapDirectory(input: {
       () =>
         retry(() =>
           input.sdk.question.list().then((x) => {
-            const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
-            const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
+            const questions = listValue(x.data)
+            const ids = questions.map((question) => question?.sessionID).filter((id): id is string => !!id)
+            const grouped = groupBySession(questions.filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
               : warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk })

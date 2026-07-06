@@ -1,11 +1,12 @@
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { pathKey } from "@/utils/path-key"
+import { listValue } from "@/utils/list-value"
 import type { ServerConnection } from "@/context/server"
 import type { HomeProjectSelection } from "@/context/layout"
 
 type SessionStore = {
-  session?: Session[]
+  session?: Session[] | Record<string, Session>
   path: { directory: string }
 }
 
@@ -26,8 +27,11 @@ function sortSessions(now: number) {
 const isRootVisibleSession = (session: Session, directory: string) =>
   pathKey(session.directory) === pathKey(directory) && !session.parentID && !session.time?.archived
 
+const sessionList = (session: SessionStore["session"]): Session[] =>
+  listValue(session).filter((item): item is Session => !!item?.id)
+
 export const roots = (store: SessionStore) =>
-  (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
+  sessionList(store.session).filter((session) => isRootVisibleSession(session, store.path.directory))
 
 export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
 
