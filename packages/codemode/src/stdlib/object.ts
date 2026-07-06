@@ -3,7 +3,7 @@ import { isBlockedMember } from "../tool-runtime.js"
 import { isSandboxValue, SandboxMap, SandboxSet, SandboxURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
-export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "is", "assign", "fromEntries"])
+export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "assign", "fromEntries"])
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
@@ -43,8 +43,6 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return Object.entries(requireObject()).map(([key, item]) => [key, item])
     case "hasOwn":
       return Object.hasOwn(requireObject(), String(args[1]))
-    case "is":
-      return Object.is(args[0], args[1])
     case "assign": {
       const target = args[0]
       if (target === null || typeof target !== "object" || Array.isArray(target) || isSandboxValue(target)) {

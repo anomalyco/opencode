@@ -604,22 +604,6 @@ describe("stdlib integration", () => {
     expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual(["0", "index"])
   })
 
-  test("Object.is preserves SameValue identity semantics", async () => {
-    expect(
-      await value(`
-        const object = {}
-        return [
-          Object.is(NaN, NaN),
-          Object.is(0, -0),
-          Object.is(object, object),
-          Object.is({}, {}),
-          Object.is(tools, tools),
-        ]
-      `),
-    ).toEqual([true, false, true, false, true])
-    expect(await value(`const object = {}; return Object.is(Object.values([object])[0], object)`)).toBe(true)
-  })
-
   test("Object.fromEntries accepts every supported entry collection", async () => {
     expect(
       await value(`
@@ -647,9 +631,6 @@ describe("stdlib integration", () => {
       await value(
         `try { Object.fromEntries(new Map([["fn", Math.max]])); return false } catch { return true }`,
       ),
-    ).toBe(true)
-    expect(
-      await value(`const object = {}; return Object.is(Object.fromEntries([["value", object]]).value, object)`),
     ).toBe(true)
   })
 

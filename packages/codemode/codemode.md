@@ -155,6 +155,7 @@ current omissions to implement, not intentional product boundaries.
       collection values, then extend it to bounded host streams when a stream boundary exists.
 - [ ] Support callback-bearing standard-library variants that models commonly generate: the mapper argument to
       `Array.from(...)` and replacers for `JSON.stringify(...)`, including Effect-aware callbacks where needed.
+- [ ] Add `Object.is` after runtime method and tool references have stable identity semantics.
 - [ ] Add deterministic modern collection conveniences where they improve orchestration: `Object.groupBy`, Set
       composition methods, and `Array.prototype.toSpliced`.
 - [ ] Decide whether nondeterministic `Math.random` and iterable `Math.sumPrecise` belong in the runtime.
