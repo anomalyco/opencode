@@ -36,3 +36,15 @@ export function pruneSessionKeys(input: {
     .sort((a, b) => score(b) - score(a))
     .slice(input.max)
 }
+
+export function sandboxRoots(projects: ReadonlyArray<{ id?: string; worktree: string; sandboxes?: string[] }>) {
+  const map = new Map<string, string>()
+  for (const project of projects) {
+    if (project.id === "global") continue
+    const sandboxes = project.sandboxes ?? []
+    for (const sandbox of sandboxes) {
+      map.set(sandbox, project.worktree)
+    }
+  }
+  return map
+}

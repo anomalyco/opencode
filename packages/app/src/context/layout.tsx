@@ -16,7 +16,7 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys, sandboxRoots } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
 
@@ -452,16 +452,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return base
     }
 
-    const roots = createMemo(() => {
-      const map = new Map<string, string>()
-      for (const project of serverSync().data.project) {
-        const sandboxes = project.sandboxes ?? []
-        for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
-        }
-      }
-      return map
-    })
+    const roots = createMemo(() => sandboxRoots(serverSync().data.project))
 
     const rootFor = (directory: string) => {
       const map = roots()
