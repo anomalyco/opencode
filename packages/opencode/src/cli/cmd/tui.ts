@@ -312,12 +312,11 @@ export const TuiThreadCommand = cmd({
         await stop()
       }
     } finally {
-      interactiveStdin?.cleanup?.()
       try {
         unguard?.()
       } catch {}
+      interactiveStdin?.cleanup?.()
     }
     process.exit(0)
   },
 })
-// scratch
