@@ -44,8 +44,7 @@ describe("ConfigCommandPlugin.Plugin", () => {
               `---
 description: File review
 agent: reviewer
-model: anthropic/claude
-variant: high
+model: anthropic/claude#high
 subtask: true
 ---
 Review files`,

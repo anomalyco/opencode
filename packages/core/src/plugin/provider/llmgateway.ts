@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Integration } from "../../integration"
+import { ProviderV2 } from "../../provider"
 
 export const LLMGatewayPlugin = define({
   id: "opencode.provider.llmgateway",
@@ -10,14 +11,17 @@ export const LLMGatewayPlugin = define({
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
         if (item.provider.disabled) continue
-        if (item.provider.api.type !== "aisdk") continue
-        if (item.provider.api.package !== "@ai-sdk/openai-compatible") continue
-        if (item.provider.api.url !== "https://api.llmgateway.io/v1") continue
+        if (!ProviderV2.isAISDK(item.provider.package)) continue
+        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
+        if (item.provider.settings?.baseURL !== "https://api.llmgateway.io/v1") continue
         if (!configured.has(Integration.ID.make(item.provider.id))) continue
         evt.provider.update(item.provider.id, (provider) => {
-          provider.request.headers["HTTP-Referer"] = "https://opencode.ai/"
-          provider.request.headers["X-Title"] = "opencode"
-          provider.request.headers["X-Source"] = "opencode"
+          provider.headers = {
+            ...provider.headers,
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+            "X-Source": "opencode",
+          }
         })
       }
     })

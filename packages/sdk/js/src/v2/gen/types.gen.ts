@@ -5219,29 +5219,23 @@ export type EventLogSynced = {
   seq?: number
 }
 
-export type ModelApi =
-  | {
-      id: string
-      type: "aisdk"
-      package: string
-      url?: string
-      settings?: {
-        [key: string]: unknown
-      }
-    }
-  | {
-      id: string
-      type: "native"
-      url?: string
-      settings: {
-        [key: string]: unknown
-      }
-    }
-
 export type ModelCapabilities = {
   tools: boolean
   input: Array<string>
   output: Array<string>
+}
+
+export type ModelVariant = {
+  id: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type ModelCost = {
@@ -5259,31 +5253,22 @@ export type ModelCost = {
 
 export type ModelV2Info = {
   id: string
+  modelID: string
   providerID: string
   family?: string
   name: string
-  api: ModelApi
-  capabilities: ModelCapabilities
-  request: {
-    settings: ProviderSettings
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    variant?: string
+  package?: string
+  settings?: {
+    [key: string]: unknown
   }
-  variants: Array<{
-    id: string
-    settings: ProviderSettings
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }>
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
+  capabilities: ModelCapabilities
+  variants: Array<ModelVariant>
   time: {
     released: number
   }
@@ -5297,32 +5282,21 @@ export type ModelV2Info = {
   }
 }
 
-export type ProviderAisdk = {
-  type: "aisdk"
-  package: string
-  url?: string
-  settings?: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderNative = {
-  type: "native"
-  url?: string
-  settings: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderApi = ProviderAisdk | ProviderNative
-
 export type ProviderV2Info = {
   id: string
   integrationID?: string
   name: string
   disabled?: boolean
-  api: ProviderApi
-  request: ProviderRequest
+  package: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type IntegrationWhen = {
@@ -9061,29 +9035,23 @@ export type SessionMessagesResponseV2 = {
   }
 }
 
-export type ModelApi2 =
-  | {
-      id: string
-      type: "aisdk"
-      package: string
-      url?: string
-      settings?: {
-        [key: string]: unknown
-      }
-    }
-  | {
-      id: string
-      type: "native"
-      url?: string
-      settings: {
-        [key: string]: unknown
-      }
-    }
-
 export type ModelCapabilities2 = {
   tools: boolean
   input: Array<string>
   output: Array<string>
+}
+
+export type ModelVariant2 = {
+  id: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type ModelCost2 = {
@@ -9101,31 +9069,22 @@ export type ModelCost2 = {
 
 export type ModelV2Info2 = {
   id: string
+  modelID: string
   providerID: string
   family?: string
   name: string
-  api: ModelApi2
-  capabilities: ModelCapabilities2
-  request: {
-    settings: ProviderSettings2
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    variant?: string
+  package?: string
+  settings?: {
+    [key: string]: unknown
   }
-  variants: Array<{
-    id: string
-    settings: ProviderSettings2
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }>
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
+  capabilities: ModelCapabilities2
+  variants: Array<ModelVariant2>
   time: {
     released: number
   }
@@ -9145,32 +9104,21 @@ export type GenerateTextResponseV2 = {
   }
 }
 
-export type ProviderAisdk2 = {
-  type: "aisdk"
-  package: string
-  url?: string
-  settings?: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderNative2 = {
-  type: "native"
-  url?: string
-  settings: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderApi2 = ProviderAisdk2 | ProviderNative2
-
 export type ProviderV2Info2 = {
   id: string
   integrationID?: string
   name: string
   disabled?: boolean
-  api: ProviderApi2
-  request: ProviderRequest2
+  package: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type ProviderNotFoundErrorV2 = {

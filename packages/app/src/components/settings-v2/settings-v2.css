@@ -399,7 +399,7 @@
   overflow: hidden;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

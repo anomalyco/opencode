@@ -4,6 +4,7 @@ import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
+import { ProviderV2 } from "../../provider"
 
 export const Plugin = define({
   id: "opencode.config.provider",
@@ -39,27 +40,29 @@ export const Plugin = define({
     yield* ctx.catalog.transform((catalog) => {
       const files = loaded.entries.filter((entry): entry is Config.Document => entry.type === "document")
       const configuredDefault = Config.latest(loaded.entries, "model")
-      if (configuredDefault !== undefined) {
-        const model = ModelV2.parse(configuredDefault)
-        catalog.model.default.set(model.providerID, model.modelID)
-      }
+      if (configuredDefault !== undefined)
+        catalog.model.default.set(configuredDefault.providerID, configuredDefault.model)
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
           const providerID = id
           catalog.provider.update(providerID, (provider) => {
             if (item.name !== undefined) provider.name = item.name
-            if (item.api !== undefined) provider.api = { ...item.api }
-            if (item.request !== undefined) {
-              Object.assign(provider.request.settings, item.request.settings)
-              Object.assign(provider.request.headers, item.request.headers)
-              Object.assign(provider.request.body, item.request.body)
-            }
+            if (item.package !== undefined) provider.package = item.package
+            if (item.settings !== undefined)
+              provider.settings = ProviderV2.mergeOverlay(provider.settings, item.settings)
+            if (item.headers !== undefined) provider.headers = ProviderV2.mergeHeaders(provider.headers, item.headers)
+            if (item.body !== undefined) provider.body = ProviderV2.mergeOverlay(provider.body, item.body)
           })
           for (const [id, config] of Object.entries(item.models ?? {})) {
             catalog.model.update(providerID, id, (model) => {
               if (config.family !== undefined) model.family = config.family
               if (config.name !== undefined) model.name = config.name
-              if (config.api !== undefined) model.api = { ...model.api, ...config.api }
+              if (config.modelID !== undefined) model.modelID = config.modelID
+              if (config.package !== undefined) model.package = config.package
+              if (config.settings !== undefined)
+                model.settings = ProviderV2.mergeOverlay(model.settings, config.settings)
+              if (config.headers !== undefined) model.headers = ProviderV2.mergeHeaders(model.headers, config.headers)
+              if (config.body !== undefined) model.body = ProviderV2.mergeOverlay(model.body, config.body)
               if (config.capabilities !== undefined) {
                 model.capabilities = {
                   tools: config.capabilities.tools,
@@ -67,27 +70,19 @@ export const Plugin = define({
                   output: [...config.capabilities.output],
                 }
               }
-              if (config.request !== undefined) {
-                Object.assign(model.request.settings, config.request.settings)
-                Object.assign(model.request.headers, config.request.headers)
-                Object.assign(model.request.body, config.request.body)
-                if (config.request.variant !== undefined) model.request.variant = config.request.variant
-              }
               if (config.variants !== undefined) {
+                model.variants ??= []
                 for (const variant of config.variants) {
                   let existing = model.variants.find((item) => item.id === variant.id)
                   if (!existing) {
-                    existing = {
-                      id: variant.id,
-                      settings: {},
-                      headers: {},
-                      body: {},
-                    }
+                    existing = { id: variant.id }
                     model.variants.push(existing)
                   }
-                  Object.assign(existing.settings, variant.settings)
-                  Object.assign(existing.headers, variant.headers)
-                  Object.assign(existing.body, variant.body)
+                  if (variant.settings !== undefined)
+                    existing.settings = ProviderV2.mergeOverlay(existing.settings, variant.settings)
+                  if (variant.headers !== undefined)
+                    existing.headers = ProviderV2.mergeHeaders(existing.headers, variant.headers)
+                  if (variant.body !== undefined) existing.body = ProviderV2.mergeOverlay(existing.body, variant.body)
                 }
               }
               if (config.cost !== undefined) {

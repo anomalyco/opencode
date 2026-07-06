@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { ModelV2 } from "../../model"
+import { ProviderV2 } from "../../provider"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
 export const OpenRouterPlugin = define({
@@ -7,11 +8,10 @@ export const OpenRouterPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (item.provider.api.type !== "aisdk") continue
-        if (item.provider.api.package !== "@openrouter/ai-sdk-provider") continue
+        if (!ProviderV2.isAISDK(item.provider.package)) continue
+        if (ProviderV2.packageName(item.provider.package) !== "@openrouter/ai-sdk-provider") continue
         evt.provider.update(item.provider.id, (provider) => {
-          provider.request.headers["HTTP-Referer"] = "https://opencode.ai/"
-          provider.request.headers["X-Title"] = "opencode"
+          provider.headers = { ...provider.headers, "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode" }
         })
         for (const modelID of [ModelV2.ID.make("gpt-5-chat-latest"), ModelV2.ID.make("openai/gpt-5-chat")]) {
           if (!item.models.has(modelID)) continue

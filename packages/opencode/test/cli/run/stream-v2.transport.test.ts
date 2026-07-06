@@ -302,12 +302,12 @@ describe("V2 mini transport", () => {
       {
         uri: pathToFileURL(filePath).href,
         name: "note.ts",
-        source: { start: 7, end: 15, text: "@note.ts" },
+        mention: { start: 7, end: 15, text: "@note.ts" },
       },
       {
         uri: pathToFileURL(`${directoryPath}${path.sep}`).href,
         name: "docs",
-        source: { start: 20, end: 25, text: "@docs" },
+        mention: { start: 20, end: 25, text: "@docs" },
       },
     ])
     await transport.close()
@@ -398,12 +398,12 @@ describe("V2 mini transport", () => {
       {
         uri: "file:///remote/project/note.ts",
         name: "note.ts",
-        source: { start: 7, end: 15, text: "@note.ts" },
+        mention: { start: 7, end: 15, text: "@note.ts" },
       },
       {
         uri: "file:///remote/project/docs",
         name: "docs",
-        source: { start: 20, end: 25, text: "@docs" },
+        mention: { start: 20, end: 25, text: "@docs" },
       },
     ])
     await transport.close()
@@ -486,7 +486,7 @@ describe("V2 mini transport", () => {
       {
         name: "diagram.png",
         uri: pathToFileURL(filePath).href,
-        source: { start: 7, end: 19, text: "@diagram.png" },
+        mention: { start: 7, end: 19, text: "@diagram.png" },
       },
     ])
     await transport.close()

@@ -12,9 +12,7 @@ import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(
-  Layer.merge(AppNodeBuilder.build(ProjectV2.node), AppNodeBuilder.build(Database.node)),
-)
+const it = testEffect(Layer.merge(AppNodeBuilder.build(ProjectV2.node), AppNodeBuilder.build(Database.node)))
 
 describe("ProjectV2.list", () => {
   it.effect("returns complete projects ordered by recent update", () =>
@@ -262,8 +260,14 @@ describe("ProjectV2.resolve", () => {
       yield* Effect.promise(async () => {
         await $`hg init`.cwd(tmp.path).quiet()
         await Bun.write(path.join(tmp.path, "file.txt"), "one\n")
-        await $`hg addremove -q`.cwd(tmp.path).env({ ...process.env, HGPLAIN: "1" }).quiet()
-        await $`hg commit -q -m initial -u test`.cwd(tmp.path).env({ ...process.env, HGPLAIN: "1" }).quiet()
+        await $`hg addremove -q`
+          .cwd(tmp.path)
+          .env({ ...process.env, HGPLAIN: "1" })
+          .quiet()
+        await $`hg commit -q -m initial -u test`
+          .cwd(tmp.path)
+          .env({ ...process.env, HGPLAIN: "1" })
+          .quiet()
         await fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true })
       })
       const project = yield* ProjectV2.Service

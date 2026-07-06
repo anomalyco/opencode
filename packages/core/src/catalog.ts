@@ -66,37 +66,19 @@ const layer = Layer.effect(
 
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
-      if (typeof provider.request.body.apiKey === "string") return true
+      if (typeof provider.settings?.apiKey === "string") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }
 
     const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
-      const api =
-        model.api.type === "native" && !model.api.url && Object.keys(model.api.settings).length === 0
-          ? { ...provider.api, id: model.api.id }
-          : model.api.type === "aisdk" && provider.api.type === "aisdk" && !model.api.url
-            ? { ...model.api, url: provider.api.url, settings: { ...provider.api.settings, ...model.api.settings } }
-            : model.api.type === "aisdk" && provider.api.type === "aisdk"
-              ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
-              : model.api
-      const request = {
-        settings: { ...provider.request.settings, ...model.request.settings },
-        headers: { ...provider.request.headers, ...model.request.headers },
-        body: { ...provider.request.body, ...model.request.body },
-        variant: model.request.variant,
-      }
       return ModelV2.Info.make({
         ...model,
-        api,
-        request,
+        package: model.package ?? provider.package,
+        settings: ProviderV2.mergeOverlay(provider.settings, model.settings),
+        headers: ProviderV2.mergeHeaders(provider.headers, model.headers),
+        body: ProviderV2.mergeOverlay(provider.body, model.body),
       })
-    }
-
-    const normalizeApi = (item: ProviderV2.MutableInfo | ModelV2.MutableInfo) => {
-      if (typeof item.request.body.baseURL !== "string") return
-      item.api.url = item.request.body.baseURL
-      delete item.request.body.baseURL
     }
 
     const state = State.create<Data, Draft>({
@@ -116,7 +98,6 @@ const layer = Layer.effect(
                 draft.providers.set(providerID, current)
               }
               fn(current.provider)
-              normalizeApi(current.provider)
             },
             remove: (providerID) => {
               draft.providers.delete(providerID)
@@ -139,7 +120,6 @@ const layer = Layer.effect(
               fn(model)
               model.id = modelID
               model.providerID = providerID
-              normalizeApi(model)
             },
             remove: (providerID, modelID) => {
               draft.providers.get(providerID)?.models.delete(modelID)

@@ -271,7 +271,7 @@ describe("LocationServiceMap", () => {
                 providers: {
                   unavailable: {
                     name: "Unavailable",
-                    api: { type: "native", settings: {} },
+                    package: "test-provider",
                     models: { chat: { disabled: true } },
                   },
                 },
@@ -306,7 +306,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("preserves the selected catalog identity when the api model id differs", () =>
+  it.live("preserves the selected catalog identity when the package model id differs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -318,12 +318,12 @@ describe("LocationServiceMap", () => {
             const catalog = yield* Catalog.Service
             yield* catalog.transform((editor) => {
               editor.provider.update(ProviderV2.ID.make("aliased"), (provider) => {
-                provider.api = { type: "aisdk", package: "@ai-sdk/openai", settings: {} }
+                provider.package = ProviderV2.aisdk("@ai-sdk/openai")
               })
               editor.model.update(ProviderV2.ID.make("aliased"), ModelV2.ID.make("fast"), (model) => {
-                // Catalog id and provider API id intentionally differ, like gpt-5.5-fast -> gpt-5.5.
-                model.api = { ...model.api, id: ModelV2.ID.make("base") }
-                model.variants.push({ id: ModelV2.VariantID.make("high"), settings: {}, headers: {}, body: {} })
+                // Catalog id and package model id intentionally differ, like gpt-5.5-fast -> gpt-5.5.
+                model.modelID = ModelV2.ID.make("base")
+                model.variants = [{ id: ModelV2.VariantID.make("high") }]
               })
             })
             const models = yield* SessionRunnerModel.Service

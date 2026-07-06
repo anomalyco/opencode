@@ -45,7 +45,8 @@ describe("GatewayPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gateway"), ModelV2.ID.make("model")),
-          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("model"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/gateway",
         options: { name: "gateway" },
@@ -65,11 +66,8 @@ describe("GatewayPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make("anthropic/claude-sonnet-4")),
-          api: {
-            id: ModelV2.ID.make("anthropic/claude-sonnet-4"),
-            type: "aisdk",
-            package: "test-provider",
-          },
+          modelID: ModelV2.ID.make("anthropic/claude-sonnet-4"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/gateway",
         options: { name: "vercel", apiKey: "test-key" },
@@ -91,7 +89,8 @@ describe("GatewayPlugin", () => {
         const ignored = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make(modelID)),
-            api: { id: ModelV2.ID.make(modelID), type: "aisdk", package: "test-provider" },
+            modelID: ModelV2.ID.make(modelID),
+            package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/vercel",
           options: { name: "vercel" },
@@ -101,7 +100,8 @@ describe("GatewayPlugin", () => {
         const result = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
             ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make(modelID)),
-            api: { id: ModelV2.ID.make(modelID), type: "aisdk", package: "test-provider" },
+            modelID: ModelV2.ID.make(modelID),
+            package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/gateway",
           options: { name: "vercel" },

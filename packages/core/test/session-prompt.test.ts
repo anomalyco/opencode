@@ -269,14 +269,15 @@ describe("SessionV2.prompt", () => {
         resume: false,
       })
 
-      expect(message.prompt.files).toEqual([
-        {
-          data: Buffer.from('import { describe, expect } from "bun:test"').toString("base64"),
-          mime: "text/plain",
-          source: { type: "uri", uri: sourceUri.href },
-          name: "main.ts",
-        },
-      ])
+      expect(message.prompt.files).toHaveLength(1)
+      expect(message.prompt.files?.[0]).toMatchObject({
+        mime: "text/plain",
+        source: { type: "uri", uri: sourceUri.href },
+        name: "main.ts",
+      })
+      expect(Buffer.from(message.prompt.files?.[0]?.data ?? "", "base64").toString("utf8").replace(/\r$/, "")).toBe(
+        'import { describe, expect } from "bun:test"',
+      )
     }),
   )
 

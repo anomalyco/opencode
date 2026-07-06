@@ -31,19 +31,19 @@ describe("AnthropicPlugin", () => {
       yield* catalog.transform((catalog) => {
         const item = ProviderV2.Info.make({
           ...ProviderV2.Info.empty(ProviderV2.ID.anthropic),
-          api: { type: "aisdk", package: "@ai-sdk/anthropic" },
-          request: { headers: { Existing: "1" }, body: {} },
+          package: ProviderV2.aisdk("@ai-sdk/anthropic"),
+          headers: { Existing: "1" },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.api = item.api
-          draft.request = { settings: {}, headers: { Existing: "1" }, body: {} }
+          draft.package = item.package
+          draft.headers = { Existing: "1" }
         })
       })
       yield* addPlugin()
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.anthropic)).request.headers["anthropic-beta"]).toBe(
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.anthropic)).headers?.["anthropic-beta"]).toBe(
         "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
       )
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.anthropic)).request.headers.Existing).toBe("1")
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.anthropic)).headers?.Existing).toBe("1")
     }),
   )
 
@@ -52,9 +52,7 @@ describe("AnthropicPlugin", () => {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => catalog.provider.update(ProviderV2.ID.openai, () => {}))
       yield* addPlugin()
-      expect(
-        required(yield* catalog.provider.get(ProviderV2.ID.openai)).request.headers["anthropic-beta"],
-      ).toBeUndefined()
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.openai)).headers?.["anthropic-beta"]).toBeUndefined()
     }),
   )
 
@@ -66,7 +64,8 @@ describe("AnthropicPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-anthropic"), ModelV2.ID.make("claude-sonnet-4-5")),
-          api: { id: ModelV2.ID.make("claude-sonnet-4-5"), type: "aisdk", package: "@ai-sdk/anthropic" },
+          modelID: ModelV2.ID.make("claude-sonnet-4-5"),
+          package: ProviderV2.aisdk("@ai-sdk/anthropic"),
         }),
         package: "@ai-sdk/anthropic",
         options: { name: "custom-anthropic", apiKey: "test" },
@@ -83,7 +82,8 @@ describe("AnthropicPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-5")),
-          api: { id: ModelV2.ID.make("claude-sonnet-4-5"), type: "aisdk", package: "@ai-sdk/anthropic" },
+          modelID: ModelV2.ID.make("claude-sonnet-4-5"),
+          package: ProviderV2.aisdk("@ai-sdk/anthropic"),
         }),
         package: "@ai-sdk/anthropic",
         options: { name: "anthropic", apiKey: "test" },

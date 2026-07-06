@@ -70,7 +70,8 @@ describe("GitLabPlugin", () => {
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
-              api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+              modelID: ModelV2.ID.make("claude"),
+              package: "aisdk:test-provider",
             }),
             package: "gitlab-ai-provider",
             options: { name: "gitlab" },
@@ -107,7 +108,8 @@ describe("GitLabPlugin", () => {
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
-              api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+              modelID: ModelV2.ID.make("claude"),
+              package: "aisdk:test-provider",
             }),
             package: "gitlab-ai-provider",
             options: { name: "gitlab" },
@@ -132,7 +134,8 @@ describe("GitLabPlugin", () => {
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
               ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
-              api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+              modelID: ModelV2.ID.make("claude"),
+              package: "aisdk:test-provider",
             }),
             package: "gitlab-ai-provider",
             options: {
@@ -173,7 +176,8 @@ describe("GitLabPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
-          api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("claude"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/openai",
         options: { name: "gitlab" },
@@ -192,11 +196,10 @@ describe("GitLabPlugin", () => {
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
-          api: { id: ModelV2.ID.make("duo-workflow-custom"), type: "aisdk", package: "test-provider" },
-          request: {
-            headers: {},
-            body: { workflowRef: "ref", workflowDefinition: "definition" },
-          },
+          modelID: ModelV2.ID.make("duo-workflow-custom"),
+          package: "aisdk:test-provider",
+          headers: {},
+          settings: { workflowRef: "ref", workflowDefinition: "definition" },
         }),
         sdk: {
           workflowChat: (id: string, options: unknown) => {
@@ -227,7 +230,8 @@ describe("GitLabPlugin", () => {
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-exact")),
-          api: { id: ModelV2.ID.make("duo-workflow-exact"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("duo-workflow-exact"),
+          package: "aisdk:test-provider",
         }),
         sdk: {
           workflowChat: (id: string, options: unknown) => {
@@ -245,7 +249,7 @@ describe("GitLabPlugin", () => {
     }),
   )
 
-  it.effect("uses provider feature flags instead of request feature flags", () =>
+  it.effect("uses provider feature flags instead of model settings feature flags", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
@@ -254,11 +258,10 @@ describe("GitLabPlugin", () => {
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
-          api: { id: ModelV2.ID.make("duo-workflow-custom"), type: "aisdk", package: "test-provider" },
-          request: {
-            headers: {},
-            body: { featureFlags: { request_flag: true } },
-          },
+          modelID: ModelV2.ID.make("duo-workflow-custom"),
+          package: "aisdk:test-provider",
+          headers: {},
+          settings: { featureFlags: { request_flag: true } },
         }),
         sdk: {
           workflowChat: (id: string, options: unknown) => {
@@ -282,8 +285,10 @@ describe("GitLabPlugin", () => {
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
-          api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
-          request: { headers: { h: "v" }, body: {} },
+          modelID: ModelV2.ID.make("claude"),
+          package: "aisdk:test-provider",
+          headers: { h: "v" },
+          settings: {},
         }),
         sdk: {
           workflowChat: () => undefined,
