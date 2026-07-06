@@ -153,6 +153,12 @@ current omissions to implement, not intentional product boundaries.
       shims. Consider `Promise.any` in the same pass.
 - [ ] Support async iteration and `for await...of`. Define behavior first for the runtime's supported promise and
       collection values, then extend it to bounded host streams when a stream boundary exists.
+- [ ] Support callback-bearing standard-library variants that models commonly generate: the mapper argument to
+      `Array.from(...)` and replacers for `JSON.stringify(...)`, including Effect-aware callbacks where needed.
+- [ ] Close basic `Object` parity gaps: let `Object.values`/`Object.entries` accept arrays, make `Object.assign` validate
+      and mutate its target, add `Object.is`, and let `Object.fromEntries` consume every supported iterable.
+- [ ] Add deterministic modern collection conveniences where they improve orchestration: `Object.groupBy`, Set
+      composition methods, and `Array.prototype.toSpliced`.
 - [ ] Complete the deterministic `Math` surface beyond the current arithmetic, rounding, root, power, and logarithm
       helpers. Decide separately whether nondeterministic `Math.random` belongs in the runtime.
 - [ ] Refine diagnostics so user throws, expected tool failures, unexpected host/tool defects, and genuine interpreter
