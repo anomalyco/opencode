@@ -142,8 +142,6 @@ export type Error =
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
     readonly data: SessionSchema.Info[]
-    /** Per-session durable log watermark, read in the same transaction as the snapshot. Sessions without events are absent. */
-    readonly watermarks: ReadonlyMap<string, EventV2.Seq>
   }>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly fork: (input: ForkInput) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError>
@@ -177,8 +175,6 @@ export interface Interface {
     after?: number
     follow?: boolean
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
-  /** Latest durable log seq per session. Sessions without events are absent. */
-  readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, EventV2.Seq>>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -394,21 +390,10 @@ const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        // Watermarks must pair with the snapshot exactly, so both reads share a transaction:
-        // a higher watermark would let an attached tail skip events missing from the snapshot.
-        const snapshot = yield* db
-          .transaction(() =>
-            Effect.gen(function* () {
-              const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-                Effect.orDie,
-              )
-              const watermarks = yield* events.sequences(rows.map((row) => row.id))
-              return { rows, watermarks }
-            }),
-          )
-          .pipe(Effect.orDie)
-        const rows = direction === "previous" ? snapshot.rows.toReversed() : snapshot.rows
-        return { data: rows.map((row) => fromRow(row)), watermarks: snapshot.watermarks }
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+          Effect.orDie,
+        )
+        return { data: (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row)) }
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
@@ -463,9 +448,6 @@ const layer = Layer.effect(
               EventV2.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      watermarks: Effect.fn("V2Session.watermarks")(function* (sessionIDs) {
-        return yield* events.sequences(sessionIDs)
-      }),
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
@@ -540,8 +522,7 @@ const layer = Layer.effect(
             const started = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
               return yield* shell.create({ command: input.command, cwd: session.location.directory })
-            })
-              .pipe(Effect.provide(locations.get(session.location)))
+            }).pipe(Effect.provide(locations.get(session.location)))
             yield* events.publish(
               SessionEvent.Shell.Started,
               {

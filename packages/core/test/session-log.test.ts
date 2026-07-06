@@ -130,33 +130,3 @@ describe("SessionV2.log", () => {
     }),
   )
 })
-
-describe("SessionV2 watermarks", () => {
-  it.effect("list pairs each session snapshot with its durable log watermark", () =>
-    Effect.gen(function* () {
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const first = yield* session.create({ location })
-      const second = yield* session.create({ location })
-      yield* session.rename({ sessionID: first.id, title: "session.renamed" })
-
-      const page = yield* session.list()
-      const sequences = yield* events.sequences([first.id, second.id])
-
-      expect(page.data.map((info) => info.id).toSorted()).toEqual([first.id, second.id].toSorted())
-      expect(page.watermarks).toEqual(sequences)
-      expect(page.watermarks.get(first.id)).toBeGreaterThan(page.watermarks.get(second.id)!)
-    }),
-  )
-
-  it.effect("watermarks omits sessions without durable events", () =>
-    Effect.gen(function* () {
-      const session = yield* SessionV2.Service
-      const created = yield* session.create({ location })
-
-      const watermarks = yield* session.watermarks([created.id, SessionV2.ID.create()])
-
-      expect(Array.from(watermarks.keys())).toEqual([created.id])
-    }),
-  )
-})
