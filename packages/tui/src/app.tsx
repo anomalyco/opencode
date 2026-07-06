@@ -46,6 +46,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogLoopList } from "./component/dialog-loop-list"
+import { DialogTuning } from "./component/dialog-tuning"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -625,6 +626,21 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "loops",
         run: () => {
           dialog.replace(() => <DialogLoopList />)
+        },
+      },
+      {
+        name: "tuning.show",
+        title: "GPU tuning",
+        category: "Local",
+        slashName: "tuning",
+        run: () => {
+          const providerID = local.model.current()?.providerID
+          const provider = providerID ? sync.data.provider.find((p) => p.id === providerID) : undefined
+          if (!provider || !provider.options?.["baseURL"]) {
+            toast.show({ variant: "info", message: "GPU tuning is only available for local llama-skein providers" })
+            return
+          }
+          dialog.replace(() => <DialogTuning providerID={provider.id} />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({

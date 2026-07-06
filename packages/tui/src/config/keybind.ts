@@ -329,6 +329,7 @@ export const CommandMap = {
   model_cycle_favorite: "model.cycle_favorite",
   model_cycle_favorite_reverse: "model.cycle_favorite_reverse",
   mcp_list: "mcp.list",
+  tuning_show: "tuning.show",
   provider_connect: "provider.connect",
   console_org_switch: "console.org.switch",
   agent_list: "agent.list",

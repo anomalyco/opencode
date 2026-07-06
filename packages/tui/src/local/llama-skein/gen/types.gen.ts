@@ -36,7 +36,7 @@ export type ResourceSnapshot = {
 
 export type LoadedModelInfo = {
     /**
-     * Model ID as defined in config.
+     * Model ID as defined in config. With several models loaded, the one with the largest weights is reported (ties: smallest ID) — selection is deterministic across calls.
      */
     id?: string;
     /**
@@ -44,7 +44,7 @@ export type LoadedModelInfo = {
      */
     model_mb?: number;
     /**
-     * Estimated KV cache MB: max(0, vram.used_mb - model_mb).
+     * Estimated KV cache MB. On GPU hosts: max(0, vram.used_mb - model_mb). When that yields 0 (CPU-only inference, no GPU telemetry), falls back to the fit engine's GGUF-derived KV size at the model's usable context.
      */
     kv_estimate_mb?: number;
 };
@@ -111,9 +111,36 @@ export type Model = {
     context_length?: number;
     max_output_tokens?: number;
     /**
+     * Current --n-cpu-moe value parsed from the model command, when set (llama.cpp MoE expert CPU offload).
+     */
+    n_cpu_moe?: number;
+    /**
+     * True when --cpu-moe is present in the model command (all MoE experts offloaded to CPU).
+     */
+    cpu_moe?: boolean;
+    /**
+     * Current --cpu-offload-gb value parsed from the model command, when set (vLLM weight offload).
+     */
+    cpu_offload_gb?: number;
+    /**
+     * Current --override-tensor value parsed from the model command, when set (llama.cpp tensor placement).
+     */
+    override_tensor?: string;
+    /**
      * Inference backend type.
      */
     backend?: 'llamacpp' | 'mlx' | 'vllm';
+    /**
+     * True when this model is the configured default, used for requests that omit the 'model' field. Listed first in the model list. llama-skein extension to the OpenAI schema.
+     */
+    default?: boolean;
+    /**
+     * Optional capability metadata for this model. llama-skein extension for MTP and other runtime capabilities.
+     */
+    metadata?: {
+        mtp?: MtpMetadata;
+        [key: string]: unknown | MtpMetadata | undefined;
+    };
 };
 
 export type ConfigInfoResponse = {
@@ -121,6 +148,10 @@ export type ConfigInfoResponse = {
     models_dir: string;
     model_count: number;
     models: Array<ConfigModelInfo>;
+    /**
+     * Configured default model ID; omitted when no default is set.
+     */
+    default_model?: string;
 };
 
 export type ConfigModelInfo = {
@@ -140,6 +171,22 @@ export type ConfigModelRequest = {
     description?: string;
     aliases?: Array<string>;
     ttl?: number;
+    /**
+     * Number of leading layers whose MoE expert tensors are offloaded to CPU/RAM (llama.cpp --n-cpu-moe). llamacpp only.
+     */
+    n_cpu_moe?: number;
+    /**
+     * Offload ALL MoE expert tensors to CPU/RAM (llama.cpp --cpu-moe). llamacpp only.
+     */
+    cpu_moe?: boolean;
+    /**
+     * GiB of weights to offload to CPU per GPU (vLLM --cpu-offload-gb). vllm only.
+     */
+    cpu_offload_gb?: number;
+    /**
+     * Advanced tensor placement override regex (llama.cpp --override-tensor). llamacpp only.
+     */
+    override_tensor?: string;
 };
 
 export type ConfigModelPatchRequest = {
@@ -162,8 +209,34 @@ export type ConfigModelPatchRequest = {
     'cache-type-k'?: string;
     cache_type_v?: string;
     'cache-type-v'?: string;
+    /**
+     * Number of leading layers whose MoE expert tensors are offloaded to CPU/RAM (llama.cpp --n-cpu-moe). 0 removes the flag. llamacpp only.
+     */
+    n_cpu_moe?: number;
+    'n-cpu-moe'?: number;
+    /**
+     * Offload ALL MoE expert tensors to CPU/RAM (llama.cpp --cpu-moe). false removes the flag. llamacpp only.
+     */
+    cpu_moe?: boolean;
+    /**
+     * GiB of weights to offload to CPU per GPU (vLLM --cpu-offload-gb). 0 removes the flag. vllm only.
+     */
+    cpu_offload_gb?: number;
+    'cpu-offload-gb'?: number;
+    /**
+     * Advanced tensor placement override regex (llama.cpp --override-tensor). Empty removes the flag. llamacpp only.
+     */
+    override_tensor?: string;
+    'override-tensor'?: string;
     flags?: {
         [key: string]: unknown;
+    };
+    /**
+     * Optional capability metadata for this model. llama-skein extension for MTP and other runtime capabilities.
+     */
+    metadata?: {
+        mtp?: MtpMetadata;
+        [key: string]: unknown | MtpMetadata | undefined;
     };
 };
 
@@ -176,6 +249,351 @@ export type ConfigGroupPatchRequest = {
 export type ConfigModelResponse = {
     id: string;
     status: string;
+    /**
+     * Non-fatal warnings produced while applying the request, e.g. offload knobs unsupported by the model's backend. Omitted when there are none.
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * Full stored config for a model plus llama-server flags parsed out of its command. ctx_size and n_gpu_layers are the raw flag values (strings); offload fields reflect the current command.
+ */
+export type ConfigModelDetail = {
+    id: string;
+    cmd: string;
+    name?: string;
+    description?: string;
+    aliases?: Array<string>;
+    ttl?: number;
+    concurrencyLimit?: number;
+    ctx_size?: string;
+    n_gpu_layers?: string;
+    cache_type_k?: string;
+    cache_type_v?: string;
+    n_cpu_moe?: number;
+    cpu_moe?: boolean;
+    cpu_offload_gb?: number;
+    override_tensor?: string;
+    /**
+     * All --flags parsed from the command, as raw string values.
+     */
+    flags?: {
+        [key: string]: string;
+    };
+    /**
+     * Optional capability metadata for this model. llama-skein extension for MTP and other runtime capabilities.
+     */
+    metadata?: {
+        mtp?: MtpMetadata;
+        [key: string]: unknown | MtpMetadata | undefined;
+    };
+    /**
+     * Read-only: the launch command after GPU-tuning profile injection. The stored `cmd` is unchanged; compare the two to see what the profile added.
+     */
+    effective_flags?: string;
+};
+
+export type ReloadResponse = {
+    status: string;
+};
+
+export type ConfigDefaultModelRequest = {
+    /**
+     * Model ID or alias to use when a request omits the 'model' field.
+     */
+    model: string;
+};
+
+export type ConfigDefaultModelResponse = {
+    /**
+     * Configured default model ID, or null when no default is set.
+     */
+    model: string | null;
+};
+
+/**
+ * Multi-Token Prediction (MTP) capability for llama.cpp models. Enables running supported GGUF models with draft model guidance for multi-token prediction.
+ */
+export type MtpMetadata = {
+    /**
+     * Whether MTP is enabled for this model. When true, the model command must include --spec-type draft-mtp and a draft model.
+     */
+    enabled?: boolean;
+    /**
+     * The spec type for draft models. For MTP-enabled models, this is always 'draft-mtp'.
+     */
+    spec_type?: 'draft-mtp';
+    /**
+     * Maximum draft N value (number of prompt tokens per generated token). Recommended starting point is 2 for most models.
+     */
+    draft_n_max?: number;
+    /**
+     * Optional list of tunable draft N values that were benchmarked on this model. If present, llama-skein will try values from this list when auto-tuning MTP.
+     */
+    draft_n_tunable?: Array<number>;
+    /**
+     * Optional explicit path to the draft model GGUF file. If omitted, llama-skein will automatically download the draft model from Hugging Face when MTP is enabled.
+     */
+    model_draft?: string;
+    /**
+     * Approximate additional memory overhead in MB when running this model with MTP enabled. Use this for capacity-aware scheduling.
+     */
+    memory_overhead_mb?: number;
+    /**
+     * How this metadata was derived: 'config' for explicitly set metadata, 'cmd' for parsed values from the llama-server command string.
+     */
+    source?: 'config' | 'cmd';
+};
+
+export type OffloadRecommendation = {
+    /**
+     * False for non-MoE models and backends where offload does not apply (e.g. mlx); see reason.
+     */
+    applicable: boolean;
+    /**
+     * Inference backend the recommendation targets.
+     */
+    backend: 'llamacpp' | 'mlx' | 'vllm';
+    /**
+     * Recommended --n-cpu-moe value (number of leading layers whose MoE experts to offload to CPU). 0 means the model fits fully on GPU.
+     */
+    n_cpu_moe?: number;
+    /**
+     * Human-readable explanation of the recommendation or why it is not applicable.
+     */
+    reason?: string;
+    /**
+     * Estimated total bytes of MoE expert tensors in the model.
+     */
+    expert_bytes_total?: number;
+    /**
+     * Free VRAM (MB) used for the calculation; falls back to system RAM when no GPU is present.
+     */
+    vram_free_mb?: number;
+    /**
+     * True when the model fits in free VRAM without any offload.
+     */
+    fits_fully_on_gpu?: boolean;
+    /**
+     * Context length assumed for the KV-cache portion of the estimate.
+     */
+    ctx_size?: number;
+};
+
+/**
+ * Per-dimension fit scores in [0,1], weighted by use-case (ported from llmfit fit.rs ScoreComponents).
+ */
+export type FitScore = {
+    /**
+     * Model quality score (benchmark-derived).
+     */
+    quality?: number;
+    /**
+     * Speed score from estimated tokens/sec on this host.
+     */
+    speed?: number;
+    /**
+     * Memory-headroom score: how comfortably the model fits.
+     */
+    fit?: number;
+    /**
+     * Context-capacity score: usable context vs the model's trained max.
+     */
+    context?: number;
+    /**
+     * Weighted overall score.
+     */
+    overall?: number;
+};
+
+/**
+ * Fit of one model to THIS host: whether it runs, how well, and the max SAFE context (output- and overhead-reserved). Ported from llmfit fit.rs ModelFit.
+ */
+export type ModelFit = {
+    /**
+     * Model ID.
+     */
+    model: string;
+    /**
+     * Inference backend.
+     */
+    backend: 'llamacpp' | 'mlx' | 'vllm';
+    /**
+     * How well the model fits this host.
+     */
+    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no';
+    /**
+     * How the model would run given memory.
+     */
+    run_mode?: 'gpu' | 'tensor_parallel' | 'moe_offload' | 'cpu_offload' | 'cpu_only';
+    /**
+     * Current --ctx-size in the model command (the KV allocation / hard n_ctx).
+     */
+    configured_ctx?: number;
+    /**
+     * Max context callers should fill: reserves the output budget plus compute/overhead so prompt+generation never exceed the backend's hard n_ctx, and accounts for llama-server dividing n_ctx across --parallel slots (per-request share). THIS is the number opencode/skein should trim to, not configured_ctx.
+     */
+    max_safe_ctx: number;
+    /**
+     * Model weights resident size (MB).
+     */
+    model_mb?: number;
+    /**
+     * KV-cache size (MB) at max_safe_ctx, given the host's cache-type quantization.
+     */
+    kv_mb_at_max_safe_ctx?: number;
+    /**
+     * Total VRAM/unified memory pool (MB).
+     */
+    vram_total_mb?: number;
+    /**
+     * Estimated VRAM needed: weights + KV + compute buffers (MB).
+     */
+    vram_required_mb?: number;
+    /**
+     * Estimated generation throughput on this host (benchmark-derived).
+     */
+    est_tokens_per_sec?: number;
+    score?: FitScore;
+    /**
+     * Human-readable explanation of the fit verdict.
+     */
+    reason?: string;
+};
+
+/**
+ * Fit of every configured model to this host. Aggregated by skein across providers for fleet placement.
+ */
+export type FitReport = {
+    /**
+     * Total VRAM/unified pool (MB).
+     */
+    vram_total_mb?: number;
+    /**
+     * Currently free VRAM (MB).
+     */
+    vram_free_mb?: number;
+    /**
+     * Per-model fit results.
+     */
+    models: Array<ModelFit>;
+};
+
+/**
+ * Additive, safe-to-inject llama-server flags. Omitted fields are not set.
+ */
+export type TuningFlags = {
+    /**
+     * Inject --flash-attn on/off.
+     */
+    flash_attn?: boolean;
+    /**
+     * Inject --parallel N (server slots).
+     */
+    parallel?: number;
+};
+
+/**
+ * MTP speculative-decoding flags, applied only to MTP-capable models.
+ */
+export type TuningMtp = {
+    apply_to_mtp_models?: boolean;
+    /**
+     * --spec-draft-n-max
+     */
+    draft_n_max?: number;
+    /**
+     * --draft-p-min
+     */
+    draft_p_min?: number;
+};
+
+/**
+ * One (gfx, use-case) entry in the tuning database: recommended defaults + provenance notes.
+ */
+export type TuningProfile = {
+    /**
+     * gfx target, e.g. gfx1201.
+     */
+    gfx: string;
+    /**
+     * Tuning scenario, e.g. agentic-single.
+     */
+    usecase: string;
+    /**
+     * True only if measured in-repo on this arch.
+     */
+    verified: boolean;
+    verified_on?: string;
+    flags?: TuningFlags;
+    mtp?: TuningMtp;
+    notes?: string;
+    device_ids?: Array<string>;
+    sources?: Array<string>;
+};
+
+/**
+ * Effective GPU tuning for this host: detected arch, whether enabled, the resolved profile after user overrides, and per-value provenance. Profiles are recommendations the operator can override or disable.
+ */
+export type TuningStatus = {
+    /**
+     * Empty when no known AMD GPU is detected.
+     */
+    detected_gfx?: string;
+    /**
+     * PCI device ID, e.g. 0x7551.
+     */
+    device_id?: string;
+    /**
+     * False disables all auto-injection; the model cmd launches verbatim.
+     */
+    enabled: boolean;
+    usecase: string;
+    profile?: TuningProfile;
+    /**
+     * Per-field origin: 'recommended' (from the profile) or 'override' (set by the user).
+     */
+    provenance?: {
+        [key: string]: 'recommended' | 'override';
+    };
+    /**
+     * User-supplied flags appended at launch.
+     */
+    extra_args?: Array<string>;
+};
+
+export type TuningProfilesResponse = {
+    usecases?: {
+        [key: string]: {
+            description?: string;
+            default?: boolean;
+        };
+    };
+    profiles: Array<TuningProfile>;
+};
+
+/**
+ * Partial per-host tuning override. A set field forces that value (including disabling a recommendation); a null field resets it to the built-in recommendation. Profiles are never forced.
+ */
+export type TuningPatchRequest = {
+    /**
+     * Master switch for auto-injection.
+     */
+    enabled?: boolean | null;
+    flash_attn?: boolean | null;
+    parallel?: number | null;
+    /**
+     * Force MTP on/off regardless of the profile.
+     */
+    mtp?: boolean | null;
+    /**
+     * Arbitrary extra flags the curated profile does not model.
+     */
+    extra_args?: Array<string> | null;
+    /**
+     * Override GPU detection.
+     */
+    gfx_target?: string | null;
 };
 
 export type GetSystemVersionData = {
@@ -225,6 +643,34 @@ export type GetHardwareResponses = {
 };
 
 export type GetHardwareResponse = GetHardwareResponses[keyof GetHardwareResponses];
+
+export type GetOffloadRecommendationData = {
+    body?: never;
+    path: {
+        /**
+         * Model ID or alias.
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/api/models/offload/{model}';
+};
+
+export type GetOffloadRecommendationErrors = {
+    /**
+     * Model not found.
+     */
+    404: unknown;
+};
+
+export type GetOffloadRecommendationResponses = {
+    /**
+     * Recommended offload settings.
+     */
+    200: OffloadRecommendation;
+};
+
+export type GetOffloadRecommendationResponse = GetOffloadRecommendationResponses[keyof GetOffloadRecommendationResponses];
 
 export type ListModelsData = {
     body?: never;
@@ -346,9 +792,9 @@ export type GetConfigModelErrors = {
 
 export type GetConfigModelResponses = {
     /**
-     * Model configuration response.
+     * Model configuration and parsed llama-server flags.
      */
-    200: ConfigModelResponse;
+    200: ConfigModelDetail;
 };
 
 export type GetConfigModelResponse = GetConfigModelResponses[keyof GetConfigModelResponses];
@@ -451,9 +897,182 @@ export type ReloadConfigResponses = {
     /**
      * Reload initiated asynchronously.
      */
-    202: {
-        status: string;
-    };
+    202: ReloadResponse;
 };
 
 export type ReloadConfigResponse = ReloadConfigResponses[keyof ReloadConfigResponses];
+
+export type ClearDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/default-model';
+};
+
+export type ClearDefaultModelErrors = {
+    /**
+     * Config file path not set.
+     */
+    422: unknown;
+    /**
+     * Internal server error.
+     */
+    500: unknown;
+};
+
+export type ClearDefaultModelResponses = {
+    /**
+     * Default model cleared; reload triggered asynchronously.
+     */
+    202: ConfigModelResponse;
+};
+
+export type ClearDefaultModelResponse = ClearDefaultModelResponses[keyof ClearDefaultModelResponses];
+
+export type GetDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/default-model';
+};
+
+export type GetDefaultModelResponses = {
+    /**
+     * Default model info. 'model' is null when no default is configured.
+     */
+    200: ConfigDefaultModelResponse;
+};
+
+export type GetDefaultModelResponse = GetDefaultModelResponses[keyof GetDefaultModelResponses];
+
+export type SetDefaultModelData = {
+    body: ConfigDefaultModelRequest;
+    path?: never;
+    query?: never;
+    url: '/api/config/default-model';
+};
+
+export type SetDefaultModelErrors = {
+    /**
+     * Bad request.
+     */
+    400: unknown;
+    /**
+     * Model not found in config.
+     */
+    404: unknown;
+    /**
+     * Config file path not set.
+     */
+    422: unknown;
+    /**
+     * Internal server error.
+     */
+    500: unknown;
+};
+
+export type SetDefaultModelResponses = {
+    /**
+     * Default model updated; reload triggered asynchronously.
+     */
+    202: ConfigModelResponse;
+};
+
+export type SetDefaultModelResponse = SetDefaultModelResponses[keyof SetDefaultModelResponses];
+
+export type GetFitReportData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fit';
+};
+
+export type GetFitReportResponses = {
+    /**
+     * Per-host fit report.
+     */
+    200: FitReport;
+};
+
+export type GetFitReportResponse = GetFitReportResponses[keyof GetFitReportResponses];
+
+export type GetModelFitData = {
+    body?: never;
+    path: {
+        /**
+         * Model ID or alias.
+         */
+        model: string;
+    };
+    query?: {
+        /**
+         * Score this context size instead of computing max_safe_ctx.
+         */
+        ctx?: number;
+    };
+    url: '/api/fit/{model}';
+};
+
+export type GetModelFitErrors = {
+    /**
+     * Model not found.
+     */
+    404: unknown;
+};
+
+export type GetModelFitResponses = {
+    /**
+     * Fit result for the model.
+     */
+    200: ModelFit;
+};
+
+export type GetModelFitResponse = GetModelFitResponses[keyof GetModelFitResponses];
+
+export type GetTuningData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tuning';
+};
+
+export type GetTuningResponses = {
+    /**
+     * Tuning status.
+     */
+    200: TuningStatus;
+};
+
+export type GetTuningResponse = GetTuningResponses[keyof GetTuningResponses];
+
+export type PatchTuningData = {
+    body: TuningPatchRequest;
+    path?: never;
+    query?: never;
+    url: '/api/tuning';
+};
+
+export type PatchTuningResponses = {
+    /**
+     * Updated tuning status.
+     */
+    200: TuningStatus;
+};
+
+export type PatchTuningResponse = PatchTuningResponses[keyof PatchTuningResponses];
+
+export type ListTuningProfilesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tuning/profiles';
+};
+
+export type ListTuningProfilesResponses = {
+    /**
+     * Tuning database.
+     */
+    200: TuningProfilesResponse;
+};
+
+export type ListTuningProfilesResponse = ListTuningProfilesResponses[keyof ListTuningProfilesResponses];

@@ -3,9 +3,10 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { DialogModelCtx } from "../../component/dialog-model-ctx"
+import { DialogTuning } from "../../component/dialog-tuning"
 import { createClient, createConfig } from "../../local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "../../local/llama-skein/gen/sdk.gen"
-import type { ResourceSnapshot } from "../../local/llama-skein/gen/types.gen"
+import type { ResourceSnapshot, TuningStatus } from "../../local/llama-skein/gen/types.gen"
 import { TextAttributes } from "@opentui/core"
 
 const id = "internal:sidebar-context"
@@ -146,6 +147,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
   const [mem, setMem] = createSignal<MemSnapshot | null>(null)
   const [balance, setBalance] = createSignal<ProviderBalance | null>(null)
+  const [tuning, setTuning] = createSignal<TuningStatus | null>(null)
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
@@ -177,7 +179,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   createEffect(on(
     () => state().baseURL,
     (url) => {
-      if (!url) { setMem(null); return }
+      if (!url) { setMem(null); setTuning(null); return }
       const llamaClient = new LlamaSkeinClient({
         client: createClient(createConfig({ baseUrl: normalizeBaseURL(url) })),
       })
@@ -191,6 +193,14 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           const res = await llamaClient.getHardware({ signal: aborter.signal })
           if (!cancelled && res.data) setMem(extractMem(res.data))
         } catch { /* backend may not support /api/hardware */ }
+        // Fold the tuning read into the same poll — no separate loop, reusing
+        // the cancelled/abort guard so a provider switch can't write stale data.
+        try {
+          const res = await llamaClient.getTuning({ signal: aborter.signal })
+          if (!cancelled) setTuning(res.data ?? null)
+        } catch {
+          if (!cancelled) setTuning(null) /* older/non-llama-skein backend */
+        }
       }
       poll()
       const pollId = setInterval(poll, 30_000)
@@ -237,6 +247,12 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const { providerID, modelID } = state()
     if (!providerID || !modelID) return
     props.api.ui.dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
+  }
+
+  function openTuningDialog() {
+    const { providerID } = state()
+    if (!providerID) return
+    props.api.ui.dialog.replace(() => <DialogTuning providerID={providerID} />)
   }
 
   const canOpenDialog = () => state().isLocal && Boolean(state().ctxWindow)
@@ -288,6 +304,22 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
             </>
           )}
         </Show>
+      </Show>
+
+      {/* ── GPU tuning badge (local llama-skein only) ── */}
+      <Show when={state().isLocal && tuning()?.detected_gfx}>
+        {(gfx) => {
+          const t = () => tuning()!
+          const verified = () => t().profile?.verified === true && t().enabled
+          return (
+            <text onMouseUp={openTuningDialog} fg={verified() ? theme().accent : theme().textMuted}>
+              {gfx()}{" "}
+              <span style={{ fg: theme().textMuted }}>
+                {!t().enabled ? "· tuning off" : verified() ? "✓ tuned" : "· default"}
+              </span>
+            </text>
+          )
+        }}
       </Show>
 
       {/* ── Speed ── */}

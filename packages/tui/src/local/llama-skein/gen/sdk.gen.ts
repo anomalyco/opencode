@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetHardwareResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses } from './types.gen';
+import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetFitReportResponses, GetHardwareResponses, GetModelFitErrors, GetModelFitResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, GetTuningResponses, ListModelsResponses, ListTuningProfilesResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, PatchTuningResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses, TuningPatchRequest } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -67,6 +67,20 @@ export class LlamaSkeinClient extends HeyApiClient {
     
     public getHardware<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
         return (options?.client ?? this.client).get<GetHardwareResponses, unknown, ThrowOnError>({ url: '/api/hardware', ...options });
+    }
+    
+    /**
+     * Recommends CPU/MoE offload settings for a model given current free VRAM. MoE-scoped; non-MoE models and the mlx backend return applicable=false.
+     */
+    public getOffloadRecommendation<ThrowOnError extends boolean = false>(parameters: {
+        model: string;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'model' }] }]);
+        return (options?.client ?? this.client).get<GetOffloadRecommendationResponses, GetOffloadRecommendationErrors, ThrowOnError>({
+            url: '/api/models/offload/{model}',
+            ...options,
+            ...params
+        });
     }
     
     public listModels<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
@@ -172,5 +186,93 @@ export class LlamaSkeinClient extends HeyApiClient {
      */
     public reloadConfig<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
         return (options?.client ?? this.client).post<ReloadConfigResponses, ReloadConfigErrors, ThrowOnError>({ url: '/api/config/reload', ...options });
+    }
+    
+    /**
+     * Removes the default model from the on-disk config YAML and triggers reload. Idempotent.
+     */
+    public clearDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).delete<ClearDefaultModelResponses, ClearDefaultModelErrors, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    }
+    
+    /**
+     * Returns the configured default model used when a request omits the 'model' field.
+     */
+    public getDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetDefaultModelResponses, unknown, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    }
+    
+    /**
+     * Sets the default model in the on-disk config YAML and triggers reload. The model must be a configured model ID or alias.
+     */
+    public setDefaultModel<ThrowOnError extends boolean = false>(parameters: {
+        configDefaultModelRequest: ConfigDefaultModelRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'configDefaultModelRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).put<SetDefaultModelResponses, SetDefaultModelErrors, ThrowOnError>({
+            url: '/api/config/default-model',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * Fit report for every configured model on this host: fit level, max-safe context, throughput estimate. The per-host payload skein aggregates for fleet placement.
+     */
+    public getFitReport<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetFitReportResponses, unknown, ThrowOnError>({ url: '/api/fit', ...options });
+    }
+    
+    /**
+     * Fit of one model to this host. Optional ctx query scores a specific context size instead of computing the max-safe one.
+     */
+    public getModelFit<ThrowOnError extends boolean = false>(parameters: {
+        model: string;
+        ctx?: number;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'model' }, { in: 'query', key: 'ctx' }] }]);
+        return (options?.client ?? this.client).get<GetModelFitResponses, GetModelFitErrors, ThrowOnError>({
+            url: '/api/fit/{model}',
+            ...options,
+            ...params
+        });
+    }
+    
+    /**
+     * Effective GPU tuning for this host (detected arch, enabled state, resolved profile, provenance).
+     */
+    public getTuning<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetTuningResponses, unknown, ThrowOnError>({ url: '/api/tuning', ...options });
+    }
+    
+    /**
+     * Override or disable the recommended tuning for this host (persisted; applied on next model reload).
+     */
+    public patchTuning<ThrowOnError extends boolean = false>(parameters: {
+        tuningPatchRequest: TuningPatchRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'tuningPatchRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).patch<PatchTuningResponses, unknown, ThrowOnError>({
+            url: '/api/tuning',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * The full tuning database (all gfx x use-case profiles) for client pickers.
+     */
+    public listTuningProfiles<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<ListTuningProfilesResponses, unknown, ThrowOnError>({ url: '/api/tuning/profiles', ...options });
     }
 }
