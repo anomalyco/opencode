@@ -1,9 +1,8 @@
 export * as Model from "./model.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema.js"
+import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
-import { statics } from "./schema.js"
 
 export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
 export type ID = typeof ID.Type
@@ -42,36 +41,23 @@ export const Cost = Schema.Struct({
   }),
 }).annotate({ identifier: "Model.Cost" })
 
-export const Api = Schema.Union([
-  Schema.Struct({
-    id: ID,
-    ...Provider.AISDK.fields,
-  }),
-  Schema.Struct({
-    id: ID,
-    ...Provider.Native.fields,
-  }),
-])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Model.Api" })
-export type Api = typeof Api.Type
+export interface Variant extends Schema.Schema.Type<typeof Variant> {}
+export const Variant = Schema.Struct({
+  id: VariantID,
+  ...Provider.Overlays,
+}).annotate({ identifier: "Model.Variant" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
+  modelID: ID,
   providerID: Provider.ID,
   family: Family.pipe(optional),
   name: Schema.String,
-  api: Api,
+  package: Provider.Package.pipe(optional),
+  ...Provider.Overlays,
   capabilities: Capabilities,
-  request: Schema.Struct({
-    ...Provider.Request.fields,
-    variant: Schema.String.pipe(optional),
-  }),
-  variants: Schema.Struct({
-    id: VariantID,
-    ...Provider.Request.fields,
-  }).pipe(Schema.Array),
+  variants: Schema.Array(Variant),
   time: Schema.Struct({
     released: Schema.Finite,
   }),
@@ -87,14 +73,13 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "ModelV2.Info" })
   .pipe(
     statics((schema) => ({
-      empty: (providerID: Provider.ID, modelID: ID) =>
+      empty: (providerID: Provider.ID, id: ID) =>
         schema.make({
-          id: modelID,
+          id,
+          modelID: id,
           providerID,
-          name: modelID,
-          api: { id: modelID, type: "native", settings: {} },
+          name: id,
           capabilities: { tools: false, input: [], output: [] },
-          request: { settings: {}, headers: {}, body: {} },
           variants: [],
           time: { released: 0 },
           cost: [],

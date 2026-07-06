@@ -230,6 +230,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
+    color: var(--task-agent-legacy-color, var(--text-strong));
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
@@ -243,6 +244,57 @@
 
     [data-component="task-tool-action"] {
       opacity: 1;
+    }
+  }
+}
+
+body[data-new-layout] {
+  [data-component="task-tool-card"] {
+    padding: 8px 12px 8px 10px;
+    border-radius: 8px;
+    border: 0;
+    border-color: transparent;
+    background: var(--task-agent-background, light-dark(#fafafa, rgba(250, 250, 250, 0.15)));
+    box-shadow: inset 0 0 0 0.5px var(--task-agent-border, var(--v2-border-border-base));
+
+    [data-component="task-tool-spinner"],
+    [data-component="task-tool-title"] {
+      color: var(--task-agent-color, var(--text-strong));
+    }
+
+    [data-component="task-tool-title"] {
+      height: 20px;
+      font-family: var(--v2-font-family-sans, "Inter", sans-serif);
+      font-style: normal;
+      font-weight: 530;
+      font-size: 13px;
+      line-height: 20px;
+      letter-spacing: -0.04px;
+      flex: none;
+      flex-grow: 0;
+    }
+
+    [data-slot="basic-tool-tool-subtitle"] {
+      font-family: var(--v2-font-family-sans, "Inter", sans-serif);
+      font-style: normal;
+      font-weight: 440;
+      font-size: 13px;
+      line-height: 20px;
+      letter-spacing: -0.04px;
+      color: light-dark(var(--v2-text-text-base), #fafafa);
+      font-variation-settings: "slnt" 0;
+      flex: none;
+      flex-grow: 0;
+    }
+
+    [data-component="session-progress-indicator-v2"] {
+      color: var(--task-agent-color, light-dark(var(--v2-text-text-base), #ffffff));
+    }
+
+    &:hover,
+    &:focus-visible {
+      border-color: transparent;
+      background: var(--task-agent-background, light-dark(#fafafa, rgba(250, 250, 250, 0.15)));
     }
   }
 }

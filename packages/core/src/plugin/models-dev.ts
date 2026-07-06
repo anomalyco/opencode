@@ -72,7 +72,7 @@ function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] 
 
 const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 
-function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model): ModelV2Info["variants"] {
+function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model): NonNullable<ModelV2Info["variants"]> {
   const npm = model.provider?.npm ?? provider.npm
   const options = model.reasoning_options ?? []
   const effort = options.find((option) => option.type === "effort")
@@ -82,7 +82,7 @@ function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model)
       const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
       if (id === undefined) return []
       const settings = settingsForEffort(npm, id)
-      return settings ? [{ id, settings, headers: {}, body: {} }] : []
+      return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
     })
   }
 
@@ -117,15 +117,18 @@ function settingsForEffort(npm: string | undefined, effort: string): ProviderV2.
 function budgetVariants(
   npm: string | undefined,
   option: Extract<NonNullable<ModelsDev.Model["reasoning_options"]>[number], { type: "budget_tokens" }>,
-): ModelV2Info["variants"] {
+): NonNullable<ModelV2Info["variants"]> {
   const max = option.max
-  const high = option.max === undefined ? Math.max(option.min ?? 0, 16_000) : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
+  const high =
+    option.max === undefined
+      ? Math.max(option.min ?? 0, 16_000)
+      : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
   return [
     { id: "high", budget: high },
     ...(max === undefined || max === high ? [] : [{ id: "max", budget: max }]),
   ].flatMap((item) => {
     const settings = settingsForBudget(npm, item.budget)
-    return settings ? [{ id: item.id, settings, headers: {}, body: {} }] : []
+    return settings ? [{ id: ModelV2.VariantID.make(item.id), settings }] : []
   })
 }
 
@@ -143,12 +146,13 @@ function modeName(model: ModelsDev.Model, mode: string) {
   return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
 }
 
-function mergeVariants(model: ModelV2Info, next: ModelV2Info["variants"]) {
-  const existing = new Map(model.variants.map((variant) => [variant.id, variant]))
+function mergeVariants(model: ModelV2Info, next: NonNullable<ModelV2Info["variants"]>) {
+  const variants = model.variants ?? []
+  const existing = new Map(variants.map((variant) => [variant.id, variant]))
   const nextIDs = new Set(next.map((variant) => variant.id))
   model.variants = [
     ...next.map((variant) => existing.get(variant.id) ?? variant),
-    ...model.variants.filter((variant) => !nextIDs.has(variant.id)),
+    ...variants.filter((variant) => !nextIDs.has(variant.id)),
   ]
 }
 
@@ -159,24 +163,14 @@ function applyModel(
     readonly name?: string
     readonly cost?: ModelV2Info["cost"]
     readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
-    readonly variants?: ModelV2Info["variants"]
+    readonly variants?: NonNullable<ModelV2Info["variants"]>
   } = {},
 ) {
   draft.name = input.name ?? model.name
+  draft.modelID = model.id
   draft.family = model.family ? ModelV2.Family.make(model.family) : undefined
-  draft.api = model.provider?.npm
-    ? {
-        id: ModelV2.ID.make(model.id),
-        type: "aisdk",
-        package: model.provider.npm,
-        url: model.provider.api,
-      }
-    : {
-        id: ModelV2.ID.make(model.id),
-        type: "native",
-        url: model.provider?.api,
-        settings: {},
-      }
+  draft.package = model.provider?.npm ? ProviderV2.aisdk(model.provider.npm) : undefined
+  draft.settings = model.provider?.api ? { ...draft.settings, baseURL: model.provider.api } : draft.settings
   draft.capabilities = {
     tools: model.tool_call,
     input: [...(model.modalities?.input ?? [])],
@@ -184,7 +178,11 @@ function applyModel(
   }
   mergeVariants(draft, input.variants ?? [])
   draft.time.released = released(model.release_date)
-  draft.cost = input.cost ?? cost(model.cost)
+  draft.cost = (input.cost ?? cost(model.cost)).map((item) => ({
+    ...item,
+    tier: item.tier && { ...item.tier },
+    cache: { ...item.cache },
+  }))
   draft.status = model.status ?? "active"
   draft.enabled = true
   draft.limit = {
@@ -192,8 +190,8 @@ function applyModel(
     input: model.limit.input,
     output: model.limit.output,
   }
-  Object.assign(draft.request.headers, input.request?.headers ?? {})
-  Object.assign(draft.request.body, input.request?.body ?? {})
+  draft.headers = { ...draft.headers, ...input.request?.headers }
+  draft.body = { ...draft.body, ...input.request?.body }
 }
 
 export const ModelsDevPlugin = define({
@@ -222,25 +220,18 @@ export const ModelsDevPlugin = define({
         const providerID = ProviderV2.ID.make(item.id)
         catalog.provider.update(providerID, (provider) => {
           provider.name = item.name
-          provider.api = item.npm
-            ? {
-                type: "aisdk",
-                package: item.npm,
-                url: item.api,
-              }
-            : {
-                type: "native",
-                url: item.api,
-                settings: {},
-              }
+          provider.package = item.npm ? ProviderV2.aisdk(item.npm) : ""
+          provider.settings = item.api ? { ...provider.settings, baseURL: item.api } : provider.settings
         })
 
         for (const model of Object.values(item.models)) {
           const baseCost = cost(model.cost)
           const variants = reasoningVariants(item, model)
-          catalog.model.update(providerID, model.id, (draft) => applyModel(draft, model, { cost: baseCost, variants }))
+          catalog.model.update(providerID, ModelV2.ID.make(model.id), (draft) =>
+            applyModel(draft, model, { cost: baseCost, variants }),
+          )
           for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
-            catalog.model.update(providerID, `${model.id}-${mode}`, (draft) =>
+            catalog.model.update(providerID, ModelV2.ID.make(`${model.id}-${mode}`), (draft) =>
               applyModel(draft, model, {
                 name: modeName(model, mode),
                 cost: mergeCost(baseCost, options.cost),

@@ -62,7 +62,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
               info: decode({
                 permissions: [{ action: "read", resource: "*", effect: "allow" }],
                 agents: {
-                  reviewer: { variant: "high", hidden: true },
+                  reviewer: { model: "openrouter/openai/gpt-5#high", hidden: true },
                   removed: { disabled: true },
                   late: {
                     permissions: [{ action: "edit", resource: "*", effect: "allow" }],
@@ -170,7 +170,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
         hidden: true,
         color: "warning",
         steps: 12,
-        model: { providerID: "anthropic", id: "claude-sonnet", variant: undefined },
+        model: { providerID: "anthropic", id: "claude-sonnet" },
       })
       expect(reviewer.request).toEqual({
         settings: {},

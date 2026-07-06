@@ -56,7 +56,8 @@ describe("CoherePlugin", () => {
       const ignored = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("cohere"), ModelV2.ID.make("command")),
-          api: { id: ModelV2.ID.make("command"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("command"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/openai-compatible",
         options: { name: "cohere" },
@@ -66,7 +67,8 @@ describe("CoherePlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("cohere"), ModelV2.ID.make("command")),
-          api: { id: ModelV2.ID.make("command"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("command"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/cohere",
         options: { name: "cohere" },
@@ -83,7 +85,8 @@ describe("CoherePlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-cohere"), ModelV2.ID.make("command-r-plus")),
-          api: { id: ModelV2.ID.make("command-r-plus"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("command-r-plus"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/cohere",
         options: { name: "custom-cohere", apiKey: "test", baseURL: "https://cohere.example" },
@@ -108,7 +111,8 @@ describe("CoherePlugin", () => {
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("cohere"), ModelV2.ID.make("alias")),
-          api: { id: ModelV2.ID.make("command-r-plus"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("command-r-plus"),
+          package: "aisdk:test-provider",
         }),
         sdk,
         options: {},

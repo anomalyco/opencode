@@ -227,20 +227,20 @@ it.effect("waits for permission before calling an MCP tool", () =>
   }),
 )
 
-it.effect("does not call MCP when permission is rejected", () =>
+it.effect("does not call MCP when permission is blocked", () =>
   Effect.gen(function* () {
     calls = 0
     assertion = yield* Deferred.make<PermissionV2.AssertInput>()
-    decision = Effect.fail(new PermissionV2.RejectedError())
+    decision = Effect.fail(new PermissionV2.BlockedError({ rules: [] }))
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 
     const settlement = yield* settleTool(registry, {
-      sessionID: SessionV2.ID.make("ses_mcp_rejected"),
+      sessionID: SessionV2.ID.make("ses_mcp_blocked"),
       ...toolIdentity,
       call: {
         type: "tool-call",
-        id: "call_mcp_rejected",
+        id: "call_mcp_blocked",
         name: "execute",
         input: { code: "return await tools.demo.search({})" },
       },

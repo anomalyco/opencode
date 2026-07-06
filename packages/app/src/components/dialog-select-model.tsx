@@ -1,5 +1,15 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createMemo, For, JSX, Show, ValidComponent } from "solid-js"
+import {
+  Component,
+  ComponentProps,
+  createEffect,
+  createMemo,
+  For,
+  JSX,
+  onCleanup,
+  Show,
+  ValidComponent,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -17,6 +27,9 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
+import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
+import { createEventListener } from "@solid-primitives/event-listener"
+import { matchesModelSearch } from "./dialog-select-model-search"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -79,7 +92,6 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
-          openDelay={0}
           value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
         >
           {node}
@@ -143,8 +155,8 @@ export function ModelSelectorPopover(props: {
 
   const handleConnectProvider = () => {
     close("provider")
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
+    void import("./dialog-connect-provider").then((x) => {
+      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
     })
   }
   const language = useLanguage()
@@ -243,14 +255,9 @@ export function ModelSelectorPopoverV2(props: {
       .filter((item) => (props.provider ? item.provider.id === props.provider : true)),
   )
   const models = createMemo(() => {
-    const search = store.search.trim().toLowerCase()
+    const search = store.search.trim()
     const filtered = search
-      ? allModels().filter(
-          (item) =>
-            item.name.toLowerCase().includes(search) ||
-            item.id.toLowerCase().includes(search) ||
-            item.provider.name.toLowerCase().includes(search),
-        )
+      ? allModels().filter((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
       : allModels()
 
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
@@ -334,18 +341,22 @@ export function ModelSelectorPopoverV2(props: {
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
   const setSearch = (value: string) => {
-    const search = value.trim().toLowerCase()
+    const search = value.trim()
     const first = [...allModels()]
       .sort((a, b) => a.name.localeCompare(b.name))
-      .find(
-        (item) =>
-          !search ||
-          item.name.toLowerCase().includes(search) ||
-          item.id.toLowerCase().includes(search) ||
-          item.provider.name.toLowerCase().includes(search),
-      )
+      .find((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
   }
+
+  createEffect(() => {
+    if (!store.open) return
+    createEventListener(
+      document,
+      "keydown",
+      (event: KeyboardEvent) => handleDocumentSearchKeydown(searchRef, event, store.search, setSearch),
+      true,
+    )
+  })
 
   return (
     <MenuV2 open={store.open} modal={false} placement="top-start" gutter={6} onOpenChange={setOpen}>
@@ -492,8 +503,8 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   const directory = () => decode64(local.slug())
 
   const provider = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
+    void import("./dialog-connect-provider").then((x) => {
+      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
     })
   }
 

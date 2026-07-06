@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message, Model } from "@opencode-ai/llm"
-import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
+import { Message } from "@opencode-ai/llm"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -12,7 +11,7 @@ import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
-const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
+const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {
@@ -606,6 +605,37 @@ Recent work
         cache: undefined,
         metadata: undefined,
         providerMetadata: undefined,
+      },
+    ])
+  })
+
+  test("preserves provider metadata for a catalog alias with a different API model ID", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-alias"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-alias",
+              text: "Visible thought",
+              providerMetadata: { openai: { reasoningEncryptedContent: "encrypted" } },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      ModelV2.Ref.make({ id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") }),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "reasoning",
+        text: "Visible thought",
+        providerMetadata: { openai: { reasoningEncryptedContent: "encrypted" } },
       },
     ])
   })

@@ -179,6 +179,8 @@ export async function handler(
       logger.metric({
         provider: providerInfo.id,
         "provider.model": providerInfo.model,
+        shallowProvider: providerInfo.id,
+        "shallowProvider.model": providerInfo.model,
       })
 
       const startTimestamp = Date.now()
@@ -210,39 +212,44 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const res = await fetchWith429Retry(reqUrl, {
-        method: "POST",
-        headers: (() => {
-          const headers = new Headers(input.request.headers)
-          providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
-          Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
-            if (v === "$ip") return headers.set(k, ip)
-            if (v === "$caller") return headers.set(k, stickyId)
-            if (v === "$session") return headers.set(k, sessionId)
-            if (v === "$model") return headers.set(k, model)
-            if (v === "$request") return headers.set(k, requestId)
-            if (v === "$project") return headers.set(k, projectId)
-            if (v === "$workspace") {
-              if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
-              return
-            }
-            headers.set(k, v)
-          })
-          headers.delete("host")
-          headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
-          return headers
-        })(),
-        body: reqBody,
-        // Propagate caller disconnects to the upstream provider request so
-        // abandoned Console requests do not leave orphaned inference work open.
-        signal: input.request.signal,
-      })
+      const isNewInference = providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")
+      const res = await fetchWith429Retry(
+        reqUrl,
+        {
+          method: "POST",
+          headers: (() => {
+            const headers = new Headers(input.request.headers)
+            providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
+            Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
+              if (v === "$ip") return headers.set(k, ip)
+              if (v === "$caller") return headers.set(k, stickyId)
+              if (v === "$session") return headers.set(k, sessionId)
+              if (v === "$model") return headers.set(k, model)
+              if (v === "$request") return headers.set(k, requestId)
+              if (v === "$project") return headers.set(k, projectId)
+              if (v === "$workspace") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
+                return
+              }
+              headers.set(k, v)
+            })
+            headers.delete("host")
+            headers.delete("content-length")
+            headers.delete("x-opencode-request")
+            headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            return headers
+          })(),
+          body: reqBody,
+          // Propagate caller disconnects to the upstream provider request so
+          // abandoned Console requests do not leave orphaned inference work open.
+          signal: input.request.signal,
+        },
+        { count: isNewInference ? MAX_429_RETRIES : 0 },
+      )
 
-      if (providerInfo.id.startsWith("console.")) {
+      if (isNewInference) {
         const resEndpointId = res.headers.get("x-opencode-endpoint-id")
         const resEndpointModelId = res.headers.get("x-opencode-upstream-model-id")
         if (resEndpointId && resEndpointModelId)
@@ -261,6 +268,7 @@ export async function handler(
 
       // Try another provider => stop retrying if using fallback provider
       if (
+        //!isNewInference &&
         res.status !== 200 &&
         // ie. 400 error is usually provider error like malformed request
         res.status !== 400 &&

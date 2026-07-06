@@ -28,7 +28,8 @@ describe("AlibabaPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("qwen")),
-          api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("qwen"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/alibaba",
         options: { name: "alibaba" },
@@ -45,7 +46,8 @@ describe("AlibabaPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("qwen")),
-          api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("qwen"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/openai-compatible",
         options: { name: "alibaba" },
@@ -62,7 +64,8 @@ describe("AlibabaPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-alibaba"), ModelV2.ID.make("qwen")),
-          api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
+          modelID: ModelV2.ID.make("qwen"),
+          package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/alibaba",
         options: { name: "custom-alibaba", apiKey: "test" },
@@ -74,17 +77,18 @@ describe("AlibabaPlugin", () => {
     }),
   )
 
-  it.effect("uses the old default languageModel(api.id) behavior", () =>
+  it.effect("uses the default languageModel(modelID) behavior", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const item = ModelV2.Info.make({
         ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("alias")),
-        api: { id: ModelV2.ID.make("qwen-plus"), type: "aisdk", package: "test-provider" },
+        modelID: ModelV2.ID.make("qwen-plus"),
+        package: "aisdk:test-provider",
       })
       const result = yield* aisdk.runSDK({ model: item, package: "@ai-sdk/alibaba", options: {} })
-      const language = result.sdk?.languageModel(item.api.id)
+      const language = result.sdk?.languageModel(item.modelID ?? item.id)
       expect(language?.modelId).toBe("qwen-plus")
       expect(language?.provider).toBe("alibaba.chat")
     }),

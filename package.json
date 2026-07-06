@@ -108,7 +108,7 @@
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "catalog:",
-    "turbo": "2.8.13"
+    "turbo": "2.10.2"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",

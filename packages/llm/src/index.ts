@@ -1,6 +1,7 @@
 export { LLMClient } from "./route/client"
 export { Auth } from "./route/auth"
 export { Provider } from "./provider"
+export { ProviderPackage } from "./provider-package"
 export { isContextOverflow, isContextOverflowFailure } from "./provider-error"
 export type {
   RouteModelInput,
@@ -31,3 +32,4 @@ export type {
   ModelFactory as ProviderModelFactory,
   ModelOptions as ProviderModelOptions,
 } from "./provider"
+export type { Definition as ProviderPackageDefinition, Settings as ProviderPackageSettings } from "./provider-package"

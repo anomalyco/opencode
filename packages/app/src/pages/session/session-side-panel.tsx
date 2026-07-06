@@ -14,6 +14,9 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
+
+const reviewTabID = "session-side-panel-review-tab"
+const reviewTabPanelID = "session-side-panel-review-tabpanel"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
@@ -45,12 +48,14 @@ export function SessionSidePanel(props: {
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean
+  reviewHasFocusableContent: () => boolean
   reviewCount: () => number
   reviewPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  stacked?: boolean
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -74,6 +79,7 @@ export function SessionSidePanel(props: {
       }),
   )
   const open = createMemo(() => reviewOpen() || fileOpen())
+  const rendered = createMemo<boolean>((previous) => previous || open(), false)
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
@@ -154,6 +160,10 @@ export function SessionSidePanel(props: {
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
+  const reviewContentRendered = createMemo<boolean>(
+    (previous) => previous || (reviewOpen() && activeTab() === "review"),
+    false,
+  )
 
   const fileTreeTab = () => layout.fileTree.tab()
 
@@ -219,8 +229,10 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
+        class="relative min-w-0 flex overflow-hidden bg-background-base"
         classList={{
+          "h-full shrink-0": !props.stacked,
+          "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
@@ -229,7 +241,7 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <Show when={open()}>
+        <Show when={rendered()}>
           <div
             class="size-full flex"
             classList={{
@@ -262,7 +274,11 @@ export function SessionSidePanel(props: {
                         }}
                       >
                         <Show when={reviewTab() && props.canReview()}>
-                          <Tabs.Trigger value="review">
+                          <Tabs.Trigger
+                            value="review"
+                            id={reviewTabID}
+                            aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
+                          >
                             <div class="flex items-center gap-1.5">
                               <div>{language.t("session.tab.review")}</div>
                               <Show when={props.hasReview()}>
@@ -325,10 +341,20 @@ export function SessionSidePanel(props: {
                       </Tabs.List>
                     </div>
 
-                    <Show when={reviewTab() && props.canReview()}>
-                      <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                        <Show when={reviewOpen() && activeTab() === "review"}>{props.reviewPanel()}</Show>
-                      </Tabs.Content>
+                    <Show when={reviewTab() && props.canReview() && reviewContentRendered()}>
+                      <div
+                        id={reviewTabPanelID}
+                        role="tabpanel"
+                        aria-labelledby={reviewTabID}
+                        aria-hidden={activeTab() !== "review"}
+                        inert={activeTab() !== "review"}
+                        tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
+                        data-slot="tabs-content"
+                        class="flex flex-col h-full overflow-hidden contain-strict"
+                        classList={{ hidden: activeTab() !== "review" }}
+                      >
+                        {props.reviewPanel()}
+                      </div>
                     </Show>
 
                     <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">

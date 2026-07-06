@@ -76,5 +76,4 @@ describe("CommandV2", () => {
       expect((yield* command.evaluate({ name: "review" })).text.replace(/\r?\n$/, "")).toEqual("Output: command-output")
     }),
   )
-
 })

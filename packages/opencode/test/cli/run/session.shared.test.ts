@@ -256,21 +256,22 @@ describe("run session shared", () => {
     spyOn(client.message, "list").mockImplementation(() =>
       Promise.resolve({
         data: [
-            {
-              id: "msg_prompt",
-              type: "user",
-              text: "Review @note.ts",
-              files: [
-                {
-                  uri: "file:///tmp/note.ts",
-                  mime: "text/plain",
-                  name: "note.ts",
-                  source: { start: 7, end: 15, text: "@note.ts" },
-                },
-              ],
-              agents: [],
-              time: { created: 1 },
-            },
+          {
+            id: "msg_prompt",
+            type: "user",
+            text: "Review @note.ts",
+            files: [
+              {
+                data: "",
+                mime: "text/plain",
+                name: "note.ts",
+                source: { type: "uri", uri: "file:///tmp/note.ts" },
+                mention: { start: 7, end: 15, text: "@note.ts" },
+              },
+            ],
+            agents: [],
+            time: { created: 1 },
+          },
         ],
         cursor: {},
       }),

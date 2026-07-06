@@ -2,6 +2,7 @@ import { ProviderID, type ModelID } from "../schema"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import type { RouteDefaultsInput } from "../route/client"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
+import type { ProviderPackage } from "../provider-package"
 import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
 export const id = ProviderID.make("openai-compatible")
@@ -11,6 +12,12 @@ type GenericModelOptions = RouteDefaultsInput &
     readonly provider?: string
     readonly baseURL: string
   }
+
+export interface Settings extends ProviderPackage.Settings {
+  readonly apiKey?: string
+  readonly baseURL: string
+  readonly provider?: string
+}
 
 export type FamilyModelOptions = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
@@ -55,6 +62,16 @@ export const provider = {
   id,
   configure,
 }
+
+export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+  configure({
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL,
+    headers: settings.headers === undefined ? undefined : { ...settings.headers },
+    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
+    limits: settings.limits,
+    provider: settings.provider,
+  }).model(modelID)
 
 export const baseten = define(profiles.baseten)
 export const cerebras = define(profiles.cerebras)

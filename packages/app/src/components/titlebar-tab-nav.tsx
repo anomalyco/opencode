@@ -28,7 +28,6 @@ export function TabNavItem(props: {
   onClose: () => void
   onNavigate: () => void
   active?: boolean
-  activeServer: boolean
   forceTruncate?: boolean
   suppressNavigation?: () => boolean
   dragging?: boolean
@@ -70,11 +69,6 @@ export function TabNavItem(props: {
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
     return home ? session.directory.replace(home, "~") : session.directory
-  })
-  const branch = createMemo(() => {
-    const session = props.session()
-    if (!session) return
-    return serverCtx()?.sync.child(session.directory, { bootstrap: false })[0].vcs?.branch
   })
   // Only label the server when multiple servers are connected.
   const serverLabel = createMemo(() => {
@@ -235,8 +229,17 @@ export function TabNavItem(props: {
             event.preventDefault()
             event.stopPropagation()
           }}
+          onMouseDown={(event) => {
+            // Navigate on mousedown to shave the press-release delay off tab switches.
+            if (event.button !== 0) return
+            if (editing()) return
+            if (props.suppressNavigation?.()) return
+            props.onNavigate()
+          }}
           onClick={(event) => {
             event.preventDefault()
+            // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+            if (event.detail > 0) return
             if (editing()) return
             if (props.suppressNavigation?.()) return
             props.onNavigate()
@@ -250,7 +253,7 @@ export function TabNavItem(props: {
                   project={project()}
                   directory={session().directory}
                   sessionId={session().id}
-                  activeServer={props.activeServer}
+                  server={props.server}
                 />
               </span>
             )}
@@ -322,7 +325,6 @@ export function TabNavItem(props: {
         projectName: projectName(),
         title: props.session()?.title,
         path: previewPath(),
-        branch: branch(),
         serverName: serverLabel(),
       }}
     />
@@ -375,8 +377,16 @@ export function DraftTabItem(props: {
           event.preventDefault()
           event.stopPropagation()
         }}
+        onMouseDown={(event) => {
+          // Navigate on mousedown to shave the press-release delay off tab switches.
+          if (event.button !== 0) return
+          if (props.suppressNavigation?.()) return
+          props.onNavigate()
+        }}
         onClick={(event) => {
           event.preventDefault()
+          // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+          if (event.detail > 0) return
           if (props.suppressNavigation?.()) return
           props.onNavigate()
         }}

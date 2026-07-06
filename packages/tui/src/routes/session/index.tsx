@@ -2323,6 +2323,7 @@ function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
+// The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
   const ctx = use()
   const { theme } = useTheme()

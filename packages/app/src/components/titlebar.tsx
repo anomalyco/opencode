@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, Match, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Match, onMount, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -58,6 +58,12 @@ export type TitlebarUpdate = {
   version: () => string | undefined
   installing: () => boolean
   install: () => void
+}
+
+export function useTitlebarRightMount() {
+  const [mount, setMount] = createSignal<HTMLElement | null>(null)
+  onMount(() => setMount(document.getElementById("opencode-titlebar-right")))
+  return mount
 }
 
 export function Titlebar(props: { update?: TitlebarUpdate }) {
@@ -328,6 +334,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 return
               }
 
+              if (route.type === "home") {
+                const selection = layout.home.selection()
+                const conn = global.servers.list().find((item) => ServerConnection.key(item) === selection.server)
+                const project = conn
+                  ? global
+                      .ensureServerCtx(conn)
+                      .projects.list()
+                      .find((item) => item.worktree === selection.directory)
+                  : undefined
+                if (conn && project) {
+                  tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                  return
+                }
+              }
+
               const current = layout.projects.list()[0]
               if (current) {
                 tabs.newDraft({ server: server.key, directory: current.worktree }, "")
@@ -374,8 +395,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: "mod+w",
                   hidden: true,
                   onSelect: () => {
-                    tabsStoreActions.removeTab(tabsStore.findIndex((tab) => current === tab))
+                    tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
                   },
+                },
+                {
+                  id: "tab.reopenClosed",
+                  category: language.t("command.category.file"),
+                  title: language.t("command.tab.reopenClosed"),
+                  keybind: "mod+shift+t",
+                  onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
                 {
                   id: `tab.prev`,
@@ -456,7 +484,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 <TitlebarTabStrip
                   tabs={tabsStore}
                   currentTab={currentTab}
-                  activeServerKey={server.key}
                   forceTruncate={tabsAreOverflowing()}
                   onOverflowChange={setTabsAreOverflowing}
                   onNavigate={(tab, el) => {
@@ -465,7 +492,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   }}
                   onClose={(tab) => {
                     const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                    if (index !== -1) tabsStoreActions.removeTab(index)
+                    if (index !== -1) tabsStoreActions.closeTab(index)
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />

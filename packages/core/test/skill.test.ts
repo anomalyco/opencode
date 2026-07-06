@@ -26,9 +26,7 @@ const discovery = Layer.succeed(
   }),
 )
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node, EventV2.node]), [
-    [SkillDiscovery.node, discovery],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node, EventV2.node]), [[SkillDiscovery.node, discovery]]),
 )
 
 function write(directory: string, name: string, description: string) {

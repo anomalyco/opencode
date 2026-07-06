@@ -42,7 +42,8 @@ describe("XAIPlugin", () => {
       const ignored = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
-          api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          modelID: ModelV2.ID.make("grok-4"),
+          package: "aisdk:@ai-sdk/xai",
         }),
         package: "@ai-sdk/openai-compatible",
         options: {},
@@ -51,7 +52,8 @@ describe("XAIPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
-          api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          modelID: ModelV2.ID.make("grok-4"),
+          package: "aisdk:@ai-sdk/xai",
         }),
         package: "@ai-sdk/xai",
         options: {},
@@ -71,7 +73,8 @@ describe("XAIPlugin", () => {
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("custom-xai"), ModelV2.ID.make("grok-4")),
-          api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          modelID: ModelV2.ID.make("grok-4"),
+          package: "aisdk:@ai-sdk/xai",
         }),
         package: "@ai-sdk/xai",
         options: {},
@@ -81,7 +84,7 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("uses responses with the model api.id for xAI language models", () =>
+  it.effect("uses responses with the model modelID for xAI language models", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
@@ -91,7 +94,8 @@ describe("XAIPlugin", () => {
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("alias")),
-          api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          modelID: ModelV2.ID.make("grok-4"),
+          package: "aisdk:@ai-sdk/xai",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
@@ -112,7 +116,8 @@ describe("XAIPlugin", () => {
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
           ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("grok-4")),
-          api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          modelID: ModelV2.ID.make("grok-4"),
+          package: "aisdk:@ai-sdk/xai",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
