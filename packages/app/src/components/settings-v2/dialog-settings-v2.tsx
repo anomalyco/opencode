@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import { Component, createSignal, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -19,6 +19,7 @@ export const DialogSettings: Component<{
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
+  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
 
   const showProviders = () => {
     void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="providers" />)
@@ -29,7 +30,8 @@ export const DialogSettings: Component<{
       <TabsV2
         orientation="vertical"
         variant="settings"
-        defaultValue={props.defaultValue ?? "general"}
+        value={tab()}
+        onChange={(value) => void startTransition(() => setTab(value))}
         class="settings-v2"
       >
         <TabsV2.List>

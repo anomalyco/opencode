@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import { Component, createSignal, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -15,6 +15,7 @@ export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
+  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
 
   const showProviders = () => {
     void dialog.show(() => <DialogSettings defaultValue="providers" />)
@@ -25,7 +26,8 @@ export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
       <Tabs
         orientation="vertical"
         variant="settings"
-        defaultValue={props.defaultValue ?? "general"}
+        value={tab()}
+        onChange={(value) => void startTransition(() => setTab(value))}
         class="h-full settings-dialog"
       >
         <Tabs.List>
