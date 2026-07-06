@@ -203,7 +203,6 @@ function ReviewPanelV2Sidebar(props: {
           when={props.searching()}
           fallback={
             <FileTreeV2
-              path=""
               allowed={props.filteredFiles()}
               kinds={props.kinds()}
               draggable={false}

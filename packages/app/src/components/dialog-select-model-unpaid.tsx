@@ -22,17 +22,16 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
   const providers = useProviders(directory)
   const language = useLanguage()
 
-  const connect = (provider: string) => {
+  const openProviders = (provider?: string) => {
     void import("./dialog-connect-provider").then((x) => {
-      dialog.show(() => <x.DialogConnectProvider provider={provider} directory={directory} />)
+      const controller = x.useProviderConnectController()
+      controller.select(provider)
+      void dialog.show(() => <x.DialogConnectProvider controller={controller} directory={directory} />)
     })
   }
 
-  const all = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
-    })
-  }
+  const connect = (provider: string) => openProviders(provider)
+  const all = () => openProviders()
 
   let listRef: ListRef | undefined
   const handleKeyDown = (e: KeyboardEvent) => {

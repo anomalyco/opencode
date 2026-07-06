@@ -10,13 +10,20 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 export const DialogSettings: Component<{
   sessionID?: string
+  defaultValue?: string
 }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
-  const [tab, setTab] = createSignal("general")
+  const dialog = useDialog()
+  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
+
+  const showProviders = () => {
+    void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="providers" />)
+  }
 
   return (
     <Dialog size="x-large" variant="settings" class="settings-v2-dialog">
@@ -80,7 +87,7 @@ export const DialogSettings: Component<{
           <SettingsServersV2 />
         </TabsV2.Content>
         <TabsV2.Content value="providers" class="settings-v2-panel">
-          <SettingsProvidersV2 />
+          <SettingsProvidersV2 onBack={showProviders} />
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
