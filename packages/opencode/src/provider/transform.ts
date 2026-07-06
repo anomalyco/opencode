@@ -1432,6 +1432,15 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
   */
 
+  // Ensure `required` is always an array when `properties` is present.
+  // Strict JSON Schema validators (e.g. ajv used by some API gateways/proxies)
+  // reject schemas where `additionalProperties: false` is set but `required`
+  // is missing or null. This normalizes all object schemas to include an
+  // explicit (possibly empty) `required` array.
+  if (schema.type === "object" && schema.properties && !Array.isArray(schema.required)) {
+    schema.required = []
+  }
+
   if (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") {
     schema = sanitizeOpenAISchema(schema) as JSONSchema7
     // Codex also applies lossy compaction above 4 KB; defer that until OpenCode needs the same schema budget.

@@ -150,6 +150,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             },
           },
           additionalProperties: false,
+          required: [],
         }),
       ),
       execute(args, opts) {
@@ -233,6 +234,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             },
           },
           additionalProperties: false,
+          required: [],
         }),
       ),
       execute(args, opts) {
