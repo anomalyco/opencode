@@ -81,7 +81,7 @@ const pluginSupervisorNode = makeLocationNode({
     Npm.node,
     PermissionV2.node,
     PluginRuntime.node,
-    QuestionV2.node,
+    Form.node,
     ReadToolFileSystem.node,
     Reference.node,
     Ripgrep.node,
