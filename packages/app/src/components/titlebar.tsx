@@ -334,6 +334,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 return
               }
 
+              if (route.type === "home") {
+                const selection = layout.home.selection()
+                const conn = global.servers.list().find((item) => ServerConnection.key(item) === selection.server)
+                const project = conn
+                  ? global
+                      .ensureServerCtx(conn)
+                      .projects.list()
+                      .find((item) => item.worktree === selection.directory)
+                  : undefined
+                if (conn && project) {
+                  tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                  return
+                }
+              }
+
               const current = layout.projects.list()[0]
               if (current) {
                 tabs.newDraft({ server: server.key, directory: current.worktree }, "")
