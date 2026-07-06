@@ -1,8 +1,8 @@
 import { For, Show, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@opencode-ai/ui/button"
-import { DockTray } from "@opencode-ai/ui/dock-surface"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { useLanguage } from "@/context/language"
 
 export function SessionRevertDock(props: {
@@ -32,9 +32,12 @@ export function SessionRevertDock(props: {
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   return (
-    <DockTray data-component="session-revert-dock">
+    <div
+      data-component="session-revert-dock"
+      class="w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
+    >
       <div
-        class="pl-3 pr-2 py-2 flex items-center gap-2"
+        class="flex h-[42px] items-center gap-2 pl-4 pr-2"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -44,16 +47,27 @@ export function SessionRevertDock(props: {
           toggle()
         }}
       >
-        <span class="shrink-0 text-14-regular text-text-strong cursor-default">{label()}</span>
+        <IconV2 name="outline-reset" size="normal" class="text-v2-icon-icon-muted" />
+        <span
+          classList={{
+            "shrink-0 cursor-default text-[13px] leading-5 tracking-[-0.04px]": true,
+            "font-[530] text-v2-text-text-base": !store.collapsed,
+            "font-[440] text-v2-text-text-muted": store.collapsed,
+          }}
+        >
+          {label()}
+        </span>
         <Show when={store.collapsed && preview()}>
-          <span class="min-w-0 flex-1 truncate text-14-regular text-text-base cursor-default">{preview()}</span>
+          <span class="min-w-0 flex-1 truncate cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
+            {preview()}
+          </span>
         </Show>
         <div class="ml-auto shrink-0">
-          <IconButton
+          <IconButtonV2
             data-collapsed={store.collapsed ? "true" : "false"}
-            icon="chevron-down"
-            size="normal"
-            variant="ghost"
+            icon={<IconV2 name="outline-chevron-down" size="small" />}
+            size="large"
+            variant="ghost-muted"
             style={{ transform: `rotate(${store.collapsed ? 180 : 0}deg)` }}
             onMouseDown={(event) => {
               event.preventDefault()
@@ -70,30 +84,28 @@ export function SessionRevertDock(props: {
         </div>
       </div>
 
-      <Show when={store.collapsed}>
-        <div class="h-5" aria-hidden="true" />
-      </Show>
-
       <Show when={!store.collapsed}>
-        <div class="px-3 pb-7 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
+        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-4 pb-3 no-scrollbar">
           <For each={props.items}>
             {(item) => (
-              <div class="flex items-center gap-2 min-w-0 py-1">
-                <span class="min-w-0 flex-1 truncate text-13-regular text-text-strong">{item.text}</span>
-                <Button
+              <div class="flex h-6 min-w-0 items-center gap-2">
+                <span class="min-w-0 flex-1 truncate text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+                  {item.text}
+                </span>
+                <ButtonV2
                   size="small"
-                  variant="secondary"
+                  variant="neutral"
                   class="shrink-0"
                   disabled={props.disabled || !!props.restoring}
                   onClick={() => props.onRestore(item.id)}
                 >
                   {language.t("session.revertDock.restore")}
-                </Button>
+                </ButtonV2>
               </div>
             )}
           </For>
         </div>
       </Show>
-    </DockTray>
+    </div>
   )
 }
