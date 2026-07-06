@@ -23,6 +23,37 @@ type Deferred<T = void> = {
   reject: (error?: unknown) => void
 }
 
+/**
+ * Hook for plugins to intercept footer prompt submissions before they enter
+ * the queue. Handlers receive context about the active turn and can either
+ * consume the prompt (output.consumed = true) or transform the text.
+ *
+ * Registered plugins' "tui.prompt.submit" handlers are wired here during
+ * Plugin.init(). Handlers run in FIFO registration order.
+ */
+type FooterSubmitHandler = (
+  input: {
+    text: string
+    sessionID: string
+    active: boolean
+    mode?: "shell" | "text"
+    command?: { name: string; arguments: string }
+  },
+  output: { text: string; consumed: boolean },
+) => Promise<void>
+
+const footerSubmitHandlers: FooterSubmitHandler[] = []
+
+export const footerSubmit = {
+  register(handler: FooterSubmitHandler) {
+    footerSubmitHandlers.push(handler)
+    return () => {
+      const idx = footerSubmitHandlers.indexOf(handler)
+      if (idx >= 0) footerSubmitHandlers.splice(idx, 1)
+    }
+  },
+}
+
 export type QueueInput = {
   footer: FooterApi
   initialInput?: string
@@ -30,6 +61,8 @@ export type QueueInput = {
   onSend?: (prompt: RunPrompt) => void
   onNewSession?: () => void | Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
+  /** The current session ID, passed to tui.prompt.submit handlers. */
+  sessionID?: string
 }
 
 type State = {
@@ -38,6 +71,7 @@ type State = {
   active?: RunPrompt
   ctrl?: AbortController
   closed: boolean
+  sessionID: string
 }
 
 function defer<T = void>(): Deferred<T> {
@@ -63,6 +97,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     queue: [],
     queued: [],
     closed: input.footer.isClosed,
+    sessionID: "",
   }
   let draining: Promise<void> | undefined
 
@@ -265,7 +300,30 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     })()
   }
 
-  const submit = (prompt: RunPrompt) => {
+  const submit = async (prompt: RunPrompt) => {
+    // Dispatch to plugin-registered footer submit handlers.
+    // Plugins may transform or consume the prompt before queuing.
+    const turnActive = !!(state.active && state.active.mode !== "shell" && !state.active.command)
+    for (const handler of footerSubmitHandlers) {
+      const output = { text: prompt.text, consumed: false }
+      try {
+        await handler(
+          {
+            text: prompt.text,
+            sessionID: state.sessionID,
+            active: turnActive,
+            mode: prompt.mode,
+            command: prompt.command ? { name: prompt.command.name, arguments: prompt.command.arguments } : undefined,
+          },
+          output,
+        )
+      } catch {
+        // swallow per-handler errors to keep the queue alive
+      }
+      if (output.consumed) return
+      prompt.text = output.text
+    }
+
     if (!prompt.text.trim() || state.closed) {
       return
     }
