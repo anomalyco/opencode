@@ -127,6 +127,9 @@ export namespace Backend {
   })
   export interface FinishParams extends Schema.Schema.Type<typeof FinishParams> {}
 
+  export const DisconnectParams = Schema.Struct({ id: Schema.String })
+  export interface DisconnectParams extends Schema.Schema.Type<typeof DisconnectParams> {}
+
   export const OpenedExchange = Schema.Struct({ id: Schema.String, url: Schema.String, body: Schema.Json })
   export interface OpenedExchange extends Schema.Schema.Type<typeof OpenedExchange> {}
 
@@ -140,6 +143,7 @@ export namespace Backend {
 
   export const decodeChunkParams = Schema.decodeUnknownPromise(ChunkParams)
   export const decodeFinishParams = Schema.decodeUnknownPromise(FinishParams)
+  export const decodeDisconnectParams = Schema.decodeUnknownPromise(DisconnectParams)
 }
 
 export * as SimulationProtocol from "./index"

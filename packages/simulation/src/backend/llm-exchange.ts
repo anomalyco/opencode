@@ -80,6 +80,14 @@ export const push = (id: string, chunks: readonly Chunk[]) =>
     yield* Queue.offerAll(exchange.queue, chunks)
   })
 
+/** Abruptly ends the provider body without a finish chunk or SSE sentinel. */
+export const disconnect = (id: string) =>
+  Effect.gen(function* () {
+    const exchange = state.exchanges.get(id)
+    if (!exchange) return yield* Effect.fail(new ExchangeNotFoundError(id))
+    yield* Queue.shutdown(exchange.queue)
+  })
+
 /**
  * Registers a listener for newly opened exchanges and immediately replays
  * currently-pending ones, so a late-attaching driver observes requests that

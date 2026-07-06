@@ -17,6 +17,7 @@ import { SimulationNetwork } from "./network"
  *                              as `llm.request` notifications
  * - `llm.chunk`   { id, items }   append response items to an exchange
  * - `llm.finish`  { id, reason? } finish an exchange
+ * - `llm.disconnect` { id } abruptly terminate an exchange without a finish
  * - `llm.pending`                 list open exchanges
  * - `network.log`                 simulated network request log
  */
@@ -52,6 +53,11 @@ async function handle(socket: ControlSocket, request: SimulationProtocol.JsonRpc
     case "llm.finish": {
       const params = await SimulationProtocol.Backend.decodeFinishParams(request.params)
       await Effect.runPromise(SimulationLLMExchange.push(params.id, [{ type: "finish", reason: params.reason }]))
+      return { ok: true }
+    }
+    case "llm.disconnect": {
+      const params = await SimulationProtocol.Backend.decodeDisconnectParams(request.params)
+      await Effect.runPromise(SimulationLLMExchange.disconnect(params.id))
       return { ok: true }
     }
     case "llm.pending":
