@@ -210,7 +210,7 @@ const en = {
   "model.totalModels": "{{count}} models",
   "model.momentum": "Momentum",
   "model.vsPreviousWindow": "vs previous window",
-  "model.usageDescription": "Daily OpenCode Go token volume over the recent two-month window.",
+  "model.usageDescription": "Daily token volume.",
   "model.noUsageTitle": "No usage",
   "model.noUsageDescription": "No usage landed in the current window.",
   "model.dailyTokenChart": "Daily token usage chart",
