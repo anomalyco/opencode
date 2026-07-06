@@ -77,7 +77,7 @@ export default defineConfig({
         input: { index: "src/preload/index.ts", login: "src/preload/login.ts" },
         output: {
           format: "cjs",
-          entryFileNames: "[name].js",
+          entryFileNames: "[name].cjs",
         },
       },
     },

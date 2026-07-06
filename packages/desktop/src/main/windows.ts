@@ -148,7 +148,7 @@ export function createMainWindow() {
         }
       : {}),
     webPreferences: {
-      preload: join(root, "../preload/index.js"),
+      preload: join(root, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
