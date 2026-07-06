@@ -30,6 +30,12 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
+export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("QuestionTool.CancelledError", {}) {
+  override get message() {
+    return "The user dismissed this question"
+  }
+}
+
 export const toModelOutput = (
   questions: ReadonlyArray<QuestionV2.Prompt>,
   answers: ReadonlyArray<QuestionV2.Answer>,
@@ -96,7 +102,7 @@ export const Plugin = {
                     .pipe(Effect.orDie),
                 ),
                 Effect.flatMap((state) => {
-                  if (state.status !== "answered") return Effect.die(new Form.CancelledError())
+                  if (state.status === "cancelled") return Effect.die(new CancelledError())
                   return Effect.succeed({
                     answers: input.questions.map((_, index): QuestionV2.Answer => {
                       const value = state.answer[`q${index}`]

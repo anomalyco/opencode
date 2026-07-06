@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Form } from "@opencode-ai/core/form"
@@ -41,7 +41,7 @@ const form = Layer.succeed(
       }).pipe(
         Effect.andThen(
           Effect.sync(
-            (): Form.State =>
+            (): Form.TerminalState =>
               reject ? { status: "cancelled" } : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
           ),
         ),
@@ -207,6 +207,11 @@ describe("QuestionTool", () => {
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(QuestionTool.CancelledError)
+        expect(error).toHaveProperty("message", "The user dismissed this question")
+      }
     }),
   )
 })

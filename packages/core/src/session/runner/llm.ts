@@ -16,7 +16,6 @@ import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
-import { Form } from "../../form"
 import { SystemContext } from "../../system-context/index"
 import { SystemContextBuiltIns } from "../../system-context/builtins"
 import { InstructionContext } from "../../instruction-context"
@@ -24,6 +23,7 @@ import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { McpGuidance } from "../../mcp/guidance"
 import { SessionContextEntry } from "../context-entry"
+import { QuestionTool } from "../../tool/question"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextCheckpoint } from "../context-checkpoint"
@@ -149,8 +149,8 @@ const layer = Layer.effect(
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
-    const isFormCancelled = (cause: Cause.Cause<unknown>) =>
-      cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof Form.CancelledError)
+    const isQuestionCancelled = (cause: Cause.Cause<unknown>) =>
+      cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionTool.CancelledError)
 
     const loadSystemContext = (agent: AgentV2.Selection, sessionID: SessionSchema.ID) =>
       Effect.all(
@@ -340,13 +340,13 @@ const layer = Layer.effect(
           if (streamInterrupted) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
           const toolsInterrupted = settled._tag === "Failure" && Cause.hasInterrupts(settled.cause)
-          const formCancelled = settled._tag === "Failure" && isFormCancelled(settled.cause)
+          const questionCancelled = settled._tag === "Failure" && isQuestionCancelled(settled.cause)
 
-          if (formCancelled || streamInterrupted || toolsInterrupted) {
+          if (questionCancelled || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
             yield* serialized(publisher.failUnsettledTools("Tool execution interrupted"))
             yield* serialized(publisher.failAssistant("Step interrupted"))
-            if (formCancelled) return yield* Effect.interrupt
+            if (questionCancelled) return yield* Effect.interrupt
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
