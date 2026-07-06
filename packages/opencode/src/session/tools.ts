@@ -185,11 +185,24 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             const permissionPatterns = parsed.server
               ? [`mcp:${parsed.server}:*`]
               : resourceServers.map((server) => `mcp:${server}:*`)
+            const beforeOutput: { args: any; shortcircuit?: { title: string; output: string; metadata: any } } = { args }
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: MCP_RESOURCE_TOOLS.list, sessionID: ctx.sessionID, callID: opts.toolCallId },
-              { args },
+              beforeOutput,
             )
+            if (beforeOutput.shortcircuit) {
+              const output = beforeOutput.shortcircuit
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: MCP_RESOURCE_TOOLS.list, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                output,
+              )
+              if (opts.abortSignal?.aborted) {
+                yield* input.processor.completeToolCall(opts.toolCallId, output)
+              }
+              return output
+            }
             yield* ctx.ask({
               permission: "read",
               metadata: parsed.server ? { server: parsed.server } : {},
@@ -268,11 +281,24 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             const permissionPatterns = parsed.server
               ? [`mcp:${parsed.server}:*`]
               : resourceServers.map((server) => `mcp:${server}:*`)
+            const beforeOutput: { args: any; shortcircuit?: { title: string; output: string; metadata: any } } = { args }
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: MCP_RESOURCE_TOOLS.listTemplates, sessionID: ctx.sessionID, callID: opts.toolCallId },
-              { args },
+              beforeOutput,
             )
+            if (beforeOutput.shortcircuit) {
+              const output = beforeOutput.shortcircuit
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: MCP_RESOURCE_TOOLS.listTemplates, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                output,
+              )
+              if (opts.abortSignal?.aborted) {
+                yield* input.processor.completeToolCall(opts.toolCallId, output)
+              }
+              return output
+            }
             yield* ctx.ask({
               permission: "read",
               metadata: parsed.server ? { server: parsed.server } : {},
@@ -348,11 +374,24 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             if (!client.getServerCapabilities()?.resources) {
               throw new Error(`MCP server "${parsed.server}" does not support resources`)
             }
+            const beforeOutput: { args: any; shortcircuit?: { title: string; output: string; metadata: any } } = { args }
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: MCP_RESOURCE_TOOLS.read, sessionID: ctx.sessionID, callID: opts.toolCallId },
-              { args },
+              beforeOutput,
             )
+            if (beforeOutput.shortcircuit) {
+              const output = beforeOutput.shortcircuit
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: MCP_RESOURCE_TOOLS.read, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                output,
+              )
+              if (opts.abortSignal?.aborted) {
+                yield* input.processor.completeToolCall(opts.toolCallId, output)
+              }
+              return output
+            }
             yield* ctx.ask({
               permission: "read",
               metadata: { server: parsed.server, uri: parsed.uri },
@@ -412,11 +451,30 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
+          const beforeOutput: { args: any; shortcircuit?: { title: string; output: string; metadata: any } } = { args }
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-            { args },
+            beforeOutput,
           )
+          if (beforeOutput.shortcircuit) {
+            const output = {
+              title: beforeOutput.shortcircuit.title,
+              metadata: beforeOutput.shortcircuit.metadata,
+              output: beforeOutput.shortcircuit.output,
+              attachments: [],
+              content: [{ type: "text" as const, text: beforeOutput.shortcircuit.output }],
+            }
+            yield* plugin.trigger(
+              "tool.execute.after",
+              { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              { title: output.title, output: output.output, metadata: output.metadata },
+            )
+            if (opts.abortSignal?.aborted) {
+              yield* input.processor.completeToolCall(opts.toolCallId, output)
+            }
+            return output
+          }
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
             return yield* Effect.promise(() => execute(args, opts))

@@ -138,11 +138,23 @@ const invokeChildTool = Effect.fn("CodeMode.invokeChildTool")(function* (input: 
   callID: string
   ctx: Tool.Context
 }) {
+  const beforeOutput: { args: any; shortcircuit?: { title: string; output: string; metadata: any } } = { args: input.args }
   yield* input.plugin.trigger(
     "tool.execute.before",
     { tool: input.entry.key, sessionID: input.ctx.sessionID, callID: input.callID },
-    { args: input.args },
+    beforeOutput,
   )
+  if (beforeOutput.shortcircuit) {
+    const result: CallToolResult = {
+      content: [{ type: "text", text: beforeOutput.shortcircuit.output }],
+    }
+    yield* input.plugin.trigger(
+      "tool.execute.after",
+      { tool: input.entry.key, sessionID: input.ctx.sessionID, callID: input.callID, args: input.args },
+      { title: beforeOutput.shortcircuit.title, output: beforeOutput.shortcircuit.output, metadata: beforeOutput.shortcircuit.metadata },
+    )
+    return result
+  }
   const result: CallToolResult = yield* Effect.gen(function* () {
     yield* input.ctx.ask({ permission: input.entry.key, metadata: {}, patterns: ["*"], always: ["*"] })
     // Deliberately mirrors McpCatalog.convertTool's transport call so the MCP service stays free of tool-loop concerns.
