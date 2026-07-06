@@ -185,7 +185,7 @@ export const Definitions = {
   input_delete_line: keybind("ctrl+shift+d", "Delete line in input"),
   input_delete_to_line_end: keybind("ctrl+k", "Delete to end of line in input"),
   input_delete_to_line_start: keybind("ctrl+u", "Delete to start of line in input"),
-  input_backspace: keybind("backspace,shift+backspace", "Backspace in input"),
+  input_backspace: keybind("backspace,shift+backspace,ctrl+h", "Backspace in input"),
   input_delete: keybind("ctrl+d,delete,shift+delete", "Delete character in input"),
   input_undo: keybind("ctrl+-,super+z", "Undo in input"),
   input_redo: keybind("ctrl+.,super+shift+z", "Redo in input"),
