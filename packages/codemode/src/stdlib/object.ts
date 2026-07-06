@@ -36,10 +36,14 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     case "hasOwn":
       return Object.hasOwn(requireObject(), String(args[1]))
     case "assign": {
-      const out: Record<string, unknown> = Object.create(null)
-      for (const source of args) {
+      const target = args[0]
+      if (target === null || typeof target !== "object" || Array.isArray(target) || isSandboxValue(target)) {
+        throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
+      }
+      const out = target as Record<string, unknown>
+      for (const source of args.slice(1)) {
         if (source === null || source === undefined) continue
-        const value = boundedData(source, "Object.assign input")
+        const value = source
         if (isSandboxValue(value)) continue
         if (value === null || typeof value !== "object" || Array.isArray(value)) {
           throw new InterpreterRuntimeError("Object.assign expects data objects.", node)

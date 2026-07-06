@@ -586,6 +586,26 @@ describe("Set", () => {
 })
 
 describe("stdlib integration", () => {
+  test("Object.assign mutates and returns its target", async () => {
+    expect(
+      await value(`
+        const target = { a: 1 }
+        const result = Object.assign(target, { b: 2 })
+        return { target, result, same: target === result }
+      `),
+    ).toEqual({ target: { a: 1, b: 2 }, result: { a: 1, b: 2 }, same: true })
+    expect(await value(`try { Object.assign(null, { a: 1 }); return false } catch { return true }`)).toBe(true)
+  })
+
+  test("assignment resolves and reads its left side before evaluating the right side", async () => {
+    expect(await value(`let x = 1; x += (x = 5); return x`)).toBe(6)
+    expect(await value(`let i = 0; const values = [9]; values[i++] = i; return [values, i]`)).toEqual([[1], 1])
+    expect(await value(`let i = 0; const values = [10, 20]; values[i++] += i; return [values, i]`)).toEqual([
+      [11, 20],
+      1,
+    ])
+  })
+
   test("typeof reports constructors as functions and never throws", async () => {
     expect(await value(`return typeof Map`)).toBe("function")
     expect(await value(`return typeof ((x) => x)`)).toBe("function")
