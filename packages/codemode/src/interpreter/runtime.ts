@@ -1088,7 +1088,7 @@ class Interpreter<R> {
       }
 
       let declaration: { readonly pattern: AstNode; readonly mutable: boolean } | undefined
-      let assignmentName: string | undefined
+      let assignment: AstNode | undefined
 
       if (left.type === "VariableDeclaration") {
         const declarations = getArray(left, "declarations")
@@ -1098,8 +1098,13 @@ class Interpreter<R> {
 
         const declarator = asNode(declarations[0], "declarations[0]")
         declaration = { pattern: getNode(declarator, "id"), mutable: getString(left, "kind") !== "const" }
-      } else if (left.type === "Identifier") {
-        assignmentName = getString(left, "name")
+      } else if (
+        left.type === "Identifier" ||
+        left.type === "MemberExpression" ||
+        left.type === "ArrayPattern" ||
+        left.type === "ObjectPattern"
+      ) {
+        assignment = left
       } else {
         throw new InterpreterRuntimeError("Unsupported for...of binding.", left)
       }
@@ -1108,8 +1113,8 @@ class Interpreter<R> {
         if (declaration) {
           self.pushScope()
           yield* self.declarePattern(declaration.pattern, value, declaration.mutable, left)
-        } else if (assignmentName) {
-          self.setIdentifierValue(assignmentName, value, left)
+        } else if (assignment) {
+          yield* self.assignPattern(assignment, value, left)
         }
 
         const result = yield* self.evaluateStatement(body).pipe(
@@ -1507,6 +1512,16 @@ class Interpreter<R> {
         return this.evaluateUnaryExpression(node)
       case "AssignmentExpression":
         return this.evaluateAssignmentExpression(node)
+      case "SequenceExpression": {
+        const self = this
+        return Effect.gen(function* () {
+          let result: unknown
+          for (const expression of getArray(node, "expressions")) {
+            result = yield* self.evaluateExpression(asNode(expression, "expressions"))
+          }
+          return result
+        })
+      }
       case "CallExpression":
         return this.evaluateCallExpression(node)
       case "ArrowFunctionExpression":

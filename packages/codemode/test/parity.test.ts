@@ -464,6 +464,54 @@ describe("H5: builtin coercion functions work as array callbacks", () => {
   })
 })
 
+describe("for...of assignment destructuring", () => {
+  test("assigns entry pairs into predeclared variables", async () => {
+    expect(
+      await value(`
+      let key
+      let item
+      const out = []
+      for ([key, item] of Object.entries({ a: 1, b: 2 })) out.push(key + item)
+      return { key, item, out }
+    `),
+    ).toEqual({ key: "b", item: 2, out: ["a1", "b2"] })
+  })
+
+  test("assigns object patterns and defaults", async () => {
+    expect(
+      await value(`
+      let id
+      let label
+      const labels = []
+      for ({ id, label = "unknown" } of [{ id: 1 }, { id: 2, label: "two" }]) labels.push(label)
+      return { id, label, labels }
+    `),
+    ).toEqual({ id: 2, label: "two", labels: ["unknown", "two"] })
+  })
+})
+
+describe("sequence expressions", () => {
+  test("evaluate left to right and return the final value", async () => {
+    expect(await value(`let x = 0; const result = (x += 1, x *= 3, x + 2); return { x, result }`)).toEqual({
+      x: 3,
+      result: 5,
+    })
+  })
+
+  test("support comma-separated for-loop updates", async () => {
+    expect(
+      await value(`
+      const pairs = []
+      for (let left = 0, right = 3; left < right; left++, right--) pairs.push([left, right])
+      return pairs
+    `),
+    ).toEqual([
+      [0, 3],
+      [1, 2],
+    ])
+  })
+})
+
 describe("destructuring assignment", () => {
   test("assigns object and array patterns to existing bindings", async () => {
     expect(
