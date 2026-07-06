@@ -4,10 +4,10 @@ import { DESKTOP_MENU } from "./desktop-menu"
 describe("desktop menu", () => {
   test("exports logs through the desktop command registry", () => {
     const items = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).filter(
-      (item) => item.type === "item" && item.label === "Export Logs...",
+      (item) => item.type === "item" && item.label === "menu.help.exportLogs",
     )
 
-    expect(items).toHaveLength(2)
+    expect(items).toHaveLength(1)
     expect(items.every((item) => item.type === "item" && item.command === "logs.export" && !item.action)).toBe(true)
   })
 })

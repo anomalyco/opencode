@@ -6,6 +6,7 @@ import {
   type DesktopMenuEntry,
   type DesktopMenuRole,
 } from "@opencode-ai/app/desktop-menu"
+import { dict as en } from "@opencode-ai/app/i18n/en"
 
 import { UPDATER_ENABLED } from "./constants"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
@@ -16,13 +17,18 @@ type Deps = {
   relaunch: () => void
 }
 
+function t(key: string) {
+  const dict = en as Record<string, string>
+  return dict[key] ?? key
+}
+
 export function createMenu(deps: Deps) {
   if (process.platform !== "darwin") return
 
   const template = DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "macos")).map((menu) => {
     if (menu.role) return { role: nativeRole(menu.role) }
     return {
-      label: menu.label,
+      label: t(menu.label),
       submenu: menu.items
         ?.filter((entry) => desktopMenuVisible(entry, "macos"))
         .map((entry) => nativeItem(entry, deps)),
@@ -37,7 +43,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   if (entry.role) return { role: nativeRole(entry.role) }
 
   const item: MenuItemConstructorOptions = {
-    label: entry.label,
+    label: t(entry.label ?? ""),
     accelerator: entry.accelerator?.macos,
     enabled: entry.enabled === "updater" ? UPDATER_ENABLED : undefined,
   }
