@@ -103,11 +103,24 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
+            const beforeOutput: { args: any; shortcircuit?: { title: string; output: string; metadata: any } } = { args }
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-              { args },
+              beforeOutput,
             )
+            if (beforeOutput.shortcircuit) {
+              const output = beforeOutput.shortcircuit
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                output,
+              )
+              if (options.abortSignal?.aborted) {
+                yield* input.processor.completeToolCall(options.toolCallId, output)
+              }
+              return output
+            }
             const result = yield* item.execute(args, ctx)
             const output = {
               ...result,
