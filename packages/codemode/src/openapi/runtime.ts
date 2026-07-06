@@ -46,7 +46,9 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
       )
     }
     if (json && Option.isNone(decoded)) {
-      return yield* Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} returned malformed JSON.`))
+      return yield* Effect.fail(
+        toolError(`${plan.operation.method} ${plan.operation.path} returned malformed JSON.`),
+      )
     }
     return parsed
   })
@@ -206,9 +208,8 @@ const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string 
       return toolError(`Missing required path parameter '${field.inputName}'.`)
     }
     const fieldValue = serializeSimple(field, item, (value) =>
-      encodeURIComponent(value).replace(
-        /[!'()*]/g,
-        (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+      encodeURIComponent(value).replace(/[!'()*]/g, (character) =>
+        `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
       ),
     )
     if (fieldValue instanceof ToolError) return fieldValue
@@ -270,7 +271,10 @@ const serializeQuery = (
     if (value.some((item) => item === undefined || (item !== null && typeof item === "object"))) {
       return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
     }
-    return value.reduce((current, item) => HttpClientRequest.appendUrlParam(current, field.name, String(item)), request)
+    return value.reduce(
+      (current, item) => HttpClientRequest.appendUrlParam(current, field.name, String(item)),
+      request,
+    )
   }
   if (isRecord(value) && field.explode) {
     return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
@@ -285,15 +289,11 @@ const serializeQuery = (
   return rendered instanceof ToolError ? rendered : HttpClientRequest.appendUrlParam(request, field.name, rendered)
 }
 
-const readResponseBody = (
-  response: HttpClientResponse.HttpClientResponse,
-  plan: Plan,
-): Effect.Effect<string, ToolError> =>
+const readResponseBody = (response: HttpClientResponse.HttpClientResponse, plan: Plan): Effect.Effect<string, ToolError> =>
   Effect.gen(function* () {
     const contentLength = response.headers["content-length"]
     const parsedSize = contentLength === undefined ? undefined : Number.parseInt(contentLength, 10)
-    const declaredSize =
-      parsedSize !== undefined && Number.isSafeInteger(parsedSize) && parsedSize >= 0 ? parsedSize : undefined
+    const declaredSize = parsedSize !== undefined && Number.isSafeInteger(parsedSize) && parsedSize >= 0 ? parsedSize : undefined
     if (declaredSize !== undefined && declaredSize > maxResponseBodyBytes) {
       return yield* Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 50 MiB.`))
     }
@@ -304,9 +304,7 @@ const readResponseBody = (
         return Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} response exceeds 50 MiB.`))
       }
       if (size + chunk.byteLength > body.byteLength) {
-        const grown = Buffer.allocUnsafe(
-          Math.min(maxResponseBodyBytes, Math.max(size + chunk.byteLength, body.byteLength * 2)),
-        )
+        const grown = Buffer.allocUnsafe(Math.min(maxResponseBodyBytes, Math.max(size + chunk.byteLength, body.byteLength * 2)))
         body.copy(grown, 0, 0, size)
         body = grown
       }

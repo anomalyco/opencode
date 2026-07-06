@@ -78,9 +78,7 @@ const isBinaryMediaType = (document: Document, mediaType: string, value: unknown
   return isRecord(schema) && schema.format === "binary"
 }
 
-const jsonContent = (
-  content: Record<string, unknown>,
-): { readonly mediaType: string; readonly schema: unknown } | undefined => {
+const jsonContent = (content: Record<string, unknown>): { readonly mediaType: string; readonly schema: unknown } | undefined => {
   const entry = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
   return entry !== undefined && isRecord(entry[1]) ? { mediaType: entry[0], schema: entry[1].schema } : undefined
 }
@@ -346,7 +344,7 @@ export const operationOutput = (
   if (outcomes.length === 0) return { ok: true, value: undefined }
   return {
     ok: true,
-    value: withDefinitions(outcomes.length === 1 ? (outcomes[0] ?? {}) : { anyOf: outcomes }, definitions),
+    value: withDefinitions(outcomes.length === 1 ? outcomes[0] ?? {} : { anyOf: outcomes }, definitions),
   }
 }
 
@@ -382,9 +380,7 @@ export const operationPath = (
   namespaces: ReadonlySet<string>,
 ): ReadonlyArray<string> => {
   const raw = nonEmptyString(operation.operationId)
-  const segments = (raw === undefined ? [fallbackOperationId(method, path)] : raw.split(".")).map(
-    sanitizeOperationSegment,
-  )
+  const segments = (raw === undefined ? [fallbackOperationId(method, path)] : raw.split(".")).map(sanitizeOperationSegment)
   if (isOperationPathAvailable(segments, used, namespaces)) return segments
   const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
   if (conflict >= 0 && conflict + 1 < segments.length) {

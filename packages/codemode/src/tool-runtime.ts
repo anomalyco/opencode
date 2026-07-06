@@ -6,12 +6,18 @@ import {
   identifierSegment,
   inputProperties,
   inputTypeScript,
-  isDefinition as isToolDefinition,
   outputTypeScript,
-  Tool,
-  type Definition,
-} from "./tool.js"
-import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
+} from "./tool-schema.js"
+import { isDefinition as isToolDefinition, type Definition } from "./tool.js"
+import {
+  SandboxDate,
+  SandboxMap,
+  SandboxPromise,
+  SandboxRegExp,
+  SandboxSet,
+  SandboxURL,
+  SandboxURLSearchParams,
+} from "./values.js"
 
 const estimateTokens = (input: string) => Math.max(0, Math.round(input.length / 4))
 
@@ -154,9 +160,9 @@ export const isBlockedMember = (name: string): boolean => blockedMemberNames.has
  * Two modes share the walk:
  * - **Boundary** (`preserveSandboxValues` false, the default): the host<->sandbox boundary -
  *   final results, tool-call arguments, `JSON.stringify`. Sandbox value types serialize
- *   exactly as JSON.stringify would: Date -> ISO string (invalid -> null), RegExp/Map/Set -> {}.
+ *   exactly as JSON.stringify would: Date/URL -> strings, the remaining value types -> {}.
  * - **Intra-sandbox checkpoint** (`preserveSandboxValues` true; see `boundedData` in
- *   codemode.ts): Date/RegExp/Map/Set instances pass through untouched (treated as leaves,
+ *   codemode.ts): standard-library value instances pass through untouched (treated as leaves,
  *   contents not walked), so values flowing through `Object.*` helpers, coercion inputs, and
  *   other in-sandbox checkpoints stay fully usable (`.getTime()`, `.has()`, ...).
  *
@@ -210,7 +216,9 @@ const copyBounded = (
       value instanceof SandboxDate ||
       value instanceof SandboxRegExp ||
       value instanceof SandboxMap ||
-      value instanceof SandboxSet
+      value instanceof SandboxSet ||
+      value instanceof SandboxURL ||
+      value instanceof SandboxURLSearchParams
     ) {
       return value
     }
@@ -230,24 +238,30 @@ const copyBounded = (
       for (const item of value.values()) wrapped.set.add(copyBounded(item, label, depth + 1, seen, true))
       return wrapped
     }
+    if (value instanceof URL) return new SandboxURL(new URL(value.href))
+    if (value instanceof URLSearchParams) return new SandboxURLSearchParams(new URLSearchParams(value))
   }
 
   // Sandbox value types (and their host counterparts, which a host tool may legitimately
-  // return) serialize exactly as JSON.stringify would at the data boundary: a Date is its
-  // toJSON() ISO string (invalid -> null), and RegExp/Map/Set have no JSON form beyond {}.
+  // return) serialize exactly as JSON.stringify would at the data boundary: Date/URL use
+  // toJSON(), while RegExp/Map/Set/URLSearchParams have no JSON form beyond {}.
   if (value instanceof SandboxDate) {
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   }
   if (value instanceof Date) {
     return Number.isFinite(value.getTime()) ? value.toISOString() : null
   }
+  if (value instanceof SandboxURL) return value.url.href
+  if (value instanceof URL) return value.href
   if (
     value instanceof SandboxRegExp ||
     value instanceof SandboxMap ||
     value instanceof SandboxSet ||
+    value instanceof SandboxURLSearchParams ||
     value instanceof RegExp ||
     value instanceof Map ||
-    value instanceof Set
+    value instanceof Set ||
+    value instanceof URLSearchParams
   ) {
     return Object.create(null) as SafeObject
   }
@@ -369,69 +383,70 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
-const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>) =>
-  Tool.make({
-    description: "Search available Code Mode tools",
-    input: SearchInput,
-    output: SearchOutput,
-    run: (request) =>
-      Effect.sync(() => {
-        const query = request.query ?? ""
-        const offset = request.offset ?? 0
-        const scoped =
-          request.namespace === undefined
-            ? searchIndex
-            : searchIndex.filter((entry) => entry.namespace === request.namespace)
-        // A query that names one tool path exactly (canonical path or rendered JavaScript
-        // expression) is a lookup, not a search: return that tool alone.
-        const trimmed = query.trim()
-        const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
-        const exact =
-          pathQuery === ""
-            ? undefined
-            : scoped.find(
-                (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
-              )
-        const terms = tokenize(query).map(termForms)
-        // Additive field-weighted scoring, summed across terms: exact path or path segment
-        // (20) > path substring (8) > description substring (4) > any searchable text,
-        // including input parameter names and descriptions (2).
-        const ranked =
-          exact !== undefined
-            ? [exact]
-            : scoped
-                .map((entry) => {
-                  const path = entry.description.path.toLowerCase()
-                  const description = entry.description.description.toLowerCase()
-                  const score = terms.reduce(
-                    (total, forms) =>
-                      total +
-                      (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
-                      (forms.some((form) => path.includes(form)) ? 8 : 0) +
-                      (forms.some((form) => description.includes(form)) ? 4 : 0) +
-                      (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
-                    0,
-                  )
-                  return { entry, score }
-                })
-                .filter(({ score }) => terms.length === 0 || score > 0)
-                .sort(
-                  (left, right) =>
-                    right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path),
+const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Definition => ({
+  _tag: "CodeModeTool",
+  description: "Search available Code Mode tools",
+  input: SearchInput,
+  output: SearchOutput,
+  run: (input) =>
+    Effect.sync(() => {
+      const request = input as typeof SearchInput.Type
+      const query = request.query ?? ""
+      const offset = request.offset ?? 0
+      const scoped =
+        request.namespace === undefined
+          ? searchIndex
+          : searchIndex.filter((entry) => entry.namespace === request.namespace)
+      // A query that names one tool path exactly (canonical path or rendered JavaScript
+      // expression) is a lookup, not a search: return that tool alone.
+      const trimmed = query.trim()
+      const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
+      const exact =
+        pathQuery === ""
+          ? undefined
+          : scoped.find(
+              (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+            )
+      const terms = tokenize(query).map(termForms)
+      // Additive field-weighted scoring, summed across terms: exact path or path segment
+      // (20) > path substring (8) > description substring (4) > any searchable text,
+      // including input parameter names and descriptions (2).
+      const ranked =
+        exact !== undefined
+          ? [exact]
+          : scoped
+              .map((entry) => {
+                const path = entry.description.path.toLowerCase()
+                const description = entry.description.description.toLowerCase()
+                const score = terms.reduce(
+                  (total, forms) =>
+                    total +
+                    (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+                    (forms.some((form) => path.includes(form)) ? 8 : 0) +
+                    (forms.some((form) => description.includes(form)) ? 4 : 0) +
+                    (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
+                  0,
                 )
-                .map(({ entry }) => entry)
-        const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
-          ...description,
-          path: toolExpression(description.path),
-        }))
-        const remaining = Math.max(0, ranked.length - offset - items.length)
-        return {
-          items,
-          remaining,
-          next: remaining > 0 ? { offset: offset + items.length } : null,
-        }
-      }),
-  })
+                return { entry, score }
+              })
+              .filter(({ score }) => terms.length === 0 || score > 0)
+              .sort(
+                (left, right) =>
+                  right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path),
+              )
+              .map(({ entry }) => entry)
+      const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
+        ...description,
+        path: toolExpression(description.path),
+      }))
+      const remaining = Math.max(0, ranked.length - offset - items.length)
+      return {
+        items,
+        remaining,
+        next: remaining > 0 ? { offset: offset + items.length } : null,
+      }
+    }),
+})
 
 const searchDescription = describeDefinition(`${reservedNamespace}.search`, makeSearchTool([]))
 
@@ -590,9 +605,9 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
     "",
     "## Language",
     "",
-    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls.",
-    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, arbitrary methods, and promise chaining are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
-    "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
+    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
+    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, unlisted methods, and promise chaining are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
+    "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
   ]
 
   const toolSection: Array<string> = [""]
