@@ -34,6 +34,11 @@ export const layer = Layer.effect(
     yield* db.run("PRAGMA busy_timeout = 30000")
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
+    // fork: lets the event journal retention sweep return freed pages to the
+    // filesystem via incremental_vacuum. Only takes effect on databases created
+    // after this pragma lands (SQLite ignores it once tables exist); existing
+    // databases need a one-time manual VACUUM to convert.
+    yield* db.run("PRAGMA auto_vacuum = INCREMENTAL")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
     yield* DatabaseMigration.apply(db)
 

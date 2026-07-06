@@ -12,6 +12,7 @@ import { Project } from "./project"
 import { ProjectCopy } from "./project/copy"
 import { ProjectDirectories } from "./project/directories"
 import { EventV2 } from "./event"
+import { EventRetention } from "./event/retention"
 import { Credential } from "./credential"
 import { Npm } from "./npm"
 import { ModelsDev } from "./models-dev"
@@ -142,6 +143,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
+    EventRetention.defaultSweepLayer,
     ApplicationTools.layer,
   ],
 }) {}

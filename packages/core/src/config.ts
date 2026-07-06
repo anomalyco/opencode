@@ -13,6 +13,7 @@ import { ConfigAgent } from "./config/agent"
 import { ConfigAttachments } from "./config/attachments"
 import { ConfigCompaction } from "./config/compaction"
 import { ConfigCommand } from "./config/command"
+import { ConfigEventJournal } from "./config/event-journal"
 import { ConfigExperimental } from "./config/experimental"
 import { ConfigFormatter } from "./config/formatter"
 import { ConfigLSP } from "./config/lsp"
@@ -79,6 +80,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   tool_output: ConfigToolOutput.Info.pipe(Schema.optional).annotate({
     description: "Tool output truncation thresholds",
+  }),
+  event_journal: ConfigEventJournal.Info.pipe(Schema.optional).annotate({
+    description: "Event journal retention and compaction behavior",
   }),
   mcp: ConfigMCP.Info.pipe(Schema.optional).annotate({
     description: "MCP server configuration",
