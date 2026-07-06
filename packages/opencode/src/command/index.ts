@@ -4,6 +4,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { Effect, Layer, Context, Schema } from "effect"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
@@ -138,14 +139,33 @@ const layer = Layer.effect(
           name: item.name,
           description: item.description,
           source: "skill",
-          get template() {
+          get template(): string | Promise<string> {
             if (!dir) return item.content
-            return [
+            const base = [
               item.content,
               "",
               `Base directory for this skill: ${dir}`,
               "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
-            ].join("\n")
+            ]
+            return Glob.scan("**", {
+              cwd: dir,
+              absolute: false,
+              include: "file",
+              symlink: true,
+              dot: true,
+            }).then((files) => {
+              const sampled = files
+                .filter((f) => f !== "SKILL.md" && !f.endsWith("/SKILL.md"))
+                .slice(0, 10)
+                .map((f) => `<file>${path.resolve(dir, f)}</file>`)
+              return [
+                ...base,
+                "",
+                "<skill_files>",
+                sampled.length > 0 ? sampled.join("\n") : "(no files found)",
+                "</skill_files>",
+              ].join("\n")
+            })
           },
           hints: [],
         }
