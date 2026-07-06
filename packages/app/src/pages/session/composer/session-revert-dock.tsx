@@ -90,7 +90,8 @@ export function SessionRevertDock(props: {
       </Show>
 
       <Show when={!store.collapsed}>
-        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-4 pt-px pb-6 no-scrollbar">
+        {/* Scroll viewport ends above the composer; the 18px sacrificial below is what the composer overlaps */}
+        <div class="flex max-h-42 flex-col gap-2 overflow-y-auto px-4 pt-px pb-3 no-scrollbar">
           <For each={props.items}>
             {(item) => (
               <div class="flex h-6 min-w-0 items-center gap-2">
@@ -110,6 +111,7 @@ export function SessionRevertDock(props: {
             )}
           </For>
         </div>
+        <div class="h-[18px]" aria-hidden="true" />
       </Show>
     </div>
   )
