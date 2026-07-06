@@ -18,6 +18,10 @@ export const packageName = (value: string | undefined) => {
   return value.slice(AISDK_PREFIX.length)
 }
 
+type Json = Schema.Schema.Type<typeof Schema.Json>
+const JsonRecord = Schema.Record(Schema.String, Schema.Json)
+const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
+
 export class LoadError extends Schema.TaggedErrorClass<LoadError>()("ProviderV2.LoadError", {
   package: Schema.String,
   cause: Schema.Defect(),
@@ -55,28 +59,30 @@ export const loadPackage = Effect.fn("ProviderV2.loadPackage")(function* (specif
 export function mergeOverlay(
   base: Readonly<Record<string, unknown>> | undefined,
   overlay: Readonly<Record<string, unknown>> | undefined,
-): Record<string, unknown> | undefined {
-  if (base === undefined) return overlay && { ...overlay }
-  if (overlay === undefined) return { ...base }
-  return Object.fromEntries(
-    new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key) => {
-      const left = base[key]
-      const right = overlay[key]
-      if (right === undefined) return [key, left]
-      if (
-        typeof left === "object" &&
-        left !== null &&
-        !Array.isArray(left) &&
-        typeof right === "object" &&
-        right !== null &&
-        !Array.isArray(right)
-      )
-        return [
-          key,
-          mergeOverlay(left as Readonly<Record<string, unknown>>, right as Readonly<Record<string, unknown>>),
-        ]
-      return [key, right]
-    }),
+): Record<string, Json> | undefined {
+  if (base === undefined) return overlay && decodeJsonRecord({ ...overlay })
+  if (overlay === undefined) return decodeJsonRecord({ ...base })
+  return decodeJsonRecord(
+    Object.fromEntries(
+      new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
+        const left = base[key]
+        const right = overlay[key]
+        if (right === undefined) return [key, left]
+        if (
+          typeof left === "object" &&
+          left !== null &&
+          !Array.isArray(left) &&
+          typeof right === "object" &&
+          right !== null &&
+          !Array.isArray(right)
+        )
+          return [
+            key,
+            mergeOverlay(left as Readonly<Record<string, unknown>>, right as Readonly<Record<string, unknown>>) ?? {},
+          ]
+        return [key, right]
+      }),
+    ),
   )
 }
 

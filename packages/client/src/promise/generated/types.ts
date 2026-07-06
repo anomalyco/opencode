@@ -2005,7 +2005,7 @@ export type ModelListOutput = {
   }
   readonly data: ReadonlyArray<{
     readonly id: string
-    readonly modelID?: string
+    readonly modelID: string
     readonly providerID: string
     readonly family?: string
     readonly name: string
@@ -2018,7 +2018,7 @@ export type ModelListOutput = {
       readonly input: ReadonlyArray<string>
       readonly output: ReadonlyArray<string>
     }
-    readonly variants?: ReadonlyArray<{
+    readonly variants: ReadonlyArray<{
       readonly id: string
       readonly settings?: { readonly [x: string]: JsonValue }
       readonly headers?: { readonly [x: string]: string }
@@ -2051,7 +2051,7 @@ export type ModelDefaultOutput = {
   }
   readonly data: {
     readonly id: string
-    readonly modelID?: string
+    readonly modelID: string
     readonly providerID: string
     readonly family?: string
     readonly name: string
@@ -2064,7 +2064,7 @@ export type ModelDefaultOutput = {
       readonly input: ReadonlyArray<string>
       readonly output: ReadonlyArray<string>
     }
-    readonly variants?: ReadonlyArray<{
+    readonly variants: ReadonlyArray<{
       readonly id: string
       readonly settings?: { readonly [x: string]: JsonValue }
       readonly headers?: { readonly [x: string]: string }

@@ -26,12 +26,12 @@ export const Package = Schema.String
 export type Package = typeof Package.Type
 
 export const Overlays = {
-  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+  settings: Schema.Record(Schema.String, Schema.Json).pipe(optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
-  body: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+  body: Schema.Record(Schema.String, Schema.Json).pipe(optional),
 }
 
-export const Settings = Schema.Record(Schema.String, Schema.Unknown).annotate({ identifier: "Provider.Settings" })
+export const Settings = Schema.Record(Schema.String, Schema.Json).annotate({ identifier: "Provider.Settings" })
 export type Settings = typeof Settings.Type
 
 export interface Request extends Schema.Schema.Type<typeof Request> {}

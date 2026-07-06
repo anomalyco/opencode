@@ -5247,7 +5247,7 @@ export type ModelCost = {
 
 export type ModelV2Info = {
   id: string
-  modelID?: string
+  modelID: string
   providerID: string
   family?: string
   name: string
@@ -5262,7 +5262,7 @@ export type ModelV2Info = {
     [key: string]: unknown
   }
   capabilities: ModelCapabilities
-  variants?: Array<ModelVariant>
+  variants: Array<ModelVariant>
   time: {
     released: number
   }
@@ -9074,7 +9074,7 @@ export type ModelCost2 = {
 
 export type ModelV2Info2 = {
   id: string
-  modelID?: string
+  modelID: string
   providerID: string
   family?: string
   name: string
@@ -9089,7 +9089,7 @@ export type ModelV2Info2 = {
     [key: string]: unknown
   }
   capabilities: ModelCapabilities2
-  variants?: Array<ModelVariant2>
+  variants: Array<ModelVariant2>
   time: {
     released: number
   }

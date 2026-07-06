@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigModel } from "@opencode-ai/core/config/model"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -23,6 +24,7 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
+const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
 
 function testLayer(
   directory: string,
@@ -105,13 +107,19 @@ describe("Config", () => {
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
     Effect.sync(() => {
       const entries = [
-        new Config.Document({ type: "document", info: new Config.Info({ model: "openrouter/openai/gpt-5" }) }),
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({ model: selection("openrouter/openai/gpt-5") }),
+        }),
         new Config.Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
         new Config.Document({ type: "document", info: new Config.Info({}) }),
-        new Config.Document({ type: "document", info: new Config.Info({ model: "openrouter/openai/gpt-5.5" }) }),
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({ model: selection("openrouter/openai/gpt-5.5") }),
+        }),
       ]
 
-      expect(Config.latest(entries, "model")).toBe("openrouter/openai/gpt-5.5")
+      expect(Config.latest(entries, "model")).toEqual(selection("openrouter/openai/gpt-5.5"))
       expect(Config.latest(entries, "default_agent")).toBeUndefined()
     }),
   )
@@ -142,7 +150,12 @@ describe("Config", () => {
     Effect.sync(() => {
       FastCheck.assert(
         FastCheck.property(Schema.toArbitrary(ConfigV1.Info), (info) => {
-          Schema.decodeUnknownSync(Config.Info)(ConfigMigrateV1.migrate(info), { errors: "all" })
+          const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
+            Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(
+              Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(info),
+            ),
+          )
+          Schema.decodeUnknownSync(Config.Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
         }),
         { numRuns: 100 },
       )
@@ -194,8 +207,7 @@ describe("Config", () => {
           template: "Review changes",
           description: "Review code",
           agent: "reviewer",
-          model: "anthropic/claude",
-          variant: "high",
+          model: { providerID: "anthropic", model: "claude", variant: "high" },
           subtask: true,
         },
       })
@@ -428,8 +440,7 @@ describe("Config", () => {
                 ],
                 agents: {
                   reviewer: {
-                    model: "openrouter/openai/gpt-5",
-                    variant: "high",
+                    model: "openrouter/openai/gpt-5#high",
                     request: {
                       headers: { "x-agent": "reviewer" },
                       body: { reasoningEffort: "high" },
@@ -502,7 +513,7 @@ describe("Config", () => {
 
             expect(documents).toHaveLength(1)
             expect(documents[0]?.info.shell).toBe("/bin/bash")
-            expect(documents[0]?.info.model).toBe("anthropic/claude")
+            expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
             expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.autoupdate).toBe("notify")
             expect(documents[0]?.info.share).toBe("disabled")
@@ -513,8 +524,7 @@ describe("Config", () => {
               { action: "bash", resource: "git status", effect: "allow" },
             ])
             const reviewer = documents[0]?.info.agents?.reviewer
-            expect(reviewer?.model).toBe("openrouter/openai/gpt-5")
-            expect(reviewer?.variant).toBe("high")
+            expect(reviewer?.model).toEqual(selection("openrouter/openai/gpt-5#high"))
             expect(reviewer?.request).toEqual({
               headers: { "x-agent": "reviewer" },
               body: { reasoningEffort: "high" },

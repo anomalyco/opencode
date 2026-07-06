@@ -8,7 +8,6 @@ import { Config } from "../../config"
 import { ConfigAgent } from "../agent"
 import { ConfigMarkdown } from "../markdown"
 import { FSUtil } from "../../fs-util"
-import { ModelV2 } from "../../model"
 import { ConfigAgentV1 } from "../../v1/config/agent"
 import { ConfigMigrateV1 } from "../../v1/config/migrate"
 
@@ -76,13 +75,12 @@ export const Plugin = define({
           const exists = draft.get(agentID) !== undefined
           draft.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...global)
-            if (item.model !== undefined) {
-              const model = ModelV2.parse(item.model)
-              agent.model = { id: model.modelID, providerID: model.providerID, variant: agent.model?.variant }
-            }
-            if (item.variant !== undefined && agent.model !== undefined) {
-              agent.model.variant = ModelV2.VariantID.make(item.variant)
-            }
+            if (item.model !== undefined)
+              agent.model = {
+                id: item.model.model,
+                providerID: item.model.providerID,
+                ...(item.model.variant === undefined ? {} : { variant: item.model.variant }),
+              }
             if (item.request !== undefined) {
               Object.assign(agent.request.headers, item.request.headers ?? {})
               Object.assign(agent.request.body, item.request.body ?? {})
@@ -134,14 +132,16 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
   const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
-  const agent = Option.getOrUndefined(
-    legacy
-      ? Option.map(
+  const agent = legacy
+    ? Option.getOrUndefined(
+        Option.map(
           decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all", propertyOrder: "original" }),
           ConfigMigrateV1.migrateAgent,
-        )
-      : decodeAgent({ ...markdown.data, system: body }, { errors: "all", propertyOrder: "original" }),
-  )
+        ),
+      )
+    : Option.getOrUndefined(
+        decodeAgent({ ...markdown.data, system: body }, { errors: "all", propertyOrder: "original" }),
+      )
   if (!agent) return
   const info = Option.getOrUndefined(
     decodeConfig({

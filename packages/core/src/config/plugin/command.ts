@@ -6,7 +6,6 @@ import { Effect, Option, Schema, Stream } from "effect"
 import { CommandV2 } from "../../command"
 import { Config } from "../../config"
 import { FSUtil } from "../../fs-util"
-import { ModelV2 } from "../../model"
 import { ConfigCommand } from "../command"
 import { ConfigMarkdown } from "../markdown"
 
@@ -35,13 +34,12 @@ export const Plugin = define({
             item.template = command.template
             if (command.description !== undefined) item.description = command.description
             if (command.agent !== undefined) item.agent = command.agent
-            if (command.model !== undefined) {
-              const model = ModelV2.parse(command.model)
-              item.model = { id: model.modelID, providerID: model.providerID, variant: item.model?.variant }
-            }
-            if (command.variant !== undefined && item.model !== undefined) {
-              item.model.variant = ModelV2.VariantID.make(command.variant)
-            }
+            if (command.model !== undefined)
+              item.model = {
+                id: command.model.model,
+                providerID: command.model.providerID,
+                ...(command.model.variant === undefined ? {} : { variant: command.model.variant }),
+              }
             if (command.subtask !== undefined) item.subtask = command.subtask
           })
         }

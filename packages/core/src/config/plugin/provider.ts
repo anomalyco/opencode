@@ -40,10 +40,8 @@ export const Plugin = define({
     yield* ctx.catalog.transform((catalog) => {
       const files = loaded.entries.filter((entry): entry is Config.Document => entry.type === "document")
       const configuredDefault = Config.latest(loaded.entries, "model")
-      if (configuredDefault !== undefined) {
-        const model = ModelV2.parse(configuredDefault)
-        catalog.model.default.set(model.providerID, model.modelID)
-      }
+      if (configuredDefault !== undefined)
+        catalog.model.default.set(configuredDefault.providerID, configuredDefault.model)
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
           const providerID = id

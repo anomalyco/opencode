@@ -50,14 +50,14 @@ export const Variant = Schema.Struct({
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
-  modelID: ID.pipe(optional),
+  modelID: ID,
   providerID: Provider.ID,
   family: Family.pipe(optional),
   name: Schema.String,
   package: Provider.Package.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,
-  variants: Schema.Array(Variant).pipe(optional),
+  variants: Schema.Array(Variant),
   time: Schema.Struct({
     released: Schema.Finite,
   }),
@@ -76,9 +76,11 @@ export const Info = Schema.Struct({
       empty: (providerID: Provider.ID, id: ID) =>
         schema.make({
           id,
+          modelID: id,
           providerID,
           name: id,
           capabilities: { tools: false, input: [], output: [] },
+          variants: [],
           time: { released: 0 },
           cost: [],
           status: "active",

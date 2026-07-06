@@ -142,7 +142,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
 
     if (typeof opts.body === "string" && model.body !== undefined) {
       const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(opts.body))
-      if (Schema.is(Schema.Record(Schema.String, Schema.Unknown))(decoded)) {
+      if (Schema.is(Schema.Record(Schema.String, Schema.Json))(decoded)) {
         opts.body = JSON.stringify(ProviderV2.mergeOverlay(decoded, model.body))
       }
     }

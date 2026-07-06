@@ -2,6 +2,7 @@ export * as ConfigMigrateV1 from "./migrate"
 
 import { ConfigV1 } from "./config"
 import { ConfigAgentV1 } from "./agent"
+import { ConfigCommandV1 } from "./command"
 import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
@@ -49,7 +50,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
   return {
     $schema: info.$schema,
     shell: info.shell,
-    model: info.model,
+    model: modelSelection(info.model),
     default_agent: info.default_agent,
     autoupdate: info.autoupdate,
     share: info.share ?? (info.autoshare ? "auto" : undefined),
@@ -73,7 +74,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       buffer: info.compaction.reserved,
     },
     skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
-    commands: info.command,
+    commands: commands(info.command),
     instructions: info.instructions,
     references: info.references ?? info.reference,
     plugins: info.plugin?.map((plugin) =>
@@ -127,8 +128,7 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     ...(info.top_p === undefined ? {} : { top_p: info.top_p }),
   }
   return {
-    model: info.model,
-    variant: info.variant,
+    model: modelSelection(info.model, info.variant),
     request: Object.keys(body).length ? { body } : undefined,
     system: info.prompt,
     description: info.description,
@@ -138,6 +138,32 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     steps: info.steps,
     disabled: info.disable,
     permissions: permissions(info.permission),
+  }
+}
+
+function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) {
+  if (!info) return undefined
+  return Object.fromEntries(
+    Object.entries(info).map(([id, command]) => [
+      id,
+      {
+        template: command.template,
+        description: command.description,
+        agent: command.agent,
+        model: modelSelection(command.model, command.variant),
+        subtask: command.subtask,
+      },
+    ]),
+  )
+}
+
+function modelSelection(input?: string, variant?: string) {
+  if (input === undefined || !/^[^/#]+\/[^#]+$/.test(input)) return undefined
+  const separator = input.indexOf("/")
+  return {
+    providerID: input.slice(0, separator),
+    model: input.slice(separator + 1),
+    ...(variant === undefined || variant.length === 0 || variant.includes("#") ? {} : { variant }),
   }
 }
 

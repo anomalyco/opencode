@@ -3,10 +3,12 @@ export * as ConfigProvider from "./provider"
 import { Schema } from "effect"
 import { ModelV2 } from "../model"
 
+const JsonRecord = Schema.Record(Schema.String, Schema.Json)
+
 export const Overlays = {
-  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  settings: JsonRecord.pipe(Schema.optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  body: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  body: JsonRecord.pipe(Schema.optional),
 }
 
 export class Request extends Schema.Class<Request>("ConfigV2.Provider.Request")({
