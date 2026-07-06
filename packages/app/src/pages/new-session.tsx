@@ -26,7 +26,7 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import { useTitlebarRightMount } from "@/components/titlebar"
 
-const showWorkspaceBar = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const workspaceBarEnabled = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 /**
  * The `/new-session` draft page. Unlike `session.tsx`, this only renders the prompt
@@ -63,7 +63,9 @@ export default function NewSessionPage() {
   const [store, setStore] = createStore<{ worktree?: string }>({})
   const rightMount = useTitlebarRightMount()
 
+  const showWorkspaceBar = createMemo(() => workspaceBarEnabled && sync().project?.vcs === "git")
   const newSessionWorktree = createMemo(() => {
+    if (!showWorkspaceBar()) return "main"
     if (store.worktree) return store.worktree
     const project = sync().project
     if (project && sdk().directory !== project.worktree) return sdk().directory
@@ -123,7 +125,7 @@ export default function NewSessionPage() {
                     </div>
                   }
                 >
-                  <div class="flex flex-col" classList={{ "gap-8": showWorkspaceBar, "gap-3": !showWorkspaceBar }}>
+                  <div class="flex flex-col" classList={{ "gap-8": showWorkspaceBar(), "gap-3": !showWorkspaceBar() }}>
                     <PromptInput
                       controls={inputController()}
                       variant="new-session"
@@ -143,15 +145,15 @@ export default function NewSessionPage() {
                       <div
                         class="flex min-h-7 min-w-0 items-center gap-0 text-v2-text-text-faint"
                         classList={{
-                          "flex-col justify-center sm:flex-row": showWorkspaceBar,
-                          "justify-start": !showWorkspaceBar,
+                          "flex-col justify-center sm:flex-row": showWorkspaceBar(),
+                          "justify-start": !showWorkspaceBar(),
                         }}
                       >
                         <PromptProjectSelector
                           controller={projectController}
-                          placement={showWorkspaceBar ? "bottom" : "bottom-start"}
+                          placement={showWorkspaceBar() ? "bottom" : "bottom-start"}
                         />
-                        <Show when={showWorkspaceBar}>
+                        <Show when={showWorkspaceBar()}>
                           <PromptWorkspaceSelector
                             value={newSessionWorktree()}
                             projectRoot={projectRoot()}
