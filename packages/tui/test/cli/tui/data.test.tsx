@@ -321,7 +321,7 @@ test("removes committed revert messages from local state", async () => {
       created: 3,
       type: "session.revert.committed",
       durable: durable(sessionID, 3),
-      data: { sessionID, messageID: "msg_002" },
+      data: { sessionID, to: "msg_002" },
     })
 
     await wait(() => data.session.message.ids(sessionID).length === 1)

@@ -13,19 +13,6 @@ function reduce(data: ReturnType<typeof createSessionData>, event: unknown, thin
   })
 }
 
-function shell(status: "running" | "exited" = "running") {
-  return {
-    id: "sh_1",
-    status,
-    command: "pwd",
-    cwd: "/tmp",
-    shell: "/bin/sh",
-    file: "/tmp/shell-output",
-    metadata: {},
-    time: { started: 1, completed: status === "exited" ? 2 : undefined },
-  }
-}
-
 function assistant(id: string, extra: Record<string, unknown> = {}) {
   return {
     type: "message.updated",
@@ -380,10 +367,10 @@ describe("run session data", () => {
       expect.objectContaining({
         kind: "tool",
         phase: "start",
-        partID: "shell:sh_1",
+        partID: "shell:call-1",
         tool: "bash",
         shell: {
-          callID: "sh_1",
+          callID: "call-1",
           command: "pwd",
         },
       }),
@@ -396,12 +383,12 @@ describe("run session data", () => {
       expect.objectContaining({
         kind: "tool",
         phase: "progress",
-        partID: "shell:sh_1",
+        partID: "shell:call-1",
         tool: "bash",
         text: "/tmp/demo\n",
         toolState: "completed",
         shell: {
-          callID: "sh_1",
+          callID: "call-1",
           command: "pwd",
         },
       }),
@@ -417,7 +404,7 @@ describe("run session data", () => {
         tool({
           id: "tool-1",
           messageID: "msg-1",
-          callID: "sh_1",
+          callID: "call-1",
           tool: "bash",
           state: {
             status: "running",
@@ -438,7 +425,7 @@ describe("run session data", () => {
         tool({
           id: "tool-1",
           messageID: "msg-1",
-          callID: "sh_1",
+          callID: "call-1",
           tool: "bash",
           state: {
             status: "completed",
@@ -463,7 +450,7 @@ describe("run session data", () => {
       tool({
         id: "tool-1",
         messageID: "msg-1",
-        callID: "sh_1",
+        callID: "call-1",
         tool: "bash",
         state: {
           status: "running",
@@ -484,7 +471,7 @@ describe("run session data", () => {
       tool({
         id: "tool-1",
         messageID: "msg-1",
-        callID: "sh_1",
+        callID: "call-1",
         tool: "bash",
         state: {
           status: "completed",

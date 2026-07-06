@@ -67,8 +67,7 @@ async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?:
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.question, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.form, "list").mockImplementation(
-    (request) =>
-      ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
+    (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
   spyOn(sdk.form, "cancel").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.session, "prompt").mockImplementation((request) => {

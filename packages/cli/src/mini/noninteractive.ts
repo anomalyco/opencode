@@ -1,14 +1,5 @@
-import type {
-  EventSubscribeOutput,
-  OpenCodeClient,
-} from "@opencode-ai/client/promise"
-import type {
-  ReasoningPart,
-  StepFinishPart,
-  StepStartPart,
-  TextPart,
-  ToolPart,
-} from "@opencode-ai/sdk/v2"
+import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
+import type { ReasoningPart, StepFinishPart, StepStartPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { UI } from "./ui"

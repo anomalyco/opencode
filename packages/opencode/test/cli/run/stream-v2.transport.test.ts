@@ -2,7 +2,12 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "node:url"
-import { OpenCode, type EventSubscribeOutput, type MessageListOutput, type OpenCodeClient } from "@opencode-ai/client/promise"
+import {
+  OpenCode,
+  type EventSubscribeOutput,
+  type MessageListOutput,
+  type OpenCodeClient,
+} from "@opencode-ai/client/promise"
 import { createSessionTransport } from "@opencode-ai/cli/mini/stream-v2.transport"
 import type { FooterApi, FooterEvent, StreamCommit } from "@opencode-ai/cli/mini/types"
 import { tmpdir } from "../../fixture/fixture"
@@ -1769,18 +1774,19 @@ describe("V2 mini transport", () => {
         ],
       },
     })
-    spyOn(client.session, "get").mockImplementation(() =>
-      ok({
-        id: "ses_child",
-        parentID: "ses_1",
-        projectID: "proj_1",
-        agent: "explore",
-        cost: 0,
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        time: { created: 1, updated: 1 },
-        title: "Find files",
-        location: { directory: "/tmp" },
-      }) as never,
+    spyOn(client.session, "get").mockImplementation(
+      () =>
+        ok({
+          id: "ses_child",
+          parentID: "ses_1",
+          projectID: "proj_1",
+          agent: "explore",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: "Find files",
+          location: { directory: "/tmp" },
+        }) as never,
     )
     const ui = footer()
     const transport = await createSessionTransport({
@@ -1870,7 +1876,9 @@ describe("V2 mini transport", () => {
     })
     await Bun.sleep(0)
     expect(
-      states().at(-1)?.details.ses_child?.commits.some((item) => item.messageID === "msg_child_prompt"),
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.some((item) => item.messageID === "msg_child_prompt"),
     ).toBe(false)
 
     events.push({
@@ -2024,19 +2032,36 @@ describe("V2 mini transport", () => {
         data: {
           sessionID: "ses_child",
           assistantMessageID: "msg_overflow_assistant",
-          textID: `txt_overflow_${index}`,
+          ordinal: index,
           delta: `live ${index}`,
         },
       })
-    while (!states().at(-1)?.details.ses_child?.commits.some((item) => item.text === "live 64")) await Bun.sleep(0)
+    while (
+      !states()
+        .at(-1)
+        ?.details.ses_child?.commits.some((item) => item.text === "live 64")
+    )
+      await Bun.sleep(0)
     releaseStale()
     while (childRequests < 2) await Bun.sleep(0)
-    expect(states().at(-1)?.details.ses_child?.commits.some((item) => item.text === "live 64")).toBe(true)
+    expect(
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.some((item) => item.text === "live 64"),
+    ).toBe(true)
 
     releaseRetry()
-    while (!states().at(-1)?.details.ses_child?.commits.some((item) => item.text === "baseline history"))
+    while (
+      !states()
+        .at(-1)
+        ?.details.ses_child?.commits.some((item) => item.text === "baseline history")
+    )
       await Bun.sleep(0)
-    expect(states().at(-1)?.details.ses_child?.commits.some((item) => item.text === "live 64")).toBe(true)
+    expect(
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.some((item) => item.text === "live 64"),
+    ).toBe(true)
     expect(childRequests).toBe(2)
     await transport.close()
   })
@@ -2101,7 +2126,7 @@ describe("V2 mini transport", () => {
         durable: durable("ses_child", seq),
         data: { sessionID: "ses_child", assistantMessageID: "msg_tool_projected", callID, name },
       })
-    const called = (callID: string, tool: string, input: Record<string, unknown>, seq: number) =>
+    const called = (callID: string, input: Record<string, unknown>, seq: number) =>
       events.push({
         id: `evt_called_${callID}`,
         created: seq,
@@ -2111,14 +2136,13 @@ describe("V2 mini transport", () => {
           sessionID: "ses_child",
           assistantMessageID: "msg_tool_projected",
           callID,
-          tool,
           input,
-          provider: { executed: true },
+          executed: true,
         },
       })
 
     inputStarted("call_terminal", "grep", 0)
-    called("call_terminal", "grep", { pattern: "needle" }, 1)
+    called("call_terminal", { pattern: "needle" }, 1)
     await Bun.sleep(0)
     transport.selectSubagent("ses_child")
     while (!childHydrating) await Bun.sleep(0)
@@ -2133,11 +2157,11 @@ describe("V2 mini transport", () => {
         callID: "call_terminal",
         structured: {},
         content: [{ type: "text", text: "found" }],
-        provider: { executed: true },
+        executed: true,
       },
     })
     inputStarted("call_overlap", "bash", 3)
-    called("call_overlap", "bash", { command: "stale" }, 4)
+    called("call_overlap", { command: "stale" }, 4)
     await Bun.sleep(0)
     const beforeHydration = states().length
     releaseHydration()

@@ -1,7 +1,4 @@
-import type {
-  EventSubscribeOutput,
-  OpenCodeClient,
-} from "@opencode-ai/client/promise"
+import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import type {
   PermissionRequest,
   QuestionRequest,
@@ -264,8 +261,7 @@ function shellTerminal(
       : shell.status === "exited"
         ? `Shell exited with code ${shell.exit ?? "unknown"}`
         : `Shell ${shell.status}`
-  if (!error)
-    return [shellCommit(callID, command, { text, phase: "progress", toolState: "completed" })]
+  if (!error) return [shellCommit(callID, command, { text, phase: "progress", toolState: "completed" })]
   return [
     ...(text ? [shellCommit(callID, command, { text, phase: "progress", toolState: "running" })] : []),
     shellCommit(callID, command, { text: error, phase: "final", toolState: "error", toolError: error }),
@@ -310,9 +306,7 @@ async function resolveSelectedModel(input: StreamInput, next: Pick<SessionTurnIn
     .then((response) => response.model)
   if (session) return { ...session, variant: next.variant }
 
-  const fallback = await input.sdk.model
-    .default(undefined, { signal: next.signal })
-    .then((response) => response.data)
+  const fallback = await input.sdk.model.default(undefined, { signal: next.signal }).then((response) => response.data)
   if (!fallback) return
   return { providerID: fallback.providerID, id: fallback.id, variant: next.variant }
 }
@@ -1039,18 +1033,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
 
       if (next.agent) {
-        await input.sdk.session.switchAgent(
-          { sessionID: input.sessionID, agent: next.agent },
-          { signal: next.signal },
-        )
+        await input.sdk.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
       }
       const selected = await resolveSelectedModel(input, next)
       if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
       if (selected)
-        await input.sdk.session.switchModel(
-          { sessionID: input.sessionID, model: selected },
-          { signal: next.signal },
-        )
+        await input.sdk.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
       const prepared = await Promise.all((next.includeFiles ? next.files : []).map(prepareFile))
       const attachments = [
