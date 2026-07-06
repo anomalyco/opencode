@@ -177,6 +177,70 @@ test("retains output schemas across paginated MCP discovery", async () => {
   ])
 })
 
+test("applies the configured MCP catalog timeout", async () => {
+  const result = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "catalog-timeout",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-timeout.ts")],
+            environment: { MCP_TIMEOUT_TARGET: "catalog" },
+            timeout: new ConfigMCP.Timeout({ catalog: 10 }),
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.tools()
+      }),
+    ),
+  )
+
+  await expect(result).rejects.toThrow("Request timed out")
+})
+
+test("applies the configured MCP execution timeout", async () => {
+  const result = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "execution-timeout",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-timeout.ts")],
+            timeout: new ConfigMCP.Timeout({ execution: 10 }),
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.callTool({ name: "slow" })
+      }),
+    ),
+  )
+
+  await expect(result).rejects.toThrow("Request timed out")
+})
+
+test("applies the configured MCP execution timeout to prompts", async () => {
+  const result = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "prompt-timeout",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-timeout.ts")],
+            timeout: new ConfigMCP.Timeout({ execution: 10 }),
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.prompt({ name: "slow" })
+      }),
+    ),
+  )
+
+  await expect(result).rejects.toThrow("Request timed out")
+})
+
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service

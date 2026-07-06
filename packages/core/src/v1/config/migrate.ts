@@ -175,7 +175,7 @@ function mcp(info: typeof ConfigV1.Info.Type) {
   )
   const timeout = info.experimental?.mcp_timeout
   if (!timeout && !Object.keys(servers).length) return undefined
-  return { timeout: timeout === undefined ? undefined : { request: timeout }, servers }
+  return { timeout: timeout === undefined ? undefined : { catalog: timeout, execution: timeout }, servers }
 }
 
 function migrateMcp(info: ConfigMCPV1.Info) {
@@ -187,7 +187,7 @@ function migrateMcp(info: ConfigMCPV1.Info) {
       cwd: info.cwd,
       environment: info.environment,
       disabled,
-      timeout: info.timeout === undefined ? undefined : { request: info.timeout },
+      timeout: info.timeout === undefined ? undefined : { catalog: info.timeout, execution: info.timeout },
     }
   return {
     type: info.type,
@@ -201,7 +201,7 @@ function migrateMcp(info: ConfigMCPV1.Info) {
       redirect_uri: info.oauth.redirectUri,
     },
     disabled,
-    timeout: info.timeout === undefined ? undefined : { request: info.timeout },
+    timeout: info.timeout === undefined ? undefined : { catalog: info.timeout, execution: info.timeout },
   }
 }
 

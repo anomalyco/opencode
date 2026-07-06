@@ -142,7 +142,7 @@ describe("Config", () => {
       // V2 nests under `mcp.servers`, so it must not be misdetected and re-migrated.
       expect(ConfigMigrateV1.isV1({ mcp: { servers: { context7: { type: "local", command: ["npx"] } } } })).toBe(false)
       expect(ConfigMigrateV1.isV1({ mcp: {} })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ mcp: { timeout: { request: 1000 } } })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ mcp: { timeout: { execution: 1000 } } })).toBe(false)
     }),
   )
 
@@ -467,14 +467,14 @@ describe("Config", () => {
                 },
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
                 mcp: {
-                  timeout: { startup: 5000, request: 60000 },
+                  timeout: { startup: 5000, catalog: 60000, execution: 100000000 },
                   servers: {
                     local: {
                       type: "local",
                       command: ["node", "./mcp/server.js"],
                       environment: { API_KEY: "secret" },
                       disabled: false,
-                      timeout: { request: 10000 },
+                      timeout: { catalog: 10000 },
                     },
                     remote: {
                       type: "remote",
@@ -552,14 +552,14 @@ describe("Config", () => {
             })
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
             expect(documents[0]?.info.mcp).toEqual({
-              timeout: { startup: 5000, request: 60000 },
+              timeout: { startup: 5000, catalog: 60000, execution: 100000000 },
               servers: {
                 local: {
                   type: "local",
                   command: ["node", "./mcp/server.js"],
                   environment: { API_KEY: "secret" },
                   disabled: false,
-                  timeout: { request: 10000 },
+                  timeout: { catalog: 10000 },
                 },
                 remote: {
                   type: "remote",
@@ -792,19 +792,19 @@ describe("Config", () => {
               buffer: 10000,
             })
             expect(documents[0]?.info.mcp).toMatchObject({
-              timeout: { request: 5000 },
+              timeout: { catalog: 5000, execution: 5000 },
               servers: {
                 local: {
                   type: "local",
                   command: ["node", "server.js"],
                   disabled: true,
-                  timeout: { request: 10000 },
+                  timeout: { catalog: 10000, execution: 10000 },
                 },
                 remote: {
                   type: "remote",
                   url: "https://mcp.example.com",
                   oauth: { client_id: "client", callback_port: 19876 },
-                  timeout: { request: 20000 },
+                  timeout: { catalog: 20000, execution: 20000 },
                 },
               },
             })
