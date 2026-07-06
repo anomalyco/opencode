@@ -42,7 +42,7 @@ const makeTransport = Effect.fn("cli.standalone.transport")(
     const output = yield* proc.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.take(1), Stream.mkString)
     if (!output) return yield* Effect.fail(new Error("Standalone server exited before reporting readiness"))
     const ready = yield* Effect.tryPromise(() => decodeReady(output))
-    return { url: ready.url, headers: ServerAuth.headers({ password }), pid: proc.pid }
+    return { url: ready.url, headers: ServerAuth.headers({ password, username: "opencode" }), pid: proc.pid }
   },
   Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
 )

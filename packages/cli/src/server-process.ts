@@ -39,7 +39,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
     Effect.gen(function* () {
       if (options.mode === "service") {
         const service = yield* ServiceConfig.options()
-        yield* Flock.effect("service-process", {
+        yield* Flock.effect(path.basename(service.file, ".json") + "-process", {
           dir: path.dirname(service.file),
           staleMs: 3_000,
           timeoutMs: 15_000,

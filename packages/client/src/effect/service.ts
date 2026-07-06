@@ -104,9 +104,10 @@ export const Info = Schema.Struct({
 export type Info = typeof Info.Type
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
-const decodeHealth = Schema.decodeUnknownEffect(
+const decodeHealth = Schema.decodeUnknownOption(
   Schema.Struct({ healthy: Schema.Literal(true), version: Schema.String, pid: Schema.Int }),
 )
+const decodeLegacyHealth = Schema.decodeUnknownOption(Schema.Struct({ healthy: Schema.Literal(true) }))
 
 // A missing or corrupt file means no valid info; callers treat both
 // the same (the registering server self-evicts, clients rediscover).
@@ -122,7 +123,7 @@ type LocalService = {
   readonly transport: Transport
 }
 
-const probe = Effect.fnUntraced(function* (info: Info, version?: string) {
+const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLegacy = false) {
   const headers = info.password === undefined ? undefined : auth(info.password)
   const response = yield* Effect.tryPromise(() =>
     fetch(new URL("/api/health", info.url), {
@@ -131,14 +132,20 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string) {
     }),
   ).pipe(Effect.option, Effect.map(Option.getOrUndefined))
   if (response === undefined || !response.ok) return undefined
-  const health = yield* Effect.tryPromise(() => response.json()).pipe(
-    Effect.flatMap(decodeHealth),
-    Effect.option,
-    Effect.map(Option.getOrUndefined),
+  const body = yield* Effect.tryPromise(() => response.json()).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+  const health = decodeHealth(body)
+  if (Option.isSome(health)) {
+    if (health.value.pid !== info.pid) return undefined
+    if (info.version !== undefined && health.value.version !== info.version) return undefined
+    if (version !== undefined && health.value.version !== version) return undefined
+    return { info, transport: { url: info.url, headers } } satisfies LocalService
+  }
+  if (
+    !allowLegacy ||
+    Option.isNone(decodeLegacyHealth(body)) ||
+    (typeof body === "object" && body !== null && ("version" in body || "pid" in body))
   )
-  if (health?.pid !== info.pid) return undefined
-  if (info.version !== undefined && health.version !== info.version) return undefined
-  if (version !== undefined && health.version !== version) return undefined
+    return undefined
   return { info, transport: { url: info.url, headers } } satisfies LocalService
 })
 
@@ -147,7 +154,7 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string) {
 const find = Effect.fnUntraced(function* (options: Options) {
   const info = yield* read(options.file)
   if (info === undefined) return undefined
-  return yield* probe(info)
+  return yield* probe(info, undefined, true)
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and start readiness.

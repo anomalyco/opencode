@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { mergeInteractiveInput, mergeNonInteractiveInput, pickRunModel } from "../src/mini"
 
 async function cli(args: string[]) {
@@ -59,6 +60,66 @@ describe("mini command", () => {
 
     expect(result.exitCode).toBe(1)
     expect(result.stderr).not.toContain("You must provide a message")
+  })
+
+  test("preserves a run failure exit code", async () => {
+    let modelRequests = 0
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/api/health")
+          return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+        if (url.pathname === "/api/model") {
+          modelRequests++
+          return Response.json({
+            location: { directory: process.cwd(), project: { id: "global", directory: process.cwd() } },
+            data: modelRequests === 1 ? [{ id: "missing", providerID: "definitely" }] : [],
+          })
+        }
+        return new Response(undefined, { status: 404 })
+      },
+    })
+
+    try {
+      const result = await cli([
+        "run",
+        "--server",
+        server.url.toString(),
+        "--dir",
+        process.cwd(),
+        "--model",
+        "definitely/missing",
+        "hi",
+      ])
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toContain("Model unavailable: definitely/missing")
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("reports pre-admission errors as JSON", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        return Response.json({ healthy: true, version: "incompatible", pid: process.pid })
+      },
+    })
+
+    try {
+      const result = await cli(["run", "--format", "json", "--server", server.url.toString(), "hi"])
+
+      expect(result.exitCode).toBe(1)
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        type: "error",
+        sessionID: "",
+        error: { type: "unknown", message: expect.stringContaining("requires") },
+      })
+    } finally {
+      server.stop(true)
+    }
   })
 
   test("uses the shared V2 server option instead of an attach command", async () => {

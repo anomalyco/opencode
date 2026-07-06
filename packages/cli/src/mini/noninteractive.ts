@@ -132,8 +132,14 @@ export async function runNonInteractivePrompt(input: Input) {
 
   const consume = async () => {
     while (!controller.signal.aborted) {
-      const next = await stream.next()
-      if (next.done) throw new Error("Event stream disconnected during prompt execution")
+      const next = await stream.next().catch((error) => {
+        if (!emittedError) throw error
+        return { done: true as const, value: undefined }
+      })
+      if (next.done) {
+        if (emittedError) return
+        throw new Error("Event stream disconnected during prompt execution")
+      }
       const event = next.value
 
       if (event.type === "permission.v2.asked" && submitted && event.data.sessionID === input.sessionID) {
@@ -416,7 +422,7 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         controller.abort()
         await completed?.catch(() => {})
-        if (interrupted) return undefined
+        if (interrupted || emittedError) return undefined
         throw error
       })
     admission = undefined

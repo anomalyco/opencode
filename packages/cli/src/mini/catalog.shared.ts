@@ -14,10 +14,11 @@ type CurrentSkill = SkillListOutput["data"][number]
 type CurrentProvider = ProviderListOutput["data"][number]
 type CurrentModel = ModelListOutput["data"][number]
 
-function location(directory: string) {
+function location(directory: string, workspace?: string) {
   return {
     location: {
       directory,
+      workspace,
     },
   }
 }
@@ -98,13 +99,14 @@ export function runProviders(providers: CurrentProvider[], models: CurrentModel[
 export async function waitForCatalogReady(input: {
   sdk: OpenCodeClient
   directory: string
+  workspace?: string
   model: { providerID: string; modelID: string }
   timeoutMs?: number
 }) {
   const deadline = Date.now() + (input.timeoutMs ?? 5_000)
   while (Date.now() < deadline) {
     const models = await input.sdk.model
-      .list(location(input.directory))
+      .list(location(input.directory, input.workspace))
       .then((result) => result.data)
       .catch(() => undefined)
     if (models?.some((model) => model.providerID === input.model.providerID && model.id === input.model.modelID)) return

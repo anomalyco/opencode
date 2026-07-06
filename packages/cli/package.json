@@ -27,6 +27,7 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "dev": "bun run src/index.ts",
+    "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

@@ -4,18 +4,19 @@ import path from "node:path"
 test("standalone server exits when its owner is killed", async () => {
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/standalone-owner.ts")], {
     cwd: path.join(import.meta.dir, ".."),
-    env: process.env,
+    env: { ...process.env, OPENCODE_SERVER_USERNAME: "custom" },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   })
   const line = await Promise.race([readLine(owner.stdout), Bun.sleep(10_000).then(() => undefined)])
-  const [rawPID, url] = line?.split(" ") ?? []
+  const [rawPID, url, status] = line?.split(" ") ?? []
   const pid = Number(rawPID)
 
   try {
     expect(pid).toBeGreaterThan(0)
     expect(url).toStartWith("http://127.0.0.1:")
+    expect(status).toBe("200")
     expect(running(pid)).toBe(true)
 
     owner.kill("SIGKILL")

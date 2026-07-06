@@ -8,7 +8,7 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { Daemon } from "../daemon"
 import { Standalone } from "../services/standalone"
-import { loadRunAgents, waitForCatalogReady, waitForDefaultModel } from "./catalog.shared"
+import { loadRunAgents, waitForCatalogReady } from "./catalog.shared"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { toolInlineInfo } from "./tool"
 import { UI } from "./ui"
@@ -49,7 +49,11 @@ type Prepared = {
 
 const ATTACH_FILE_MAX_BYTES = 10 * 1024 * 1024
 
-export async function runNonInteractive(input: RunCommandInput) {
+export function runNonInteractive(input: RunCommandInput) {
+  return run(input).catch((error) => reportError(input, error instanceof Error ? error.message : String(error)))
+}
+
+async function run(input: RunCommandInput) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   const root = process.env.PWD ?? process.cwd()
   const directory = input.server ? input.directory : localDirectory(input.directory, root)
@@ -78,17 +82,22 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
   if (!requestedDirectory) fail("Failed to resolve server directory")
   const session = await selectSession(client, requestedDirectory, input)
   const cwd = session?.location.directory ?? requestedDirectory
+  const workspace = session?.location.workspaceID
   const explicitModel = parseModel(input.model)
   const sessionModel = session?.model ? { providerID: session.model.providerID, modelID: session.model.id } : undefined
   const defaultModel =
-    input.variant && !explicitModel && !sessionModel
-      ? await waitForDefaultModel({ sdk: client, directory: cwd })
+    !explicitModel && !sessionModel
+      ? await client.model
+          .default({ location: { directory: cwd, workspace } })
+          .then((result) =>
+            result.data ? { providerID: result.data.providerID, modelID: result.data.id } : undefined,
+          )
       : undefined
   const model = pickRunModel(explicitModel, input.variant, sessionModel, defaultModel)
   if (input.variant && !model) return reportError(input, "Cannot select a variant before selecting a model", session?.id)
   if (model) {
-    await waitForCatalogReady({ sdk: client, directory: cwd, model })
-    const available = await client.model.list({ location: { directory: cwd } })
+    await waitForCatalogReady({ sdk: client, directory: cwd, workspace, model })
+    const available = await client.model.list({ location: { directory: cwd, workspace } })
     if (!available.data.some((item) => item.providerID === model.providerID && item.id === model.modelID))
       return reportError(input, `Model unavailable: ${model.providerID}/${model.modelID}`, session?.id)
   }
@@ -109,26 +118,21 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
     })
   }
 
-  try {
-    await runNonInteractivePrompt({
-      client,
-      sessionID: selected.id,
-      message: prepared.message,
-      files: prepared.files,
-      agent,
-      model,
-      variant: input.variant,
-      thinking: input.thinking ?? false,
-      format: input.format,
-      dangerouslySkipPermissions: input.dangerouslySkipPermissions ?? false,
-      attached: !input.standaloneCommand,
-      renderTool,
-      renderToolError,
-    })
-  } catch (error) {
-    UI.error(error instanceof Error ? error.message : String(error))
-    process.exitCode = 1
-  }
+  await runNonInteractivePrompt({
+    client,
+    sessionID: selected.id,
+    message: prepared.message,
+    files: prepared.files,
+    agent,
+    model,
+    variant: input.variant,
+    thinking: input.thinking ?? false,
+    format: input.format,
+    dangerouslySkipPermissions: input.dangerouslySkipPermissions ?? false,
+    attached: !input.standaloneCommand,
+    renderTool,
+    renderToolError,
+  }).catch((error) => reportError(input, error instanceof Error ? error.message : String(error), selected.id))
 }
 
 export function mergeInput(message: string | undefined, piped: string | undefined) {
@@ -303,6 +307,5 @@ function reportError(input: RunCommandInput, message: string, sessionID?: string
 }
 
 function fail(message: string): never {
-  UI.error(message)
-  process.exit(1)
+  throw new Error(message)
 }

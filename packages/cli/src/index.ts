@@ -58,6 +58,6 @@ Effect.logInfo("cli starting", {
   Effect.provide(LoggingLayer),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
-  Effect.tap(() => Effect.sync(() => process.exit(0))),
+  Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
   NodeRuntime.runMain,
 )
