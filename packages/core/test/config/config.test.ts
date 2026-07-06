@@ -16,6 +16,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
@@ -47,11 +48,10 @@ function testLayer(
 }
 
 const provider = {
-  api: { type: "native", settings: {} },
-  request: {
-    headers: {},
-    body: {},
-  },
+  package: "native",
+  settings: {},
+  headers: {},
+  body: {},
   models: {},
 }
 
@@ -165,12 +165,9 @@ describe("Config", () => {
         },
       })
 
-      expect(migrated.providers?.bedrock?.api).toEqual({
-        type: "aisdk",
-        package: "@ai-sdk/amazon-bedrock",
+      expect(migrated.providers?.bedrock).toMatchObject({
+        package: ProviderV2.aisdk("@ai-sdk/amazon-bedrock"),
         settings: { region: "us-east-1", profile: "dev" },
-      })
-      expect(migrated.providers?.bedrock?.request).toEqual({
         headers: { "x-test": "1" },
         body: { trace: true },
       })
@@ -748,34 +745,32 @@ describe("Config", () => {
             })
             expect(documents[0]?.info.attachments).toEqual({ image: { auto_resize: false, max_width: 1200 } })
             expect(documents[0]?.info.providers?.custom).toMatchObject({
-              request: { body: { apiKey: "secret" } },
+              settings: { apiKey: "secret" },
               models: {
                 model: {
-                  request: { body: { reasoningEffort: "high" } },
-                  variants: [{ id: "fast", body: { temperature: 0.2 } }],
+                  settings: { reasoningEffort: "high" },
+                  variants: [{ id: "fast", settings: { temperature: 0.2 } }],
                 },
               },
             })
             expect(documents[0]?.info.providers?.openai).toMatchObject({
-              api: { settings: {} },
-              request: { headers: { Authorization: "Bearer secret", "OpenAI-Organization": "org" } },
+              package: ProviderV2.aisdk("@ai-sdk/openai"),
+              settings: { apiKey: "secret", organization: "org" },
               models: {
                 model: {
-                  request: {
-                    body: { temperature: 0.3, reasoning: { effort: "high" }, service_tier: "priority" },
-                  },
-                  variants: [{ id: "high", body: { reasoning: { effort: "high", summary: "auto" } } }],
+                  settings: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                  variants: [{ id: "high", settings: { reasoningEffort: "high", reasoningSummary: "auto" } }],
                 },
               },
             })
             expect(documents[0]?.info.providers?.anthropic).toMatchObject({
+              package: ProviderV2.aisdk("@ai-sdk/anthropic"),
               models: {
                 model: {
-                  request: {
-                    body: {
-                      output_config: { effort: "high", task_budget: 4096 },
-                      metadata: { user_id: "user-1" },
-                    },
+                  settings: {
+                    effort: "high",
+                    taskBudget: 4096,
+                    metadata: { userId: "user-1" },
                   },
                 },
               },

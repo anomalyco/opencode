@@ -334,6 +334,8 @@ import type {
   V2ProjectCurrentResponses,
   V2ProjectDirectoriesErrors,
   V2ProjectDirectoriesResponses,
+  V2ProjectListErrors,
+  V2ProjectListResponses,
   V2ProviderGetErrors,
   V2ProviderGetResponses,
   V2ProviderListErrors,
@@ -7032,6 +7034,18 @@ export class Credential extends HeyApiClient {
 }
 
 export class Project2 extends HeyApiClient {
+  /**
+   * List projects
+   *
+   * List known projects.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2ProjectListResponses, V2ProjectListErrors, ThrowOnError>({
+      url: "/api/project",
+      ...options,
+    })
+  }
+
   /**
    * Get current project
    *

@@ -2005,39 +2005,24 @@ export type ModelListOutput = {
   }
   readonly data: ReadonlyArray<{
     readonly id: string
+    readonly modelID?: string
     readonly providerID: string
     readonly family?: string
     readonly name: string
-    readonly api:
-      | {
-          readonly id: string
-          readonly type: "aisdk"
-          readonly package: string
-          readonly url?: string
-          readonly settings?: { readonly [x: string]: JsonValue }
-        }
-      | {
-          readonly id: string
-          readonly type: "native"
-          readonly url?: string
-          readonly settings: { readonly [x: string]: JsonValue }
-        }
+    readonly package?: string
+    readonly settings?: { readonly [x: string]: JsonValue }
+    readonly headers?: { readonly [x: string]: string }
+    readonly body?: { readonly [x: string]: JsonValue }
     readonly capabilities: {
       readonly tools: boolean
       readonly input: ReadonlyArray<string>
       readonly output: ReadonlyArray<string>
     }
-    readonly request: {
-      readonly settings: { readonly [x: string]: JsonValue }
-      readonly headers: { readonly [x: string]: string }
-      readonly body: { readonly [x: string]: JsonValue }
-      readonly variant?: string
-    }
-    readonly variants: ReadonlyArray<{
+    readonly variants?: ReadonlyArray<{
       readonly id: string
-      readonly settings: { readonly [x: string]: JsonValue }
-      readonly headers: { readonly [x: string]: string }
-      readonly body: { readonly [x: string]: JsonValue }
+      readonly settings?: { readonly [x: string]: JsonValue }
+      readonly headers?: { readonly [x: string]: string }
+      readonly body?: { readonly [x: string]: JsonValue }
     }>
     readonly time: { readonly released: number }
     readonly cost: ReadonlyArray<{
@@ -2066,39 +2051,24 @@ export type ModelDefaultOutput = {
   }
   readonly data: {
     readonly id: string
+    readonly modelID?: string
     readonly providerID: string
     readonly family?: string
     readonly name: string
-    readonly api:
-      | {
-          readonly id: string
-          readonly type: "aisdk"
-          readonly package: string
-          readonly url?: string
-          readonly settings?: { readonly [x: string]: JsonValue }
-        }
-      | {
-          readonly id: string
-          readonly type: "native"
-          readonly url?: string
-          readonly settings: { readonly [x: string]: JsonValue }
-        }
+    readonly package?: string
+    readonly settings?: { readonly [x: string]: JsonValue }
+    readonly headers?: { readonly [x: string]: string }
+    readonly body?: { readonly [x: string]: JsonValue }
     readonly capabilities: {
       readonly tools: boolean
       readonly input: ReadonlyArray<string>
       readonly output: ReadonlyArray<string>
     }
-    readonly request: {
-      readonly settings: { readonly [x: string]: JsonValue }
-      readonly headers: { readonly [x: string]: string }
-      readonly body: { readonly [x: string]: JsonValue }
-      readonly variant?: string
-    }
-    readonly variants: ReadonlyArray<{
+    readonly variants?: ReadonlyArray<{
       readonly id: string
-      readonly settings: { readonly [x: string]: JsonValue }
-      readonly headers: { readonly [x: string]: string }
-      readonly body: { readonly [x: string]: JsonValue }
+      readonly settings?: { readonly [x: string]: JsonValue }
+      readonly headers?: { readonly [x: string]: string }
+      readonly body?: { readonly [x: string]: JsonValue }
     }>
     readonly time: { readonly released: number }
     readonly cost: ReadonlyArray<{
@@ -2146,19 +2116,10 @@ export type ProviderListOutput = {
     readonly integrationID?: string
     readonly name: string
     readonly disabled?: boolean
-    readonly api:
-      | {
-          readonly type: "aisdk"
-          readonly package: string
-          readonly url?: string
-          readonly settings?: { readonly [x: string]: JsonValue }
-        }
-      | { readonly type: "native"; readonly url?: string; readonly settings: { readonly [x: string]: JsonValue } }
-    readonly request: {
-      readonly settings: { readonly [x: string]: JsonValue }
-      readonly headers: { readonly [x: string]: string }
-      readonly body: { readonly [x: string]: JsonValue }
-    }
+    readonly package: string
+    readonly settings?: { readonly [x: string]: JsonValue }
+    readonly headers?: { readonly [x: string]: string }
+    readonly body?: { readonly [x: string]: JsonValue }
   }>
 }
 
@@ -2180,19 +2141,10 @@ export type ProviderGetOutput = {
     readonly integrationID?: string
     readonly name: string
     readonly disabled?: boolean
-    readonly api:
-      | {
-          readonly type: "aisdk"
-          readonly package: string
-          readonly url?: string
-          readonly settings?: { readonly [x: string]: JsonValue }
-        }
-      | { readonly type: "native"; readonly url?: string; readonly settings: { readonly [x: string]: JsonValue } }
-    readonly request: {
-      readonly settings: { readonly [x: string]: JsonValue }
-      readonly headers: { readonly [x: string]: string }
-      readonly body: { readonly [x: string]: JsonValue }
-    }
+    readonly package: string
+    readonly settings?: { readonly [x: string]: JsonValue }
+    readonly headers?: { readonly [x: string]: string }
+    readonly body?: { readonly [x: string]: JsonValue }
   }
 }
 

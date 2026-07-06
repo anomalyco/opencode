@@ -162,7 +162,7 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"
                   id: ModelV2.ID.make(current.id),
                   providerID: ProviderV2.ID.make(current.providerID),
                   family: current.family === undefined ? undefined : ModelV2.Family.make(current.family),
-                  variants: current.variants.map((variant) => ({
+                  variants: current.variants?.map((variant) => ({
                     ...variant,
                     id: ModelV2.VariantID.make(variant.id),
                   })),
@@ -327,35 +327,28 @@ function agentInfo(value: AgentV2.Info) {
 function providerInfo(value: ProviderV2.MutableInfo) {
   return {
     ...value,
-    api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
-    request: {
-      settings: { ...value.request.settings },
-      headers: { ...value.request.headers },
-      body: { ...value.request.body },
-    },
+    settings: value.settings && { ...value.settings },
+    headers: value.headers && { ...value.headers },
+    body: value.body && { ...value.body },
   }
 }
 
 function modelInfo(value: ModelV2.Info | ModelV2.MutableInfo) {
   return {
     ...value,
-    api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
+    settings: value.settings && { ...value.settings },
+    headers: value.headers && { ...value.headers },
+    body: value.body && { ...value.body },
     capabilities: {
       ...value.capabilities,
       input: [...value.capabilities.input],
       output: [...value.capabilities.output],
     },
-    request: {
-      ...value.request,
-      settings: { ...value.request.settings },
-      headers: { ...value.request.headers },
-      body: { ...value.request.body },
-    },
-    variants: value.variants.map((variant) => ({
+    variants: value.variants?.map((variant) => ({
       ...variant,
-      settings: { ...variant.settings },
-      headers: { ...variant.headers },
-      body: { ...variant.body },
+      settings: variant.settings && { ...variant.settings },
+      headers: variant.headers && { ...variant.headers },
+      body: variant.body && { ...variant.body },
     })),
     time: { ...value.time },
     cost: value.cost.map((cost) => ({ ...cost, tier: cost.tier && { ...cost.tier }, cache: { ...cost.cache } })),

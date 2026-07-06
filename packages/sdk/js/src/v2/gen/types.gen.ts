@@ -5213,29 +5213,23 @@ export type EventLogSynced = {
   seq?: number
 }
 
-export type ModelApi =
-  | {
-      id: string
-      type: "aisdk"
-      package: string
-      url?: string
-      settings?: {
-        [key: string]: unknown
-      }
-    }
-  | {
-      id: string
-      type: "native"
-      url?: string
-      settings: {
-        [key: string]: unknown
-      }
-    }
-
 export type ModelCapabilities = {
   tools: boolean
   input: Array<string>
   output: Array<string>
+}
+
+export type ModelVariant = {
+  id: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type ModelCost = {
@@ -5253,31 +5247,22 @@ export type ModelCost = {
 
 export type ModelV2Info = {
   id: string
+  modelID?: string
   providerID: string
   family?: string
   name: string
-  api: ModelApi
-  capabilities: ModelCapabilities
-  request: {
-    settings: ProviderSettings
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    variant?: string
+  package?: string
+  settings?: {
+    [key: string]: unknown
   }
-  variants: Array<{
-    id: string
-    settings: ProviderSettings
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }>
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
+  capabilities: ModelCapabilities
+  variants?: Array<ModelVariant>
   time: {
     released: number
   }
@@ -5291,32 +5276,21 @@ export type ModelV2Info = {
   }
 }
 
-export type ProviderAisdk = {
-  type: "aisdk"
-  package: string
-  url?: string
-  settings?: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderNative = {
-  type: "native"
-  url?: string
-  settings: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderApi = ProviderAisdk | ProviderNative
-
 export type ProviderV2Info = {
   id: string
   integrationID?: string
   name: string
   disabled?: boolean
-  api: ProviderApi
-  request: ProviderRequest
+  package: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type IntegrationWhen = {
@@ -9066,29 +9040,23 @@ export type SessionMessagesResponseV2 = {
   }
 }
 
-export type ModelApi2 =
-  | {
-      id: string
-      type: "aisdk"
-      package: string
-      url?: string
-      settings?: {
-        [key: string]: unknown
-      }
-    }
-  | {
-      id: string
-      type: "native"
-      url?: string
-      settings: {
-        [key: string]: unknown
-      }
-    }
-
 export type ModelCapabilities2 = {
   tools: boolean
   input: Array<string>
   output: Array<string>
+}
+
+export type ModelVariant2 = {
+  id: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type ModelCost2 = {
@@ -9106,31 +9074,22 @@ export type ModelCost2 = {
 
 export type ModelV2Info2 = {
   id: string
+  modelID?: string
   providerID: string
   family?: string
   name: string
-  api: ModelApi2
-  capabilities: ModelCapabilities2
-  request: {
-    settings: ProviderSettings2
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    variant?: string
+  package?: string
+  settings?: {
+    [key: string]: unknown
   }
-  variants: Array<{
-    id: string
-    settings: ProviderSettings2
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-  }>
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
+  capabilities: ModelCapabilities2
+  variants?: Array<ModelVariant2>
   time: {
     released: number
   }
@@ -9150,32 +9109,21 @@ export type GenerateTextResponseV2 = {
   }
 }
 
-export type ProviderAisdk2 = {
-  type: "aisdk"
-  package: string
-  url?: string
-  settings?: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderNative2 = {
-  type: "native"
-  url?: string
-  settings: {
-    [key: string]: unknown
-  }
-}
-
-export type ProviderApi2 = ProviderAisdk2 | ProviderNative2
-
 export type ProviderV2Info2 = {
   id: string
   integrationID?: string
   name: string
   disabled?: boolean
-  api: ProviderApi2
-  request: ProviderRequest2
+  package: string
+  settings?: {
+    [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
+  }
+  body?: {
+    [key: string]: unknown
+  }
 }
 
 export type ProviderNotFoundErrorV2 = {
@@ -9327,6 +9275,38 @@ export type McpServer2 = {
     | McpStatusNeedsAuth3
     | McpStatusNeedsClientRegistration3
   integrationID?: string
+}
+
+export type ProjectVcs2 = "git" | "hg"
+
+export type ProjectIcon2 = {
+  url?: string
+  override?: string
+  color?: string
+}
+
+export type ProjectCommands2 = {
+  /**
+   * Startup script to run when creating a new workspace (worktree)
+   */
+  start?: string
+}
+
+export type ProjectTime2 = {
+  created: number
+  updated: number
+  initialized?: number
+}
+
+export type ProjectV2 = {
+  id: string
+  worktree: string
+  vcs?: ProjectVcs2
+  name?: string
+  icon?: ProjectIcon2
+  commands?: ProjectCommands2
+  time: ProjectTime2
+  sandboxes: Array<string>
 }
 
 export type ProjectCurrent2 = {
@@ -17352,6 +17332,35 @@ export type V2CredentialUpdateResponses = {
 }
 
 export type V2CredentialUpdateResponse = V2CredentialUpdateResponses[keyof V2CredentialUpdateResponses]
+
+export type V2ProjectListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/project"
+}
+
+export type V2ProjectListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedErrorV2
+}
+
+export type V2ProjectListError = V2ProjectListErrors[keyof V2ProjectListErrors]
+
+export type V2ProjectListResponses = {
+  /**
+   * Success
+   */
+  200: Array<ProjectV2>
+}
+
+export type V2ProjectListResponse = V2ProjectListResponses[keyof V2ProjectListResponses]
 
 export type V2ProjectCurrentData = {
   body?: never

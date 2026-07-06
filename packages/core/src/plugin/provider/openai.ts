@@ -178,8 +178,8 @@ export const OpenAIPlugin = define({
     })
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (item.provider.api.type !== "aisdk") continue
-        if (item.provider.api.package !== "@ai-sdk/openai") continue
+        if (!ProviderV2.isAISDK(item.provider.package)) continue
+        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/openai") continue
         if (!item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) continue
         evt.model.update(item.provider.id, ModelV2.ID.make("gpt-5-chat-latest"), (model) => {
           // OpenAIPlugin sends OpenAI models through Responses; this alias is a
@@ -194,7 +194,7 @@ export const OpenAIPlugin = define({
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
         evt.model.update(item.provider.id, model.id, (draft) => {
-          if (!OpenAICodex.eligible(draft.api.id)) {
+          if (!OpenAICodex.eligible(draft.modelID ?? draft.id)) {
             draft.enabled = false
             return
           }
@@ -220,7 +220,7 @@ export const OpenAIPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.openai) return
-        evt.language = evt.sdk.responses(evt.model.api.id)
+        evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
       }),
     )
   }),

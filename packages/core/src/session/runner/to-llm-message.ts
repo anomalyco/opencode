@@ -4,10 +4,10 @@ import {
   ToolOutput,
   ToolResultPart,
   type ContentPart,
-  type Model,
   type ProviderMetadata,
 } from "@opencode-ai/llm"
 import { Option, Schema } from "effect"
+import type { ModelV2 } from "../../model"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
@@ -66,9 +66,9 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: Model) => {
+const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
   const sameModel =
-    String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
+    String(message.model.providerID) === String(model.providerID) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
@@ -111,7 +111,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
+function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -168,5 +168,5 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
+export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: ModelV2.Ref) =>
   messages.flatMap((message) => toLLMMessage(message, model))

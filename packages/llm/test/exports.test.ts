@@ -30,7 +30,6 @@ describe("public exports", () => {
 
   test("provider barrels expose user-facing facades", () => {
     expect(OpenAI.model).toBeFunction()
-    expect(OpenAI.provider.model).toBe(OpenAI.model)
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.provider.responsesWebSocket).toBe(OpenAI.responsesWebSocket)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
