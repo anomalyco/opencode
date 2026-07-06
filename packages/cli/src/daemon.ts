@@ -31,8 +31,8 @@ const attach = Effect.fn("cli.daemon.attach")(function* (options: AttachOptions)
     catch: (cause) => attachError(options, cause),
   })
   if (health.version !== InstallationVersion)
-    return yield* Effect.fail(
-      new Error(`Server at ${options.url} has version ${health.version}; this client requires ${InstallationVersion}`),
+    process.stderr.write(
+      `Warning: Server at ${options.url} has version ${health.version}; this client is ${InstallationVersion}. Continuing anyway.\n`,
     )
   return transport
 })

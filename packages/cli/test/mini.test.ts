@@ -116,7 +116,7 @@ describe("mini command", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         type: "error",
         sessionID: "",
-        error: { type: "unknown", message: expect.stringContaining("requires") },
+        error: { type: "unknown", message: "Failed to resolve server directory" },
       })
     } finally {
       server.stop(true)
