@@ -32,7 +32,7 @@ import { InstallationVersion } from "../installation/version"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
-const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000
+const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 
 type Transport = StdioClientTransport | StreamableHTTPClientTransport
 
