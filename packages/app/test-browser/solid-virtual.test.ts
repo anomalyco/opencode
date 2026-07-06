@@ -27,6 +27,21 @@ test("reactive count updates preserve measured row sizes", () => {
   })
 })
 
+test("initial rect projects rows before a scroll element connects", () => {
+  createRoot((dispose) => {
+    const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+      count: 100,
+      getScrollElement: () => null,
+      estimateSize: () => 28,
+      initialRect: { width: 0, height: 600 },
+      overscan: 10,
+    })
+
+    expect(virtualizer.getVirtualItems().length).toBeGreaterThan(0)
+    dispose()
+  })
+})
+
 test("logical scroll offset includes pending measurement adjustments", () => {
   createRoot((dispose) => {
     const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({

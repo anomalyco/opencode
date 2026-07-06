@@ -54,7 +54,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 
-import { SessionPage, TargetSessionRoute as TargetSessionRouteContent } from "@/pages/session"
+import { SessionPage, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -100,6 +100,9 @@ const TargetSessionRoute = () => {
   })
 
   return (
+    // Owns the server-identity remount. Session changes must NOT remount this
+    // subtree (SessionRouteErrorBoundary resets and createSessionLineage
+    // re-resolves reactively instead); both rely on this key for server changes.
     <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
