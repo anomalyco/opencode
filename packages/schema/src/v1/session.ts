@@ -627,6 +627,13 @@ const events = {
       partID: PartID,
     },
   }),
+  MessagesCleared: define({
+    type: "session.messages.cleared",
+    ...options,
+    schema: {
+      sessionID: SessionID,
+    },
+  }),
 }
 
 export const PartDelta = define({
@@ -669,6 +676,7 @@ export const Event = {
     events.MessageRemoved,
     events.PartUpdated,
     events.PartRemoved,
+    events.MessagesCleared,
     PartDelta,
     Diff,
     Error,

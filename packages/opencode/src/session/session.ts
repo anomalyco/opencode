@@ -471,6 +471,7 @@ export interface Interface {
     sessionID: SessionID,
     predicate: (msg: SessionV1.WithParts) => boolean,
   ) => Effect.Effect<Option.Option<SessionV1.WithParts>, NotFound>
+  readonly clearMessages: (sessionID: SessionID) => Effect.Effect<void, NotFound>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -886,6 +887,16 @@ const layer: Layer.Layer<
       yield* events.publish(MessageV2.Event.PartDelta, input)
     })
 
+    const clearMessages = Effect.fn("Session.clearMessages")(function* (sessionID: SessionID) {
+      yield* get(sessionID)
+      const msgs = yield* messages({ sessionID })
+      yield* Effect.forEach(msgs, (msg) => removeMessage({ sessionID, messageID: msg.info.id }), {
+        concurrency: "unbounded",
+        discard: true,
+      })
+      yield* events.publish(SessionV1.Event.MessagesCleared, { sessionID })
+    })
+
     /** Finds the first message matching the predicate, searching newest-first. */
     const findMessage: Interface["findMessage"] = Effect.fn("Session.findMessage")(function* (sessionID, predicate) {
       const size = 50
@@ -933,6 +944,7 @@ const layer: Layer.Layer<
       getPart,
       updatePartDelta,
       findMessage,
+      clearMessages,
     })
   }),
 )

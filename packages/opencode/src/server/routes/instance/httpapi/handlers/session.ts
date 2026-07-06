@@ -234,6 +234,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
+    const clear = Effect.fn("SessionHttpApi.clear")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
+      yield* SessionError.mapStorageNotFound(session.clearMessages(ctx.params.sessionID))
+      return true
+    })
+
     const init = Effect.fn("SessionHttpApi.init")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof InitPayload.Type
@@ -424,6 +431,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("update", update)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
+      .handle("clear", clear)
       .handle("init", init)
       .handle("share", share)
       .handle("unshare", unshare)

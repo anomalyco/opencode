@@ -424,6 +424,21 @@ export const {
           break
         }
 
+        case "session.messages.cleared": {
+          const sid = event.properties.sessionID
+          const clearedMessages = store.message[sid] ?? []
+          batch(() => {
+            setStore("message", sid, [])
+            setStore(
+              "part",
+              produce((draft) => {
+                for (const msg of clearedMessages) delete draft[msg.id]
+              }),
+            )
+          })
+          break
+        }
+
         case "lsp.updated": {
           const workspace = project.workspace.current()
           void sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", x.data ?? []))

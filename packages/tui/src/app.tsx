@@ -584,11 +584,25 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         suggested: route.data.type === "session",
         category: "Session",
         slashName: "new",
-        slashAliases: ["clear"],
         run: () => {
           route.navigate({
             type: "home",
           })
+          dialog.clear()
+        },
+      },
+      {
+        name: "session.clear",
+        title: "Clear session context",
+        desc: "Delete all messages and start fresh in the same session",
+        suggested: route.data.type === "session",
+        category: "Session",
+        slashName: "clear",
+        run: () => {
+          if (route.data.type !== "session") return
+          void sdk.client.session
+            .clearMessages({ sessionID: route.data.sessionID })
+            .catch(toast.error)
           dialog.clear()
         },
       },

@@ -820,6 +820,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.messages.cleared"
+        properties: {
+          sessionID: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.agent.switched"
         properties: {
           timestamp: number
@@ -9980,6 +9987,40 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionClearMessagesData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/clear"
+}
+
+export type SessionClearMessagesErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionClearMessagesError = SessionClearMessagesErrors[keyof SessionClearMessagesErrors]
+
+export type SessionClearMessagesResponses = {
+  /**
+   * Cleared session messages
+   */
+  200: boolean
+}
+
+export type SessionClearMessagesResponse = SessionClearMessagesResponses[keyof SessionClearMessagesResponses]
 
 export type SessionInitData = {
   body?: {
