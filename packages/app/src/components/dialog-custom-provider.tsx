@@ -19,6 +19,28 @@ type Props = {
 }
 
 export function DialogCustomProvider(props: Props) {
+  const language = useLanguage()
+
+  return (
+    <Dialog
+      class="h-full"
+      title={
+        <IconButton
+          tabIndex={-1}
+          icon="arrow-left"
+          variant="ghost"
+          onClick={props.onBack}
+          aria-label={language.t("common.goBack")}
+        />
+      }
+      transition
+    >
+      <CustomProviderForm />
+    </Dialog>
+  )
+}
+
+export function CustomProviderForm() {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
@@ -153,169 +175,155 @@ export function DialogCustomProvider(props: Props) {
   }
 
   return (
-    <Dialog
-      class="h-full"
-      title={
-        <IconButton
-          tabIndex={-1}
-          icon="arrow-left"
-          variant="ghost"
-          onClick={props.onBack}
-          aria-label={language.t("common.goBack")}
-        />
-      }
-      transition
-    >
-      <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
-        <div class="px-2.5 flex gap-4 items-center">
-          <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
+    <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
+      <div class="px-2.5 flex gap-4 items-center">
+        <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
+        <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
+      </div>
+
+      <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
+        <p class="text-14-regular text-text-base">
+          {language.t("provider.custom.description.prefix")}
+          <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
+            {language.t("provider.custom.description.link")}
+          </Link>
+          {language.t("provider.custom.description.suffix")}
+        </p>
+
+        <div class="flex flex-col gap-4">
+          <TextField
+            autofocus
+            label={language.t("provider.custom.field.providerID.label")}
+            placeholder={language.t("provider.custom.field.providerID.placeholder")}
+            description={language.t("provider.custom.field.providerID.description")}
+            value={form.providerID}
+            onChange={(v) => setField("providerID", v)}
+            validationState={form.err.providerID ? "invalid" : undefined}
+            error={form.err.providerID}
+          />
+          <TextField
+            label={language.t("provider.custom.field.name.label")}
+            placeholder={language.t("provider.custom.field.name.placeholder")}
+            value={form.name}
+            onChange={(v) => setField("name", v)}
+            validationState={form.err.name ? "invalid" : undefined}
+            error={form.err.name}
+          />
+          <TextField
+            label={language.t("provider.custom.field.baseURL.label")}
+            placeholder={language.t("provider.custom.field.baseURL.placeholder")}
+            value={form.baseURL}
+            onChange={(v) => setField("baseURL", v)}
+            validationState={form.err.baseURL ? "invalid" : undefined}
+            error={form.err.baseURL}
+          />
+          <TextField
+            label={language.t("provider.custom.field.apiKey.label")}
+            placeholder={language.t("provider.custom.field.apiKey.placeholder")}
+            description={language.t("provider.custom.field.apiKey.description")}
+            value={form.apiKey}
+            onChange={(v) => setField("apiKey", v)}
+          />
         </div>
 
-        <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
-          <p class="text-14-regular text-text-base">
-            {language.t("provider.custom.description.prefix")}
-            <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
-              {language.t("provider.custom.description.link")}
-            </Link>
-            {language.t("provider.custom.description.suffix")}
-          </p>
-
-          <div class="flex flex-col gap-4">
-            <TextField
-              autofocus
-              label={language.t("provider.custom.field.providerID.label")}
-              placeholder={language.t("provider.custom.field.providerID.placeholder")}
-              description={language.t("provider.custom.field.providerID.description")}
-              value={form.providerID}
-              onChange={(v) => setField("providerID", v)}
-              validationState={form.err.providerID ? "invalid" : undefined}
-              error={form.err.providerID}
-            />
-            <TextField
-              label={language.t("provider.custom.field.name.label")}
-              placeholder={language.t("provider.custom.field.name.placeholder")}
-              value={form.name}
-              onChange={(v) => setField("name", v)}
-              validationState={form.err.name ? "invalid" : undefined}
-              error={form.err.name}
-            />
-            <TextField
-              label={language.t("provider.custom.field.baseURL.label")}
-              placeholder={language.t("provider.custom.field.baseURL.placeholder")}
-              value={form.baseURL}
-              onChange={(v) => setField("baseURL", v)}
-              validationState={form.err.baseURL ? "invalid" : undefined}
-              error={form.err.baseURL}
-            />
-            <TextField
-              label={language.t("provider.custom.field.apiKey.label")}
-              placeholder={language.t("provider.custom.field.apiKey.placeholder")}
-              description={language.t("provider.custom.field.apiKey.description")}
-              value={form.apiKey}
-              onChange={(v) => setField("apiKey", v)}
-            />
-          </div>
-
-          <div class="flex flex-col gap-3">
-            <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
-            <For each={form.models}>
-              {(m, i) => (
-                <div class="flex gap-2 items-start" data-row={m.row}>
-                  <div class="flex-1">
-                    <TextField
-                      label={language.t("provider.custom.models.id.label")}
-                      hideLabel
-                      placeholder={language.t("provider.custom.models.id.placeholder")}
-                      value={m.id}
-                      onChange={(v) => setModel(i(), "id", v)}
-                      validationState={m.err.id ? "invalid" : undefined}
-                      error={m.err.id}
-                    />
-                  </div>
-                  <div class="flex-1">
-                    <TextField
-                      label={language.t("provider.custom.models.name.label")}
-                      hideLabel
-                      placeholder={language.t("provider.custom.models.name.placeholder")}
-                      value={m.name}
-                      onChange={(v) => setModel(i(), "name", v)}
-                      validationState={m.err.name ? "invalid" : undefined}
-                      error={m.err.name}
-                    />
-                  </div>
-                  <IconButton
-                    type="button"
-                    icon="trash"
-                    variant="ghost"
-                    class="mt-1.5"
-                    onClick={() => removeModel(i())}
-                    disabled={form.models.length <= 1}
-                    aria-label={language.t("provider.custom.models.remove")}
+        <div class="flex flex-col gap-3">
+          <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+          <For each={form.models}>
+            {(m, i) => (
+              <div class="flex gap-2 items-start" data-row={m.row}>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.models.id.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.models.id.placeholder")}
+                    value={m.id}
+                    onChange={(v) => setModel(i(), "id", v)}
+                    validationState={m.err.id ? "invalid" : undefined}
+                    error={m.err.id}
                   />
                 </div>
-              )}
-            </For>
-            <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
-              {language.t("provider.custom.models.add")}
-            </Button>
-          </div>
-
-          <div class="flex flex-col gap-3">
-            <label class="text-12-medium text-text-weak">{language.t("provider.custom.headers.label")}</label>
-            <For each={form.headers}>
-              {(h, i) => (
-                <div class="flex gap-2 items-start" data-row={h.row}>
-                  <div class="flex-1">
-                    <TextField
-                      label={language.t("provider.custom.headers.key.label")}
-                      hideLabel
-                      placeholder={language.t("provider.custom.headers.key.placeholder")}
-                      value={h.key}
-                      onChange={(v) => setHeader(i(), "key", v)}
-                      validationState={h.err.key ? "invalid" : undefined}
-                      error={h.err.key}
-                    />
-                  </div>
-                  <div class="flex-1">
-                    <TextField
-                      label={language.t("provider.custom.headers.value.label")}
-                      hideLabel
-                      placeholder={language.t("provider.custom.headers.value.placeholder")}
-                      value={h.value}
-                      onChange={(v) => setHeader(i(), "value", v)}
-                      validationState={h.err.value ? "invalid" : undefined}
-                      error={h.err.value}
-                    />
-                  </div>
-                  <IconButton
-                    type="button"
-                    icon="trash"
-                    variant="ghost"
-                    class="mt-1.5"
-                    onClick={() => removeHeader(i())}
-                    disabled={form.headers.length <= 1}
-                    aria-label={language.t("provider.custom.headers.remove")}
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.models.name.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.models.name.placeholder")}
+                    value={m.name}
+                    onChange={(v) => setModel(i(), "name", v)}
+                    validationState={m.err.name ? "invalid" : undefined}
+                    error={m.err.name}
                   />
                 </div>
-              )}
-            </For>
-            <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addHeader} class="self-start">
-              {language.t("provider.custom.headers.add")}
-            </Button>
-          </div>
-
-          <Button
-            class="w-auto self-start"
-            type="submit"
-            size="large"
-            variant="primary"
-            disabled={saveMutation.isPending}
-          >
-            {saveMutation.isPending ? language.t("common.saving") : language.t("common.submit")}
+                <IconButton
+                  type="button"
+                  icon="trash"
+                  variant="ghost"
+                  class="mt-1.5"
+                  onClick={() => removeModel(i())}
+                  disabled={form.models.length <= 1}
+                  aria-label={language.t("provider.custom.models.remove")}
+                />
+              </div>
+            )}
+          </For>
+          <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
+            {language.t("provider.custom.models.add")}
           </Button>
-        </form>
-      </div>
-    </Dialog>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <label class="text-12-medium text-text-weak">{language.t("provider.custom.headers.label")}</label>
+          <For each={form.headers}>
+            {(h, i) => (
+              <div class="flex gap-2 items-start" data-row={h.row}>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.headers.key.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.headers.key.placeholder")}
+                    value={h.key}
+                    onChange={(v) => setHeader(i(), "key", v)}
+                    validationState={h.err.key ? "invalid" : undefined}
+                    error={h.err.key}
+                  />
+                </div>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.headers.value.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.headers.value.placeholder")}
+                    value={h.value}
+                    onChange={(v) => setHeader(i(), "value", v)}
+                    validationState={h.err.value ? "invalid" : undefined}
+                    error={h.err.value}
+                  />
+                </div>
+                <IconButton
+                  type="button"
+                  icon="trash"
+                  variant="ghost"
+                  class="mt-1.5"
+                  onClick={() => removeHeader(i())}
+                  disabled={form.headers.length <= 1}
+                  aria-label={language.t("provider.custom.headers.remove")}
+                />
+              </div>
+            )}
+          </For>
+          <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addHeader} class="self-start">
+            {language.t("provider.custom.headers.add")}
+          </Button>
+        </div>
+
+        <Button
+          class="w-auto self-start"
+          type="submit"
+          size="large"
+          variant="primary"
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? language.t("common.saving") : language.t("common.submit")}
+        </Button>
+      </form>
+    </div>
   )
 }
