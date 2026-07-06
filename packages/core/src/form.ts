@@ -63,7 +63,11 @@ export class InvalidFormError extends Schema.TaggedErrorClass<InvalidFormError>(
   message: Schema.String,
 }) {}
 
-export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("Form.CancelledError", {}) {}
+export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("Form.CancelledError", {}) {
+  override get message() {
+    return "The form was cancelled"
+  }
+}
 
 export type CreateInput =
   | (Omit<Form.FormInfo, "id"> & { readonly id?: ID })
