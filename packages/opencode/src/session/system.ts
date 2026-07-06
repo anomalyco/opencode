@@ -18,9 +18,10 @@ import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Reference } from "@opencode-ai/core/reference"
+import { MCP } from "@/mcp"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -41,21 +42,22 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
-    const locations = yield* LocationServiceMap
+    const mcp = yield* MCP.Service
+    const locations = yield* LocationServiceMap.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
         const references = yield* Effect.gen(function* () {
-          yield* (yield* PluginBoot.Service).wait()
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         return [
@@ -104,14 +106,38 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+
+      mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {
+        const ruleset = Permission.merge(agent.permission, permission ?? [])
+        const instructions = (yield* mcp.instructions()).filter(
+          (item) => item.tools.length === 0 || Permission.disabled(item.tools, ruleset).size < item.tools.length,
+        )
+        if (instructions.length === 0) return
+
+        return [
+          "<mcp_instructions>",
+          ...instructions.flatMap((item) => [
+            `  <server name="${item.name}">`,
+            ...item.instructions.split("\n").map((line) => `    ${line}`),
+            "  </server>",
+          ]),
+          "</mcp_instructions>",
+        ].join("\n")
+      }),
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(LocationServiceMap.layer))
+const locationServiceMapNode = LayerNode.make({
+  service: LocationServiceMap.Service,
+  layer: locationServiceMapLayer,
+  deps: [],
+})
 
-const locationServiceMapNode = LayerNode.make(LocationServiceMap.layer, [])
-
-export const node = LayerNode.make(layer, [Skill.node, locationServiceMapNode])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Skill.node, MCP.node, locationServiceMapNode],
+})
 
 export * as SystemPrompt from "./system"

@@ -80,7 +80,8 @@ import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
-import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
+import { usePathFormatter } from "../../context/path-format"
+import { LocationProvider } from "../../context/location"
 
 addDefaultParsers(parsers.parsers)
 
@@ -193,6 +194,10 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+  const location = createMemo(() => {
+    const current = session()
+    return current ? { directory: current.directory, workspaceID: current.workspaceID } : undefined
+  })
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
@@ -1138,7 +1143,7 @@ export function Session() {
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
-    <PathFormatterProvider path={session()?.directory}>
+    <LocationProvider location={location()}>
       <context.Provider
         value={{
           get width() {
@@ -1338,18 +1343,8 @@ export function Session() {
           </Show>
         </box>
       </context.Provider>
-    </PathFormatterProvider>
+    </LocationProvider>
   )
-}
-
-const MIME_BADGE: Record<string, string> = {
-  "text/plain": "txt",
-  "image/png": "img",
-  "image/jpeg": "img",
-  "image/gif": "img",
-  "image/webp": "img",
-  "application/pdf": "pdf",
-  "application/x-directory": "dir",
 }
 
 function UserMessage(props: {
@@ -1412,14 +1407,12 @@ function UserMessage(props: {
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
                   {(file) => {
-                    const bg = createMemo(() => {
-                      if (file.mime.startsWith("image/")) return theme.accent
-                      if (file.mime === "application/pdf") return theme.primary
-                      return theme.secondary
-                    })
+                    const directory = file.mime === "application/x-directory"
                     return (
                       <text fg={theme.text}>
-                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                        <span style={{ bg: theme.secondary, fg: theme.background }}>
+                          {directory ? " Directory " : " File "}
+                        </span>
                         <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
                       </text>
                     )
@@ -1535,7 +1528,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.error}
         >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
+          <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
       <Switch>
@@ -1765,6 +1758,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={display() === "task"}>
           <Task {...toolprops} />
         </Match>
+        <Match when={display() === "execute"}>
+          <Execute {...toolprops} />
+        </Match>
         <Match when={display() === "apply_patch"}>
           <ApplyPatch {...toolprops} />
         </Match>
@@ -1838,6 +1834,7 @@ function InlineTool(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  separate?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
@@ -1890,6 +1887,7 @@ function InlineTool(props: {
       pending={props.pending}
       failure={props.failure}
       spinner={props.spinner}
+      separate={props.separate}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1919,6 +1917,7 @@ export function InlineToolRow(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  separate?: boolean
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
@@ -1931,8 +1930,12 @@ export function InlineToolRow(props: {
       onMouseOut={props.onMouseOut}
       onMouseUp={props.onMouseUp}
       ref={(el: BoxRenderable) => {
+        if (props.separate) alwaysSeparate.add(el)
         setPreLayoutSiblingMargin(el, (previous) => {
-          return previous instanceof BoxRenderable && (previous.height > 1 || alwaysSeparate.has(previous)) ? 1 : 0
+          return props.separate ||
+            (previous instanceof BoxRenderable && (previous.height > 1 || alwaysSeparate.has(previous)))
+            ? 1
+            : 0
         })
       }}
     >
@@ -1982,7 +1985,7 @@ export function InlineToolRow(props: {
 }
 
 function BlockTool(props: {
-  title: string
+  title?: string
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
@@ -2011,15 +2014,19 @@ function BlockTool(props: {
         props.onClick?.()
       }}
     >
-      <Show
-        when={props.spinner}
-        fallback={
-          <text paddingLeft={3} fg={theme.textMuted}>
-            {props.title}
-          </text>
-        }
-      >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+      <Show when={props.title}>
+        {(title) => (
+          <Show
+            when={props.spinner}
+            fallback={
+              <text paddingLeft={3} fg={theme.textMuted}>
+                {title()}
+              </text>
+            }
+          >
+            <Spinner color={theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
+          </Show>
+        )}
       </Show>
       {props.children}
       <Show when={error()}>
@@ -2047,15 +2054,15 @@ function Shell(props: ToolProps) {
   const workdirDisplay = createMemo(() => {
     const workdir = stringValue(props.input.workdir)
     if (!workdir || workdir === ".") return undefined
-    return pathFormatter.format(workdir)
+    const formatted = pathFormatter.format(workdir)
+    if (formatted === ".") return undefined
+    return formatted
   })
 
   const title = createMemo(() => {
-    const desc = stringValue(props.input.description) ?? "Shell"
     const wd = workdirDisplay()
-    if (!wd) return `# ${desc}`
-    if (desc.includes(wd)) return `# ${desc}`
-    return `# ${desc} in ${wd}`
+    if (!wd) return
+    return `# Running in ${wd}`
   })
 
   return (
@@ -2064,11 +2071,12 @@ function Shell(props: ToolProps) {
         <BlockTool
           title={title()}
           part={props.part}
-          spinner={isRunning()}
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>$ {stringValue(props.input.command)}</text>
+            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
+              <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+            </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
@@ -2281,6 +2289,7 @@ function Task(props: ToolProps) {
   return (
     <InlineTool
       icon={props.part.state.status === "completed" ? "✓" : "│"}
+      separate={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
       complete={stringValue(props.input.description)}
@@ -2314,6 +2323,66 @@ export function formatSubagentRetry(attempt: number, message: string) {
 export function formatCompletedSubagentDetail(toolcalls: number, duration: string) {
   if (toolcalls === 0) return duration
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
+}
+
+type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
+
+function executeCalls(value: unknown): ExecuteCall[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((call) => {
+    const item = recordValue(call)
+    const tool = stringValue(item?.tool)
+    const status = stringValue(item?.status)
+    if (!tool || !status || !["running", "completed", "error"].includes(status)) return []
+    return [{ tool, status: status as ExecuteCall["status"], input: recordValue(item?.input) }]
+  })
+}
+
+// The `execute` tool streams child tool calls through metadata, not a child session like Task.
+function Execute(props: ToolProps) {
+  const ctx = use()
+  const { theme } = useTheme()
+  const isLoading = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
+  const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
+  const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
+  const hasRuntimeError = createMemo(() => props.metadata.error === true)
+  const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
+  const showOutput = createMemo(() => output() && hasRuntimeError())
+  const content = createMemo(() => {
+    const lines = ["execute"]
+    for (const call of calls()) {
+      const args = input(call.input ?? {})
+      lines.push(`↳ ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`)
+    }
+    return lines.join("\n")
+  })
+
+  return (
+    <>
+      <InlineTool
+        icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
+        color={hasRuntimeError() ? theme.error : undefined}
+        spinner={isLoading()}
+        pending="execute"
+        complete={true}
+        part={props.part}
+      >
+        {content()}
+      </InlineTool>
+      <Show when={showOutput()}>
+        <box paddingLeft={3}>
+          <For each={outputPreview().split("\n")}>
+            {(line, index) => (
+              <text paddingLeft={3} fg={theme.error}>
+                {index() === 0 ? "↳ " : "  "}
+                {line}
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
+    </>
+  )
 }
 
 function Edit(props: ToolProps) {
@@ -2572,6 +2641,7 @@ const toolDisplays = new Set([
   "todowrite",
   "question",
   "skill",
+  "execute",
 ])
 
 export function toolDisplay(tool: string) {

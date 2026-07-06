@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -19,6 +19,7 @@ import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
+import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "./onboarding"
 import {
   getDefaultServerUrl,
   preferAppEnv,
@@ -28,16 +29,19 @@ import {
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
 import {
-  createMainWindow,
+  getLastFocusedWindow,
   registerRendererProtocol,
   setRelaunchHandler,
+  setAppQuitting,
   setBackgroundColor,
   setDockIcon,
+  restoreMainWindows,
 } from "./windows"
 import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
+import { cleanupStoreFiles } from "./store-cleanup"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -53,7 +57,6 @@ const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
-let mainWindow: BrowserWindow | null = null
 let server: SidecarListener | null = null
 
 const pendingDeepLinks: string[] = []
@@ -70,7 +73,8 @@ function useEnvProxy() {
 function emitDeepLinks(urls: string[]) {
   if (urls.length === 0) return
   pendingDeepLinks.push(...urls)
-  if (mainWindow) sendDeepLinks(mainWindow, urls)
+  const win = getLastFocusedWindow()
+  if (win) sendDeepLinks(win, urls)
 }
 
 async function killSidecar() {
@@ -156,6 +160,7 @@ const main = Effect.gen(function* () {
     wslServers.stopAll()
   }
   const relaunch = () => {
+    setAppQuitting()
     void stopSidecars().finally(() => {
       app.relaunch()
       app.exit(0)
@@ -194,9 +199,10 @@ const main = Effect.gen(function* () {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
     }
-    if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
+    const win = getLastFocusedWindow()
+    if (win) {
+      win.show()
+      win.focus()
     }
   })
 
@@ -207,10 +213,12 @@ const main = Effect.gen(function* () {
   })
 
   app.on("before-quit", () => {
+    setAppQuitting()
     void stopSidecars()
   })
 
   app.on("will-quit", () => {
+    setAppQuitting()
     void stopSidecars()
   })
 
@@ -228,6 +236,7 @@ const main = Effect.gen(function* () {
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
+      setAppQuitting()
       void stopSidecars().finally(() => app.exit(0))
     })
   }
@@ -237,6 +246,19 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
+  yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
+    Effect.tap((result) =>
+      Effect.sync(() => {
+        if (result.deleted.length === 0) return
+        logger.log("cleaned scoped store files", { count: result.deleted.length, scanned: result.scanned })
+      }),
+    ),
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        logger.warn("failed to clean scoped store files", error)
+      }),
+    ),
+  )
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
@@ -256,6 +278,8 @@ const main = Effect.gen(function* () {
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
+    isFirstLaunchOnboardingPending,
+    finishFirstLaunchOnboarding,
     getDisplayBackend: async () => null,
     setDisplayBackend: async () => undefined,
     parseMarkdown: async (markdown) => parseMarkdown(markdown),
@@ -347,11 +371,11 @@ const main = Effect.gen(function* () {
 
   yield* Fiber.await(loadingTask)
 
-  mainWindow = createMainWindow()
-  if (mainWindow) {
+  const windows = restoreMainWindows()
+  if (windows.length) {
     createMenu({
       trigger: (id) => {
-        const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+        const win = getLastFocusedWindow()
         if (win) sendMenuCommand(win, id)
       },
       checkForUpdates: () => {

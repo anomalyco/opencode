@@ -325,6 +325,7 @@ jobs:
         run: bun run build
         working-directory: packages/desktop
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}

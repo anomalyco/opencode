@@ -140,9 +140,6 @@
 
     color: var(--text-strong);
 
-    transition:
-      background-color 0.2s ease-in-out,
-      color 0.2s ease-in-out;
     outline: none;
     user-select: none;
 
