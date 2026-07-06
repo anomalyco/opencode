@@ -86,6 +86,12 @@ test("resolves a session move keybind", () => {
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
 })
 
+test("includes Cmd-compatible paste binding by default", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("prompt.paste")).toMatchObject([{ key: "super+v,ctrl+v" }])
+})
+
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {
   const config = resolve({}, { terminalSuspend: false })
 
