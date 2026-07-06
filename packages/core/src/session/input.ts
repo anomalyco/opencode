@@ -7,7 +7,7 @@ import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
-import { Prompt } from "./prompt"
+import { Prompt } from "@opencode-ai/schema/prompt"
 import { SessionSchema } from "./schema"
 import { SessionInputTable, SessionMessageTable } from "./sql"
 

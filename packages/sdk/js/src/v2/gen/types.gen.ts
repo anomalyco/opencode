@@ -3255,24 +3255,35 @@ export type LocationRef = {
   workspaceID?: string
 }
 
-export type PromptSource = {
+export type PromptBase64 = string
+
+export type PromptFileSource =
+  | {
+      type: "inline"
+    }
+  | {
+      type: "uri"
+      uri: string
+    }
+
+export type PromptMention = {
   start: number
   end: number
   text: string
 }
 
 export type PromptFileAttachment = {
-  uri: string
+  data: PromptBase64
   mime: string
-  content?: string
+  source: PromptFileSource
   name?: string
   description?: string
-  source?: PromptSource
+  mention?: PromptMention
 }
 
 export type PromptAgentAttachment = {
   name: string
-  source?: PromptSource
+  mention?: PromptMention
 }
 
 export type SessionErrorUnknown = {
@@ -4279,7 +4290,7 @@ export type PromptInputFileAttachment = {
   uri: string
   name?: string
   description?: string
-  source?: PromptSource
+  mention?: PromptMention
 }
 
 export type SessionInputAdmitted = {
@@ -7877,7 +7888,7 @@ export type MessageNotFoundErrorV2 = {
   message: string
 }
 
-export type PromptSource2 = {
+export type PromptMention2 = {
   start: number
   end: number
   text: string
@@ -7887,12 +7898,12 @@ export type PromptInputFileAttachment2 = {
   uri: string
   name?: string
   description?: string
-  source?: PromptSource2
+  mention?: PromptMention2
 }
 
 export type PromptAgentAttachment2 = {
   name: string
-  source?: PromptSource2
+  mention?: PromptMention2
 }
 
 export type PromptInputV2 = {
@@ -7901,13 +7912,24 @@ export type PromptInputV2 = {
   agents?: Array<PromptAgentAttachment2>
 }
 
+export type PromptBase642 = string
+
+export type PromptFileSource2 =
+  | {
+      type: "inline"
+    }
+  | {
+      type: "uri"
+      uri: string
+    }
+
 export type PromptFileAttachment2 = {
-  uri: string
+  data: PromptBase642
   mime: string
-  content?: string
+  source: PromptFileSource2
   name?: string
   description?: string
-  source?: PromptSource2
+  mention?: PromptMention2
 }
 
 export type PromptV2 = {
@@ -15965,7 +15987,7 @@ export type V2SessionPromptErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError1 | InvalidRequestErrorV2
   /**
    * UnauthorizedError
    */
@@ -16016,7 +16038,7 @@ export type V2SessionCommandErrors = {
   /**
    * InvalidRequestError
    */
-  400: InvalidRequestErrorV2
+  400: InvalidRequestError1 | InvalidRequestErrorV2
   /**
    * UnauthorizedError
    */

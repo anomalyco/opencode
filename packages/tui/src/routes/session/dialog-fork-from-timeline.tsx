@@ -59,7 +59,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
                 files.push({
                   uri: part.url,
                   name: part.filename,
-                  source: part.source?.text
+                  mention: part.source?.text
                     ? {
                         start: part.source.text.start,
                         end: part.source.text.end,

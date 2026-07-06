@@ -181,7 +181,7 @@ it.live(
         const active = yield* opencode.sessions.active()
         const admitted = yield* opencode.sessions.prompt({
           sessionID: id,
-          prompt: fixture.sdk.Prompt.make({ text: "Do not run" }),
+          prompt: fixture.sdk.PromptInput.Prompt.make({ text: "Do not run" }),
           resume: false,
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
@@ -192,7 +192,7 @@ it.live(
         const remainingContextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
         const wake = yield* opencode.sessions.prompt({
           sessionID: id,
-          prompt: fixture.sdk.Prompt.make({ text: "Promote this input" }),
+          prompt: fixture.sdk.PromptInput.Prompt.make({ text: "Promote this input" }),
         })
         const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
           Stream.filter((event) => event.type === "session.prompt.promoted" && event.data.inputID === wake.id),
@@ -282,7 +282,7 @@ it.live(
         yield* opencode.sessions.create({ id, location: location(fixture) })
         yield* opencode.sessions.prompt({
           sessionID: id,
-          prompt: fixture.sdk.Prompt.make({ text: "Observe this input" }),
+          prompt: fixture.sdk.PromptInput.Prompt.make({ text: "Observe this input" }),
         })
 
         const event = yield* Deferred.await(prompted).pipe(Effect.timeout("4 seconds"))

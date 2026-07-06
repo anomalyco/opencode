@@ -4,7 +4,7 @@ import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { AgentAttachment, FileAttachment } from "@opencode-ai/core/session/prompt"
+import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Shell } from "@opencode-ai/schema/shell"
@@ -49,7 +49,12 @@ describe("toLLMMessages", () => {
   })
 
   test("maps every top-level V2 Session message type", () => {
-    const file = FileAttachment.make({ uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" })
+    const file = FileAttachment.make({
+      data: Base64.make("aGVsbG8="),
+      mime: "image/png",
+      source: { type: "inline" },
+      name: "hello.png",
+    })
     const messages = toLLMMessages(
       [
         SessionMessage.AgentSelected.make({
@@ -122,7 +127,7 @@ describe("toLLMMessages", () => {
         role: "user",
         content: [
           { type: "text", text: "Inspect this image" },
-          { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
+          { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "hello.png" },
         ],
         metadata: { agents: [{ name: "build" }] },
       }),
@@ -151,9 +156,9 @@ Recent work
 
   test("lowers text attachments as separate user messages", () => {
     const file = FileAttachment.make({
-      uri: "file:///project/main.ts",
+      data: Base64.make(Buffer.from("export const value = 1").toString("base64")),
       mime: "text/plain",
-      content: "export const value = 1",
+      source: { type: "uri", uri: "file:///project/main.ts" },
       name: "main.ts",
     })
     const messages = toLLMMessages(
@@ -175,10 +180,10 @@ Recent work
       content: [
         {
           type: "text",
-          text: "Attached file: main.ts\nSource: file:///project/main.ts\n\nexport const value = 1",
+          text: "Attached file: main.ts\n\nexport const value = 1",
         },
       ],
-      metadata: { attachment: { uri: "file:///project/main.ts", name: "main.ts" } },
+      metadata: { attachment: { source: file.source, name: "main.ts" } },
     })
     expect(messages[1]).toMatchObject({
       id: id("user-text-file"),
@@ -187,15 +192,21 @@ Recent work
     })
   })
 
-  test("derives text attachment content from durable data URLs", () => {
-    const uri = `data:text/plain;base64,${Buffer.from("inline content").toString("base64")}`
+  test("decodes inline text attachment content", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
           id: id("user-data-file"),
           type: "user",
           text: "Review this file",
-          files: [FileAttachment.make({ uri, mime: "text/plain", name: "inline.txt" })],
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("inline content").toString("base64")),
+              mime: "text/plain",
+              source: { type: "inline" },
+              name: "inline.txt",
+            }),
+          ],
           time: { created },
         }),
       ],
@@ -205,8 +216,37 @@ Recent work
     expect(messages[0]?.content).toEqual([
       {
         type: "text",
-        text: `Attached file: inline.txt\nSource: ${uri}\n\ninline content`,
+        text: "Attached file: inline.txt\n\ninline content",
       },
+    ])
+  })
+
+  test("uses materialized image data as provider media and drops unsupported attachments", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-local-image"),
+          type: "user",
+          text: "Inspect this image",
+          files: [
+            FileAttachment.make({ data, mime: "image/png", source: { type: "inline" }, name: "image.png" }),
+            FileAttachment.make({
+              data: Base64.make("JVBERg=="),
+              mime: "application/pdf",
+              source: { type: "inline" },
+              name: "document.pdf",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "media", mediaType: "image/png", data, filename: "image.png" },
     ])
   })
 

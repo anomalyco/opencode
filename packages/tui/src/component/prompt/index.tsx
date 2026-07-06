@@ -483,17 +483,17 @@ export function Prompt(props: PromptProps) {
           // Update attachment positions and drop virtual text deleted in the editor.
           // this handles a case where the user edits the text in the editor
           // such that the virtual text moves around or is deleted
-          const moveSource = <Part extends { source?: { start: number; end: number; text: string } }>(part: Part) => {
-            if (!part.source?.text) return part
-            const start = normalized.indexOf(part.source.text)
+          const moveMention = <Part extends { mention?: { start: number; end: number; text: string } }>(part: Part) => {
+            if (!part.mention?.text) return part
+            const start = normalized.indexOf(part.mention.text)
             if (start === -1) return
-            return { ...part, source: { ...part.source, start, end: start + part.source.text.length } }
+            return { ...part, mention: { ...part.mention, start, end: start + part.mention.text.length } }
           }
 
           setStore("prompt", {
             text: normalized,
-            files: store.prompt.files?.map(moveSource).filter((part) => part !== undefined),
-            agents: store.prompt.agents?.map(moveSource).filter((part) => part !== undefined),
+            files: store.prompt.files?.map(moveMention).filter((part) => part !== undefined),
+            agents: store.prompt.agents?.map(moveMention).filter((part) => part !== undefined),
             pasted: [],
           })
           restoreExtmarksFromPrompt(store.prompt)
@@ -647,16 +647,28 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPart", new Map())
 
     const parts = [
-      ...(prompt.files ?? []).map((part, index) => ({ part, ref: { type: "file" as const, index }, styleId: fileStyleId })),
-      ...(prompt.agents ?? []).map((part, index) => ({ part, ref: { type: "agent" as const, index }, styleId: agentStyleId })),
-      ...prompt.pasted.map((part, index) => ({ part, ref: { type: "pasted" as const, index }, styleId: pasteStyleId })),
+      ...(prompt.files ?? []).map((part, index) => ({
+        mention: part.mention,
+        ref: { type: "file" as const, index },
+        styleId: fileStyleId,
+      })),
+      ...(prompt.agents ?? []).map((part, index) => ({
+        mention: part.mention,
+        ref: { type: "agent" as const, index },
+        styleId: agentStyleId,
+      })),
+      ...prompt.pasted.map((part, index) => ({
+        mention: part.source,
+        ref: { type: "pasted" as const, index },
+        styleId: pasteStyleId,
+      })),
     ]
 
-    parts.forEach(({ part, ref, styleId }) => {
-      if (part.source?.text) {
+    parts.forEach(({ mention, ref, styleId }) => {
+      if (mention?.text) {
         const extmarkId = input.extmarks.create({
-          start: part.source.start,
-          end: part.source.end,
+          start: mention.start,
+          end: mention.end,
           virtual: true,
           styleId,
           typeId: promptPartTypeId,
@@ -684,9 +696,9 @@ export function Prompt(props: PromptProps) {
           if (!ref) continue
           if (ref.type === "file") {
             const part = draft.prompt.files?.[ref.index]
-            if (!part?.source) continue
-            part.source.start = extmark.start
-            part.source.end = extmark.end
+            if (!part?.mention) continue
+            part.mention.start = extmark.start
+            part.mention.end = extmark.end
             const index = files.length
             files.push(part)
             newMap.set(extmark.id, { type: "file", index })
@@ -694,9 +706,9 @@ export function Prompt(props: PromptProps) {
           }
           if (ref.type === "agent") {
             const part = draft.prompt.agents?.[ref.index]
-            if (!part?.source) continue
-            part.source.start = extmark.start
-            part.source.end = extmark.end
+            if (!part?.mention) continue
+            part.mention.start = extmark.start
+            part.mention.end = extmark.end
             const index = agents.length
             agents.push(part)
             newMap.set(extmark.id, { type: "agent", index })
@@ -1248,7 +1260,7 @@ export function Prompt(props: PromptProps) {
     const part: NonNullable<PromptInfo["files"]>[number] = {
       uri: file.uri,
       name: file.filename,
-      source: {
+      mention: {
         start: extmarkStart,
         end: extmarkEnd,
         text: virtualText,

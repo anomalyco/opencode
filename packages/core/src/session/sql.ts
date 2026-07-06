@@ -2,7 +2,7 @@ import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from
 import { directoryColumn, pathColumn } from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
-import type { Prompt } from "./prompt"
+import type { Prompt } from "@opencode-ai/schema/prompt"
 import type { SessionInput } from "./input"
 import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"

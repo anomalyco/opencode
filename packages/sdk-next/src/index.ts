@@ -8,6 +8,7 @@ export {
   Location,
   Model,
   Prompt,
+  PromptInput,
   Provider,
   RelativePath,
   Session,

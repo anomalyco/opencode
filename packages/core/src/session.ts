@@ -9,7 +9,7 @@ import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
-import { Prompt } from "./session/prompt"
+import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
@@ -121,6 +121,10 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
+  uri: Schema.String,
+  message: Schema.String,
+}) {}
 export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
@@ -135,6 +139,7 @@ export type Error =
   | MessageDecodeError
   | OperationUnavailableError
   | PromptConflictError
+  | AttachmentError
   | BusyError
   | SkillNotFoundError
   | CommandV2.NotFoundError
@@ -189,7 +194,7 @@ export interface Interface {
     prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | AttachmentError>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -203,7 +208,7 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<
     SessionInput.Admitted,
-    NotFoundError | PromptConflictError | CommandV2.NotFoundError | CommandV2.EvaluationError
+    NotFoundError | PromptConflictError | AttachmentError | CommandV2.NotFoundError | CommandV2.EvaluationError
   >
   readonly shell: (input: {
     id?: EventV2.ID
@@ -721,40 +726,98 @@ const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (input: Pro
   const files = input.files
     ? yield* Effect.forEach(
         input.files,
-        (file) =>
-          Effect.gen(function* () {
-            const mime = yield* Mime.resolve(file.uri)
-            const content = mime === "text/plain" ? yield* readTextAttachment(fs, file.uri) : undefined
-            return { ...file, mime, ...(content === undefined ? {} : { content }) }
-          }),
+        (file) => materializeAttachment(fs, file),
         { concurrency: 8 },
       )
     : undefined
   return Prompt.make({ text: input.text, agents: input.agents, files })
 })
 
-function readTextAttachment(fs: FSUtil.Interface, uri: string) {
-  if (uri.startsWith("data:")) return Effect.succeed(undefined)
-  return Effect.try({
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(function* (
+  fs: FSUtil.Interface,
+  input: PromptInput.FileAttachment,
+) {
+  const resolved = input.uri.startsWith("data:")
+    ? {
+        bytes: yield* decodeDataURL(input.uri),
+        source: { type: "inline" as const },
+        start: undefined,
+        end: undefined,
+        name: undefined,
+      }
+    : yield* readFileAttachment(fs, input.uri)
+  if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
+    return yield* new AttachmentError({
+      uri: input.uri,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${input.uri}`,
+    })
+
+  const mime = Mime.detect(resolved.bytes)
+  const content =
+    mime === "text/plain" && resolved.start !== undefined
+      ? Buffer.from(
+          Buffer.from(resolved.bytes).toString("utf8").split("\n").slice(resolved.start - 1, resolved.end).join("\n"),
+        )
+      : resolved.bytes
+  return FileAttachment.create({
+    data: Base64.make(Buffer.from(content).toString("base64")),
+    mime,
+    source: resolved.source,
+    name: input.name ?? resolved.name,
+    description: input.description,
+    mention: input.mention,
+  })
+})
+
+const readFileAttachment = Effect.fn("V2Session.readFileAttachment")(function* (fs: FSUtil.Interface, uri: string) {
+  const url = yield* Effect.try({
     try: () => new URL(uri),
-    catch: () => new Error("Invalid attachment URI"),
-  }).pipe(
-    Effect.flatMap((url) => {
-      if (url.protocol !== "file:") return Effect.succeed(undefined)
-      const start = positiveInt(url.searchParams.get("start"))
-      const end = positiveInt(url.searchParams.get("end"))
+    catch: () => new AttachmentError({ uri, message: `Invalid attachment URI: ${uri}` }),
+  })
+  if (url.protocol !== "file:")
+    return yield* new AttachmentError({ uri, message: `Unsupported attachment URI: ${uri}` })
+  const start = positiveInt(url.searchParams.get("start"))
+  const end = positiveInt(url.searchParams.get("end"))
+  const target = yield* Effect.try({
+    try: () => {
       url.search = ""
       url.hash = ""
-      return Effect.try({
-        try: () => fileURLToPath(url),
-        catch: () => new Error("Invalid file URI"),
-      }).pipe(
-        Effect.flatMap((target) => fs.readFileString(target)),
-        Effect.map((content) => (start === undefined ? content : content.split("\n").slice(start - 1, end).join("\n"))),
-      )
-    }),
-    Effect.catch(() => Effect.succeed(undefined)),
+      return fileURLToPath(url)
+    },
+    catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
+  })
+  const info = yield* fs.stat(target).pipe(
+    Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })),
   )
+  if (info.type !== "File") return yield* new AttachmentError({ uri, message: `Attachment is not a file: ${uri}` })
+  if (Number(info.size) > MAX_ATTACHMENT_BYTES)
+    return yield* new AttachmentError({
+      uri,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${uri}`,
+    })
+  const bytes = yield* fs.readFile(target).pipe(
+    Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })),
+  )
+  return { bytes, source: { type: "uri" as const, uri }, start, end, name: path.basename(target) }
+})
+
+function decodeDataURL(uri: string) {
+  return Effect.try({
+    try: () => {
+      const comma = uri.indexOf(",")
+      if (comma === -1) throw new Error("Invalid data URL")
+      const metadata = uri.slice(5, comma)
+      const payload = uri.slice(comma + 1)
+      if (!metadata.split(";").some((part) => part.toLowerCase() === "base64"))
+        return Buffer.from(decodeURIComponent(payload))
+      const bytes = Buffer.from(payload, "base64")
+      if (bytes.toString("base64") !== payload) throw new Error("Non-canonical base64")
+      return bytes
+    },
+    catch: () => new AttachmentError({ uri, message: "Invalid attachment data URL" }),
+  })
 }
 
 function positiveInt(value: string | null) {

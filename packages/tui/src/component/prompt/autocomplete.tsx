@@ -210,17 +210,17 @@ export function Autocomplete(props: {
         const existingIndex = files.findIndex((file) => file.uri === part.value.uri)
         if (existingIndex !== -1) {
           const existing = files[existingIndex]
-          if (existing?.source) {
-            existing.source.start = extmarkStart
-            existing.source.end = extmarkEnd
-            existing.source.text = virtualText
+          if (existing?.mention) {
+            existing.mention.start = extmarkStart
+            existing.mention.end = extmarkEnd
+            existing.mention.text = virtualText
           }
           return
         }
-        if (part.value.source) {
-          part.value.source.start = extmarkStart
-          part.value.source.end = extmarkEnd
-          part.value.source.text = virtualText
+        if (part.value.mention) {
+          part.value.mention.start = extmarkStart
+          part.value.mention.end = extmarkEnd
+          part.value.mention.text = virtualText
         }
         const index = files.length
         files.push(part.value)
@@ -229,10 +229,10 @@ export function Autocomplete(props: {
       }
 
       const agents = (draft.agents ??= [])
-      if (part.value.source) {
-        part.value.source.start = extmarkStart
-        part.value.source.end = extmarkEnd
-        part.value.source.text = virtualText
+      if (part.value.mention) {
+        part.value.mention.start = extmarkStart
+        part.value.mention.end = extmarkEnd
+        part.value.mention.text = virtualText
       }
       const index = agents.length
       agents.push(part.value)
@@ -268,7 +268,7 @@ export function Autocomplete(props: {
         value: {
           uri: urlObj.href,
           name: filename,
-          source: { start: 0, end: 0, text: "" },
+          mention: { start: 0, end: 0, text: "" },
         },
       },
     }
@@ -376,7 +376,7 @@ export function Autocomplete(props: {
               uri: res.uri,
               name: res.name,
               description: res.description,
-              source: { start: 0, end: 0, text: "" },
+              mention: { start: 0, end: 0, text: "" },
             },
           })
         },
@@ -397,7 +397,7 @@ export function Autocomplete(props: {
               type: "agent",
               value: {
                 name: agent.id,
-                source: { start: 0, end: 0, text: "" },
+                mention: { start: 0, end: 0, text: "" },
               },
             })
           },
@@ -419,7 +419,7 @@ export function Autocomplete(props: {
               value: {
                 uri: pathToFileURL(reference.path).href,
                 name: reference.name,
-                source: { start: 0, end: 0, text: "" },
+                mention: { start: 0, end: 0, text: "" },
               },
             })
           },

@@ -176,22 +176,22 @@ export async function resolveCurrentSession(
             parts: [
               ...(message.files ?? []).map((file) => ({
                 type: "file" as const,
-                url: file.uri,
+                url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
                 mime: file.mime,
                 filename: file.name,
-                source: file.source
+                source: file.mention
                   ? {
                       type: "file" as const,
-                      path: file.name ?? file.uri,
-                      text: { start: file.source.start, end: file.source.end, value: file.source.text },
+                      path: file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment"),
+                      text: { start: file.mention.start, end: file.mention.end, value: file.mention.text },
                     }
                   : undefined,
               })),
               ...(message.agents ?? []).map((agent) => ({
                 type: "agent" as const,
                 name: agent.name,
-                source: agent.source
-                  ? { start: agent.source.start, end: agent.source.end, value: agent.source.text }
+                source: agent.mention
+                  ? { start: agent.mention.start, end: agent.mention.end, value: agent.mention.text }
                   : undefined,
               })),
             ],

@@ -19,7 +19,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionTitle } from "@opencode-ai/core/session/title"
-import { Prompt } from "@opencode-ai/core/session/prompt"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
@@ -172,7 +172,7 @@ describe("SessionRunnerLLM recorded", () => {
       const session = yield* SessionV2.Service
       const prompt = yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Say hello in one short sentence." }),
+        prompt: PromptInput.Prompt.make({ text: "Say hello in one short sentence." }),
         resume: false,
       })
 

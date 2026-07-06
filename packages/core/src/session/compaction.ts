@@ -106,7 +106,11 @@ export const serializeToolContent = (content: SessionMessage.ToolStateCompleted[
 
 const serialize = (message: SessionMessage.Message) => {
   if (message.type === "user") {
-    const files = message.files?.map((file) => `[Attached ${file.mime}: ${file.name ?? file.uri}]`) ?? []
+    const files =
+      message.files?.map(
+        (file) =>
+          `[Attached ${file.mime}: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}]`,
+      ) ?? []
     return [`[User]: ${message.text}`, ...files].join("\n")
   }
   if (message.type === "assistant") {

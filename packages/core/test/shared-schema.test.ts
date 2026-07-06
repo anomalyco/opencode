@@ -6,11 +6,11 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
-import { AgentAttachment, FileAttachment, Prompt, Source } from "@opencode-ai/schema/prompt"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Project } from "@opencode-ai/schema/project"
 import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
+import { Prompt } from "@opencode-ai/schema/prompt"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -47,7 +47,6 @@ test("Core reuses the canonical shared schemas", async () => {
     coreSessionInput,
     coreSessionMessage,
     coreSessionTodo,
-    corePrompt,
     coreSkill,
     coreV2Schema,
     coreSchema,
@@ -69,7 +68,6 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
     import("@opencode-ai/core/session/todo"),
-    import("@opencode-ai/core/session/prompt"),
     import("@opencode-ai/core/skill"),
     import("@opencode-ai/core/v2-schema"),
     import("@opencode-ai/core/schema"),
@@ -164,10 +162,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.Message, SessionMessage.Message],
     [coreSessionTodo.Info, SessionTodo.Info],
     [coreSessionTodo.Event, SessionTodo.Event],
-    [corePrompt.Source, Source],
-    [corePrompt.FileAttachment, FileAttachment],
-    [corePrompt.AgentAttachment, AgentAttachment],
-    [corePrompt.Prompt, Prompt],
     [coreSkill.DirectorySource, Skill.DirectorySource],
     [coreSkill.UrlSource, Skill.UrlSource],
     [coreSkill.EmbeddedSource, Skill.EmbeddedSource],
