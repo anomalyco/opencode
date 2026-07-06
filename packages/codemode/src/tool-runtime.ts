@@ -561,14 +561,12 @@ export const prepare = <R>(
         ...(complete
           ? [
               "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
-              "2. Call it using the exact signature shown; bracket notation and quotes are part of the path.",
-              "3. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
+              "2. Call it using the exact signature shown: `const result = await tools.<namespace>.<tool>(input)`; bracket notation and quotes are part of the path.",
+              "3. Return only the fields you need: `return { <field>: result.<field> }` - raw payloads get truncated and waste context.",
             ]
           : [
-              '1. If the exact signature is not listed below, first search: `const request = { query: "<intent + key nouns>" }; const page = await tools.$codemode.search(request)`.',
-              "2. Read `page.items`: each match is `{ path, description, signature }` - read the description before using an unfamiliar tool.",
-              "3. Call the result's `path` as-is; bracket notation and quotes are part of the path.",
-              "4. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
+              '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+              "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
             ]),
       ]
 
@@ -589,7 +587,7 @@ export const prepare = <R>(
           ? []
           : [
               '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
-              "- Search results are paginated from zero-based offset 0. When `page.next` is not null, continue with `await tools.$codemode.search({ ...request, ...page.next })`.",
+              "- If search returns `next`, repeat the same search with `offset: next.offset`.",
             ]),
       ]
 
@@ -598,7 +596,7 @@ export const prepare = <R>(
     "## Language",
     "",
     "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls.",
-    "Modules/imports, classes, generators, timers, network access, eval, prototype access, arbitrary methods, and promise chaining are unavailable. Use await with try/catch.",
+    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, arbitrary methods, and promise chaining are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
     "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
   ]
 

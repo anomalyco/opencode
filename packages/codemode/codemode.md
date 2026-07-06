@@ -512,10 +512,9 @@ adapter needed **no changes**.
   described here was later condensed by Fix 8 and the language-accuracy pass):
   - **Intro**: identifies the language as restricted JavaScript for calling tools rather than
     a general-purpose runtime.
-  - **`## Workflow`**: numbered steps - find a tool via `tools.$codemode.search` -> read
-    the `{ path, description, signature }` matches -> call by path -> return only the needed fields. When the catalog is
-    COMPLETE the search/read steps collapse into "Pick a tool from the list under
-    `## Available tools`" and the steps renumber.
+  - **`## Workflow`**: with a partial catalog, return search results from one execution, then
+    copy a selected path into the next execution. With a complete catalog, pick and call an
+    inlined signature, then return only the needed fields.
   - **`## Rules`**: narrow unknown results at runtime; filter/aggregate large collections in code instead of per-item round-trips;
     console.log/warn/error/dir/table for intermediates; `Promise.all` parallelism (no
     .then/.catch - await + try/catch); `Object.keys(tools)`/`for...in` enumeration;

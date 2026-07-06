@@ -617,7 +617,9 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("Only Code Mode tools listed here and internal runtime tools")
     // Placeholders use generic namespace/tool/field names only - no fabricated real tools
     // and no real catalog tools cherry-picked into example lines.
-    expect(instructions).toContain("`return { <field>: data.<field> }`")
+    expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
+    expect(instructions).toContain("`return { <field>: result.<field> }`")
+    expect(instructions).not.toContain("data.<field>")
     expect(instructions).not.toContain("total_count")
     expect(instructions).not.toContain("list_issues")
     expect(instructions).not.toContain("tools.orders.lookup({")
@@ -629,16 +631,16 @@ describe("CodeMode public contract", () => {
     // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
     // a query string, never a tool name) and the browse-namespace rule appears.
     expect(partial).toContain(
-      '1. If the exact signature is not listed below, first search: `const request = { query: "<intent + key nouns>" }; const page = await tools.$codemode.search(request)`.',
+      '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
     )
-    expect(partial).toContain("Read `page.items`")
+    expect(partial).toContain("In the next execution, copy a returned path exactly")
     expect(partial).toContain(
       "Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools",
     )
     expect(partial).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
     )
-    expect(partial).toContain("When `page.next` is not null")
+    expect(partial).toContain("repeat the same search with `offset: next.offset`")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
     expect(partial).not.toContain("total_count")
     expect(partial).not.toContain("tools.orders.lookup({")
@@ -650,9 +652,10 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("not a general-purpose runtime")
     expect(instructions).not.toContain("Standard modern JavaScript works")
     expect(instructions).not.toContain("TypeScript type annotations")
-    for (const missing of ["Modules/imports", "classes", "generators", "network access", "promise chaining"]) {
+    for (const missing of ["Modules/imports", "classes", "generators", "fetch", "promise chaining"]) {
       expect(instructions).toContain(missing)
     }
+    expect(instructions).toContain("Use Code Mode tools for external operations")
     expect(instructions).toContain(
       "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
     )
