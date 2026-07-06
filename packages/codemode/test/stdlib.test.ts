@@ -613,9 +613,16 @@ describe("stdlib integration", () => {
           Object.is(object, object),
           Object.is({}, {}),
           Object.is(tools, tools),
+          Object.is(tools.host, tools.host),
+          Object.is(Math.max, Math.max),
+          Object.is([].map, [].map),
+          Object.is("".trimLeft, "".trimStart),
+          Object.is(new Set().keys, new Set().values),
+          Object.is(Number.parseInt, parseInt),
         ]
       `),
-    ).toEqual([true, false, true, false, true])
+    ).toEqual([true, false, true, false, true, true, true, true, true, true, true])
+    expect(await value(`const object = {}; return Object.is(Object.values([object])[0], object)`)).toBe(true)
   })
 
   test("Object.fromEntries accepts every supported entry collection", async () => {
@@ -638,6 +645,17 @@ describe("stdlib integration", () => {
       { e: 5 },
       { "[object Object]": 6, "1970-01-01T00:00:00.000Z": 7, null: 8, undefined: 9 },
     ])
+    expect(await value(`try { Object.fromEntries(new Set([Math.max])); return false } catch { return true }`)).toBe(
+      true,
+    )
+    expect(
+      await value(
+        `try { Object.fromEntries(new Map([["fn", Math.max]])); return false } catch { return true }`,
+      ),
+    ).toBe(true)
+    expect(
+      await value(`const object = {}; return Object.is(Object.fromEntries([["value", object]]).value, object)`),
+    ).toBe(true)
   })
 
   test("deterministic Math methods match the host runtime", async () => {

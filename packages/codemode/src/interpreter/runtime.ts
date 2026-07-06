@@ -112,6 +112,43 @@ import {
   SandboxURLSearchParams,
 } from "../values.js"
 
+const intrinsicReceiverKind = (value: unknown): string | undefined => {
+  if (typeof value === "string") return "String"
+  if (typeof value === "number") return "Number"
+  if (Array.isArray(value)) return "Array"
+  if (value instanceof SandboxDate) return "Date"
+  if (value instanceof SandboxRegExp) return "RegExp"
+  if (value instanceof SandboxMap) return "Map"
+  if (value instanceof SandboxSet) return "Set"
+  if (value instanceof SandboxURL) return "URL"
+  if (value instanceof SandboxURLSearchParams) return "URLSearchParams"
+}
+
+const runtimeReferenceIdentity = (value: unknown): string | undefined => {
+  if (value instanceof ToolReference) return `Tool:${JSON.stringify(value.path)}`
+  if (value instanceof PromiseMethodReference) return `Promise:${value.name}`
+  if (value instanceof CoercionFunction) return `Coercion:${value.name}`
+  if (value instanceof GlobalMethodReference) {
+    if (value.namespace === "Number" && (value.name === "parseInt" || value.name === "parseFloat")) {
+      return `Coercion:${value.name}`
+    }
+    return `Global:${value.namespace}.${value.name}`
+  }
+  if (value instanceof IntrinsicReference) {
+    const kind = intrinsicReceiverKind(value.receiver)
+    if (kind === undefined) return
+    const name =
+      kind === "String" && value.name === "trimLeft"
+        ? "trimStart"
+        : kind === "String" && value.name === "trimRight"
+          ? "trimEnd"
+          : kind === "Set" && value.name === "keys"
+            ? "values"
+            : value.name
+    return `Intrinsic:${kind}.${name}`
+  }
+}
+
 const parseProgram = (code: string): ProgramNode => {
   const transpiled = transpileModule(`async function __codemode__() {\n${code}\n}`, {
     reportDiagnostics: true,
@@ -2009,10 +2046,17 @@ class Interpreter<R> {
       }
       if (callable instanceof GlobalMethodReference) {
         if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
+        if (callable.namespace === "Object" && callable.name === "is") return self.objectIs(args)
         if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
           return self.invokeObjectMethodOnTools(callable.name, args, node)
         }
-        if (callable.namespace === "Object" && callable.name === "assign") {
+        if (
+          callable.namespace === "Object" &&
+          (callable.name === "assign" ||
+            callable.name === "values" ||
+            callable.name === "entries" ||
+            callable.name === "fromEntries")
+        ) {
           return invokeGlobalMethod(callable, args, node)
         }
         return boundedData(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
@@ -2033,10 +2077,9 @@ class Interpreter<R> {
 
   // Object.* over a tool reference: `Object.keys(tools)` / `Object.keys(tools.ns)` enumerate
   // namespace/tool names from the host tool tree - the discovery idiom a model reaches for
-  // first. Object.is may compare the opaque reference without reading it. Every other Object
-  // helper fails with a pointer at the working idioms instead of a generic plain-data message.
+  // first. Other Object helpers fail with a pointer at the working idioms instead of a generic
+  // plain-data message.
   private invokeObjectMethodOnTools(name: string, args: Array<unknown>, node: AstNode): unknown {
-    if (name === "is") return invokeObjectMethod(name, args, node)
     if (name === "keys") {
       return boundedData(this.enumerableKeys(args[0] as ToolReference)!, "Object.keys result")
     }
@@ -2045,6 +2088,13 @@ class Interpreter<R> {
       node,
       "InvalidDataValue",
     )
+  }
+
+  private objectIs(args: Array<unknown>): boolean {
+    const [left, right] = args
+    if (Object.is(left, right)) return true
+    const identity = runtimeReferenceIdentity(left)
+    return identity !== undefined && identity === runtimeReferenceIdentity(right)
   }
 
   private invokeConsole(name: string, args: Array<unknown>, node: AstNode): undefined {
