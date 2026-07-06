@@ -17,18 +17,16 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 
-export function DialogConnectProvider(props: { provider: string; directory?: Accessor<string | undefined> }) {
+export function DialogConnectProvider(props: {
+  provider: string
+  directory?: Accessor<string | undefined>
+  onBack: () => void
+}) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const providers = useProviders(props.directory)
-
-  const all = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={props.directory} />)
-    })
-  }
 
   const alive = { value: true }
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -364,19 +362,11 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
   }
 
   function goBack() {
-    if (methods().length === 1) {
-      all()
-      return
-    }
-    if (store.authorization) {
+    if (methods().length > 1 && store.methodIndex !== undefined) {
       dispatch({ type: "method.reset" })
       return
     }
-    if (store.methodIndex !== undefined) {
-      dispatch({ type: "method.reset" })
-      return
-    }
-    all()
+    props.onBack()
   }
 
   function MethodSelection() {
@@ -600,6 +590,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
 
   return (
     <Dialog
+      class="h-full"
       title={
         <IconButton
           tabIndex={-1}
@@ -609,6 +600,7 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
           aria-label={language.t("common.goBack")}
         />
       }
+      transition
     >
       <div class="flex flex-col gap-6 px-2.5 pb-3">
         <div class="px-2.5 flex gap-4 items-center">

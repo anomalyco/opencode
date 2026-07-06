@@ -10,6 +10,9 @@ const sessionB = "ses_review_tab_b"
 const titleA = "Alpha session"
 const titleB = "Beta session"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+const diffs = Array.from({ length: 2_740 }, (_, index) =>
+  fileDiff(`src/generated-${String(index).padStart(4, "0")}.ts`),
+)
 // Marks the review pane DOM node so a remount (fresh node) is detectable.
 const PROBE = "original"
 
@@ -25,20 +28,34 @@ test("keeps the v2 review pane mounted when switching session tabs in a workspac
   await expectSessionTitle(page, titleA)
 
   await page.getByRole("button", { name: "Toggle review" }).click()
+  const reviewTab = page.getByRole("tab", { name: /Review/ })
+  const reviewTabPanel = page.getByRole("tabpanel", { name: /Review/ })
+  await expect(reviewTab).toHaveAttribute("aria-controls", "session-side-panel-review-tabpanel")
+  await expect(reviewTabPanel).toHaveAttribute("id", "session-side-panel-review-tabpanel")
   const review = page.locator('#review-panel [data-component="session-review-v2"]')
   await expectAppVisible(review)
-  await expectAppVisible(page.getByRole("button", { name: /example\.ts/ }))
+  await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   await writeProbe(page)
 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
   await expectAppVisible(review)
+  await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
 
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
+  await expectAppVisible(page.getByRole("button", { name: "generated-0000.ts" }))
   expect(await readProbe(page)).toBe(PROBE)
+
+  const viewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
+  await viewport.hover()
+  await page.mouse.wheel(0, 100_000)
+  await expect
+    .poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+  await expect(page.getByRole("button", { name: "generated-2739.ts" })).toBeVisible()
 })
 
 type Probed = HTMLElement & { __e2eProbe?: string }
@@ -80,16 +97,7 @@ async function setup(page: Page) {
       default: { providerID: "opencode", modelID: "test" },
     },
     sessions: [session(sessionA, titleA, 1700000000000), session(sessionB, titleB, 1700000001000)],
-    vcsDiff: [
-      {
-        file: "src/example.ts",
-        additions: 1,
-        deletions: 1,
-        status: "modified",
-        patch:
-          "diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-export const value = 'before'\n+export const value = 'after'\n",
-      },
-    ],
+    vcsDiff: diffs,
     pageMessages: () => ({ items: [] }),
   })
 
@@ -126,4 +134,14 @@ function session(id: string, title: string, created: number) {
 
 function sessionHref(sessionID: string) {
   return `/server/${base64Encode(server)}/session/${sessionID}`
+}
+
+function fileDiff(file: string) {
+  return {
+    file,
+    additions: 1,
+    deletions: 1,
+    status: "modified",
+    patch: `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-export const value = 'before'\n+export const value = 'after'\n`,
+  }
 }

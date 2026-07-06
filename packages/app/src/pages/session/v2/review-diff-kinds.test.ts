@@ -12,6 +12,13 @@ describe("reviewDiffKinds", () => {
     expect(kinds.get("src/b.ts")).toBe("del")
     expect(kinds.get("src")).toBe("mix")
   })
+
+  test("normalizes file and directory paths", () => {
+    const kinds = reviewDiffKinds([{ file: "\\src//lib/a.ts/", additions: 1, deletions: 1, status: "modified" }])
+
+    expect(kinds.get("src/lib/a.ts")).toBe("mix")
+    expect(kinds.get("src/lib")).toBe("mix")
+  })
 })
 
 describe("filterReviewFiles", () => {

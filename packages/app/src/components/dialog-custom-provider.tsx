@@ -6,18 +6,16 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@/utils/toast"
-import { type Accessor, batch, For } from "solid-js"
+import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
-import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
-  back?: "providers" | "close"
-  directory?: Accessor<string | undefined>
+  onBack: () => void
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -35,14 +33,6 @@ export function DialogCustomProvider(props: Props) {
     headers: [headerRow()],
     err: {},
   })
-
-  const goBack = () => {
-    if (props.back === "close") {
-      dialog.close()
-      return
-    }
-    dialog.show(() => <DialogSelectProvider directory={props.directory} />)
-  }
 
   const addModel = () => {
     setForm(
@@ -164,12 +154,13 @@ export function DialogCustomProvider(props: Props) {
 
   return (
     <Dialog
+      class="h-full"
       title={
         <IconButton
           tabIndex={-1}
           icon="arrow-left"
           variant="ghost"
-          onClick={goBack}
+          onClick={props.onBack}
           aria-label={language.t("common.goBack")}
         />
       }
