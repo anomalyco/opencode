@@ -268,9 +268,18 @@ const main = Effect.gen(function* () {
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
     logout: async () => {
-      const deleted = await clearAuth()
-      logger.log("logout: auth files deleted", { count: deleted })
-      return deleted
+      const count = await clearAuth()
+      logger.log("logout complete", { authFilesDeleted: count })
+      if (count > 0) {
+        // Sidecar stop + relaunch so the login gate shows on next start.
+        // IPC response is sent before the exit (setImmediate).
+        await stopSidecars()
+        setImmediate(() => {
+          app.relaunch()
+          app.exit(0)
+        })
+      }
+      return count
     },
   })
   registerWslIpcHandlers(wslServers)
