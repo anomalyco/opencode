@@ -534,7 +534,7 @@ adapter needed **no changes**.
     appear anywhere in the instructions. Zero tools keep "No tools are currently
     available." under minimal sections (intro + Syntax + Available tools).
   - **Tests**: the package worked-example test replaced by section-structure/placeholder
-    assertions (section order; JSON.parse + return-small rules present; no
+    assertions (section order; unknown-result + return-small rules present; no
     `total_count`/`list_issues`/real-tool example lines; browse hint only when PARTIAL;
     zero-tool minimal sections) - 156 pass / 0 fail; adapter suites gain the same
     assertions on the built description (still 35 + 16, green).
@@ -733,9 +733,9 @@ instructions and directed further cuts):
   return the same data; the prompt stays console-neutral, neither for nor against.)
   The media-stripping MECHANISM is unchanged and still tested; only the prose about it
   is gone - the `[N images attached]` marker is self-explanatory in context.
-- Kept as-is per user: the JSON.parse workflow step (maps to the original motivating
-  transcript failure; NOT copied from prior art - see section 5 note), the browse-namespace rule
-  (undecided), no no-fetch/ambient-authority rule added (proposed, not approved).
+- Later revised: unconditional JSON parsing was removed because text results are not
+  necessarily JSON. The browse-namespace rule remains; the language section now states that
+  ambient `fetch` is unavailable and external operations go through Code Mode tools.
 - Explicitly REJECTED for now: auto-parsing JSON-looking text results at the adapter
   boundary ("could get weird" - type flips, program-sees vs tool-sent divergence). Logged
   as a next-iteration follow-up below.
@@ -1004,11 +1004,19 @@ focused interpreter-surface pass rather than picked off piecemeal.
 - [x] Sandbox values nested inside logged containers print `[CodeMode reference]`
       (`console.log({ m: map })`) - could deep-format instead.
 
+### Next iteration: optional search input boundary
+
+- [ ] `SearchInput` uses Effect's exact `optionalKey`, so an omitted field is accepted but an
+      explicitly present `undefined` field is rejected. The previous handwritten validator
+      treated explicit `undefined` as omission. Decide whether search should preserve that
+      convenience locally or whether all tool arguments should adopt JSON-style undefined
+      normalization; do not broaden `copyOut` semantics solely to fix search.
+
 ### Next iteration: text-result handling (deliberate follow-up, user-directed)
 
 - [ ] Revisit how MCP text results reach the program. Today: `structuredContent` when the
-      server sends it, else joined text as a plain string (the program JSON.parses it,
-      guided by a workflow step). Considered and deferred: (a) conservative boundary
+      server sends it, else joined text as a plain string. Programs narrow unknown results
+      before use; the prompt no longer recommends unconditional JSON parsing. Considered and deferred: (a) conservative boundary
       auto-parse (text starting with `{`/`[` that parses cleanly becomes an object) -
       rejected for now as potentially confusing (type flips; program sees something other
       than what the tool sent); (b) raw-envelope passthrough with the envelope shape
