@@ -6,7 +6,7 @@ import { CodeMode, Tool } from "../src/index.js"
 // intra-sandbox checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
 // values, while at the host boundary (final result, tool arguments, JSON.stringify) they
 // serialize exactly as JSON.stringify would: Date -> ISO string (invalid -> null),
-// RegExp/Map/Set -> {}.
+// URL -> href, and RegExp/Map/Set/URLSearchParams -> {}.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 const value = async (code: string) => {
   const result = await run(code)
@@ -266,6 +266,165 @@ describe("RegExp", () => {
 
   test("template interpolation renders the literal form", async () => {
     expect(await value("return `${/ab/g}`")).toBe("/ab/g")
+  })
+})
+
+describe("URL and URI helpers", () => {
+  test("encodes and decodes complete URIs and URI components", async () => {
+    expect(
+      await value(`
+        return [
+          encodeURI("https://example.test/a b?q=a/b"),
+          encodeURIComponent("a b/c?"),
+          decodeURI("https://example.test/a%20b?q=a/b"),
+          decodeURIComponent("a%20b%2Fc%3F"),
+          ["a b", "c/d"].map(encodeURIComponent),
+        ]
+      `),
+    ).toEqual([
+      "https://example.test/a%20b?q=a/b",
+      "a%20b%2Fc%3F",
+      "https://example.test/a b?q=a/b",
+      "a b/c?",
+      ["a%20b", "c%2Fd"],
+    ])
+    expect(
+      await value(`try { decodeURIComponent("%zz"); return false } catch (error) { return error instanceof URIError }`),
+    ).toBe(true)
+  })
+
+  test("resolves and mutates URLs with linked search parameters", async () => {
+    expect(
+      await value(`
+        const url = new URL("../users?id=old#top", "https://user:pass@example.com:8443/api/v1/")
+        url.pathname = "/items/a b"
+        url.searchParams.set("id", "a b")
+        url.searchParams.append("tag", "x/y")
+        url.hash = "part 1"
+        return {
+          href: url.href,
+          origin: url.origin,
+          host: url.host,
+          pathname: url.pathname,
+          search: url.search,
+          id: url.searchParams.get("id"),
+          string: String(url),
+          json: url.toJSON(),
+          instances: [
+            url instanceof URL,
+            url.searchParams instanceof URLSearchParams,
+            url.searchParams === url.searchParams,
+          ],
+        }
+      `),
+    ).toEqual({
+      href: "https://user:pass@example.com:8443/items/a%20b?id=a+b&tag=x%2Fy#part%201",
+      origin: "https://example.com:8443",
+      host: "example.com:8443",
+      pathname: "/items/a%20b",
+      search: "?id=a+b&tag=x%2Fy",
+      id: "a b",
+      string: "https://user:pass@example.com:8443/items/a%20b?id=a+b&tag=x%2Fy#part%201",
+      json: "https://user:pass@example.com:8443/items/a%20b?id=a+b&tag=x%2Fy#part%201",
+      instances: [true, true, true],
+    })
+  })
+
+  test("URLSearchParams supports records, pairs, mutation, callbacks, and materialization", async () => {
+    expect(
+      await value(`
+        const params = new URLSearchParams([["tag", "b"], ["tag", "a"], ["q", "a b"]])
+        const seen = []
+        params.forEach((value, key) => seen.push(key + "=" + value))
+        params.delete("tag", "b")
+        params.append("tag", "c")
+        params.sort()
+        return {
+          text: params.toString(),
+          size: params.size,
+          tags: params.getAll("tag"),
+          has: params.has("tag", "c"),
+          entries: Array.from(params),
+          object: Object.fromEntries(params),
+          record: new URLSearchParams({ page: 2, filter: "open" }).toString(),
+          seen,
+        }
+      `),
+    ).toEqual({
+      text: "q=a+b&tag=a&tag=c",
+      size: 3,
+      tags: ["a", "c"],
+      has: true,
+      entries: [
+        ["q", "a b"],
+        ["tag", "a"],
+        ["tag", "c"],
+      ],
+      object: { q: "a b", tag: "c" },
+      record: "page=2&filter=open",
+      seen: ["tag=b", "tag=a", "q=a b"],
+    })
+  })
+
+  test("URL parsing failures are catchable and values use native JSON forms", async () => {
+    expect(
+      await value(`
+        const parsed = URL.parse("/users", "https://example.test/api/")
+        let invalidIsTypeError = false
+        try { new URL("not relative without a base") } catch (error) { invalidIsTypeError = error instanceof TypeError }
+        return {
+          canParse: URL.canParse("/users", "https://example.test/api/"),
+          cannotParse: URL.canParse("not relative without a base"),
+          parsed: parsed.href,
+          invalidIsTypeError,
+          boundary: [new URL("https://example.test/a"), new URLSearchParams("q=one")],
+          json: JSON.stringify({ url: new URL("https://example.test/a"), params: new URLSearchParams("q=one") }),
+        }
+      `),
+    ).toEqual({
+      canParse: true,
+      cannotParse: false,
+      parsed: "https://example.test/users",
+      invalidIsTypeError: true,
+      boundary: ["https://example.test/a", {}],
+      json: '{"url":"https://example.test/a","params":{}}',
+    })
+  })
+
+  test("distinguishes omitted URL arguments from explicit undefined", async () => {
+    expect(
+      await value(`
+        function throwsTypeError(run) {
+          try { run(); return false } catch (error) { return error instanceof TypeError }
+        }
+        const params = new URLSearchParams()
+        const required = [
+          () => params.append(),
+          () => params.delete(),
+          () => params.get(),
+          () => params.getAll(),
+          () => params.has(),
+          () => params.set(),
+          () => params.forEach(),
+        ].map(throwsTypeError)
+        params.append(undefined, undefined)
+        return {
+          construct: throwsTypeError(() => new URL()),
+          canParse: throwsTypeError(() => URL.canParse()),
+          parse: throwsTypeError(() => URL.parse()),
+          explicitUndefined: new URL(undefined, "https://example.test/base/").href,
+          params: params.toString(),
+          required,
+        }
+      `),
+    ).toEqual({
+      construct: true,
+      canParse: true,
+      parse: true,
+      explicitUndefined: "https://example.test/base/undefined",
+      params: "undefined=undefined",
+      required: [true, true, true, true, true, true, true],
+    })
   })
 })
 

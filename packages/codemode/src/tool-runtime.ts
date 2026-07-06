@@ -9,7 +9,15 @@ import {
   outputTypeScript,
 } from "./tool-schema.js"
 import { isDefinition as isToolDefinition, type Definition } from "./tool.js"
-import { SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
+import {
+  SandboxDate,
+  SandboxMap,
+  SandboxPromise,
+  SandboxRegExp,
+  SandboxSet,
+  SandboxURL,
+  SandboxURLSearchParams,
+} from "./values.js"
 
 const estimateTokens = (input: string) => Math.max(0, Math.round(input.length / 4))
 
@@ -152,9 +160,9 @@ export const isBlockedMember = (name: string): boolean => blockedMemberNames.has
  * Two modes share the walk:
  * - **Boundary** (`preserveSandboxValues` false, the default): the host<->sandbox boundary -
  *   final results, tool-call arguments, `JSON.stringify`. Sandbox value types serialize
- *   exactly as JSON.stringify would: Date -> ISO string (invalid -> null), RegExp/Map/Set -> {}.
+ *   exactly as JSON.stringify would: Date/URL -> strings, the remaining value types -> {}.
  * - **Intra-sandbox checkpoint** (`preserveSandboxValues` true; see `boundedData` in
- *   codemode.ts): Date/RegExp/Map/Set instances pass through untouched (treated as leaves,
+ *   codemode.ts): standard-library value instances pass through untouched (treated as leaves,
  *   contents not walked), so values flowing through `Object.*` helpers, coercion inputs, and
  *   other in-sandbox checkpoints stay fully usable (`.getTime()`, `.has()`, ...).
  *
@@ -208,7 +216,9 @@ const copyBounded = (
       value instanceof SandboxDate ||
       value instanceof SandboxRegExp ||
       value instanceof SandboxMap ||
-      value instanceof SandboxSet
+      value instanceof SandboxSet ||
+      value instanceof SandboxURL ||
+      value instanceof SandboxURLSearchParams
     ) {
       return value
     }
@@ -228,24 +238,30 @@ const copyBounded = (
       for (const item of value.values()) wrapped.set.add(copyBounded(item, label, depth + 1, seen, true))
       return wrapped
     }
+    if (value instanceof URL) return new SandboxURL(new URL(value.href))
+    if (value instanceof URLSearchParams) return new SandboxURLSearchParams(new URLSearchParams(value))
   }
 
   // Sandbox value types (and their host counterparts, which a host tool may legitimately
-  // return) serialize exactly as JSON.stringify would at the data boundary: a Date is its
-  // toJSON() ISO string (invalid -> null), and RegExp/Map/Set have no JSON form beyond {}.
+  // return) serialize exactly as JSON.stringify would at the data boundary: Date/URL use
+  // toJSON(), while RegExp/Map/Set/URLSearchParams have no JSON form beyond {}.
   if (value instanceof SandboxDate) {
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   }
   if (value instanceof Date) {
     return Number.isFinite(value.getTime()) ? value.toISOString() : null
   }
+  if (value instanceof SandboxURL) return value.url.href
+  if (value instanceof URL) return value.href
   if (
     value instanceof SandboxRegExp ||
     value instanceof SandboxMap ||
     value instanceof SandboxSet ||
+    value instanceof SandboxURLSearchParams ||
     value instanceof RegExp ||
     value instanceof Map ||
-    value instanceof Set
+    value instanceof Set ||
+    value instanceof URLSearchParams
   ) {
     return Object.create(null) as SafeObject
   }
@@ -589,9 +605,9 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
     "",
     "## Language",
     "",
-    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls.",
-    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, arbitrary methods, and promise chaining are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
-    "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
+    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
+    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, unlisted methods, and promise chaining are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
+    "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
   ]
 
   const toolSection: Array<string> = [""]

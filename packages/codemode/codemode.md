@@ -153,17 +153,13 @@ current omissions to implement, not intentional product boundaries.
       shims. Consider `Promise.any` in the same pass.
 - [ ] Support async iteration and `for await...of`. Define behavior first for the runtime's supported promise and
       collection values, then extend it to bounded host streams when a stream boundary exists.
-- [ ] Add deterministic URL and URI helpers, starting with `URL`, `URLSearchParams`, and URI component encoding. These
-      are higher-value for tool orchestration than broad runtime expansion.
 - [ ] Complete the deterministic `Math` surface beyond the current arithmetic, rounding, root, power, and logarithm
       helpers. Decide separately whether nondeterministic `Math.random` belongs in the runtime.
-- [ ] Refine diagnostics so user throws, tool refusals, internal tool failures, and genuine interpreter defects are
-      distinguishable without leaking private causes.
+- [ ] Refine diagnostics so user throws, expected tool failures, unexpected host/tool defects, and genuine interpreter
+      defects are distinguishable without leaking private causes.
 
 ### Tool and result contracts
 
-- [ ] Improve weak MCP result contracts where possible. Preserve declared output schemas, and revisit text-result
-      representation only with evidence from real failures; do not auto-parse JSON-looking text by heuristic.
 - [ ] Design explicit tagged representations and size rules before allowing Blob, File, ArrayBuffer, typed arrays, or
       host streams to cross the sandbox boundary.
 - [ ] Define one consistent policy for tool path segments named `__proto__`, `constructor`, or `prototype`. They must

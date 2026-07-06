@@ -16,7 +16,16 @@ import {
 } from "./tool-runtime.js"
 import type { Definition } from "./tool.js"
 import { ToolError } from "./tool-error.js"
-import { isSandboxValue, SandboxDate, SandboxMap, SandboxPromise, SandboxRegExp, SandboxSet } from "./values.js"
+import {
+  isSandboxValue,
+  SandboxDate,
+  SandboxMap,
+  SandboxPromise,
+  SandboxRegExp,
+  SandboxSet,
+  SandboxURL,
+  SandboxURLSearchParams,
+} from "./values.js"
 
 /** A tool call admitted during an execution. */
 export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
@@ -184,7 +193,7 @@ type StatementResult =
   | { kind: "continue" }
 
 type MemberReference = {
-  target: SafeObject | Array<unknown>
+  target: SafeObject | Array<unknown> | SandboxURL
   key: string | number
 }
 
@@ -217,7 +226,18 @@ class PromiseMethodReference {
 
 // A built-in global namespace (`Object`, `Math`, `JSON`, `Array`, ...); members resolve to a
 // GlobalMethodReference, except known constants (e.g. `Math.PI`) which resolve to a value.
-type GlobalNamespaceName = "Object" | "Math" | "JSON" | "Array" | "console" | "Date" | "RegExp" | "Map" | "Set"
+type GlobalNamespaceName =
+  | "Object"
+  | "Math"
+  | "JSON"
+  | "Array"
+  | "console"
+  | "Date"
+  | "RegExp"
+  | "Map"
+  | "Set"
+  | "URL"
+  | "URLSearchParams"
 
 class GlobalNamespace {
   constructor(readonly name: GlobalNamespaceName) {}
@@ -232,6 +252,10 @@ class GlobalMethodReference {
 
 class CoercionFunction {
   constructor(readonly name: "Number" | "String" | "Boolean" | "parseInt" | "parseFloat") {}
+}
+
+class UriFunction {
+  constructor(readonly name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent") {}
 }
 
 class ProgramThrow {
@@ -355,7 +379,7 @@ const errorConstructors = new Set([
   "URIError",
 ])
 
-const valueConstructors = new Set(["Date", "RegExp", "Map", "Set"])
+const valueConstructors = new Set(["Date", "RegExp", "Map", "Set", "URL", "URLSearchParams"])
 
 const dateMethods = new Set([
   "getTime",
@@ -400,10 +424,52 @@ const regexpProperties = new Set([
 const mapMethods = new Set(["get", "set", "has", "delete", "clear", "forEach", "keys", "values", "entries"])
 const setMethods = new Set(["add", "has", "delete", "clear", "forEach", "keys", "values", "entries"])
 
+const urlProperties = new Set([
+  "href",
+  "origin",
+  "protocol",
+  "username",
+  "password",
+  "host",
+  "hostname",
+  "port",
+  "pathname",
+  "search",
+  "hash",
+])
+const urlWritableProperties = new Set([
+  "href",
+  "protocol",
+  "username",
+  "password",
+  "host",
+  "hostname",
+  "port",
+  "pathname",
+  "search",
+  "hash",
+])
+const urlMethods = new Set(["toString", "toJSON"])
+const urlStatics = new Set(["canParse", "parse"])
+const urlSearchParamsMethods = new Set([
+  "append",
+  "delete",
+  "get",
+  "getAll",
+  "has",
+  "set",
+  "sort",
+  "forEach",
+  "keys",
+  "values",
+  "entries",
+  "toString",
+])
+
 const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-short-circuit")
 
 const supportedSyntaxMessage =
-  "Supported orchestration syntax: tools.* calls (they return promises - resolve them with await), data literals, destructuring, optional chaining, template literals, conditionals, switch, loops (incl. for...of and for...in over object/array/tools keys), arrow functions, spread, try/catch, array methods (map/filter/find/findIndex/some/every/reduce/flatMap/forEach/sort/slice/concat/indexOf/lastIndexOf/at/flat/reverse/includes/join), string methods (incl. match/matchAll/replace/split with regular expressions), Date/RegExp/Map/Set, Object/Math/JSON helpers, captured console.log/warn/error/dir/table, and Promise.all/allSettled/race/resolve/reject over arrays mixing promises and plain values for parallel tool calls (promise chaining with .then/.catch is not supported - use await with try/catch)."
+  "Supported orchestration syntax: tools.* calls (they return promises - resolve them with await), data literals, destructuring, optional chaining, template literals, conditionals, switch, loops (incl. for...of and for...in over object/array/tools keys), arrow functions, spread, try/catch, array methods (map/filter/find/findIndex/some/every/reduce/flatMap/forEach/sort/slice/concat/indexOf/lastIndexOf/at/flat/reverse/includes/join), string methods (incl. match/matchAll/replace/split with regular expressions), Date/RegExp/Map/Set/URL/URLSearchParams, URI encoding helpers, Object/Math/JSON helpers, captured console.log/warn/error/dir/table, and Promise.all/allSettled/race/resolve/reject over arrays mixing promises and plain values for parallel tool calls (promise chaining with .then/.catch is not supported - use await with try/catch)."
 
 const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError(
@@ -662,6 +728,7 @@ const isRuntimeReference = (value: unknown): boolean =>
   value instanceof PromiseMethodReference ||
   value instanceof SandboxPromise ||
   value instanceof CoercionFunction ||
+  value instanceof UriFunction ||
   value instanceof ErrorConstructorReference ||
   isSandboxValue(value)
 
@@ -677,7 +744,7 @@ const containsRuntimeReference = (value: unknown, seen = new Set<object>()): boo
   return contains
 }
 
-// Like containsRuntimeReference, but sandbox value types (Date/RegExp/Map/Set) count as data:
+// Like containsRuntimeReference, but sandbox standard-library values count as data:
 // operators and switch treat them as ordinary object operands (identity equality, ToPrimitive
 // coercion) rather than rejecting them as opaque interpreter machinery.
 const containsOpaqueReference = (value: unknown, seen = new Set<object>()): boolean => {
@@ -707,6 +774,7 @@ const typeofValue = (value: unknown): string => {
     value instanceof ErrorConstructorReference
   )
     return "function"
+  if (value instanceof UriFunction) return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   if (value instanceof GlobalNamespace) {
     return value.name === "Math" || value.name === "JSON" || value.name === "console" ? "object" : "function"
@@ -733,6 +801,10 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
         return lhs instanceof SandboxMap
       case "Set":
         return lhs instanceof SandboxSet
+      case "URL":
+        return lhs instanceof SandboxURL
+      case "URLSearchParams":
+        return lhs instanceof SandboxURLSearchParams
       case "Array":
         return Array.isArray(lhs)
       case "Object":
@@ -746,7 +818,7 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
     return false
   }
   throw new InterpreterRuntimeError(
-    "The right-hand side of 'instanceof' must be a constructor CodeMode knows: Error (or a specific error type like TypeError), Date, RegExp, Map, Set, Array, Object, or Promise.",
+    "The right-hand side of 'instanceof' must be a constructor CodeMode knows: Error (or a specific error type like TypeError), Date, RegExp, Map, Set, URL, URLSearchParams, Array, Object, or Promise.",
     node,
   )
 }
@@ -1020,6 +1092,8 @@ const coerceToString = (value: unknown): string => {
   if (value instanceof SandboxRegExp) return `/${value.regex.source}/${value.regex.flags}`
   if (value instanceof SandboxMap) return "[object Map]"
   if (value instanceof SandboxSet) return "[object Set]"
+  if (value instanceof SandboxURL) return value.url.href
+  if (value instanceof SandboxURLSearchParams) return value.params.toString()
   if (typeof value === "object") {
     return Array.isArray(value)
       ? value.map((item) => (item === null || item === undefined ? "" : coerceToString(item))).join(",")
@@ -1064,7 +1138,7 @@ const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNo
 const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   const requireObject = (): Record<string, unknown> => {
     const value = boundedData(args[0], `Object.${name} input`)
-    // Sandbox values (Date/RegExp/Map/Set) have no own enumerable properties in JS, so the
+    // Sandbox standard-library values have no own enumerable properties in JS, so the
     // Object.* helpers see them as empty objects - never their interpreter internals.
     if (isSandboxValue(value)) return {}
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -1114,6 +1188,11 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): 
       if (args[0] instanceof SandboxMap) {
         const out: Record<string, unknown> = Object.create(null)
         for (const [key, item] of (args[0] as SandboxMap).map.entries()) guardedSet(out, coerceToString(key), item)
+        return out
+      }
+      if (args[0] instanceof SandboxURLSearchParams) {
+        const out: Record<string, unknown> = Object.create(null)
+        for (const [key, value] of args[0].params.entries()) guardedSet(out, key, value)
         return out
       }
       const pairs = boundedData(args[0], "Object.fromEntries input")
@@ -1233,6 +1312,9 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
       if (args[0] instanceof SandboxMap)
         return Array.from((args[0] as SandboxMap).map.entries(), ([key, item]) => [key, item])
       if (args[0] instanceof SandboxSet) return Array.from((args[0] as SandboxSet).set.values())
+      if (args[0] instanceof SandboxURLSearchParams) {
+        return Array.from(args[0].params.entries(), ([key, value]) => [key, value])
+      }
       const source = boundedData(args[0], "Array.from input")
       if (typeof source === "string") return Array.from(source)
       if (Array.isArray(source)) return [...source]
@@ -1377,6 +1459,52 @@ const invokeRegExpMethod = (value: SandboxRegExp, name: string, args: Array<unkn
   }
 }
 
+const uriArgument = (value: unknown, label: string): string => coerceToString(boundedData(value, label))
+
+const invokeUriFunction = (ref: UriFunction, args: Array<unknown>, node: AstNode): string => {
+  const value = uriArgument(args[0], `${ref.name} input`)
+  try {
+    switch (ref.name) {
+      case "encodeURI":
+        return encodeURI(value)
+      case "encodeURIComponent":
+        return encodeURIComponent(value)
+      case "decodeURI":
+        return decodeURI(value)
+      case "decodeURIComponent":
+        return decodeURIComponent(value)
+    }
+  } catch (error) {
+    throw new InterpreterRuntimeError(
+      `${ref.name} received malformed URI data: ${error instanceof Error ? error.message : String(error)}`,
+      node,
+    ).as("URIError")
+  }
+}
+
+const urlArgument = (value: unknown, label: string): string =>
+  value instanceof SandboxURL ? value.url.href : uriArgument(value, label)
+
+const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
+  if (!urlStatics.has(name)) throw new InterpreterRuntimeError(`URL.${name} is not available in CodeMode.`, node)
+  if (args.length === 0) {
+    throw new InterpreterRuntimeError(`URL.${name} requires a URL argument.`, node).as("TypeError")
+  }
+  const input = urlArgument(args[0], `URL.${name} input`)
+  const base = args[1] === undefined ? undefined : urlArgument(args[1], `URL.${name} base`)
+  try {
+    const url = new URL(input, base)
+    return name === "canParse" ? true : new SandboxURL(url)
+  } catch {
+    return name === "canParse" ? false : null
+  }
+}
+
+const invokeURLMethod = (value: SandboxURL, name: string, node: AstNode): string => {
+  if (name === "toString" || name === "toJSON") return value.url.href
+  throw new InterpreterRuntimeError(`URL method '${name}' is not available in CodeMode.`, node)
+}
+
 const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
   if (ref.namespace === "console")
     throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
@@ -1385,12 +1513,18 @@ const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, no
   if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
   if (ref.namespace === "Number") return invokeNumberStatic(ref.name, args, node)
   if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
+  if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
   if (ref.namespace === "Date") {
     if (!dateStatics.has(ref.name))
       throw new InterpreterRuntimeError(`Date.${ref.name} is not available in CodeMode.`, node)
     return invokeDateStatic(ref.name, args, node)
   }
-  if (ref.namespace === "RegExp" || ref.namespace === "Map" || ref.namespace === "Set") {
+  if (
+    ref.namespace === "RegExp" ||
+    ref.namespace === "Map" ||
+    ref.namespace === "Set" ||
+    ref.namespace === "URLSearchParams"
+  ) {
     throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
   }
   return invokeJsonMethod(ref.name, args, node)
@@ -1403,6 +1537,8 @@ const spreadItems = (spread: unknown): Array<unknown> | undefined => {
   if (spread instanceof SandboxMap)
     return Array.from(spread.map.entries(), ([key, item]): Array<unknown> => [key, item])
   if (spread instanceof SandboxSet) return Array.from(spread.set.values())
+  if (spread instanceof SandboxURLSearchParams)
+    return Array.from(spread.params.entries(), ([key, value]): Array<unknown> => [key, value])
   return undefined
 }
 
@@ -1477,6 +1613,12 @@ class Interpreter<R> {
     globalScope.set("RegExp", { mutable: false, value: new GlobalNamespace("RegExp") })
     globalScope.set("Map", { mutable: false, value: new GlobalNamespace("Map") })
     globalScope.set("Set", { mutable: false, value: new GlobalNamespace("Set") })
+    globalScope.set("URL", { mutable: false, value: new GlobalNamespace("URL") })
+    globalScope.set("URLSearchParams", { mutable: false, value: new GlobalNamespace("URLSearchParams") })
+    globalScope.set("encodeURI", { mutable: false, value: new UriFunction("encodeURI") })
+    globalScope.set("encodeURIComponent", { mutable: false, value: new UriFunction("encodeURIComponent") })
+    globalScope.set("decodeURI", { mutable: false, value: new UriFunction("decodeURI") })
+    globalScope.set("decodeURIComponent", { mutable: false, value: new UriFunction("decodeURIComponent") })
     // Error constructors are real values, so `x instanceof Error` works and `Error("msg")`
     // (with or without `new`) constructs a branded { name, message } error object.
     for (const name of errorConstructors) {
@@ -2323,8 +2465,12 @@ class Interpreter<R> {
             return self.constructRegExp(args, node)
           case "Map":
             return self.constructMap(args[0], node)
-          default:
+          case "Set":
             return self.constructSet(args[0], node)
+          case "URL":
+            return self.constructURL(args, node)
+          default:
+            return self.constructURLSearchParams(args[0], node)
         }
       })
     }
@@ -2411,6 +2557,67 @@ class Interpreter<R> {
     }
     for (const item of items) target.set.add(item)
     return target
+  }
+
+  private constructURL(args: Array<unknown>, node: AstNode): SandboxURL {
+    if (args.length === 0) {
+      throw new InterpreterRuntimeError("new URL(...) requires a URL string and an optional base URL.", node).as(
+        "TypeError",
+      )
+    }
+    const input = urlArgument(args[0], "new URL input")
+    const base = args[1] === undefined ? undefined : urlArgument(args[1], "new URL base")
+    try {
+      return new SandboxURL(new URL(input, base))
+    } catch {
+      throw new InterpreterRuntimeError(
+        `new URL(...) received an invalid URL${base === undefined ? "" : " or base URL"}.`,
+        node,
+      ).as("TypeError")
+    }
+  }
+
+  private constructURLSearchParams(init: unknown, node: AstNode): SandboxURLSearchParams {
+    if (init === undefined) return new SandboxURLSearchParams(new URLSearchParams())
+    if (init instanceof SandboxURLSearchParams) {
+      return new SandboxURLSearchParams(new URLSearchParams(init.params))
+    }
+    if (typeof init === "string") return new SandboxURLSearchParams(new URLSearchParams(init))
+    if (init === null || typeof init === "number" || typeof init === "boolean") {
+      return new SandboxURLSearchParams(new URLSearchParams(coerceToString(init)))
+    }
+    if (init instanceof SandboxMap) {
+      return this.constructURLSearchParams(
+        Array.from(init.map.entries(), ([key, value]) => [key, value]),
+        node,
+      )
+    }
+    if (Array.isArray(init)) {
+      const entries = init.map((pair) => {
+        if (!Array.isArray(pair) || pair.length !== 2) {
+          throw new InterpreterRuntimeError(
+            "new URLSearchParams(...) expects an array of [name, value] pairs.",
+            node,
+          ).as("TypeError")
+        }
+        return [uriArgument(pair[0], "URLSearchParams name"), uriArgument(pair[1], "URLSearchParams value")] as [
+          string,
+          string,
+        ]
+      })
+      return new SandboxURLSearchParams(new URLSearchParams(entries))
+    }
+    if (isSandboxValue(init)) return new SandboxURLSearchParams(new URLSearchParams())
+    const data = boundedData(init, "new URLSearchParams input")
+    if (data === null || typeof data !== "object") {
+      throw new InterpreterRuntimeError(
+        "new URLSearchParams(...) expects a query string, data object, array of pairs, or URLSearchParams.",
+        node,
+      ).as("TypeError")
+    }
+    return new SandboxURLSearchParams(
+      new URLSearchParams(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, coerceToString(value)]))),
+    )
   }
 
   private evaluateBinaryExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
@@ -2691,6 +2898,9 @@ class Interpreter<R> {
       if (callable instanceof CoercionFunction) {
         return boundedData(invokeCoercion(callable, args, node), `${callable.name} result`)
       }
+      if (callable instanceof UriFunction) {
+        return invokeUriFunction(callable, args, node)
+      }
       // `Error("msg")` without `new` constructs an error exactly like `new Error("msg")`, as in JS.
       if (callable instanceof ErrorConstructorReference) {
         return createErrorValue(callable.name, args[0] === undefined ? "" : coerceToString(args[0]))
@@ -2751,6 +2961,8 @@ class Interpreter<R> {
     if (value instanceof SandboxPromise) return "[Promise (await it to get its value)]"
     if (value instanceof SandboxDate) return coerceToString(value)
     if (value instanceof SandboxRegExp) return coerceToString(value)
+    if (value instanceof SandboxURL) return coerceToString(value)
+    if (value instanceof SandboxURLSearchParams) return coerceToString(value)
     if (depth > MAX_CONSOLE_DEPTH) return "..."
     if (seen.has(value)) return "[Circular]"
     if (value instanceof SandboxMap) {
@@ -3020,7 +3232,7 @@ class Interpreter<R> {
     if (typeof ref.receiver === "string") {
       if (
         (ref.name === "replace" || ref.name === "replaceAll") &&
-        (args[1] instanceof CodeModeFunction || args[1] instanceof CoercionFunction)
+        (args[1] instanceof CodeModeFunction || args[1] instanceof CoercionFunction || args[1] instanceof UriFunction)
       ) {
         return this.invokeStringReplacer(ref.receiver, ref.name, args, node)
       }
@@ -3043,6 +3255,12 @@ class Interpreter<R> {
     }
     if (ref.receiver instanceof SandboxSet) {
       return this.invokeSetMethod(ref.receiver, ref.name, args, node)
+    }
+    if (ref.receiver instanceof SandboxURL) {
+      return Effect.succeed(invokeURLMethod(ref.receiver, ref.name, node))
+    }
+    if (ref.receiver instanceof SandboxURLSearchParams) {
+      return this.invokeURLSearchParamsMethod(ref.receiver, ref.name, args, node)
     }
     throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
   }
@@ -3107,20 +3325,26 @@ class Interpreter<R> {
     })
   }
 
-  // Runs a collection callback accepting a user function or a builtin coercion, mirroring
-  // the array-method callback contract.
+  // Runs a collection callback accepting a user function or supported builtin callable,
+  // mirroring the array-method callback contract.
   private applyCollectionCallback(
     callback: unknown,
     name: string,
     node: AstNode,
   ): (args: Array<unknown>) => Effect.Effect<unknown, unknown, R> {
-    if (!(callback instanceof CodeModeFunction) && !(callback instanceof CoercionFunction)) {
+    if (
+      !(callback instanceof CodeModeFunction) &&
+      !(callback instanceof CoercionFunction) &&
+      !(callback instanceof UriFunction)
+    ) {
       throw new InterpreterRuntimeError(`${name} expects a function callback.`, node)
     }
     return (callbackArgs) =>
       callback instanceof CoercionFunction
         ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
-        : this.invokeFunction(callback, callbackArgs)
+        : callback instanceof UriFunction
+          ? Effect.succeed(invokeUriFunction(callback, callbackArgs, node))
+          : this.invokeFunction(callback, callbackArgs)
   }
 
   private invokeMapMethod(
@@ -3200,6 +3424,81 @@ class Interpreter<R> {
       }
       default:
         throw new InterpreterRuntimeError(`Set method '${name}' is not available in CodeMode.`, node)
+    }
+  }
+
+  private invokeURLSearchParamsMethod(
+    target: SandboxURLSearchParams,
+    name: string,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
+    const arg = (index: number): string => uriArgument(args[index], `URLSearchParams.${name} argument ${index + 1}`)
+    const requireArgs = (count: number): void => {
+      if (args.length < count) {
+        throw new InterpreterRuntimeError(
+          `URLSearchParams.${name} requires ${count} argument${count === 1 ? "" : "s"}.`,
+          node,
+        ).as("TypeError")
+      }
+    }
+    switch (name) {
+      case "append": {
+        requireArgs(2)
+        return Effect.sync(() => {
+          target.params.append(arg(0), arg(1))
+          return undefined
+        })
+      }
+      case "delete": {
+        requireArgs(1)
+        return Effect.sync(() => {
+          if (args[1] !== undefined) target.params.delete(arg(0), arg(1))
+          else target.params.delete(arg(0))
+          return undefined
+        })
+      }
+      case "get":
+        requireArgs(1)
+        return Effect.sync(() => target.params.get(arg(0)))
+      case "getAll":
+        requireArgs(1)
+        return Effect.sync(() => target.params.getAll(arg(0)))
+      case "has":
+        requireArgs(1)
+        return Effect.sync(() =>
+          args[1] !== undefined ? target.params.has(arg(0), arg(1)) : target.params.has(arg(0)),
+        )
+      case "set": {
+        requireArgs(2)
+        return Effect.sync(() => {
+          target.params.set(arg(0), arg(1))
+          return undefined
+        })
+      }
+      case "sort":
+        return Effect.sync(() => {
+          target.params.sort()
+          return undefined
+        })
+      case "keys":
+        return Effect.sync(() => Array.from(target.params.keys()))
+      case "values":
+        return Effect.sync(() => Array.from(target.params.values()))
+      case "entries":
+        return Effect.sync(() => Array.from(target.params.entries(), ([key, value]): Array<unknown> => [key, value]))
+      case "toString":
+        return Effect.sync(() => target.params.toString())
+      case "forEach": {
+        requireArgs(1)
+        const apply = this.applyCollectionCallback(args[0], "URLSearchParams.forEach", node)
+        return Effect.gen(function* () {
+          for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target])
+          return undefined
+        })
+      }
+      default:
+        throw new InterpreterRuntimeError(`URLSearchParams method '${name}' is not available in CodeMode.`, node)
     }
   }
 
@@ -3312,17 +3611,23 @@ class Interpreter<R> {
     }
 
     const callback = args[0]
-    if (!(callback instanceof CodeModeFunction) && !(callback instanceof CoercionFunction)) {
+    if (
+      !(callback instanceof CodeModeFunction) &&
+      !(callback instanceof CoercionFunction) &&
+      !(callback instanceof UriFunction)
+    ) {
       throw new InterpreterRuntimeError(`Array.${name} expects a function callback.`, node)
     }
     const self = this
-    // Accept a user arrow function or a builtin coercion callable (Boolean/String/Number), so the
-    // idioms `filter(Boolean)` / `map(String)` / `map(Number)` work as in JS. Coercions are
-    // synchronous; only CodeModeFunctions can await tool calls.
+    // Accept a user function or supported builtin callable, so idioms such as
+    // `filter(Boolean)`, `map(String)`, and `map(encodeURIComponent)` work as in JS. Builtins
+    // are synchronous; only CodeModeFunctions can await tool calls.
     const apply = (callbackArgs: Array<unknown>): Effect.Effect<unknown, unknown, R> =>
       callback instanceof CoercionFunction
         ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
-        : self.invokeFunction(callback, callbackArgs)
+        : callback instanceof UriFunction
+          ? Effect.succeed(invokeUriFunction(callback, callbackArgs, node))
+          : self.invokeFunction(callback, callbackArgs)
     return Effect.gen(function* () {
       // Iterate a snapshot taken at call time so a callback that mutates the array can't
       // self-extend the loop - matching JS, where elements appended during iteration are not visited.
@@ -3476,7 +3781,7 @@ class Interpreter<R> {
           const spread = yield* self.evaluateExpression(getNode(property, "argument"))
           // JS treats `{ ...null }` / `{ ...undefined }` as a no-op, so the common
           // `{ ...maybeOpts, override }` merge works when the operand is absent. Sandbox values
-          // (Date/RegExp/Map/Set) have no own enumerable properties in JS, so they are no-ops too.
+          // have no own enumerable properties in JS, so they are no-ops too.
           if (spread === null || spread === undefined || isSandboxValue(spread)) continue
           if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
             throw new InterpreterRuntimeError(
@@ -3713,6 +4018,21 @@ class Interpreter<R> {
         if (typeof key === "string" && setMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
+      if (objectValue instanceof SandboxURL) {
+        if (key === "searchParams") {
+          return new ComputedValue(objectValue.searchParams)
+        }
+        if (typeof key === "string" && urlMethods.has(key)) return new IntrinsicReference(objectValue, key)
+        if (typeof key === "string" && urlProperties.has(key)) return { target: objectValue, key }
+        return new ComputedValue(undefined)
+      }
+      if (objectValue instanceof SandboxURLSearchParams) {
+        if (key === "size") return new ComputedValue(objectValue.params.size)
+        if (typeof key === "string" && urlSearchParamsMethods.has(key)) {
+          return new IntrinsicReference(objectValue, key)
+        }
+        return new ComputedValue(undefined)
+      }
 
       // Any property access on a promise is a confused program (`p.then(...)`, `p.value`);
       // reading `undefined` here would hide the missing await, so both paths get an explicit,
@@ -3790,6 +4110,9 @@ class Interpreter<R> {
         }
         return reference.key === "length" ? reference.target.length : reference.target[Number(reference.key)]
       }
+      if (reference.target instanceof SandboxURL) {
+        return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
+      }
       return reference.target[String(reference.key)]
     })
   }
@@ -3827,7 +4150,10 @@ class Interpreter<R> {
         }
       }
       const key = Array.isArray(reference.target) ? Number(reference.key) : String(reference.key)
-      const current = (reference.target as Record<PropertyKey, unknown>)[key]
+      const current =
+        reference.target instanceof SandboxURL
+          ? (reference.target.url as unknown as Record<string, unknown>)[key]
+          : (reference.target as Record<PropertyKey, unknown>)[key]
       const { write, next, result } = yield* compute(current)
       if (write) self.assignToReference(reference, key, next, node)
       return result
@@ -3866,6 +4192,20 @@ class Interpreter<R> {
       this.rejectCircularInsertion(target, next, "Array assignment result", node)
       target[index] = next
       return
+    }
+    if (reference.target instanceof SandboxURL) {
+      const property = key as string
+      if (!urlWritableProperties.has(property)) {
+        throw new InterpreterRuntimeError(`URL.${property} is read-only.`, node).as("TypeError")
+      }
+      try {
+        const url = reference.target.url as unknown as Record<string, string>
+        url[property] = uriArgument(next, `URL.${property} value`)
+        return
+      } catch (error) {
+        if (error instanceof InterpreterRuntimeError || error instanceof ToolRuntimeError) throw error
+        throw new InterpreterRuntimeError(`URL.${property} received an invalid value.`, node).as("TypeError")
+      }
     }
     const target = reference.target as SafeObject
     const objectKey = key as string
