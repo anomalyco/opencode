@@ -1,17 +1,17 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { isBlockedMember } from "../tool-runtime.js"
-import { isSandboxValue, SandboxMap, SandboxURLSearchParams } from "../values.js"
+import { isSandboxValue, SandboxMap, SandboxSet, SandboxURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
-export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "assign", "fromEntries"])
+export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "is", "assign", "fromEntries"])
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   if (!objectStatics.has(name)) throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
   const requireObject = (): Record<string, unknown> => {
     const value = boundedData(args[0], `Object.${name} input`)
     if (isSandboxValue(value)) return {}
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      throw new InterpreterRuntimeError(`Object.${name} expects a data object.`, node)
+    if (value === null || typeof value !== "object") {
+      throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node)
     }
     return value as Record<string, unknown>
   }
@@ -35,6 +35,8 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return Object.entries(requireObject()).map(([key, item]) => [key, item])
     case "hasOwn":
       return Object.hasOwn(requireObject(), String(args[1]))
+    case "is":
+      return Object.is(args[0], args[1])
     case "assign": {
       const target = args[0]
       if (target === null || typeof target !== "object" || Array.isArray(target) || isSandboxValue(target)) {
@@ -63,16 +65,19 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         for (const [key, value] of args[0].params.entries()) guardedSet(out, key, value)
         return out
       }
-      const pairs = boundedData(args[0], "Object.fromEntries input")
+      const pairs =
+        args[0] instanceof SandboxSet
+          ? Array.from(args[0].set.values())
+          : boundedData(args[0], "Object.fromEntries input")
       if (!Array.isArray(pairs)) {
         throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
       }
       const out: Record<string, unknown> = Object.create(null)
       for (const pair of pairs) {
-        if (!Array.isArray(pair)) {
-          throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] pairs.", node)
-        }
-        guardedSet(out, String(pair[0]), pair[1])
+        if (pair === null || typeof pair !== "object" || isSandboxValue(pair))
+          throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
+        const entry = pair as Record<string, unknown>
+        guardedSet(out, String(entry[0]), entry[1])
       }
       return out
     }

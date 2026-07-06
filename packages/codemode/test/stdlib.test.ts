@@ -586,6 +586,81 @@ describe("Set", () => {
 })
 
 describe("stdlib integration", () => {
+  test("Object values and entries accept arrays", async () => {
+    expect(await value(`return [Object.values(["a", "b"]), Object.entries(["a", "b"])]`)).toEqual([
+      ["a", "b"],
+      [
+        ["0", "a"],
+        ["1", "b"],
+      ],
+    ])
+    expect(await value(`return [Object.keys([, "a"]), Object.values([, "a"]), Object.entries([, "a"])]`)).toEqual([
+      ["1"],
+      ["a"],
+      [["1", "a"]],
+    ])
+  })
+
+  test("Object.is preserves SameValue identity semantics", async () => {
+    expect(
+      await value(`
+        const object = {}
+        return [
+          Object.is(NaN, NaN),
+          Object.is(0, -0),
+          Object.is(object, object),
+          Object.is({}, {}),
+          Object.is(tools, tools),
+        ]
+      `),
+    ).toEqual([true, false, true, false, true])
+  })
+
+  test("Object.fromEntries accepts every supported entry collection", async () => {
+    expect(
+      await value(`
+        return [
+          Object.fromEntries([["a", 1]]),
+          Object.fromEntries(new Map([["b", 2]])),
+          Object.fromEntries(new Set([["c", 3]])),
+          Object.fromEntries(new URLSearchParams("d=4")),
+          Object.fromEntries([{ 0: "e", 1: 5 }]),
+        ]
+      `),
+    ).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }, { d: "4" }, { e: 5 }])
+  })
+
+  test("deterministic Math methods match the host runtime", async () => {
+    const result = await value(`
+      return [
+        Math.acos(0.5), Math.acosh(2), Math.asin(0.5), Math.asinh(2), Math.atan(1), Math.atan2(1, 2), Math.atanh(0.5),
+        Math.cos(0.5), Math.cosh(0.5), Math.sin(0.5), Math.sinh(0.5), Math.tan(0.5), Math.tanh(0.5),
+        Math.log1p(0.5), Math.expm1(0.5), Math.f16round(1.337), Math.fround(1.337), Math.clz32(1), Math.imul(2, 3),
+      ]
+    `)
+    expect(result).toEqual([
+      Math.acos(0.5),
+      Math.acosh(2),
+      Math.asin(0.5),
+      Math.asinh(2),
+      Math.atan(1),
+      Math.atan2(1, 2),
+      Math.atanh(0.5),
+      Math.cos(0.5),
+      Math.cosh(0.5),
+      Math.sin(0.5),
+      Math.sinh(0.5),
+      Math.tan(0.5),
+      Math.tanh(0.5),
+      Math.log1p(0.5),
+      Math.expm1(0.5),
+      Math.f16round(1.337),
+      Math.fround(1.337),
+      Math.clz32(1),
+      Math.imul(2, 3),
+    ])
+  })
+
   test("Object.assign mutates and returns its target", async () => {
     expect(
       await value(`

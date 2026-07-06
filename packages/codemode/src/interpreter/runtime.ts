@@ -2009,7 +2009,7 @@ class Interpreter<R> {
       }
       if (callable instanceof GlobalMethodReference) {
         if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
-        if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
+        if (callable.namespace === "Object" && callable.name !== "is" && args[0] instanceof ToolReference) {
           return self.invokeObjectMethodOnTools(callable.name, args[0] as ToolReference, node)
         }
         if (callable.namespace === "Object" && callable.name === "assign") {
@@ -2980,7 +2980,7 @@ class Interpreter<R> {
     return Effect.gen(function* () {
       for (const elementValue of elements) {
         if (elementValue === null) {
-          values.push(undefined)
+          values.length += 1
           continue
         }
         const element = asNode(elementValue, "elements")
