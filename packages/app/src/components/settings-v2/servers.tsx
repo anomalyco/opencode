@@ -2,6 +2,7 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import fuzzysort from "fuzzysort"
 import { type Component, For, Show, createMemo } from "solid-js"
@@ -47,7 +48,7 @@ export const SettingsServersV2: Component = () => {
   }
 
   return (
-    <>
+    <ScrollView class="flex-1 min-h-0">
       <div
         class="settings-v2-tab-header settings-v2-servers-header"
         classList={{ "settings-v2-tab-header--stacked": showSearch() }}
@@ -134,6 +135,6 @@ export const SettingsServersV2: Component = () => {
           </SettingsListV2>
         </Show>
       </div>
-    </>
+    </ScrollView>
   )
 }

@@ -10,7 +10,9 @@ import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { SettingsList } from "./settings-list"
+import { SettingsScroll } from "./settings-scroll"
 
 const ButtonV2 = lazy(() => import("@opencode-ai/ui/v2/button-v2").then((module) => ({ default: module.ButtonV2 })))
 const IconV2 = lazy(() => import("@opencode-ai/ui/v2/icon").then((module) => ({ default: module.Icon })))
@@ -486,7 +488,7 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
     <Show
       when={props.v2}
       fallback={
-        <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+        <SettingsScroll>
           <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
             <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
               <div class="flex items-center justify-between gap-4">
@@ -517,10 +519,10 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
             </div>
           </div>
           {groups}
-        </div>
+        </SettingsScroll>
       }
     >
-      <>
+      <ScrollView class="flex-1 min-h-0">
         <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
           <div class="settings-v2-tab-header-row">
             <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
@@ -554,7 +556,7 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
           </div>
         </div>
         <div class="settings-v2-tab-body">{groups}</div>
-      </>
+      </ScrollView>
     </Show>
   )
 }

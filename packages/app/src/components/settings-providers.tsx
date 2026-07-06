@@ -12,6 +12,7 @@ import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
+import { SettingsScroll } from "./settings-scroll"
 import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
@@ -138,7 +139,7 @@ const SettingsProvidersContent: Component = () => {
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+    <SettingsScroll>
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex items-center justify-between gap-4 pt-6 pb-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
@@ -258,6 +259,6 @@ const SettingsProvidersContent: Component = () => {
           </Button>
         </div>
       </div>
-    </div>
+    </SettingsScroll>
   )
 }

@@ -9,6 +9,7 @@ import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
 import { SettingsList } from "./settings-list"
+import { SettingsScroll } from "./settings-scroll"
 import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
@@ -67,7 +68,7 @@ const SettingsModelsContent: Component = () => {
   })
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+    <SettingsScroll>
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <div class="flex items-center justify-between gap-4">
@@ -144,6 +145,6 @@ const SettingsModelsContent: Component = () => {
           </Show>
         </Show>
       </div>
-    </div>
+    </SettingsScroll>
   )
 }
