@@ -1200,9 +1200,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const duration = createMemo(() =>
     props.message.time.completed ? props.message.time.completed - props.message.time.created : 0,
   )
+  const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
     <>
-      <Show when={props.message.error}>
+      <Show when={props.message.error && !interrupted()}>
         <box
           border={["left"]}
           paddingTop={1}
@@ -1215,7 +1216,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
-      <box paddingLeft={3} marginTop={props.message.error ? 1 : 0}>
+      <box paddingLeft={3} marginTop={props.message.error && !interrupted() ? 1 : 0}>
         <text>
           <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
@@ -1223,6 +1224,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <span style={{ fg: theme.textMuted }}> · {model()}</span>
           <Show when={duration()}>
             <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+          </Show>
+          <Show when={interrupted()}>
+            <span style={{ fg: theme.textMuted }}> · interrupted</span>
           </Show>
         </text>
       </box>
