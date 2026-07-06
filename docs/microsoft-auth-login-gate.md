@@ -693,6 +693,16 @@ scans **all** candidate locations:
 This ensures the login gate finds the auth file regardless of where
 `xdg-basedir` decided to store it.
 
+### Logout
+
+Calling `window.api.logout()` from the renderer — or `clearAuth()` from the
+main process — deletes `auth.json` from **all** candidate XDG paths, stops
+the sidecar, and relaunches the app, forcing the login gate to appear on the
+next start.
+
+The candidate paths are the same as `checkExistingAuth()` uses (see
+[Windows XDG fallback](#windows-xdg-fallback)).
+
 ---
 
 ## See also
