@@ -250,4 +250,81 @@ describe("Session", () => {
       expect(saved.metadata).toBeUndefined()
     }),
   )
+
+  it.instance("clearMessages removes messages without changing session identity", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(
+        session.create({ title: "clear-target", metadata: { feature: "clear-session" } }),
+        (info) => session.remove(info.id).pipe(Effect.ignore),
+      )
+      yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: created.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "user",
+        model: { providerID: "test", modelID: "test" },
+        tools: {},
+        mode: "",
+      } as unknown as SessionV1.Info)
+      yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: created.id,
+        role: "assistant",
+        time: { created: Date.now() },
+        agent: "assistant",
+        model: { providerID: "test", modelID: "test" },
+        tools: {},
+        mode: "",
+      } as unknown as SessionV1.Info)
+
+      const beforeClear = yield* session.messages({ sessionID: created.id })
+      expect(beforeClear).toHaveLength(2)
+
+      yield* session.clearMessages(created.id)
+
+      const afterClear = yield* session.messages({ sessionID: created.id })
+      const reloaded = yield* session.get(created.id)
+      expect(afterClear).toHaveLength(0)
+      expect(reloaded.id).toBe(created.id)
+      expect(reloaded.title).toBe(created.title)
+      expect(reloaded.metadata).toEqual(created.metadata)
+    }),
+  )
+
+  it.instance("clearMessages emits session.messages.cleared", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const events = yield* EventV2Bridge.Service
+      const received = yield* Deferred.make<SessionID>()
+      const unsubscribe = yield* events.listen((event) => {
+        if (event.type === SessionNs.Event.MessagesCleared.type)
+          Deferred.doneUnsafe(
+            received,
+            Effect.succeed((event.data as typeof SessionNs.Event.MessagesCleared.data.Type).sessionID),
+          )
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const created = yield* Effect.acquireRelease(session.create({ title: "clear-event" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: created.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "user",
+        model: { providerID: "test", modelID: "test" },
+        tools: {},
+        mode: "",
+      } as unknown as SessionV1.Info)
+
+      yield* session.clearMessages(created.id)
+      const clearedSessionID = yield* awaitDeferred(received, "timed out waiting for session.messages.cleared")
+      expect(clearedSessionID).toBe(created.id)
+    }),
+  )
 })
