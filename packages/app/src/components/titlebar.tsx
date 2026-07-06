@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, Match, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Match, onMount, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -58,6 +58,12 @@ export type TitlebarUpdate = {
   version: () => string | undefined
   installing: () => boolean
   install: () => void
+}
+
+export function useTitlebarRightMount() {
+  const [mount, setMount] = createSignal<HTMLElement | null>(null)
+  onMount(() => setMount(document.getElementById("opencode-titlebar-right")))
+  return mount
 }
 
 export function Titlebar(props: { update?: TitlebarUpdate }) {
