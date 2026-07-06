@@ -15,7 +15,7 @@ import {
   type UsageRange,
 } from "@opencode-ai/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
@@ -121,6 +121,8 @@ export default function StatsModel() {
   const modelHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
     { href: "#overview", label: i18n.t("nav.overview") },
     { href: "#momentum", label: i18n.t("model.momentum") },
+    { href: "#usage", label: i18n.t("nav.usage") },
+    { href: "#unique-users", label: i18n.t("model.uniqueUsers") },
     { href: "#efficiency", label: i18n.t("nav.efficiency") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
     { href: "#peers", label: i18n.t("nav.peers") },
@@ -183,6 +185,8 @@ export default function StatsModel() {
                 />
                 <ModelOverview catalog={catalogEntry() ?? null} />
                 <ModelMomentumSection data={stats() ?? null} />
+                <ModelUsageSection data={stats() ?? null} />
+                <ModelUniqueUsersSection data={stats() ?? null} />
                 <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
@@ -558,6 +562,303 @@ function MomentumMetric(props: { label: string; value: string; watermark?: strin
       <span>{props.label}</span>
       <strong>{props.value}</strong>
     </div>
+  )
+}
+
+function ModelUsageSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
+  return (
+    <ModelTrendSection
+      data={props.data}
+      id="usage"
+      title={i18n.t("nav.usage")}
+      description={i18n.t("model.usageDescription")}
+      ariaLabel={i18n.t("model.dailyTokenChart")}
+      emptyTitle={i18n.t("model.noUsageTitle")}
+      emptyDescription={i18n.t("model.noUsageDescription")}
+      value={(point) => point.tokens}
+      formatValue={formatTokens}
+      valueUnit={i18n.t("lab.tokens")}
+      rowLabel={i18n.t("lab.dailyTokens")}
+      lineTone="muted"
+    />
+  )
+}
+
+function ModelUniqueUsersSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
+  return (
+    <ModelTrendSection
+      data={props.data}
+      id="unique-users"
+      title={i18n.t("model.uniqueUsers")}
+      description={i18n.t("model.usersDescription")}
+      ariaLabel={i18n.t("model.dailyUserChart")}
+      emptyTitle={i18n.t("model.noUsersTitle")}
+      emptyDescription={i18n.t("model.noUsersDescription")}
+      value={(point) => point.users}
+      formatValue={formatUsers}
+      valueUnit={i18n.t("format.users")}
+      rowLabel={i18n.t("model.uniqueUsers")}
+      lineTone="active"
+      activeLineBaseTone="muted"
+      highlightBars={false}
+      area
+    />
+  )
+}
+
+function ModelTrendSection(props: {
+  data: StatsModelData | null
+  id: string
+  title: string
+  description: string
+  ariaLabel: string
+  emptyTitle: string
+  emptyDescription: string
+  value: (point: ModelUsagePoint) => number
+  formatValue: (value: number) => string
+  valueUnit: string
+  rowLabel: string
+  lineTone: "muted" | "active"
+  activeLineBaseTone?: "muted" | "active"
+  highlightBars?: boolean
+  area?: boolean
+}) {
+  const activeLineClipId = createUniqueId()
+  const activeLineMaskId = createUniqueId()
+  const areaGradientId = createUniqueId()
+  const [activeIndex, setActiveIndex] = createSignal<number>()
+  const highlightBars = createMemo(() => props.highlightBars ?? true)
+  const lineScale = 326 / 450
+  const areaBottom = 100 / lineScale
+  const usage = createMemo(() => props.data?.usage ?? [])
+  const valueMax = createMemo(() => Math.max(0, ...usage().map((item) => props.value(item))) || 1)
+  const linePoints = createMemo(() =>
+    usage().map((point, index) => ({
+      point,
+      x: modelUsagePointX(index, usage().length),
+      y: modelUsageLineY(props.value(point), valueMax()),
+    })),
+  )
+  const linePath = createMemo(() => modelUsageLinePath(linePoints()))
+  const areaPath = createMemo(() => modelUsageAreaPath(linePoints(), areaBottom))
+  const activeLineBreak = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined || linePoints().length < 2) return undefined
+    return modelUsageColumnBounds(index, linePoints().length)
+  })
+  const activeLineClip = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined || linePoints().length < 2) return undefined
+    return modelUsageColumnInnerBounds(index, linePoints().length)
+  })
+  const activeTooltip = createMemo(() => {
+    const index = activeIndex()
+    const point = index === undefined ? undefined : usage()[index]
+    if (index === undefined || !point) return undefined
+    const bounds = modelUsageColumnBounds(index, usage().length)
+    return {
+      bounds,
+      index,
+      point,
+      tooltipY: (linePoints()[index]?.y ?? 100) * lineScale,
+    }
+  })
+  const monthTicks = createMemo(() => modelUsageMonthTicks(usage(), props.data?.updatedAt ?? null))
+
+  return (
+    <section id={props.id} data-section="model-panel">
+      <SectionTitle href={`#${props.id}`} title={props.title} description={props.description} />
+      <Show
+        when={usage().some((item) => props.value(item) > 0)}
+        fallback={<ModelEmptyState title={props.emptyTitle} description={props.emptyDescription} />}
+      >
+        <div
+          data-component="model-usage-chart"
+          data-variant="model-trend"
+          data-highlight-bars={highlightBars() ? "true" : undefined}
+          role="img"
+          aria-label={props.ariaLabel}
+          style={{ "--model-usage-count": usage().length } as JSX.CSSProperties}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "touch") return
+            setActiveIndex(undefined)
+          }}
+        >
+          <div data-slot="model-trend-plot">
+            <Show when={linePath()}>
+              {(path) => (
+                <>
+                  <Show when={props.area && areaPath()}>
+                    {(area) => (
+                      <svg
+                        data-slot="model-trend-area-layer"
+                        viewBox={`0 0 100 ${formatUsagePathNumber(areaBottom)}`}
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <linearGradient id={areaGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="var(--model-trend-active)" stop-opacity="0.1" />
+                            <stop offset="66%" stop-color="var(--model-trend-active)" stop-opacity="0.045" />
+                            <stop offset="100%" stop-color="var(--model-trend-active)" stop-opacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <path data-slot="model-trend-area" d={area()} fill={`url(#${areaGradientId})`} />
+                      </svg>
+                    )}
+                  </Show>
+                  <svg
+                    data-slot="model-trend-line"
+                    data-layer="base"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <Show
+                      when={activeLineBreak()}
+                      fallback={<path data-slot="model-trend-line-base" data-tone={props.lineTone} d={path()} />}
+                    >
+                      {(lineBreak) => (
+                        <>
+                          <defs>
+                            <mask id={activeLineMaskId} maskUnits="userSpaceOnUse">
+                              <rect x="0" y="-2" width="100" height="104" fill="white" />
+                              <rect x={lineBreak().x} y="-2" width={lineBreak().width} height="104" fill="black" />
+                            </mask>
+                          </defs>
+                          <path
+                            data-slot="model-trend-line-base"
+                            data-tone={props.activeLineBaseTone ?? props.lineTone}
+                            d={path()}
+                            mask={`url(#${activeLineMaskId})`}
+                          />
+                        </>
+                      )}
+                    </Show>
+                  </svg>
+                  <Show when={activeLineClip()}>
+                    {(clip) => (
+                      <svg
+                        data-slot="model-trend-line"
+                        data-layer="active"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <clipPath id={activeLineClipId} clipPathUnits="userSpaceOnUse">
+                            <rect x={clip().x} y="-2" width={clip().width} height="104" />
+                          </clipPath>
+                        </defs>
+                        <path data-slot="model-trend-line-active" d={path()} clip-path={`url(#${activeLineClipId})`} />
+                      </svg>
+                    )}
+                  </Show>
+                </>
+              )}
+            </Show>
+            <Show when={linePoints().at(-1)}>
+              {(point) => (
+                <span
+                  data-slot="model-trend-end-marker"
+                  data-tone={props.lineTone}
+                  aria-hidden="true"
+                  style={
+                    {
+                      "--model-trend-end-x": `${point().x}%`,
+                      "--model-trend-end-top": `${point().y * lineScale}%`,
+                    } as JSX.CSSProperties
+                  }
+                />
+              )}
+            </Show>
+            <div data-slot="model-trend-bars">
+              <For each={usage()}>
+                {(point, index) => (
+                  <div
+                    data-slot="model-trend-column"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${point.date} ${props.formatValue(props.value(point))} ${props.valueUnit}`}
+                    data-active={activeIndex() === index() ? "true" : undefined}
+                    data-muted={
+                      highlightBars() && activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined
+                    }
+                    style={
+                      {
+                        "--model-trend-token-height": modelUsageStripHeight(props.value(point), valueMax()),
+                      } as JSX.CSSProperties
+                    }
+                    onPointerDown={(event) => {
+                      if (event.pointerType !== "touch") return
+                      setActiveIndex(index())
+                    }}
+                    onPointerEnter={() => setActiveIndex(index())}
+                    onPointerMove={(event) => {
+                      if (event.pointerType === "touch") return
+                      setActiveIndex(index())
+                    }}
+                    onClick={() => setActiveIndex(index())}
+                    onFocus={() => setActiveIndex(index())}
+                    onBlur={() => setActiveIndex(undefined)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return
+                      event.preventDefault()
+                      setActiveIndex(index())
+                    }}
+                  >
+                    <div data-slot="model-trend-token-band">
+                      <div data-slot="model-trend-token-bar" />
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={activeTooltip()} keyed>
+              {(active) => (
+                <div
+                  data-component="chart-tooltip"
+                  data-placement={active.index > usage().length * 0.62 ? "left" : "right"}
+                  style={
+                    {
+                      "--model-trend-tooltip-left": `${active.bounds.x}%`,
+                      "--model-trend-tooltip-right": `${active.bounds.x + active.bounds.width}%`,
+                      "--model-trend-tooltip-y": `${active.tooltipY}`,
+                    } as JSX.CSSProperties
+                  }
+                >
+                  <strong>{formatModelUsageTooltipDate(active.point.date, props.data?.updatedAt ?? null)}</strong>
+                  <span>
+                    {props.formatValue(props.value(active.point))} {props.valueUnit}
+                  </span>
+                  <div data-slot="tooltip-divider" />
+                  <p>
+                    <span data-slot="tooltip-label">
+                      <i data-kind={props.lineTone === "active" ? "users" : "tokens"} /> {props.rowLabel}
+                    </span>
+                    <b>{props.formatValue(props.value(active.point))}</b>
+                  </p>
+                </div>
+              )}
+            </Show>
+          </div>
+          <div data-slot="model-trend-months" aria-hidden="true">
+            <For each={monthTicks()}>
+              {(tick) => (
+                <span
+                  data-align={tick.align}
+                  style={{ "--model-trend-month-left": `${tick.left}%` } as JSX.CSSProperties}
+                >
+                  {tick.label}
+                </span>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </section>
   )
 }
 
@@ -1012,6 +1313,101 @@ function formatMomentumDateLabel(date: string) {
   const parsed = parseMomentumDate(date, null)
   if (parsed.getUTCFullYear() === 1970) return "JAN 1"
   return `${shortMonths[parsed.getUTCMonth()]} ${parsed.getUTCDate()}`
+}
+
+function modelUsageStripHeight(value: number, max: number) {
+  if (value <= 0 || max <= 0) return "0px"
+  return `max(2px, ${(value / max) * 100}%)`
+}
+
+function modelUsageLineY(value: number, max: number) {
+  if (value <= 0 || max <= 0) return 100
+  return Math.max(0, 100 - (value / max) * 100)
+}
+
+function modelUsagePointX(index: number, count: number) {
+  if (count <= 1) return 50
+  return ((index + 0.5) / count) * 100
+}
+
+function modelUsageColumnBounds(index: number, count: number) {
+  if (count <= 0) return { x: 0, width: 100 }
+  return { x: (index / count) * 100, width: 100 / count }
+}
+
+function modelUsageColumnInnerBounds(index: number, count: number) {
+  const bounds = modelUsageColumnBounds(index, count)
+  const inset = Math.min(bounds.width * 0.1, 0.24)
+  return { x: bounds.x + inset, width: Math.max(0.001, bounds.width - inset * 2) }
+}
+
+type ModelUsageLinePoint = { x: number; y: number }
+
+function modelUsageLinePath(points: ModelUsageLinePoint[]) {
+  if (points.length === 0) return ""
+  if (points.length === 1) return `M ${formatUsagePathNumber(points[0].x)} ${formatUsagePathNumber(points[0].y)}`
+
+  return points.slice(0, -1).reduce(
+    (path, point, index) => {
+      const next = points[index + 1]
+      const previous = points[index - 1] ?? point
+      const afterNext = points[index + 2] ?? next
+      const controlA = {
+        x: point.x + (next.x - previous.x) / 6,
+        y: clampUsagePercent(point.y + (next.y - previous.y) / 6),
+      }
+      const controlB = {
+        x: next.x - (afterNext.x - point.x) / 6,
+        y: clampUsagePercent(next.y - (afterNext.y - point.y) / 6),
+      }
+      return `${path} C ${formatUsagePathNumber(controlA.x)} ${formatUsagePathNumber(controlA.y)}, ${formatUsagePathNumber(controlB.x)} ${formatUsagePathNumber(controlB.y)}, ${formatUsagePathNumber(next.x)} ${formatUsagePathNumber(next.y)}`
+    },
+    `M ${formatUsagePathNumber(points[0].x)} ${formatUsagePathNumber(points[0].y)}`,
+  )
+}
+
+function modelUsageAreaPath(points: ModelUsageLinePoint[], bottom: number) {
+  const path = modelUsageLinePath(points)
+  if (!path || points.length === 0) return ""
+  const first = points[0]
+  const last = points[points.length - 1]
+  return `${path} L ${formatUsagePathNumber(last.x)} ${formatUsagePathNumber(bottom)} L ${formatUsagePathNumber(first.x)} ${formatUsagePathNumber(bottom)} Z`
+}
+
+function formatUsagePathNumber(value: number) {
+  return Number(value.toFixed(3))
+}
+
+function clampUsagePercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function modelUsageMonthTicks(points: ModelUsagePoint[], updatedAt: string | null) {
+  const seen = new Set<string>()
+  return points.flatMap((point, index) => {
+    const parsed = parseMomentumDate(point.date, updatedAt)
+    const label = shortMonths[parsed.getUTCMonth()]
+    if (!label || seen.has(label)) return []
+    seen.add(label)
+    return [
+      {
+        label,
+        left: modelUsagePointX(index, points.length),
+        align: index === 0 ? "start" : index >= points.length - 2 ? "end" : "center",
+      },
+    ]
+  })
+}
+
+function formatModelUsageTooltipDate(value: string, updatedAt: string | null) {
+  const date = parseMomentumDate(value, updatedAt)
+  if (date.getUTCFullYear() === 1970) return value
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
 }
 
 function formatRankLabel(rank: number | null) {
