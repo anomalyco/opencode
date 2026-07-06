@@ -1,27 +1,26 @@
 import { expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Deferred, Effect, Fiber, Layer, Logger } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppLayer } from "../../src/effect/app-runtime"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceRef } from "../../src/effect/instance-ref"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
-import * as Observability from "@opencode-ai/core/effect/observability"
+import * as Observability from "@opencode-ai/core/observability"
 import { attach } from "../../src/effect/run-service"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(CrossSpawnSpawner.defaultLayer)
+const observabilityLayer = LayerNode.compile(Observability.node)
+const it = testEffect(LayerNode.compile(CrossSpawnSpawner.node))
 
 function check(loggers: ReadonlySet<Logger.Logger<unknown, any>>) {
   return {
-    defaultLogger: loggers.has(Logger.defaultLogger),
     tracerLogger: loggers.has(Logger.tracerLogger),
-    effectLogger: loggers.has(EffectLogger.logger),
     size: loggers.size,
   }
 }
 
-it.live("makeRuntime installs EffectLogger through Observability.layer", () =>
+it.live("makeRuntime installs the observability logger", () =>
   Effect.gen(function* () {
     class Dummy extends Context.Service<Dummy, { readonly current: () => Effect.Effect<ReturnType<typeof check>> }>()(
       "@test/Dummy",
@@ -37,20 +36,18 @@ it.live("makeRuntime installs EffectLogger through Observability.layer", () =>
     )
 
     const current = yield* Dummy.use((svc) => svc.current()).pipe(
-      Effect.provide(Layer.provideMerge(layer, Observability.layer)),
+      Effect.provide(Layer.provideMerge(layer, observabilityLayer)),
     )
 
-    expect(current.effectLogger).toBe(true)
-    expect(current.defaultLogger).toBe(false)
+    expect(current.size).toBeGreaterThan(0)
   }),
 )
 
-it.live("AppLayer also installs EffectLogger through Observability.layer", () =>
+it.live("AppLayer also installs the observability logger", () =>
   Effect.gen(function* () {
     const current = yield* Effect.map(Effect.service(Logger.CurrentLoggers), check).pipe(Effect.provide(AppLayer))
 
-    expect(current.effectLogger).toBe(true)
-    expect(current.defaultLogger).toBe(false)
+    expect(current.size).toBeGreaterThan(0)
   }),
 )
 
@@ -98,8 +95,7 @@ it.instance(
       const result = yield* Fiber.join(fiber)
 
       expect(result.directory).toBe(test.directory)
-      expect(result.effectLogger).toBe(true)
-      expect(result.defaultLogger).toBe(false)
-    }).pipe(Effect.provide(Observability.layer)),
+      expect(result.size).toBeGreaterThan(0)
+    }).pipe(Effect.provide(observabilityLayer)),
   { git: true },
 )

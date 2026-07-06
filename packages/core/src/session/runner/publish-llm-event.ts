@@ -1,11 +1,4 @@
-import {
-  ToolOutput as LLMToolOutput,
-  type LLMEvent,
-  type ProviderMetadata,
-  type ToolOutput as LLMToolOutputType,
-  type ToolResultValue,
-  type Usage,
-} from "@opencode-ai/llm"
+import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -17,6 +10,7 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
   readonly model: ModelV2.Ref
+  readonly snapshot?: string
 }
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
@@ -45,13 +39,13 @@ const message = (value: unknown) => {
   }
 }
 
-type ToolOutput =
-  | { readonly structured: Record<string, unknown>; readonly content: LLMToolOutputType["content"] }
+type SettledOutput =
+  | { readonly structured: Record<string, unknown>; readonly content: ToolOutput["content"] }
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
-const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
+const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): SettledOutput => {
   if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
-  const settled = value ?? LLMToolOutput.fromResultValue(result)
+  const settled = value ?? ToolOutput.fromResultValue(result)
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
   return { structured: record(settled.structured), content: settled.content }
 }
@@ -72,15 +66,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   >()
   const timestamp = DateTime.now
   let assistantMessageID: SessionMessage.ID | undefined
+  let assistantActive = false
+  let assistantFailed = false
   let providerFailed = false
+  let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
     assistantMessageID = SessionMessage.ID.create()
+    assistantActive = true
     yield* events.publish(SessionEvent.Step.Started, {
       ...input,
       assistantMessageID,
       timestamp: yield* timestamp,
+      snapshot: input.snapshot,
     })
     return assistantMessageID
   })
@@ -165,7 +164,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
-    const assistantMessageID = yield* currentAssistantMessageID()
+    const assistantMessageID = yield* startAssistant()
     tools.set(event.id, {
       assistantMessageID,
       name: event.name,
@@ -197,6 +196,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* flushFragments()
   })
 
+  const failAssistant = Effect.fnUntraced(function* (message: string) {
+    if (assistantFailed) return
+    yield* flush()
+    const assistantMessageID = yield* startAssistant()
+    assistantActive = false
+    assistantFailed = true
+    yield* events.publish(SessionEvent.Step.Failed, {
+      sessionID: input.sessionID,
+      timestamp: yield* timestamp,
+      assistantMessageID,
+      error: { type: "unknown", message },
+    })
+  })
+
   const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (
     message: string,
     hostedOnly = false,
@@ -218,10 +231,17 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const assistantMessageIDForTool = (callID: string) => {
+    const tool = tools.get(callID)
+    return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(`Unknown tool call: ${callID}`)
+  }
+
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
+    event: LLMEvent,
+    outputPaths: ReadonlyArray<string> = [],
+  ) {
     switch (event.type) {
       case "step-start":
-        yield* startAssistant()
         return
       case "text-start":
         yield* text.start(event.id)
@@ -347,7 +367,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
-          result: event.result,
+          outputPaths,
+          ...(provider.executed ? { result: event.result } : {}),
           provider,
         })
         return
@@ -374,29 +395,29 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       }
       case "step-finish":
         yield* flush()
-        yield* events.publish(SessionEvent.Step.Ended, {
-          sessionID: input.sessionID,
-          timestamp: yield* timestamp,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          finish: event.reason,
-          cost: 0,
-          tokens: tokens(event.usage),
-        })
+        assistantActive = false
+        if (stepSettlement) return yield* Effect.die("Duplicate step finish")
+        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
         return
       case "finish":
         return
       case "provider-error":
         providerFailed = true
-        yield* flush()
-        yield* events.publish(SessionEvent.Step.Failed, {
-          sessionID: input.sessionID,
-          timestamp: yield* timestamp,
-          assistantMessageID: yield* startAssistant(),
-          error: { type: "unknown", message: event.message },
-        })
+        yield* failAssistant(event.message)
         return
     }
   })
 
-  return { publish, flush, failUnsettledTools, hasProviderError: () => providerFailed, startAssistant }
+  return {
+    publish,
+    flush,
+    failAssistant,
+    failUnsettledTools,
+    hasActiveAssistant: () => assistantActive,
+    hasAssistantStarted: () => assistantMessageID !== undefined,
+    hasProviderError: () => providerFailed,
+    stepSettlement: () => stepSettlement,
+    startAssistant,
+    assistantMessageID: assistantMessageIDForTool,
+  }
 }

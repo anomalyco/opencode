@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { ServerScope } from "./server-scope"
 
 type PersistTestingType = typeof import("./persist").PersistTesting
 type PersistType = typeof import("./persist").Persist
@@ -163,5 +164,48 @@ describe("persist localStorage resilience", () => {
 
     expect(storage.getItem(`${target.storage}:${target.key}`)).toBeNull()
     expect(storage.getItem(`${target.legacyStorageNames![0]}:${target.key}`)).toBeNull()
+  })
+
+  test("draft target isolates storage per draft and namespaces keys", () => {
+    const a = Persist.draft("draft-a", "prompt")
+    const b = Persist.draft("draft-b", "prompt")
+
+    expect(a.key).toBe("draft:prompt")
+    expect(a.storage).not.toBe(b.storage)
+    expect(a.storage).not.toBe(Persist.workspace("/home/luke/repo", "prompt").storage)
+  })
+
+  test("removes draft storage when removing persisted target", () => {
+    const target = Persist.draft("draft-a", "prompt")
+    storage.setItem(`${target.storage}:${target.key}`, '{"value":1}')
+
+    removePersisted(target)
+
+    expect(storage.getItem(`${target.storage}:${target.key}`)).toBeNull()
+  })
+
+  test("server workspace target preserves local storage and isolates remote storage", () => {
+    const local = Persist.serverWorkspace(ServerScope.local, "/home/luke/repo", "prompt")
+    const windows = Persist.serverWorkspace("https://windows.example" as ServerScope, "/home/luke/repo", "prompt")
+    const debian = Persist.serverWorkspace("https://debian.example" as ServerScope, "/home/luke/repo", "prompt")
+
+    expect(local).toEqual(Persist.workspace("/home/luke/repo", "prompt"))
+    expect(windows.storage).not.toBe(local.storage)
+    expect(debian.storage).not.toBe(local.storage)
+    expect(debian.storage).not.toBe(windows.storage)
+    expect(windows.legacyStorageNames).toBeUndefined()
+    expect(debian.legacyStorageNames).toBeUndefined()
+  })
+
+  test("server global target preserves local key and isolates remote keys", () => {
+    expect(Persist.serverGlobal(ServerScope.local, "notification")).toEqual(Persist.global("notification"))
+    expect(Persist.serverGlobal("https://debian.example" as ServerScope, "notification")).toEqual({
+      storage: "opencode.global.dat",
+      key: "https://debian.example\0notification",
+    })
+  })
+
+  test("server global target cannot collide when scope and key contain colons", () => {
+    expect(Persist.serverGlobal("a:b" as ServerScope, "c")).not.toEqual(Persist.serverGlobal("a" as ServerScope, "b:c"))
   })
 })

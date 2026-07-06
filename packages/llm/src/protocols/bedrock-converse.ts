@@ -7,7 +7,9 @@ import {
   Usage,
   type CacheHint,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
+  type ModelToolSchemaCompatibility,
   type ProviderMetadata,
   type ReasoningPart,
   type ToolCallPart,
@@ -15,11 +17,13 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
+import { isContextOverflow } from "../provider-error"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { BedrockAuth } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
 import { BedrockMedia } from "./utils/bedrock-media"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "bedrock-converse"
@@ -204,18 +208,22 @@ type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerToolSpec = (tool: ToolDefinition): BedrockToolSpec => ({
+const lowerToolSpec = (tool: ToolDefinition, inputSchema: JsonSchema): BedrockToolSpec => ({
   toolSpec: {
     name: tool.name,
     description: tool.description,
-    inputSchema: { json: tool.inputSchema },
+    inputSchema: { json: inputSchema },
   },
 })
 
-const lowerTools = (breakpoints: BedrockCache.Breakpoints, tools: ReadonlyArray<ToolDefinition>): BedrockTool[] => {
+const lowerTools = (
+  compatibility: ModelToolSchemaCompatibility | undefined,
+  breakpoints: BedrockCache.Breakpoints,
+  tools: ReadonlyArray<ToolDefinition>,
+): BedrockTool[] => {
   const result: BedrockTool[] = []
   for (const tool of tools) {
-    result.push(lowerToolSpec(tool))
+    result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility)))
     const cachePoint = BedrockCache.block(breakpoints, tool.cache)
     if (cachePoint) result.push(cachePoint)
   }
@@ -268,7 +276,12 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
       content.push({ text: item.text })
       continue
     }
-    const media = yield* BedrockMedia.lower(item)
+    const media = yield* BedrockMedia.lower({
+      type: "media",
+      mediaType: item.mime,
+      data: item.uri,
+      filename: item.name,
+    })
     if (!("image" in media))
       return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
     content.push(media)
@@ -380,7 +393,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const breakpoints = BedrockCache.breakpoints()
   const toolConfig =
     request.tools.length > 0 && request.toolChoice?.type !== "none"
-      ? { tools: lowerTools(breakpoints, request.tools), toolChoice }
+      ? { tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools), toolChoice }
       : undefined
   const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
   const messages = yield* lowerMessages(request, breakpoints)
@@ -406,6 +419,9 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
             stopSequences: generation?.stop,
           },
     toolConfig,
+    // Converse's base inferenceConfig has no topK; Anthropic/Nova accept it
+    // as a model-specific field, so it goes through additionalModelRequestFields.
+    additionalModelRequestFields: generation?.topK === undefined ? undefined : { top_k: generation.topK },
   }
 })
 
@@ -582,7 +598,16 @@ const step = (state: ParserState, event: BedrockEvent) =>
     if (event.validationException || event.throttlingException) {
       const message =
         event.validationException?.message ?? event.throttlingException?.message ?? "Bedrock Converse error"
-      return [state, [LLMEvent.providerError({ message, retryable: event.throttlingException !== undefined })]] as const
+      return [
+        state,
+        [
+          LLMEvent.providerError({
+            message,
+            classification: event.validationException && isContextOverflow(message) ? "context-overflow" : undefined,
+            retryable: event.throttlingException !== undefined,
+          }),
+        ],
+      ] as const
     }
 
     return [state, []] as const

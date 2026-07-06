@@ -1,5 +1,4 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { LSP } from "@/lsp/lsp"
 import { Schema } from "effect"
@@ -36,6 +35,20 @@ export const FindFileQuery = Schema.Struct({
 export const FindSymbolQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   query: Schema.String,
+})
+
+export const LegacyMatch = Schema.Struct({
+  path: Schema.Struct({ text: Schema.String }),
+  lines: Schema.Struct({ text: Schema.String }),
+  line_number: NonNegativeInt,
+  absolute_offset: NonNegativeInt,
+  submatches: Schema.Array(
+    Schema.Struct({
+      match: Schema.Struct({ text: Schema.String }),
+      start: NonNegativeInt,
+      end: NonNegativeInt,
+    }),
+  ),
 })
 
 export const LegacyEntry = Schema.Struct({
@@ -94,7 +107,7 @@ export const FileApi = HttpApi.make("file")
       .add(
         HttpApiEndpoint.get("findText", FilePaths.findText, {
           query: FindTextQuery,
-          success: described(Schema.Array(Ripgrep.SearchMatch), "Matches"),
+          success: described(Schema.Array(LegacyMatch), "Matches"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.text",

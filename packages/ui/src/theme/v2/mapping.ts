@@ -3,12 +3,37 @@ import { V2_AVATAR_DARK, V2_AVATAR_LIGHT } from "./avatar"
 
 const ref = (name: string): V2ColorValue => `var(--${name})`
 
+const lightAgentTokens: Record<string, V2ColorValue> = {
+  "v2-agent-plan-solid": ref("v2-pink-900"),
+  "v2-agent-plan-border": "rgba(200, 61, 139, 0.5)",
+  "v2-agent-plan-background": "rgba(253, 236, 243, 0.33)",
+  "v2-agent-build-solid": ref("v2-blue-900"),
+  "v2-agent-build-border": "rgba(59, 92, 246, 0.5)",
+  "v2-agent-build-background": "rgba(236, 241, 254, 0.33)",
+  "v2-agent-explore-solid": ref("v2-yellow-900"),
+  "v2-agent-explore-border": "rgba(142, 114, 49, 0.5)",
+  "v2-agent-explore-background": "rgba(254, 250, 236, 0.33)",
+}
+
+const darkAgentTokens: Record<string, V2ColorValue> = {
+  "v2-agent-plan-solid": ref("v2-pink-400"),
+  "v2-agent-plan-border": "rgba(250, 188, 216, 0.5)",
+  "v2-agent-plan-background": "rgba(247, 213, 228, 0.1)",
+  "v2-agent-build-solid": ref("v2-blue-400"),
+  "v2-agent-build-border": "rgba(215, 226, 252, 0.5)",
+  "v2-agent-build-background": "rgba(215, 226, 252, 0.1)",
+  "v2-agent-explore-solid": ref("v2-yellow-400"),
+  "v2-agent-explore-border": "rgba(247, 229, 181, 0.5)",
+  "v2-agent-explore-background": "rgba(252, 239, 208, 0.1)",
+}
+
 const light: Record<string, V2ColorValue> = {
   "v2-background-bg-base": ref("v2-grey-100"),
   "v2-background-bg-deep": ref("v2-grey-200"),
   "v2-background-bg-layer-01": ref("v2-grey-300"),
   "v2-background-bg-layer-02": ref("v2-grey-400"),
   "v2-background-bg-layer-03": ref("v2-grey-500"),
+  "v2-background-bg-layer-04": ref("v2-grey-600"),
   "v2-background-bg-inverse": ref("v2-grey-1000"),
   "v2-background-bg-contrast": ref("v2-grey-900"),
   "v2-background-bg-button-neutral": ref("v2-grey-100"),
@@ -17,12 +42,7 @@ const light: Record<string, V2ColorValue> = {
   "v2-text-text-contrast": ref("v2-grey-100"),
   "v2-text-text-accent": ref("v2-blue-600"),
   "v2-text-text-accent-hover": ref("v2-blue-700"),
-  "v2-icon-icon-base": ref("v2-grey-1000"),
-  "v2-icon-icon-muted": ref("v2-grey-800"),
-  "v2-icon-icon-inverse": ref("v2-grey-100"),
-  "v2-icon-icon-contrast": ref("v2-grey-200"),
-  "v2-icon-icon-accent": ref("v2-blue-600"),
-  "v2-icon-icon-accent-hover": ref("v2-blue-700"),
+  "v2-text-text-code-accent": ref("v2-blue-900"),
   "v2-border-border-muted": ref("v2-alpha-dark-8"),
   "v2-border-border-base": ref("v2-alpha-dark-10"),
   "v2-border-border-strong": ref("v2-alpha-dark-20"),
@@ -50,6 +70,7 @@ const light: Record<string, V2ColorValue> = {
   "v2-state-bg-info": ref("v2-blue-100"),
   "v2-state-fg-info": ref("v2-blue-800"),
   "v2-state-border-info": ref("v2-blue-300"),
+  ...lightAgentTokens,
   ...V2_AVATAR_LIGHT,
   "v2-elevation-raised":
     "0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
@@ -77,6 +98,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-background-bg-layer-01": ref("v2-grey-800"),
   "v2-background-bg-layer-02": ref("v2-grey-600"),
   "v2-background-bg-layer-03": ref("v2-grey-500"),
+  "v2-background-bg-layer-04": ref("v2-grey-400"),
   "v2-background-bg-inverse": ref("v2-grey-100"),
   "v2-background-bg-contrast": ref("v2-grey-700"),
   "v2-background-bg-button-neutral": ref("v2-alpha-light-6"),
@@ -85,12 +107,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-text-text-contrast": ref("v2-grey-100"),
   "v2-text-text-accent": ref("v2-blue-400"),
   "v2-text-text-accent-hover": ref("v2-blue-300"),
-  "v2-icon-icon-base": ref("v2-grey-300"),
-  "v2-icon-icon-muted": ref("v2-grey-400"),
-  "v2-icon-icon-inverse": ref("v2-grey-1000"),
-  "v2-icon-icon-contrast": ref("v2-grey-200"),
-  "v2-icon-icon-accent": ref("v2-blue-400"),
-  "v2-icon-icon-accent-hover": ref("v2-blue-300"),
+  "v2-text-text-code-accent": ref("v2-blue-400"),
   "v2-border-border-muted": ref("v2-alpha-light-8"),
   "v2-border-border-base": ref("v2-alpha-light-10"),
   "v2-border-border-strong": ref("v2-alpha-light-20"),
@@ -100,7 +117,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-overlay-simple-overlay-pressed": ref("v2-alpha-light-10"),
   "v2-overlay-simple-overlay-contrast-hover": ref("v2-alpha-dark-24"),
   "v2-overlay-simple-overlay-contrast-pressed": ref("v2-alpha-dark-40"),
-  "v2-overlay-simple-overlay-scrim": ref("v2-alpha-light-30"),
+  "v2-overlay-simple-overlay-scrim": ref("v2-alpha-dark-60"),
   "v2-overlay-gradient-depth-overlay-depth-top": ref("v2-alpha-light-100"),
   "v2-overlay-gradient-depth-overlay-depth-bot": ref("v2-alpha-light-0"),
   "v2-overlay-simple-tab-active-scrim": "#24242400",
@@ -118,6 +135,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-state-bg-info": ref("v2-blue-1200"),
   "v2-state-fg-info": ref("v2-blue-500"),
   "v2-state-border-info": ref("v2-blue-900"),
+  ...darkAgentTokens,
   ...V2_AVATAR_DARK,
   "v2-elevation-raised":
     "0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",

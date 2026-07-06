@@ -9,6 +9,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import { host } from "../plugin/host"
 
 const it = testEffect(Layer.empty)
 const decode = Schema.decodeUnknownSync(Config.Info)
@@ -18,16 +19,28 @@ describe("ConfigSkillPlugin.Plugin", () => {
     Effect.gen(function* () {
       const directory = AbsolutePath.make("/repo/packages/app")
       const sources: SkillV2.Source[] = []
-      const transform = Effect.fnUntraced(function* () {
-        return Effect.fnUntraced(function* (update: (editor: SkillV2.Editor) => void) {
-          update({
-            source: (source) => sources.push(source),
-            list: () => sources,
-          })
+      const transform = Effect.fnUntraced(function* (update: (draft: SkillV2.Draft) => void | Effect.Effect<void>) {
+        const result = update({
+          source: (source) => {
+            sources.push(source)
+          },
+          list: () => sources,
         })
+        if (Effect.isEffect(result)) yield* result
+        const dispose = Effect.sync(() => {
+          sources.length = 0
+        })
+        yield* Effect.addFinalizer(() => dispose)
+        return { dispose }
       })
 
-      yield* ConfigSkillPlugin.Plugin.effect.pipe(
+      yield* ConfigSkillPlugin.Plugin.effect(
+        host({
+          skill: { transform, reload: () => Effect.void },
+        }),
+      ).pipe(
+        Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: "/home/test" })),
+        Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
         Effect.provideService(
           Config.Service,
           Config.Service.of({
@@ -43,35 +56,24 @@ describe("ConfigSkillPlugin.Plugin", () => {
               ]),
           }),
         ),
-        Effect.provideService(Global.Service, Global.Service.of(Global.make({ home: "/home/test" }))),
-        Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
-        Effect.provideService(
-          SkillV2.Service,
-          SkillV2.Service.of({
-            transform,
-            sources: () => Effect.succeed(sources),
-            list: () => Effect.succeed([]),
-            forAgent: () => Effect.succeed([]),
-          }),
-        ),
       )
 
       expect(sources).toEqual([
-        new SkillV2.DirectorySource({
+        SkillV2.DirectorySource.make({
           type: "directory",
           path: AbsolutePath.make(path.join("/repo/.opencode", "skill")),
         }),
-        new SkillV2.DirectorySource({
+        SkillV2.DirectorySource.make({
           type: "directory",
           path: AbsolutePath.make(path.join("/repo/.opencode", "skills")),
         }),
-        new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
-        new SkillV2.DirectorySource({
+        SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
+        SkillV2.DirectorySource.make({
           type: "directory",
           path: AbsolutePath.make(path.join("/home/test", "shared-skills")),
         }),
-        new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make("/opt/skills") }),
-        new SkillV2.UrlSource({ type: "url", url: "https://example.test/skills/" }),
+        SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/opt/skills") }),
+        SkillV2.UrlSource.make({ type: "url", url: "https://example.test/skills/" }),
       ])
     }),
   )

@@ -10,10 +10,8 @@ export type MemoryState = {
 export interface Adapter {
   readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
-  readonly getCurrentCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
   readonly getCurrentShell: (callID: string) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
-  readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Message) => Effect.Effect<void>
 }
@@ -23,7 +21,6 @@ export function memory(state: MemoryState): Adapter {
     state.messages.findLastIndex((message) => message.id === messageID)
   // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
   const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
-  const activeCompactionIndex = () => state.messages.findLastIndex((message) => message.type === "compaction")
   const activeShellIndex = (callID: string) =>
     state.messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
 
@@ -44,14 +41,6 @@ export function memory(state: MemoryState): Adapter {
         return assistant?.type === "assistant" ? assistant : undefined
       })
     },
-    getCurrentCompaction() {
-      return Effect.sync(() => {
-        const index = activeCompactionIndex()
-        if (index < 0) return
-        const compaction = state.messages[index]
-        return compaction?.type === "compaction" ? compaction : undefined
-      })
-    },
     getCurrentShell(callID) {
       return Effect.sync(() => {
         const index = activeShellIndex(callID)
@@ -67,15 +56,6 @@ export function memory(state: MemoryState): Adapter {
         const current = state.messages[index]
         if (current?.type !== "assistant") return
         state.messages[index] = assistant
-      })
-    },
-    updateCompaction(compaction) {
-      return Effect.sync(() => {
-        const index = activeCompactionIndex()
-        if (index < 0) return
-        const current = state.messages[index]
-        if (current?.type !== "compaction") return
-        state.messages[index] = compaction
       })
     },
     updateShell(shell) {
@@ -122,7 +102,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
     yield* SessionEvent.All.match(event, {
       "session.next.agent.switched": (event) => {
         return adapter.appendMessage(
-          new SessionMessage.AgentSwitched({
+          SessionMessage.AgentSwitched.make({
             id: event.data.messageID,
             type: "agent-switched",
             metadata: event.metadata,
@@ -133,7 +113,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.next.model.switched": (event) => {
         return adapter.appendMessage(
-          new SessionMessage.ModelSwitched({
+          SessionMessage.ModelSwitched.make({
             id: event.data.messageID,
             type: "model-switched",
             metadata: event.metadata,
@@ -145,23 +125,30 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.moved": () => Effect.void,
       "session.next.prompted": (event) => {
         return adapter.appendMessage(
-          new SessionMessage.User({
+          SessionMessage.User.make({
             id: event.data.messageID,
             type: "user",
             metadata: event.metadata,
             text: event.data.prompt.text,
             files: event.data.prompt.files,
             agents: event.data.prompt.agents,
-            references: event.data.prompt.references,
             time: { created: event.data.timestamp },
           }),
         )
       },
       "session.next.prompt.admitted": () => Effect.void,
-      "session.next.prompt.promoted": () => Effect.void,
+      "session.next.context.updated": (event) =>
+        adapter.appendMessage(
+          SessionMessage.System.make({
+            id: event.data.messageID,
+            type: "system",
+            text: event.data.text,
+            time: { created: event.data.timestamp },
+          }),
+        ),
       "session.next.synthetic": (event) => {
         return adapter.appendMessage(
-          new SessionMessage.Synthetic({
+          SessionMessage.Synthetic.make({
             sessionID: event.data.sessionID,
             text: event.data.text,
             id: event.data.messageID,
@@ -172,7 +159,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.next.shell.started": (event) => {
         return adapter.appendMessage(
-          new SessionMessage.Shell({
+          SessionMessage.Shell.make({
             id: event.data.messageID,
             type: "shell",
             metadata: event.metadata,
@@ -207,7 +194,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             )
           }
           yield* adapter.appendMessage(
-            new SessionMessage.Assistant({
+            SessionMessage.Assistant.make({
               id: event.data.assistantMessageID,
               type: "assistant",
               agent: event.data.agent,
@@ -225,7 +212,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           draft.finish = event.data.finish
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
-          if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, end: event.data.snapshot }
+          if (event.data.snapshot || event.data.files)
+            draft.snapshot = {
+              ...draft.snapshot,
+              end: event.data.snapshot,
+              files: event.data.files ? Array.from(event.data.files) : undefined,
+            }
         })
       },
       "session.next.step.failed": (event) => {
@@ -238,7 +230,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.text.started": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.content.push(
-            castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
+            castDraft(SessionMessage.AssistantText.make({ type: "text", id: event.data.textID, text: "" })),
           )
         })
       },
@@ -258,12 +250,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.content.push(
             castDraft(
-              new SessionMessage.AssistantTool({
+              SessionMessage.AssistantTool.make({
                 type: "tool",
                 id: event.data.callID,
                 name: event.data.name,
                 time: { created: event.data.timestamp },
-                state: new SessionMessage.ToolStatePending({ status: "pending", input: "" }),
+                state: SessionMessage.ToolStatePending.make({ status: "pending", input: "" }),
               }),
             ),
           )
@@ -283,7 +275,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             match.provider = event.data.provider
             match.time.ran = event.data.timestamp
             match.state = castDraft(
-              new SessionMessage.ToolStateRunning({
+              SessionMessage.ToolStateRunning.make({
                 status: "running",
                 input: event.data.input,
                 structured: {},
@@ -313,11 +305,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             }
             match.time.completed = event.data.timestamp
             match.state = castDraft(
-              new SessionMessage.ToolStateCompleted({
+              SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: match.state.input,
                 structured: event.data.structured,
                 content: [...event.data.content],
+                outputPaths: event.data.outputPaths ? [...event.data.outputPaths] : [],
                 result: event.data.result,
               }),
             )
@@ -335,7 +328,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             }
             match.time.completed = event.data.timestamp
             match.state = castDraft(
-              new SessionMessage.ToolStateError({
+              SessionMessage.ToolStateError.make({
                 status: "error",
                 error: event.data.error,
                 input: typeof match.state.input === "string" ? {} : match.state.input,
@@ -351,11 +344,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.content.push(
             castDraft(
-              new SessionMessage.AssistantReasoning({
+              SessionMessage.AssistantReasoning.make({
                 type: "reasoning",
                 id: event.data.reasoningID,
                 text: "",
                 providerMetadata: event.data.providerMetadata,
+                time: { created: event.data.timestamp },
               }),
             ),
           )
@@ -372,48 +366,30 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           const match = latestReasoning(draft, event.data.reasoningID)
           if (match) {
             match.text = event.data.text
+            match.time = { created: match.time?.created ?? event.data.timestamp, completed: event.data.timestamp }
             if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
           }
         })
       },
       "session.next.retried": () => Effect.void,
-      "session.next.compaction.started": (event) => {
+      "session.next.compaction.started": () => Effect.void,
+      "session.next.compaction.delta": () => Effect.void,
+      "session.next.compaction.ended": (event) => {
         return adapter.appendMessage(
-          new SessionMessage.Compaction({
+          SessionMessage.Compaction.make({
             id: event.data.messageID,
             type: "compaction",
             metadata: event.metadata,
             reason: event.data.reason,
-            summary: "",
+            summary: event.data.text,
+            recent: event.data.recent,
             time: { created: event.data.timestamp },
           }),
         )
       },
-      "session.next.compaction.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentCompaction = yield* adapter.getCurrentCompaction()
-          if (currentCompaction) {
-            yield* adapter.updateCompaction(
-              produce(currentCompaction, (draft) => {
-                draft.summary += event.data.text
-              }),
-            )
-          }
-        })
-      },
-      "session.next.compaction.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentCompaction = yield* adapter.getCurrentCompaction()
-          if (currentCompaction) {
-            yield* adapter.updateCompaction(
-              produce(currentCompaction, (draft) => {
-                draft.summary = event.data.text
-                draft.include = event.data.include
-              }),
-            )
-          }
-        })
-      },
+      "session.next.revert.staged": () => Effect.void,
+      "session.next.revert.cleared": () => Effect.void,
+      "session.next.revert.committed": () => Effect.void,
     })
   })
 }

@@ -123,6 +123,7 @@ function metricColumns() {
   return {
     sessions: bigint({ mode: "number" }).notNull().default(0),
     requests: bigint({ mode: "number" }).notNull().default(0),
+    unique_users: bigint({ mode: "number" }).notNull().default(0),
     input_tokens: bigint({ mode: "number" }).notNull().default(0),
     output_tokens: bigint({ mode: "number" }).notNull().default(0),
     reasoning_tokens: bigint({ mode: "number" }).notNull().default(0),

@@ -1,95 +1,128 @@
 export * as State from "./state"
 
-import { Effect, Scope, Semaphore } from "effect"
-import type { Draft, Objectish } from "immer"
+import { Context, Effect, Scope, Semaphore } from "effect"
 
 /**
- * A replayable contribution applied to an editor during rebuild.
+ * A replayable transform applied to a draft during reload.
  *
- * Transforms are intentionally synchronous and mutation-shaped: domain editors
- * hide the draft representation while preserving concise plugin/config code.
+ * Domain drafts expose readable and writable state while preserving concise
+ * plugin/config code. Transforms may perform Effects before returning.
  */
-export type Transform<Editor> = (editor: Editor) => void
-export type MakeEditor<State extends Objectish, Editor> = (draft: Draft<State>) => Editor
+type TransformCallback<DraftApi> = (draft: DraftApi) => Effect.Effect<void> | void
+export type MakeDraft<State, DraftApi> = (state: State) => DraftApi
 
-export interface Options<State extends Objectish, Editor> {
-  /** Creates the base value for initial state and every scoped-transform rebuild. */
-  readonly initial: () => State
-  /** Wraps the mutable draft in a domain-specific editor. */
-  readonly editor: MakeEditor<State, Editor>
-  /**
-   * Completes every committed edit.
-   *
-   * For rebuilds, this runs after all active transforms have been replayed and
-   * before the rebuilt state becomes visible. For direct updates, this runs
-   * after the current state has already been edited. The optional reason is
-   * caller-defined metadata for exceptional update origins.
-   */
-  readonly finalize?: (editor: Editor, reason?: string) => Effect.Effect<void>
+export interface Registration {
+  readonly dispose: Effect.Effect<void>
 }
 
-export interface Interface<State extends Objectish, Editor> {
+export type Transform<DraftApi> = (
+  transform: TransformCallback<DraftApi>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+export type Reload = () => Effect.Effect<void>
+
+export interface Transformable<DraftApi> {
+  readonly transform: Transform<DraftApi>
+  readonly reload: Reload
+}
+
+const CurrentBatch = Context.Reference<Set<Reload> | undefined>("@opencode/State/CurrentBatch", {
+  defaultValue: () => undefined,
+})
+
+export function batch<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  return Effect.gen(function* () {
+    const current = yield* CurrentBatch
+    if (current) return yield* effect
+    const reloads = new Set<Reload>()
+    const result = yield* effect.pipe(Effect.provideService(CurrentBatch, reloads))
+    yield* Effect.forEach(reloads, (reload) => reload(), { discard: true })
+    return result
+  })
+}
+
+export interface Options<State, DraftApi> {
+  /** Creates the base value for initial state and every scoped-transform reload. */
+  readonly initial: () => State
+  /** Wraps mutable state in a domain-specific draft API. */
+  readonly draft: MakeDraft<State, DraftApi>
+  /** Runs after all active transforms and before the rebuilt state becomes visible. */
+  readonly finalize?: (draft: DraftApi) => Effect.Effect<void>
+}
+
+export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
   readonly get: () => State
   /**
-   * Registers a scoped transform slot and returns the slot updater.
-   *
-   * Acquiring the slot has no visible effect until the returned updater is
-   * called. Each updater call replaces that slot's transform, then rebuilds the
-   * materialized state from `initial()` by replaying all active transforms in
-   * registration order. Closing the owning Scope removes the slot and rebuilds.
+   * Registers and applies a scoped transform. Closing the owning Scope removes
+   * the transform and reloads the materialized state.
    */
-  readonly transform: () => Effect.Effect<(transform: Transform<Editor>) => Effect.Effect<void>, never, Scope.Scope>
-  /**
-   * Mutates the current materialized state directly.
-   *
-   * This is not replayable contribution state: a later rebuild starts again
-   * from `initial()` plus active transforms, so direct edits must be reserved
-   * for current-state adjustments that are intentionally outside the transform
-   * fold.
-   */
-  readonly update: (update: (editor: Editor) => Effect.Effect<void>, reason?: string) => Effect.Effect<void>
 }
 
-export function create<State extends Objectish, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
+export function create<State, DraftApi>(options: Options<State, DraftApi>): Interface<State, DraftApi> {
   let state = options.initial()
-  let transforms: { update: Transform<Editor> }[] = []
+  let transforms: { run: TransformCallback<DraftApi> }[] = []
   const semaphore = Semaphore.makeUnsafe(1)
 
-  const commit = Effect.fn("State.commit")(function* (next: State, reason?: string) {
-    const api = options.editor(next as Draft<State>)
-    if (options.finalize) yield* options.finalize(api, reason)
+  const commit = Effect.fn("State.commit")(function* (next: State) {
+    const api = options.draft(next)
+    if (options.finalize) yield* options.finalize(api)
     state = next
   })
 
-  const rebuild = Effect.fn("State.rebuild")(function* () {
-    const next = options.initial()
-    const api = options.editor(next as Draft<State>)
-    for (const transform of transforms)
-      yield* Effect.sync(() => transform.update(api)).pipe(Effect.withSpan("State.rebuild.update", {}))
-    yield* commit(next)
-  }, semaphore.withPermit)
+  const apply = (transform: TransformCallback<DraftApi>, draft: DraftApi) =>
+    Effect.suspend(() => {
+      const result = transform(draft)
+      return Effect.isEffect(result) ? Effect.asVoid(result).pipe(Effect.orDie) : Effect.void
+    })
 
-  return {
+  const materialize = Effect.fnUntraced(function* () {
+    const next = options.initial()
+    const api = options.draft(next)
+    for (const transform of transforms) yield* apply(transform.run, api).pipe(Effect.withSpan("State.reload.update"))
+    yield* commit(next)
+  })
+
+  const reload = () => semaphore.withPermit(materialize())
+
+  const result: Interface<State, DraftApi> = {
     get: () => state,
-    transform: Effect.fn("State.transform")(function* () {
-      const transform = { update: (_editor: Editor) => {} }
-      transforms = [...transforms, transform]
+    transform: Effect.fn("State.transform")(function* (update) {
       const scope = yield* Scope.Scope
-      yield* Scope.addFinalizer(
-        scope,
-        Effect.sync(() => {
-          transforms = transforms.filter((item) => item !== transform)
-        }).pipe(Effect.andThen(rebuild())),
+      return yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const transform = { run: update }
+          let active = true
+          const dispose = Effect.uninterruptible(
+            semaphore.withPermit(
+              Effect.suspend(() => {
+                if (!active) return Effect.void
+                active = false
+                transforms = transforms.filter((item) => item !== transform)
+                return Effect.gen(function* () {
+                  const batch = yield* CurrentBatch
+                  if (batch) {
+                    batch.add(reload)
+                    return
+                  }
+                  yield* materialize()
+                })
+              }),
+            ),
+          )
+          yield* semaphore.withPermit(
+            Effect.sync(() => {
+              transforms = [...transforms, transform]
+            }),
+          )
+          yield* Scope.addFinalizer(scope, dispose)
+          const batch = yield* CurrentBatch
+          if (batch) batch.add(reload)
+          else yield* reload()
+          return { dispose }
+        }),
       )
-      return Effect.fnUntraced(function* (update: Transform<Editor>) {
-        transform.update = update
-        yield* rebuild()
-      })
     }),
-    update: Effect.fn("State.update")(function* (update, reason) {
-      const api = options.editor(state as Draft<State>)
-      yield* update(api)
-      if (options.finalize) yield* options.finalize(api, reason)
-    }, semaphore.withPermit),
+    reload,
   }
+  return result
 }

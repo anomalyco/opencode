@@ -9,9 +9,11 @@ import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
-import { SettingsServers } from "../settings-servers"
+import { SettingsServersV2 } from "./servers"
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{
+  sessionID?: string
+}> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
@@ -33,16 +35,16 @@ export const DialogSettings: Component = () => {
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
                     </TabsV2.Trigger>
-                    <TabsV2.Trigger value="servers">
-                      <Icon name="server" />
-                      {language.t("status.popover.tab.servers")}
-                    </TabsV2.Trigger>
                   </div>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
                   <TabsV2.SectionTitle>{language.t("settings.section.server")}</TabsV2.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
+                    <TabsV2.Trigger value="servers">
+                      <Icon name="server" />
+                      {language.t("status.popover.tab.servers")}
+                    </TabsV2.Trigger>
                     <TabsV2.Trigger value="providers">
                       <Icon name="providers" />
                       {language.t("settings.providers.title")}
@@ -62,13 +64,13 @@ export const DialogSettings: Component = () => {
           </div>
         </TabsV2.List>
         <TabsV2.Content value="general" class="settings-v2-panel">
-          <SettingsGeneralV2 />
+          <SettingsGeneralV2 sessionID={props.sessionID} />
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />
         </TabsV2.Content>
         <TabsV2.Content value="servers" class="settings-v2-panel">
-          <SettingsServers />
+          <SettingsServersV2 />
         </TabsV2.Content>
         <TabsV2.Content value="providers" class="settings-v2-panel">
           <SettingsProvidersV2 />

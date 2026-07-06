@@ -1,15 +1,11 @@
 import path from "path"
-import { Schema } from "effect"
-import { Effect, Option } from "effect"
+import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
-import { Reference } from "@/reference/reference"
-
-const MAX_LINE_LENGTH = 2000
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The regex pattern to search for in file contents" }),
@@ -25,9 +21,7 @@ export const GrepTool = Tool.define(
   "grep",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const rg = yield* Ripgrep.Service
-    const reference = yield* Reference.Service
-
+    const ripgrep = yield* Ripgrep.Service
     return {
       description: DESCRIPTION,
       parameters: Parameters,
@@ -57,64 +51,37 @@ export const GrepTool = Tool.define(
           const requested = path.isAbsolute(params.path ?? ins.directory)
             ? (params.path ?? ins.directory)
             : path.join(ins.directory, params.path ?? ".")
-          yield* reference.ensure(requested)
           const requestedInfo = yield* fs.stat(requested).pipe(Effect.catch(() => Effect.succeed(undefined)))
           yield* assertExternalDirectoryEffect(ctx, requested, {
-            bypass: yield* reference.contains(requested),
+            bypass: false,
             kind: requestedInfo?.type === "Directory" ? "directory" : "file",
           })
 
           const search = FSUtil.resolve(requested)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
-          const file = info?.type === "Directory" ? undefined : [path.relative(cwd, search)]
-
-          const result = yield* rg.search({
+          const result = yield* ripgrep.grep({
             cwd,
             pattern: params.pattern,
-            glob: params.include ? [params.include] : undefined,
-            file,
-            signal: ctx.abort,
+            include: params.include,
+            limit: 100,
           })
-          if (result.items.length === 0) return empty
+          if (result.length === 0) return empty
 
-          const rows = result.items.map((item) => ({
-            path: FSUtil.resolve(path.isAbsolute(item.path.text) ? item.path.text : path.join(cwd, item.path.text)),
-            line: item.line_number,
-            text: item.lines.text,
+          const rows = result.map((item) => ({
+            path: path.resolve(cwd, item.entry.path),
+            line: item.line,
+            text: item.text,
           }))
-          const times = new Map(
-            (yield* Effect.forEach(
-              [...new Set(rows.map((row) => row.path))],
-              Effect.fnUntraced(function* (file) {
-                const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-                if (!info || info.type === "Directory") return undefined
-                return [
-                  file,
-                  info.mtime.pipe(
-                    Option.map((time) => time.getTime()),
-                    Option.getOrElse(() => 0),
-                  ) ?? 0,
-                ] as const
-              }),
-              { concurrency: 16 },
-            )).filter((entry): entry is readonly [string, number] => Boolean(entry)),
-          )
-          const matches = rows.flatMap((row) => {
-            const mtime = times.get(row.path)
-            if (mtime === undefined) return []
-            return [{ ...row, mtime }]
-          })
-
-          matches.sort((a, b) => b.mtime - a.mtime)
 
           const limit = 100
-          const truncated = matches.length > limit
-          const final = truncated ? matches.slice(0, limit) : matches
+          const truncated = rows.length === limit
+          const final = rows
           if (final.length === 0) return empty
 
-          const total = matches.length
-          const output = [`Found ${total} matches${truncated ? ` (showing first ${limit})` : ""}`]
+          const total = rows.length
+          const hasMore = truncated || result.length === limit
+          const output = [`Found ${total} matches${hasMore ? " (more matches available)" : ""}`]
 
           let current = ""
           for (const match of final) {
@@ -123,21 +90,12 @@ export const GrepTool = Tool.define(
               current = match.path
               output.push(`${match.path}:`)
             }
-            const text =
-              match.text.length > MAX_LINE_LENGTH ? match.text.substring(0, MAX_LINE_LENGTH) + "..." : match.text
-            output.push(`  Line ${match.line}: ${text}`)
+            output.push(`  Line ${match.line}: ${match.text}`)
           }
 
           if (truncated) {
             output.push("")
-            output.push(
-              `(Results truncated: showing ${limit} of ${total} matches (${total - limit} hidden). Consider using a more specific path or pattern.)`,
-            )
-          }
-
-          if (result.partial) {
-            output.push("")
-            output.push("(Some paths were inaccessible and skipped)")
+            output.push("(Results truncated. Consider using a more specific path or pattern.)")
           }
 
           return {
