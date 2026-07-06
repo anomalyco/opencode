@@ -585,7 +585,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             "session",
             "input",
             event.data.sessionID,
-            (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.messageID),
+            (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
           )
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findIndex((item) => item.id >= event.data.to)

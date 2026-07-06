@@ -231,9 +231,7 @@ it.effect("does not call MCP when permission is blocked", () =>
   Effect.gen(function* () {
     calls = 0
     assertion = yield* Deferred.make<PermissionV2.AssertInput>()
-    decision = Effect.fail(
-      new PermissionV2.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }),
-    )
+    decision = Effect.fail(new PermissionV2.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }))
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 

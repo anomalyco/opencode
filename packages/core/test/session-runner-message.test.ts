@@ -606,9 +606,8 @@ Recent work
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
-              id: "reasoning-alias",
               text: "Visible thought",
-              providerMetadata: { openai: { reasoningEncryptedContent: "encrypted" } },
+              state: { reasoningEncryptedContent: "encrypted" },
             }),
           ],
           time: { created, completed: created },
@@ -621,7 +620,7 @@ Recent work
       {
         type: "reasoning",
         text: "Visible thought",
-        providerMetadata: { openai: { reasoningEncryptedContent: "encrypted" } },
+        providerMetadata: { provider: { reasoningEncryptedContent: "encrypted" } },
       },
     ])
   })

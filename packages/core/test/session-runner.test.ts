@@ -18,7 +18,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
-import { Job } from "@opencode-ai/core/job"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
@@ -28,9 +27,6 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { UserInterruptedError } from "@opencode-ai/core/session/error"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
-import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
@@ -65,7 +61,7 @@ import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -665,7 +661,11 @@ describe("SessionRunnerLLM", () => {
             }),
         }),
       })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Use application context" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Use application context" }),
+        resume: false,
+      })
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
@@ -713,7 +713,10 @@ describe("SessionRunnerLLM", () => {
       streamStarted = undefined
       response = []
 
-      const message = yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Run automatically" }) })
+      const message = yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Run automatically" }),
+      })
       yield* session.wait(sessionID)
 
       expect(requests).toHaveLength(1)
@@ -755,7 +758,12 @@ describe("SessionRunnerLLM", () => {
       const { db } = yield* Database.Service
       const messageID = SessionMessage.ID.create()
       systemUnavailable = true
-      yield* session.prompt({ id: messageID, sessionID, prompt: PromptInput.Prompt.make({ text: "First" }), resume: false })
+      yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "First" }),
+        resume: false,
+      })
       requests.length = 0
 
       const exit = yield* session.resume(sessionID).pipe(Effect.exit)
@@ -1292,7 +1300,6 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
-      const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
@@ -1518,7 +1525,6 @@ describe("SessionRunnerLLM", () => {
       systemBaseline = "Changed context"
       yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Second" }), resume: false })
       yield* session.resume(sessionID)
-      const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
@@ -2152,7 +2158,11 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Interrupt current work" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Interrupt current work" }),
+        resume: false,
+      })
 
       requests.length = 0
       responses = [
@@ -2195,7 +2205,11 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Interrupt current work" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Interrupt current work" }),
+        resume: false,
+      })
 
       requests.length = 0
       responses = [
@@ -2351,7 +2365,10 @@ describe("SessionRunnerLLM", () => {
       yield* Deferred.succeed(firstGate, undefined)
       while (requests.length < 2) yield* Effect.yieldNow
       yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Steer before next queued input" }) })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Also steer before next queued input" }) })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Also steer before next queued input" }),
+      })
       yield* Deferred.succeed(secondGate, undefined)
       yield* Fiber.join(first)
       streamGate = undefined
@@ -2449,7 +2466,11 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Recover interrupted tool" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Recover interrupted tool" }),
+        resume: false,
+      })
       yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
       const assistantMessageID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Step.Started, {
@@ -2623,7 +2644,11 @@ describe("SessionRunnerLLM", () => {
       const defect = new Error("fail after prompt promotion")
       let fail = true
       yield* events.project(SessionEvent.PromptPromoted, () => (fail ? Effect.die(defect) : Effect.void))
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Recover promoted input" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Recover promoted input" }),
+        resume: false,
+      })
 
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
       fail = false
@@ -2671,7 +2696,11 @@ describe("SessionRunnerLLM", () => {
       yield* insertSession(otherSessionID)
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Run first" }), resume: false })
-      yield* session.prompt({ sessionID: otherSessionID, prompt: PromptInput.Prompt.make({ text: "Run second" }), resume: false })
+      yield* session.prompt({
+        sessionID: otherSessionID,
+        prompt: PromptInput.Prompt.make({ text: "Run second" }),
+        resume: false,
+      })
 
       requests.length = 0
       responses = undefined
@@ -2732,7 +2761,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Retry after failure" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Retry after failure" }),
+        resume: false,
+      })
 
       requests.length = 0
       responses = undefined
@@ -3069,7 +3102,11 @@ describe("SessionRunnerLLM", () => {
             }),
         }),
       })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Reject permission" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Reject permission" }),
+        resume: false,
+      })
       requests.length = 0
       responses = [
         [
@@ -3143,8 +3180,7 @@ describe("SessionRunnerLLM", () => {
       const exit = yield* Fiber.join(run)
 
       expect(exit._tag).toBe("Failure")
-      if (exit._tag === "Failure")
-        expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBeInstanceOf(UserInterruptedError)
+      if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Ask then stop" },
@@ -3166,7 +3202,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Settle before failing" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Settle before failing" }),
+        resume: false,
+      })
       const failure = providerUnavailable()
       toolExecutionGate = yield* Deferred.make<void>()
       responseStream = Stream.concat(
@@ -3208,7 +3248,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Interrupt blocked tool" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Interrupt blocked tool" }),
+        resume: false,
+      })
       executions.length = 0
       toolExecutionGate = yield* Deferred.make<void>()
       responseStream = Stream.concat(
@@ -3266,7 +3310,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Interrupt provider" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Interrupt provider" }),
+        resume: false,
+      })
       requests.length = 0
       response = []
       streamGate = yield* Deferred.make<void>()
@@ -3294,7 +3342,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Interrupt tool settlement" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Interrupt tool settlement" }),
+        resume: false,
+      })
       executions.length = 0
       toolExecutionGate = yield* Deferred.make<void>()
       toolExecutionsStarted = yield* Deferred.make<void>()
@@ -3344,7 +3396,11 @@ describe("SessionRunnerLLM", () => {
         }),
       )
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Finish at the limit" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Finish at the limit" }),
+        resume: false,
+      })
 
       requests.length = 0
       executions.length = 0
@@ -3546,7 +3602,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Fail after output" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Fail after output" }),
+        resume: false,
+      })
 
       requests.length = 0
       response = [
@@ -3575,7 +3635,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Fail raw stream durably" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Fail raw stream durably" }),
+        resume: false,
+      })
       const failure = invalidRequest()
       responseStream = Stream.fail(failure)
 
@@ -3682,7 +3746,11 @@ describe("SessionRunnerLLM", () => {
         }),
       )
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Bound retries by steps" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Bound retries by steps" }),
+        resume: false,
+      })
       requests.length = 0
       const failure = providerUnavailable()
       responseStream = Stream.fail(failure)
@@ -3761,7 +3829,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Fail hosted tool durably" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Fail hosted tool durably" }),
+        resume: false,
+      })
 
       requests.length = 0
       response = [
@@ -3830,7 +3902,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Fail hosted tool at EOF" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Fail hosted tool at EOF" }),
+        resume: false,
+      })
       response = [
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.toolCall({
@@ -4092,7 +4168,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Call provider tool" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Call provider tool" }),
+        resume: false,
+      })
 
       responses = undefined
       streamGate = undefined

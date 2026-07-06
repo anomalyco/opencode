@@ -74,19 +74,17 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(
       () =>
-        data.session.message
-          .list(sessionID())
-          .flatMap((message) =>
-            message.type === "user"
-              ? [
-                  {
-                    id: message.id,
-                    created: message.time.created,
-                    input: data.session.input.has(sessionID(), message.id),
-                  },
-                ]
-              : [],
-          ),
+        data.session.message.list(sessionID()).flatMap((message) =>
+          message.type === "user"
+            ? [
+                {
+                  id: message.id,
+                  created: message.time.created,
+                  input: data.session.input.has(sessionID(), message.id),
+                },
+              ]
+            : [],
+        ),
       () => setRows(reconcile(reduce())),
     ),
   )
@@ -146,12 +144,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
       }),
     )
 
-  const latestFragmentRef = (messageID: string, kind: "text" | "reasoning") => {
-    const message = data.session.message.get(sessionID(), messageID)
-    const ordinal = message?.type === "assistant" ? message.content.filter((part) => part.type === kind).length - 1 : 0
-    return { messageID, partID: `${kind}:${Math.max(0, ordinal)}` }
-  }
-
   const isQueued = (messageID: string) => {
     return data.session.input.has(sessionID(), messageID)
   }
@@ -179,19 +171,20 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.model.selected", message),
     data.on("session.compaction.ended", message),
     data.on("session.text.delta", (event) => {
-      if (event.data.sessionID === sessionID()) appendPart(latestFragmentRef(event.data.assistantMessageID, "text"))
+      if (event.data.sessionID === sessionID())
+        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
     }),
     data.on("session.text.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart(latestFragmentRef(event.data.assistantMessageID, "text"))
+        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
     }),
     data.on("session.reasoning.delta", (event) => {
       if (event.data.sessionID === sessionID())
-        appendPart(latestFragmentRef(event.data.assistantMessageID, "reasoning"))
+        appendPart({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
     }),
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart(latestFragmentRef(event.data.assistantMessageID, "reasoning"))
+        appendPart({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())

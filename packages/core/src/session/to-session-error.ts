@@ -36,8 +36,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
       }
     }
   }
-  if (cause instanceof PermissionV2.BlockedError)
-    return { type: "permission.rejected", message: cause.message }
+  if (cause instanceof PermissionV2.BlockedError) return { type: "permission.rejected", message: cause.message }
   if (cause instanceof QuestionV2.RejectedError) return { type: "aborted", message: cause.message }
   if (cause instanceof ToolFailure)
     return cause.error === undefined ? { type: "tool.execution", message: cause.message } : toSessionError(cause.error)
@@ -47,7 +46,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
     cause instanceof SessionRunnerModel.VariantUnavailableError ||
-    cause instanceof SessionRunnerModel.UnsupportedApiError
+    cause instanceof SessionRunnerModel.UnsupportedPackageError
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }

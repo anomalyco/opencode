@@ -105,7 +105,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: reuseProviderMetadata ? providerMetadata(model.provider, item.state) : undefined,
+              providerMetadata: reuseProviderMetadata ? providerMetadata(model.providerID, item.state) : undefined,
             },
           ]
         : item.text.length > 0
@@ -113,13 +113,13 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
           : []
     const call = toolCall(
       item,
-      reuseProviderMetadata ? providerMetadata(model.provider, item.providerState) : undefined,
+      reuseProviderMetadata ? providerMetadata(model.providerID, item.providerState) : undefined,
     )
     if (item.executed !== true) return [call]
     const result = toolResult(
       item,
       reuseProviderMetadata
-        ? providerMetadata(model.provider, item.providerResultState ?? item.providerState)
+        ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
         : undefined,
     )
     return result ? [call, result] : [call]
@@ -135,7 +135,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
       toolResult(
         item,
         reuseProviderMetadata
-          ? providerMetadata(model.provider, item.providerResultState ?? item.providerState)
+          ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
           : undefined,
       ),
     )
@@ -156,9 +156,7 @@ function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Mess
     case "user":
       const files = message.files ?? []
       return [
-        ...files
-          .filter((file) => file.mime === "text/plain")
-          .map(textAttachment),
+        ...files.filter((file) => file.mime === "text/plain").map(textAttachment),
         Message.make({
           id: message.id,
           role: "user",

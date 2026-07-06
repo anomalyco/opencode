@@ -136,19 +136,13 @@ const registryLayer = Layer.effect(
 
     const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised: object) {
       const registration = local.get(input.call.name)?.at(-1)?.registration
-      if (!registration)
+      if (!registration || registration.identity !== advertised) {
+        const message = `Stale tool call: ${input.call.name}`
         return {
-          result: {
-            type: "error" as const,
-            value: `Stale tool call: ${input.call.name}`,
-          },
-          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}` },
+          result: { type: "error" as const, value: message },
+          error: { type: "tool.stale" as const, message },
         }
-      if (registration.identity !== advertised)
-        return {
-          result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` },
-          error: { type: "tool.stale" as const, message: `Stale tool call: ${input.call.name}` },
-        }
+      }
       return yield* settleTool(input, registration.tool)
     })
 

@@ -132,7 +132,7 @@ Before each step, the runner estimates the complete model-visible request and co
 
 Compaction keeps the full transcript durable while replacing its active model representation with one hidden checkpoint containing a structured rolling summary and token-bounded serialized recent context. Provider-native assistant, reasoning, and tool messages never survive across the boundary, avoiding signature and encrypted-reasoning failures when the earlier prefix changes.
 
-The rolling summary is a continuation checkpoint with this complete heading order: `Continuation Goal`, `Operating Constraints`, `Progress` (`Completed`, `In Flight`, `Blocked`), `Decisions To Preserve`, `Resume From Here`, `Context To Preserve`, and `Working Files`. Every heading remains present even when its value is `(none)`.
+The rolling summary is a continuation checkpoint with this complete heading order: `Objective`, `Important Details`, `Work State`, and `Next Move`. `Work State` records completed, active, and blocked work, while `Next Move` records the immediate and following actions. Every heading remains present even when its value is `(none)`.
 
 `session.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.compaction.ended.1` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next physical attempt, the runner observes that completed compaction and directly renders a fresh instruction baseline through `InstructionCheckpoint`. A failed or interrupted attempt therefore leaves the previous history boundary active.
 

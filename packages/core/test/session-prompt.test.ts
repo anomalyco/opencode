@@ -275,9 +275,11 @@ describe("SessionV2.prompt", () => {
         source: { type: "uri", uri: sourceUri.href },
         name: "main.ts",
       })
-      expect(Buffer.from(message.prompt.files?.[0]?.data ?? "", "base64").toString("utf8").replace(/\r$/, "")).toBe(
-        'import { describe, expect } from "bun:test"',
-      )
+      expect(
+        Buffer.from(message.prompt.files?.[0]?.data ?? "", "base64")
+          .toString("utf8")
+          .replace(/\r$/, ""),
+      ).toBe('import { describe, expect } from "bun:test"')
     }),
   )
 

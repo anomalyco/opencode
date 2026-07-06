@@ -252,28 +252,41 @@ function renameCollidingComponents(target: OpenApiDocument, source: OpenApiDocum
 }
 
 function normalizeComponentNames(document: OpenApiDocument) {
-  let schemas = document.components?.schemas
+  const schemas = document.components?.schemas
   if (!schemas) return
 
+  const canonical = new Map(Object.entries(schemas))
+  const renames = new Map<string, string>()
   for (const name of Object.keys(schemas)) {
-    if (!Object.hasOwn(schemas, name)) continue
     const next = componentTypeName(name)
     if (next === name) continue
-    if (schemas[next] !== undefined) {
-      if (JSON.stringify(normalizeSchema(schemas[name])) !== JSON.stringify(normalizeSchema(schemas[next]))) continue
-      const renames = new Map([[name, next]])
-      schemas = rewriteRefs(schemas, renames) as Record<string, unknown>
-      delete schemas[name]
-      document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
+    const existing = canonical.get(next)
+    if (existing !== undefined) {
+      if (JSON.stringify(normalizeSchema(schemas[name])) !== JSON.stringify(normalizeSchema(existing))) continue
+      renames.set(name, next)
       continue
     }
-    const renames = new Map([[name, next]])
-    schemas = rewriteRefs(schemas, renames) as Record<string, unknown>
-    schemas[next] = schemas[name]
-    delete schemas[name]
-    document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
+    renames.set(name, next)
+    canonical.set(next, schemas[name])
   }
-  document.components = { ...document.components, schemas }
+  if (renames.size === 0) return
+
+  const renamed = new Set<string>()
+  document.components = {
+    ...document.components,
+    schemas: Object.fromEntries(
+      [
+        ...Object.entries(schemas).filter(([name]) => !renames.has(name)),
+        ...Object.entries(schemas).flatMap(([name, schema]) => {
+          const next = renames.get(name)
+          if (!next || Object.hasOwn(schemas, next) || renamed.has(next)) return []
+          renamed.add(next)
+          return [[next, schema] as const]
+        }),
+      ].map(([name, schema]) => [name, rewriteRefs(schema, renames)]),
+    ),
+  }
+  document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
 }
 
 function componentTypeName(name: string) {
@@ -355,6 +368,7 @@ function normalizeSchema(value: unknown, key?: string): unknown {
           })
         : flattened
     const normalized = expanded.map((item) => normalizeSchema(item))
+    if (key !== "anyOf" && key !== "required" && key !== "enum") return normalized
     return [...new Map(normalized.map((item) => [JSON.stringify(item), item])).values()].sort((a, b) =>
       JSON.stringify(a).localeCompare(JSON.stringify(b)),
     )

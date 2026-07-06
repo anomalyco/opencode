@@ -91,7 +91,7 @@ const permission = Layer.succeed(
                   permission: input.action,
                   resources: input.resources,
                 }),
-          ),
+              ),
         ),
       ),
     ask: () => Effect.die("unused"),
