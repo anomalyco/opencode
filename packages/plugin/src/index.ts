@@ -258,6 +258,25 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
+  /**
+   * Modify the model request before it is sent to the provider
+   */
+  "model.request.before"?: (
+    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    output: {
+      system: string[]
+      messages: unknown[]
+      tools: Record<string, unknown>
+      params: {
+        temperature: number | undefined
+        topP: number | undefined
+        topK: number | undefined
+        maxOutputTokens: number | undefined
+        options: Record<string, any>
+      }
+      headers: Record<string, string>
+    },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
