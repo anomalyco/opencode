@@ -111,6 +111,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Sign out: clear stored auth tokens and restart the app (desktop only) */
+  logout?(): Promise<number>
 }
 
 export type Platform = PlatformBase &

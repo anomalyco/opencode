@@ -1046,4 +1046,9 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
+
+  "settings.general.logout.title": "Account",
+  "settings.general.logout.button": "Sign out",
+  "settings.general.logout.confirm": "Are you sure you want to sign out? You will need to re-authenticate with Microsoft.",
+  "settings.general.logout.success": "Signed out successfully.",
 }

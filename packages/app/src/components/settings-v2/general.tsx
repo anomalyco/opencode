@@ -672,6 +672,54 @@ export const SettingsGeneralV2: Component = () => {
     </div>
   )
 
+  const LogoutSection = () => {
+    const [loggingOut, setLoggingOut] = createSignal(false)
+    const [done, setDone] = createSignal(false)
+    const handleLogout = async () => {
+      if (!platform.logout) return
+      const ok = window.confirm(language.t("settings.general.logout.confirm"))
+      if (!ok) return
+      setLoggingOut(true)
+      try {
+        const count = await platform.logout()
+        if (count > 0) {
+          setDone(true)
+        }
+      } catch {
+        // Relaunch even if the IPC throws — auth may be partially cleared
+      } finally {
+        setLoggingOut(false)
+      }
+    }
+
+    return (
+      <div class="settings-v2-section">
+        <h3 class="settings-v2-section-title">{language.t("settings.general.logout.title")}</h3>
+        <SettingsListV2>
+          <SettingsRowV2
+            title={language.t("settings.general.logout.title")}
+            description={language.t("settings.general.logout.confirm")}
+          >
+            <div data-action="settings-logout">
+              <Show when={!done()} fallback={<span class="text-success">{language.t("settings.general.logout.success")}</span>}>
+                <ButtonV2
+                  size="normal"
+                  variant="danger"
+                  disabled={loggingOut()}
+                  onClick={handleLogout}
+                >
+                  {loggingOut()
+                    ? "..."
+                    : language.t("settings.general.logout.button")}
+                </ButtonV2>
+              </Show>
+            </div>
+          </SettingsRowV2>
+        </SettingsListV2>
+      </div>
+    )
+  }
+
   // We can probably remove this, right?
   const DisplaySection = () => (
     <Show when={desktop()}>
@@ -714,6 +762,10 @@ export const SettingsGeneralV2: Component = () => {
         <DisplaySection />
 
         <AdvancedSection />
+
+        <Show when={desktop()}>
+          <LogoutSection />
+        </Show>
       </div>
     </>
   )
