@@ -194,6 +194,29 @@ describe("tool.shell", () => {
     ),
   )
 
+  // Regression for #35511: the merged stdout/stderr reader must drain to EOF
+  // before output is assembled, otherwise buffered output is lost and the tool
+  // returns "(no output)" on exit 0. Loop to catch the race.
+  each("drains stdout before reading output (#35511)", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        for (let i = 0; i < 10; i++) {
+          const result = yield* run({
+            command: "echo hi",
+          })
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).not.toBe("(no output)")
+          expect(result.output).toContain("hi")
+          // metadata.output (the streaming `last` preview) is populated from the
+          // same drained list, so it must also carry the output, not "(no output)".
+          expect(result.metadata.output).not.toBe("(no output)")
+          expect(result.metadata.output).toContain("hi")
+        }
+      }),
+    ),
+  )
+
   it.live("falls back from terminal-only configured shell", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ config: { shell: "fish" } })

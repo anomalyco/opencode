@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -483,7 +483,7 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const reader = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -545,6 +545,21 @@ export const ShellTool = Tool.define(
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
 
+          if (exit.kind === "exit") {
+            // On a clean exit, join the reader fiber so the merged stdout/stderr
+            // stream drains to EOF before the scope closes and interrupts it.
+            // Without this, buffered output can be lost, yielding "(no output)"
+            // on exit 0 (#35511).
+            //
+            // A backgrounded child can keep the stdout/stderr write end open past
+            // the parent's exit, so the stream may never reach EOF. Bound the
+            // best-effort drain with abort/timeout so it can't hang forever (the
+            // reader fiber is interrupted on scope close). The process already
+            // exited cleanly here, so we do NOT set aborted/expired if the drain
+            // is cut short — that would mislabel a successful command as
+            // terminated/aborted despite its clean exit code.
+            yield* Fiber.join(reader).pipe(Effect.race(abort), Effect.race(timeout))
+          }
           if (exit.kind === "abort") {
             aborted = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
