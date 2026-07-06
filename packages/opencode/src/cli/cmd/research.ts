@@ -157,7 +157,7 @@ function printWorkspaceInfo(dir: string, goal: string): void {
 
 export const ResearchCommand = effectCmd({
   command: "research [query..]",
-  describe: "autonomous research loop (autoresearch pattern)",
+  describe: "run an autonomous research experiment (autoresearch pattern)",
   instance: false,
   builder: (yargs) =>
     yargs
