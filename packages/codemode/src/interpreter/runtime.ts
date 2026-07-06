@@ -2229,14 +2229,36 @@ class Interpreter<R> {
     switch (ref.name) {
       case "all": {
         // Mark every promise element observed up-front (Promise.all handles all of its
-        // members' failures, as in JS), then join in index order; the first failure rejects
-        // the whole call while unrelated in-flight members keep running.
-        const settles = items.map((item) =>
-          item instanceof SandboxPromise ? this.settlePromise(item, node) : Effect.succeed(item),
+        // members' failures, as in JS), race their settlements for fail-fast rejection, and
+        // preserve input order when they all fulfill. Rejected calls keep draining siblings.
+        const observations = items.map((item, index) =>
+          item instanceof SandboxPromise
+            ? Effect.map(this.observePromise(item), (exit) => ({ index, item, exit }))
+            : Effect.succeed({ index, item: undefined, exit: Exit.succeed(item) }),
         )
         return Effect.gen(function* () {
+          const remaining = [...observations]
           const values: Array<unknown> = []
-          for (const settle of settles) values.push(yield* settle)
+          values.length = items.length
+          while (remaining.length > 0) {
+            const winner = yield* Effect.raceAll(remaining)
+            const position = remaining.indexOf(observations[winner.index])
+            if (position >= 0) remaining.splice(position, 1)
+            if (Exit.isSuccess(winner.exit)) {
+              values[winner.index] = winner.exit.value
+              continue
+            }
+            yield* self.createPromise(
+              Effect.asVoid(
+                Effect.forEach(
+                  items,
+                  (item) => (item instanceof SandboxPromise ? self.observePromise(item) : Effect.void),
+                  { concurrency: "unbounded" },
+                ),
+              ),
+            )
+            return yield* self.unwrapPromiseExit(winner.item, winner.exit, node)
+          }
           return values
         })
       }

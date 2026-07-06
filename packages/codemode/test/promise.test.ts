@@ -48,6 +48,14 @@ const failingTool = Tool.make({
   run: () => Effect.fail(toolError("Lookup refused")),
 })
 
+const completedTool = (trace: Trace) =>
+  Tool.make({
+    description: "Return the number of completed sleepy calls",
+    input: Schema.Struct({}),
+    output: Schema.Number,
+    run: () => Effect.succeed(trace.completed),
+  })
+
 const run = (
   code: string,
   options: { trace?: Trace; limits?: CodeMode.ExecutionLimits } = {},
@@ -55,7 +63,7 @@ const run = (
   const trace = options.trace ?? makeTrace()
   return Effect.runPromise(
     CodeMode.execute({
-      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool } },
+      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool, completed: completedTool(trace) } },
       code,
       ...(options.limits ? { limits: options.limits } : {}),
     }),
@@ -336,6 +344,28 @@ describe("Promise.all over arbitrary arrays", () => {
       }
     `),
     ).toBe("Lookup refused")
+  })
+
+  test("rejects before an earlier slow promise fulfills", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          try {
+            await Promise.all([
+              tools.host.sleepy({ id: 1, ms: 100 }),
+              tools.host.fail({}),
+            ])
+            return -1
+          } catch {
+            return await tools.host.completed({})
+          }
+        `,
+        { trace },
+      ),
+    ).toBe(0)
+    expect(trace.completed).toBe(1)
+    expect(trace.interrupted).toBe(0)
   })
 
   test("a non-collection argument is a clear error", async () => {
