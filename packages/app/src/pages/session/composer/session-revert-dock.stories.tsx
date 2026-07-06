@@ -1,6 +1,7 @@
 import { For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
+import { SettingsProvider, useSettings } from "@/context/settings"
 
 export default {
   title: "Composer/Revert Dock",
@@ -18,6 +19,9 @@ Real \`SessionRevertDock\` from app code, rendered above a mock composer card.
 ### Why the mock composer
 The live composer overlaps the dock's bottom by 18px (\`session-composer-region-controller.ts\` \`lift()\`).
 The card below reproduces that overlap so the collapsed/expanded cutoff behavior can be verified in isolation.
+
+### Layout split
+Use the **Layout** button to toggle \`newLayoutDesigns\` and preview both the v2 dock and the legacy (v1) \`DockTray\` fallback.
 
 ### Notes
 - \`onRestore\` only mutates local story state, so nothing in the real session is affected.
@@ -48,9 +52,11 @@ const btn = (accent?: boolean) =>
   }) as const
 
 function Stage(props: { count: number }) {
+  const settings = useSettings()
   const seed = () => messages.slice(0, props.count).map((text, index) => ({ id: `rolled-${index}`, text }))
   const [store, setStore] = createStore({ items: seed() })
 
+  const v2 = () => settings.general.newLayoutDesigns()
   const reset = () => setStore("items", seed())
   const restore = (id: string) =>
     setStore(
@@ -63,6 +69,9 @@ function Stage(props: { count: number }) {
       <div style={{ display: "flex", gap: "8px" }}>
         <button style={btn()} onClick={reset}>
           Reset ({props.count})
+        </button>
+        <button style={btn(v2())} onClick={() => settings.general.setNewLayoutDesigns(!v2())}>
+          Layout: {v2() ? "v2" : "v1"}
         </button>
       </div>
 
@@ -87,17 +96,23 @@ function Stage(props: { count: number }) {
   )
 }
 
+const story = (count: number) => () => (
+  <SettingsProvider>
+    <Stage count={count} />
+  </SettingsProvider>
+)
+
 export const OneMessage = {
   name: "1 rolled back",
-  render: () => <Stage count={1} />,
+  render: story(1),
 }
 
 export const ThreeMessages = {
   name: "3 rolled back",
-  render: () => <Stage count={3} />,
+  render: story(3),
 }
 
 export const ManyMessages = {
   name: "6 rolled back (scrolls)",
-  render: () => <Stage count={6} />,
+  render: story(6),
 }
