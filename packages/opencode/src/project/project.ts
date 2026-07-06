@@ -10,6 +10,7 @@ import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { which } from "@opencode-ai/core/util/which"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
@@ -215,6 +216,64 @@ const layer = Layer.effect(
       }
     })
 
+    // When a project's worktree moved on disk (old path dead), sessions and
+    // workspaces recorded at or under the old path follow it: their directory
+    // doubles as the runtime cwd, so leaving the dead path makes them fail
+    // every prompt with ENOENT. The snapshot store is keyed by a hash of the
+    // worktree path and is carried over for the same reason. Copies and
+    // sibling clones never reach this path — it only runs when the previous
+    // worktree no longer exists.
+    const rehomeDirectories = Effect.fn("Project.rehomeDirectories")(function* (
+      id: ProjectV2.ID,
+      from: string,
+      to: string,
+    ) {
+      const prefix = from.endsWith("/") ? from : `${from}/`
+      const moved = (directory: string) =>
+        directory === from ? to : directory.startsWith(prefix) ? to + directory.slice(from.length) : undefined
+
+      const sessions = yield* db
+        .select({ id: SessionTable.id, directory: SessionTable.directory })
+        .from(SessionTable)
+        .where(eq(SessionTable.project_id, id))
+        .all()
+        .pipe(Effect.orDie)
+      for (const session of sessions) {
+        const next = moved(session.directory)
+        if (!next) continue
+        yield* db
+          .update(SessionTable)
+          .set({ directory: next, time_updated: sql`${SessionTable.time_updated}` })
+          .where(eq(SessionTable.id, session.id))
+          .run()
+          .pipe(Effect.orDie)
+      }
+
+      const workspaces = yield* db
+        .select({ id: WorkspaceTable.id, directory: WorkspaceTable.directory })
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.project_id, id))
+        .all()
+        .pipe(Effect.orDie)
+      for (const workspace of workspaces) {
+        const next = workspace.directory ? moved(workspace.directory) : undefined
+        if (!next) continue
+        yield* db
+          .update(WorkspaceTable)
+          .set({ directory: next })
+          .where(eq(WorkspaceTable.id, workspace.id))
+          .run()
+          .pipe(Effect.orDie)
+      }
+
+      yield* fs
+        .rename(
+          path.join(Global.Path.data, "snapshot", id, Hash.fast(from)),
+          path.join(Global.Path.data, "snapshot", id, Hash.fast(to)),
+        )
+        .pipe(Effect.ignore)
+    })
+
     const saveProjectDirectory = Effect.fn("Project.saveProjectDirectory")(function* (input: {
       projectID: ProjectV2.ID
       directory: string
@@ -297,8 +356,10 @@ const layer = Layer.effect(
         // adopt the directory it now resolves from.
         const worktreeExists = yield* fs.exists(result.worktree).pipe(Effect.orDie)
         if (!worktreeExists) {
+          const previous = result.worktree
           result.worktree = data.directory
           result.sandboxes = result.sandboxes.filter((sandbox) => sandbox !== result.worktree)
+          yield* rehomeDirectories(projectID, previous, data.directory)
         }
       }
       if (

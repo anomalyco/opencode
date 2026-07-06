@@ -333,7 +333,17 @@ describe("Project identity migration", () => {
 
       const before = yield* project.fromDirectory(tmp)
       const sessionID = crypto.randomUUID() as SessionID
+      const nestedID = crypto.randomUUID() as SessionID
       yield* seedSession({ id: sessionID, dir: tmp, project: before.project.id })
+      yield* seedSession({ id: nestedID, dir: path.join(tmp, "packages", "app"), project: before.project.id })
+      const workspaceID = WorkspaceV2.ID.ascending()
+      yield* Database.Service.use(({ db }) =>
+        db
+          .insert(WorkspaceTable)
+          .values({ id: workspaceID, type: "local", name: "test", project_id: before.project.id, directory: tmp })
+          .run()
+          .pipe(Effect.orDie),
+      )
       yield* Effect.promise(() => fs.rename(tmp, renamed))
 
       const after = yield* project.fromDirectory(renamed)
@@ -343,6 +353,18 @@ describe("Project identity migration", () => {
       expect(after.project.sandboxes).not.toContain(renamed)
       expect(yield* sessionProject(sessionID)).toBe(before.project.id)
       expect(yield* projectCount()).toBe(1)
+
+      // Sessions and workspaces recorded at or under the old path follow the
+      // move — their directory is the runtime cwd and the old path is dead.
+      const rows = yield* Database.Service.use(({ db }) =>
+        db.select().from(SessionTable).where(eq(SessionTable.project_id, before.project.id)).all().pipe(Effect.orDie),
+      )
+      expect(rows.find((row) => row.id === sessionID)?.directory).toBe(renamed)
+      expect(rows.find((row) => row.id === nestedID)?.directory).toBe(path.join(renamed, "packages", "app"))
+      const workspace = yield* Database.Service.use(({ db }) =>
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie),
+      )
+      expect(workspace?.directory).toBe(renamed)
     }),
   )
 })
