@@ -11,7 +11,6 @@ import {
   createMemo,
   createEffect,
   createComputed,
-  createResource,
   on,
   onMount,
   type ParentProps,
@@ -85,7 +84,7 @@ import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, selectSessionLineage, sessionHref } from "@/utils/session-route"
+import { createSessionLineage, legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 
@@ -223,17 +222,8 @@ function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   const settings = useSettings()
   const tabs = useTabs()
-  const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const cached = createMemo(() => sync().session.lineage.peek(params.id))
-  const [resolved] = createResource(
-    () => {
-      if (cached()) return
-      return { id: params.id, sync: sync() }
-    },
-    ({ id, sync }) => sync.session.lineage.resolve(id),
-  )
-  const current = createMemo(() => selectSessionLineage(params.id, cached(), resolved()))
+  const current = createSessionLineage(() => params.id)
   const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
 
