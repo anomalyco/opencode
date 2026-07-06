@@ -330,6 +330,27 @@ export interface Hooks {
   ) => Promise<void>
   /**
    * Modify tool definitions (description and parameters) sent to LLM
-   */
+    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Fires when the user submits a prompt in the TUI footer, before the prompt
+   * enters the queue. Handlers receive the prompt text and context (session ID,
+   * whether a generation turn is active, mode, command). Set `output.consumed`
+   * to skip queuing entirely (e.g. for mid-generation steering). Set
+   * `output.text` to transform the text before it reaches the queue.
+   *
+   * Handlers run in FIFO order. Each handler receives the output of the
+   * previous handler. CLI-only in the initial implementation (not yet
+   * dispatched in server mode via RPC bridge).
+   */
+  "tui.prompt.submit"?: (
+    input: {
+      text: string
+      sessionID: string
+      active: boolean
+      mode?: "shell" | "text"
+      command?: { name: string; arguments: string }
+    },
+    output: { text: string; consumed: boolean },
+  ) => Promise<void>
 }
