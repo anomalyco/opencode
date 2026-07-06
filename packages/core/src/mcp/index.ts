@@ -42,6 +42,7 @@ export class Tool extends Schema.Class<Tool>("MCP.Tool")({
   name: Schema.String,
   description: Schema.String.pipe(Schema.optional),
   inputSchema: Schema.Unknown.pipe(Schema.optional),
+  outputSchema: Schema.Unknown.pipe(Schema.optional),
 }) {}
 
 export const ToolResultContent = Schema.Union([
@@ -391,7 +392,13 @@ export const layer = Layer.effect(
     } satisfies MCPClient.ElicitationHandler
 
     const toTool = (server: ServerName, def: MCPClient.ToolDefinition) =>
-      new Tool({ server, name: def.name, description: def.description, inputSchema: def.inputSchema })
+      new Tool({
+        server,
+        name: def.name,
+        description: def.description,
+        inputSchema: def.inputSchema,
+        outputSchema: def.outputSchema,
+      })
 
     const toPrompt = (server: ServerName, def: MCPClient.PromptDefinition) =>
       new Prompt({

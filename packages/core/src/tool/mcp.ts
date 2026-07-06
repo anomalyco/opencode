@@ -45,6 +45,7 @@ export const layer = Layer.effectDiscard(
                 properties: schema.properties ?? {},
                 additionalProperties: false,
               },
+              outputSchema: tool.outputSchema as JsonSchema.JsonSchema | undefined,
               execute: (input, context) =>
                 Effect.gen(function* () {
                   yield* permission.assert({

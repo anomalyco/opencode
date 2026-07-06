@@ -1,8 +1,10 @@
+import path from "node:path"
 import { describe, expect, test } from "bun:test"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { ConfigMCP } from "@opencode-ai/core/config/mcp"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -15,7 +17,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
-import { settleTool, toolIdentity, waitForTool } from "./lib/tool"
+import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<PermissionV2.AssertInput> | undefined
 let decision: Effect.Effect<void, PermissionV2.Error> = Effect.void
@@ -29,6 +31,11 @@ const mcp = Layer.mock(MCP.Service, {
         name: "search",
         description: "Search",
         inputSchema: { type: "object", properties: {} },
+        outputSchema: {
+          type: "object",
+          properties: { ok: { type: "boolean" } },
+          required: ["ok"],
+        },
       }),
     ]),
   callTool: (input) =>
@@ -132,6 +139,53 @@ test("preserves output schema validation across paginated tool discovery", async
     await Promise.all([client.close(), server.close()])
   }
 })
+
+test("retains output schemas across paginated MCP discovery", async () => {
+  const tools = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "pagination",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.tools()
+      }),
+    ),
+  )
+
+  expect(tools.map((tool) => ({ name: tool.name, outputSchema: tool.outputSchema }))).toEqual([
+    {
+      name: "first",
+      outputSchema: {
+        type: "object",
+        properties: { value: { type: "string" } },
+        required: ["value"],
+      },
+    },
+    {
+      name: "second",
+      outputSchema: {
+        type: "object",
+        properties: { value: { type: "number" } },
+        required: ["value"],
+      },
+    },
+  ])
+})
+
+it.effect("advertises MCP output schemas to Code Mode", () =>
+  Effect.gen(function* () {
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "execute")
+    const execute = (yield* toolDefinitions(registry)).find((tool) => tool.name === "execute")
+
+    expect(execute?.description).toContain("tools.demo.search(input: {}): Promise<{ ok: boolean }>")
+  }),
+)
 
 it.effect("waits for permission before calling an MCP tool", () =>
   Effect.gen(function* () {
