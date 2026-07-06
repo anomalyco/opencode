@@ -2,7 +2,6 @@ import { type Accessor, Component, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
@@ -16,10 +15,8 @@ export const DialogSelectProvider: Component<{ directory?: Accessor<string | und
   const providers = useProviders(props.directory)
   const language = useLanguage()
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
-  const navigation = { back: showPicker }
 
   function showPicker() {
-    navigation.back = showPicker
     setStore("selected", undefined)
   }
 
@@ -34,49 +31,15 @@ export const DialogSelectProvider: Component<{ directory?: Accessor<string | und
   }
 
   return (
-    <Dialog
-      class="h-full"
-      transition
-      title={
-        <Switch>
-          <Match when={store.selected}>
-            <IconButton
-              tabIndex={-1}
-              icon="arrow-left"
-              variant="ghost"
-              onClick={() => navigation.back()}
-              aria-label={language.t("common.goBack")}
-            />
-          </Match>
-          <Match when={true}>{language.t("command.provider.connect")}</Match>
-        </Switch>
-      }
-    >
-      <Switch>
-        <Match when={store.selected === CUSTOM_ID}>
-          <DialogCustomProvider
-            content
-            directory={props.directory}
-            back={showPicker}
-            bind={(value) => {
-              navigation.back = value.back
-            }}
-          />
-        </Match>
-        <Match when={store.selected && store.selected !== CUSTOM_ID ? store.selected : undefined}>
-          {(provider) => (
-            <DialogConnectProvider
-              content
-              provider={provider()}
-              directory={props.directory}
-              onBack={showPicker}
-              bind={(value) => {
-                navigation.back = value.back
-              }}
-            />
-          )}
-        </Match>
-        <Match when={true}>
+    <Switch>
+      <Match when={store.selected === CUSTOM_ID}>
+        <DialogCustomProvider onBack={showPicker} />
+      </Match>
+      <Match when={store.selected && store.selected !== CUSTOM_ID ? store.selected : undefined}>
+        {(provider) => <DialogConnectProvider provider={provider()} directory={props.directory} onBack={showPicker} />}
+      </Match>
+      <Match when={true}>
+        <Dialog class="h-full" transition title={language.t("command.provider.connect")}>
           <List
             class="px-3"
             search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
@@ -127,8 +90,8 @@ export const DialogSelectProvider: Component<{ directory?: Accessor<string | und
               </div>
             )}
           </List>
-        </Match>
-      </Switch>
-    </Dialog>
+        </Dialog>
+      </Match>
+    </Switch>
   )
 }

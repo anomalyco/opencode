@@ -20,25 +20,13 @@ import { useProviders } from "@/hooks/use-providers"
 export function DialogConnectProvider(props: {
   provider: string
   directory?: Accessor<string | undefined>
-  onBack?: () => void
-  content?: boolean
-  bind?: (value: { back: () => void }) => void
+  onBack: () => void
 }) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const providers = useProviders(props.directory)
-
-  const all = () => {
-    if (props.onBack) {
-      props.onBack()
-      return
-    }
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={props.directory} />)
-    })
-  }
 
   const alive = { value: true }
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -374,19 +362,11 @@ export function DialogConnectProvider(props: {
   }
 
   function goBack() {
-    if (methods().length === 1) {
-      all()
-      return
-    }
-    if (store.authorization) {
+    if (methods().length > 1 && store.methodIndex !== undefined) {
       dispatch({ type: "method.reset" })
       return
     }
-    if (store.methodIndex !== undefined) {
-      dispatch({ type: "method.reset" })
-      return
-    }
-    all()
+    props.onBack()
   }
 
   function MethodSelection() {
@@ -673,11 +653,9 @@ export function DialogConnectProvider(props: {
     </div>
   )
 
-  props.bind?.({ back: goBack })
-  if (props.content) return content
-
   return (
     <Dialog
+      class="h-full"
       title={
         <IconButton
           tabIndex={-1}
@@ -687,6 +665,7 @@ export function DialogConnectProvider(props: {
           aria-label={language.t("common.goBack")}
         />
       }
+      transition
     >
       {content}
     </Dialog>

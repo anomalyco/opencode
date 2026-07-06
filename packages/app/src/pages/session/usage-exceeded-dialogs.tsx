@@ -77,7 +77,16 @@ export function useUsageExceededDialogs() {
               if (dontShowAgain) setGoUpsellState(keys.dontShow, Date.now())
               else {
                 void import("../../components/dialog-connect-provider").then((x) =>
-                  dialog.show(() => <x.DialogConnectProvider provider="opencode-go" />),
+                  dialog.show(() => (
+                    <x.DialogConnectProvider
+                      provider="opencode-go"
+                      onBack={() => {
+                        void import("../../components/dialog-select-provider").then((provider) => {
+                          dialog.show(() => <provider.DialogSelectProvider />)
+                        })
+                      }}
+                    />
+                  )),
                 )
               }
             }}
