@@ -601,6 +601,7 @@ describe("stdlib integration", () => {
         ["index", 1],
       ],
     ])
+    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual(["0", "index"])
   })
 
   test("Object.is preserves SameValue identity semantics", async () => {

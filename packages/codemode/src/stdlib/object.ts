@@ -4,6 +4,7 @@ import { isSandboxValue, SandboxMap, SandboxSet, SandboxURLSearchParams } from "
 import { boundedData, coerceToString } from "./value.js"
 
 export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "is", "assign", "fromEntries"])
+export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   if (!objectStatics.has(name)) throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
@@ -20,6 +21,11 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
   const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
     if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
     out[key] = item
+  }
+  const addEntry = (out: Record<string, unknown>, key: unknown, item: unknown): void => {
+    boundedData(key, "Object.fromEntries key")
+    boundedData(item, "Object.fromEntries value")
+    guardedSet(out, coerceToString(key), item)
   }
   switch (name) {
     case "keys": {
@@ -59,11 +65,7 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     case "fromEntries": {
       if (args[0] instanceof SandboxMap) {
         const out: Record<string, unknown> = Object.create(null)
-        for (const [key, item] of args[0].map.entries()) {
-          boundedData(key, "Object.fromEntries key")
-          boundedData(item, "Object.fromEntries value")
-          guardedSet(out, coerceToString(key), item)
-        }
+        for (const [key, item] of args[0].map.entries()) addEntry(out, key, item)
         return out
       }
       if (args[0] instanceof SandboxURLSearchParams) {
@@ -72,8 +74,8 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         return out
       }
       const pairs = args[0] instanceof SandboxSet ? Array.from(args[0].set.values()) : args[0]
-      if (!(args[0] instanceof SandboxSet)) boundedData(args[0], "Object.fromEntries input")
       if (!Array.isArray(pairs)) {
+        boundedData(args[0], "Object.fromEntries input")
         throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
       }
       const out: Record<string, unknown> = Object.create(null)
@@ -82,7 +84,7 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         if (validated === null || typeof validated !== "object" || isSandboxValue(validated))
           throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
         const entry = pair as Record<string, unknown>
-        guardedSet(out, coerceToString(entry[0]), entry[1])
+        addEntry(out, entry[0], entry[1])
       }
       return out
     }

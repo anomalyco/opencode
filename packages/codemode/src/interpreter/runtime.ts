@@ -66,7 +66,7 @@ import {
   numberMethods,
   numberStatics,
 } from "../stdlib/number.js"
-import { invokeObjectMethod } from "../stdlib/object.js"
+import { invokeObjectMethod, objectMethodsPreservingIdentity } from "../stdlib/object.js"
 import { promiseStatics, TOOL_CALL_CONCURRENCY } from "../stdlib/promise.js"
 import {
   escapeRegexHint,
@@ -124,6 +124,12 @@ const intrinsicReceiverKind = (value: unknown): string | undefined => {
   if (value instanceof SandboxURLSearchParams) return "URLSearchParams"
 }
 
+const intrinsicAliases = new Map([
+  ["String.trimLeft", "String.trimStart"],
+  ["String.trimRight", "String.trimEnd"],
+  ["Set.keys", "Set.values"],
+])
+
 const runtimeReferenceIdentity = (value: unknown): string | undefined => {
   if (value instanceof ToolReference) return `Tool:${JSON.stringify(value.path)}`
   if (value instanceof PromiseMethodReference) return `Promise:${value.name}`
@@ -137,15 +143,8 @@ const runtimeReferenceIdentity = (value: unknown): string | undefined => {
   if (value instanceof IntrinsicReference) {
     const kind = intrinsicReceiverKind(value.receiver)
     if (kind === undefined) return
-    const name =
-      kind === "String" && value.name === "trimLeft"
-        ? "trimStart"
-        : kind === "String" && value.name === "trimRight"
-          ? "trimEnd"
-          : kind === "Set" && value.name === "keys"
-            ? "values"
-            : value.name
-    return `Intrinsic:${kind}.${name}`
+    const method = `${kind}.${value.name}`
+    return `Intrinsic:${intrinsicAliases.get(method) ?? method}`
   }
 }
 
@@ -2048,15 +2047,9 @@ class Interpreter<R> {
         if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
         if (callable.namespace === "Object" && callable.name === "is") return self.objectIs(args)
         if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
-          return self.invokeObjectMethodOnTools(callable.name, args, node)
+          return self.invokeObjectMethodOnTools(callable.name, args[0], node)
         }
-        if (
-          callable.namespace === "Object" &&
-          (callable.name === "assign" ||
-            callable.name === "values" ||
-            callable.name === "entries" ||
-            callable.name === "fromEntries")
-        ) {
+        if (callable.namespace === "Object" && objectMethodsPreservingIdentity.has(callable.name)) {
           return invokeGlobalMethod(callable, args, node)
         }
         return boundedData(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
@@ -2079,9 +2072,9 @@ class Interpreter<R> {
   // namespace/tool names from the host tool tree - the discovery idiom a model reaches for
   // first. Other Object helpers fail with a pointer at the working idioms instead of a generic
   // plain-data message.
-  private invokeObjectMethodOnTools(name: string, args: Array<unknown>, node: AstNode): unknown {
+  private invokeObjectMethodOnTools(name: string, ref: ToolReference, node: AstNode): unknown {
     if (name === "keys") {
-      return boundedData(this.enumerableKeys(args[0] as ToolReference)!, "Object.keys result")
+      return boundedData(this.enumerableKeys(ref)!, "Object.keys result")
     }
     throw new InterpreterRuntimeError(
       `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or tools.$codemode.search({ query }) for signatures.`,
