@@ -165,14 +165,17 @@ describe("PluginV2", () => {
         id: "tool-plugin",
         effect: (ctx) =>
           ctx.tool
-            .register({
-              plugin_tool: Tool.make({
-                description: "Plugin tool",
-                input: Schema.Struct({}),
-                output: Schema.Struct({ ok: Schema.Boolean }),
-                execute: () => Effect.succeed({ ok: true }),
-              }),
-            })
+            .transform((draft) =>
+              draft.add(
+                "plugin_tool",
+                Tool.make({
+                  description: "Plugin tool",
+                  input: Schema.Struct({}),
+                  output: Schema.Struct({ ok: Schema.Boolean }),
+                  execute: () => Effect.succeed({ ok: true }),
+                }),
+              ),
+            )
             .pipe(Effect.orDie),
       })
 
@@ -202,13 +205,13 @@ describe("PluginV2", () => {
       const plugin = define({
         id: "grouped-tools",
         effect: (ctx) =>
-          Effect.gen(function* () {
-            yield* ctx.tool.register({ plain: tool("Plain") }).pipe(Effect.orDie)
-            yield* ctx.tool.register({ "look/up": tool("Lookup") }, { group: "context 7" }).pipe(Effect.orDie)
-            yield* ctx.tool
-              .register({ search: tool("Search") }, { group: "context 7", deferred: true })
-              .pipe(Effect.orDie)
-          }),
+          ctx.tool
+            .transform((draft) => {
+              draft.add("plain", tool("Plain"))
+              draft.add("look/up", tool("Lookup"), { group: "context 7" })
+              draft.add("search", tool("Search"), { group: "context 7", deferred: true })
+            })
+            .pipe(Effect.orDie),
       })
 
       yield* plugins.activate([{ plugin }])
@@ -236,14 +239,17 @@ describe("PluginV2", () => {
         effect: (ctx) =>
           Effect.gen(function* () {
             yield* ctx.tool
-              .register({
-                echo: Tool.make({
-                  description: "Echo",
-                  input: Schema.Struct({ text: Schema.String }),
-                  output: Schema.Struct({ text: Schema.String }),
-                  execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
-                }),
-              })
+              .transform((draft) =>
+                draft.add(
+                  "echo",
+                  Tool.make({
+                    description: "Echo",
+                    input: Schema.Struct({ text: Schema.String }),
+                    output: Schema.Struct({ text: Schema.String }),
+                    execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
+                  }),
+                ),
+              )
               .pipe(Effect.orDie)
 
             yield* ctx.tool.execute

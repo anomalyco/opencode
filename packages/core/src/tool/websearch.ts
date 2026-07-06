@@ -195,58 +195,63 @@ export const Plugin = {
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
-      .register({
-        [name]: Tool.make({
-          description,
-          input: Input,
-          output: Output,
-          toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
-          execute: (input, context) => {
-            const provider = selectProvider(context.sessionID, config, config.provider)
-            return Effect.gen(function* () {
-              yield* permission.assert({
-                action: name,
-                resources: [input.query],
-                save: ["*"],
-                metadata: { ...input, provider },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
-              })
+      .transform((draft) =>
+        draft.add(
+          name,
+          Tool.make({
+            description,
+            input: Input,
+            output: Output,
+            toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+            execute: (input, context) => {
+              const provider = selectProvider(context.sessionID, config, config.provider)
+              return Effect.gen(function* () {
+                yield* permission.assert({
+                  action: name,
+                  resources: [input.query],
+                  save: ["*"],
+                  metadata: { ...input, provider },
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                })
 
-              const text =
-                provider === "exa"
-                  ? yield* callMcp(http, exaUrl(config.exaApiKey), "web_search_exa", ExaArgs, {
-                      query: input.query,
-                      type: input.type || "auto",
-                      numResults: input.numResults || 8,
-                      livecrawl: input.livecrawl || "fallback",
-                      contextMaxCharacters: input.contextMaxCharacters,
-                    })
-                  : yield* callMcp(
-                      http,
-                      PARALLEL_URL,
-                      "web_search",
-                      ParallelArgs,
-                      {
-                        objective: input.query,
-                        search_queries: [input.query],
-                        session_id: context.sessionID,
-                        // V2 invocation context does not safely expose the model yet.
-                      },
-                      {
-                        "User-Agent": `opencode/${InstallationVersion}`,
-                        ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
-                      },
-                    )
-              return {
-                provider,
-                text: text ?? NO_RESULTS,
-              }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to search the web for ${input.query}` })))
-          },
-        }),
-      })
+                const text =
+                  provider === "exa"
+                    ? yield* callMcp(http, exaUrl(config.exaApiKey), "web_search_exa", ExaArgs, {
+                        query: input.query,
+                        type: input.type || "auto",
+                        numResults: input.numResults || 8,
+                        livecrawl: input.livecrawl || "fallback",
+                        contextMaxCharacters: input.contextMaxCharacters,
+                      })
+                    : yield* callMcp(
+                        http,
+                        PARALLEL_URL,
+                        "web_search",
+                        ParallelArgs,
+                        {
+                          objective: input.query,
+                          search_queries: [input.query],
+                          session_id: context.sessionID,
+                          // V2 invocation context does not safely expose the model yet.
+                        },
+                        {
+                          "User-Agent": `opencode/${InstallationVersion}`,
+                          ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
+                        },
+                      )
+                return {
+                  provider,
+                  text: text ?? NO_RESULTS,
+                }
+              }).pipe(
+                Effect.mapError(() => new ToolFailure({ message: `Unable to search the web for ${input.query}` })),
+              )
+            },
+          }),
+        ),
+      )
       .pipe(Effect.orDie)
   }),
 }

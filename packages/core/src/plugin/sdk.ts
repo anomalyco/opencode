@@ -3,6 +3,9 @@ export * as SdkPlugins from "./sdk"
 import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
+import { EventV2 } from "../event"
+
+export const Updated = EventV2.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 
 export interface Store {
   readonly plugins: Map<string, Plugin>
@@ -16,9 +19,8 @@ const defaultStore = makeStore()
  * Holds the plugins an embedder (the `@opencode-ai/sdk-next` host) contributes,
  * so `PluginSupervisor` can add them on every Location boot through the ordinary
  * generation path that `PluginSupervisor` uses for plugins discovered from
- * config. A plugin registered after a Location has booted only
- * applies to Locations booted afterward, matching config-plugin timing;
- * embedders register at startup before creating Sessions.
+ * config. Registration publishes an unlocated update so every booted Location
+ * reloads its plugin generation from the shared store.
  *
  * The store is shared explicitly between the SDK construction graph and the
  * embedded route graph because `LocationServiceMap` builds Location layers lazily
@@ -36,6 +38,7 @@ export const layerWithStore = (store: Store) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      const events = yield* EventV2.Service
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           store.plugins.clear()
@@ -45,7 +48,7 @@ export const layerWithStore = (store: Store) =>
         register: (plugin) =>
           Effect.sync(() => {
             store.plugins.set(plugin.id, plugin)
-          }),
+          }).pipe(Effect.andThen(events.publish(Updated, {})), Effect.asVoid),
         all: () => [...store.plugins.values()],
       })
     }),
@@ -53,4 +56,4 @@ export const layerWithStore = (store: Store) =>
 
 export const layer = layerWithStore(defaultStore)
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [EventV2.node] })

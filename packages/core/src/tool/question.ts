@@ -56,65 +56,68 @@ export const Plugin = {
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
-      .register({
-        [name]: Tool.make({
-          description,
-          input: Input,
-          output: Output,
-          toModelOutput: ({ input, output }) => [
-            { type: "text", text: toModelOutput(input.questions, output.answers) },
-          ],
-          execute: (input, context) =>
-            permission
-              .assert({
-                action: "question",
-                resources: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
-              })
-              .pipe(
-                Effect.mapError(() => new ToolFailure({ message: "Permission denied: question" })),
-                Effect.andThen(
-                  forms
-                    .ask({
-                      sessionID: context.sessionID,
-                      metadata: {
-                        kind: "question",
-                        tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
-                      },
-                      mode: "form",
-                      fields: input.questions.map(
-                        (question, index): Form.Field => ({
-                          key: `q${index}`,
-                          title: question.header,
-                          description: question.question,
-                          type: question.multiple === true ? "multiselect" : "string",
-                          options: question.options.map((option) => ({
-                            value: option.label,
-                            label: option.label,
-                            description: option.description,
-                          })),
-                        custom: true,
-                        }),
-                      ),
+      .transform((draft) =>
+        draft.add(
+          name,
+          Tool.make({
+            description,
+            input: Input,
+            output: Output,
+            toModelOutput: ({ input, output }) => [
+              { type: "text", text: toModelOutput(input.questions, output.answers) },
+            ],
+            execute: (input, context) =>
+              permission
+                .assert({
+                  action: "question",
+                  resources: ["*"],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                })
+                .pipe(
+                  Effect.mapError(() => new ToolFailure({ message: "Permission denied: question" })),
+                  Effect.andThen(
+                    forms
+                      .ask({
+                        sessionID: context.sessionID,
+                        metadata: {
+                          kind: "question",
+                          tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
+                        },
+                        mode: "form",
+                        fields: input.questions.map(
+                          (question, index): Form.Field => ({
+                            key: `q${index}`,
+                            title: question.header,
+                            description: question.question,
+                            type: question.multiple === true ? "multiselect" : "string",
+                            options: question.options.map((option) => ({
+                              value: option.label,
+                              label: option.label,
+                              description: option.description,
+                            })),
+                            custom: true,
+                          }),
+                        ),
+                      })
+                      .pipe(Effect.orDie),
+                  ),
+                  Effect.flatMap((state) => {
+                    if (state.status === "cancelled") return Effect.die(new CancelledError())
+                    return Effect.succeed({
+                      answers: input.questions.map((_, index): QuestionV2.Answer => {
+                        const value = state.answer[`q${index}`]
+                        if (value === undefined) return []
+                        if (typeof value === "object") return Array.from(value)
+                        return [String(value)]
+                      }),
                     })
-                    .pipe(Effect.orDie),
+                  }),
                 ),
-                Effect.flatMap((state) => {
-                  if (state.status === "cancelled") return Effect.die(new CancelledError())
-                  return Effect.succeed({
-                    answers: input.questions.map((_, index): QuestionV2.Answer => {
-                      const value = state.answer[`q${index}`]
-                      if (value === undefined) return []
-                      if (typeof value === "object") return Array.from(value)
-                      return [String(value)]
-                    }),
-                  })
-                }),
-              ),
-        }),
-      })
+          }),
+        ),
+      )
       .pipe(Effect.orDie)
   }),
 }

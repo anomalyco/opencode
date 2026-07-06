@@ -61,6 +61,12 @@ const GlobalMessage = EventV2.ephemeral({
     text: Schema.String,
   },
 })
+const CountMessage = EventV2.ephemeral({
+  type: "test.count",
+  schema: {
+    count: Schema.Number,
+  },
+})
 
 const VersionedMessage = EventV2.durable({
   type: "test.versioned",
@@ -90,6 +96,26 @@ const it = testEffect(
 const itWithoutLocation = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node])))
 
 describe("EventV2", () => {
+  it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      // @ts-expect-error multi-definition subscriptions require at least one definition
+      events.subscribe([])
+      const fiber = yield* events
+        .subscribe([Message, CountMessage])
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(Message, { text: "hello" })
+      yield* events.publish(CountMessage, { count: 2 })
+
+      const received = Array.from(yield* Fiber.join(fiber)).map((event) =>
+        event.type === "test.message" ? event.data.text : event.data.count,
+      )
+      expect(received).toEqual(["hello", 2])
+    }),
+  )
+
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

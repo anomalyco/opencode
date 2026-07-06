@@ -93,80 +93,88 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .register({
-        [name]: Tool.make({
-          description,
-          input: Input,
-          output: Output,
-          toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              const parent = yield* runtime.session
-                .get(context.sessionID)
-                .pipe(
-                  Effect.mapError(() => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` })),
-                )
-              const agent = yield* agents.resolve(input.agent)
-              if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
-              if (agent.mode === "primary")
-                return yield* new ToolFailure({ message: `Agent ${input.agent} cannot run as a subagent` })
+      .transform((draft) =>
+        draft.add(
+          name,
+          Tool.make({
+            description,
+            input: Input,
+            output: Output,
+            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                const parent = yield* runtime.session
+                  .get(context.sessionID)
+                  .pipe(
+                    Effect.mapError(
+                      () => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` }),
+                    ),
+                  )
+                const agent = yield* agents.resolve(input.agent)
+                if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
+                if (agent.mode === "primary")
+                  return yield* new ToolFailure({ message: `Agent ${input.agent} cannot run as a subagent` })
 
-              // Model selection is policy/config/session state, not an LLM-facing tool argument.
-              const model = agent.model ?? parent.model
-              const child = yield* runtime.session
-                .create({
-                  parentID: context.sessionID,
+                // Model selection is policy/config/session state, not an LLM-facing tool argument.
+                const model = agent.model ?? parent.model
+                const child = yield* runtime.session
+                  .create({
+                    parentID: context.sessionID,
+                    title: input.description,
+                    agent: AgentV2.ID.make(input.agent),
+                    model,
+                    // TODO(opencode kkdvxn): derive restricted subagent permissions from the parent
+                    // session (V1 deriveSubagentSessionPermission). MVP uses the agent's own permissions.
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      () => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` }),
+                    ),
+                  )
+
+                const background = input.background === true
+
+                const run = Effect.gen(function* () {
+                  // The child session owns its agent/model (set at create); prompt only admits input.
+                  yield* runtime.session.prompt({ sessionID: child.id, prompt: { text: input.prompt }, resume: false })
+                  yield* runtime.session.resume(child.id)
+                  return yield* latestAssistantText(child.id)
+                }).pipe(Effect.onInterrupt(() => runtime.session.interrupt(child.id)))
+
+                const info = yield* runtime.job.start({
+                  id: child.id,
+                  type: name,
                   title: input.description,
-                  agent: AgentV2.ID.make(input.agent),
-                  model,
-                  // TODO(opencode kkdvxn): derive restricted subagent permissions from the parent
-                  // session (V1 deriveSubagentSessionPermission). MVP uses the agent's own permissions.
+                  metadata: {},
+                  run,
                 })
-                .pipe(
-                  Effect.mapError(() => new ToolFailure({ message: `Parent session not found: ${context.sessionID}` })),
+
+                if (background) {
+                  yield* runtime.job.background(info.id)
+                  yield* notifyWhenDone(context.sessionID, child.id, input.description)
+                  return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
+                }
+
+                const result = yield* runtime.job.block({ id: child.id, sessionID: context.sessionID }).pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.all([runtime.session.interrupt(child.id), runtime.job.cancel(child.id)], {
+                      discard: true,
+                    }),
+                  ),
                 )
-
-              const background = input.background === true
-
-              const run = Effect.gen(function* () {
-                // The child session owns its agent/model (set at create); prompt only admits input.
-                yield* runtime.session.prompt({ sessionID: child.id, prompt: { text: input.prompt }, resume: false })
-                yield* runtime.session.resume(child.id)
-                return yield* latestAssistantText(child.id)
-              }).pipe(Effect.onInterrupt(() => runtime.session.interrupt(child.id)))
-
-              const info = yield* runtime.job.start({
-                id: child.id,
-                type: name,
-                title: input.description,
-                metadata: {},
-                run,
-              })
-
-              if (background) {
-                yield* runtime.job.background(info.id)
-                yield* notifyWhenDone(context.sessionID, child.id, input.description)
-                return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
-              }
-
-              const result = yield* runtime.job.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([runtime.session.interrupt(child.id), runtime.job.cancel(child.id)], {
-                    discard: true,
-                  }),
-                ),
-              )
-              if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(context.sessionID, child.id, input.description)
-                return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
-              }
-              if (result?.info.status === "error")
-                return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })
-              if (result?.info.status === "cancelled") return yield* new ToolFailure({ message: "Subagent cancelled" })
-              return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
-            }),
-        }),
-      })
+                if (result?.type === "backgrounded") {
+                  yield* notifyWhenDone(context.sessionID, child.id, input.description)
+                  return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
+                }
+                if (result?.info.status === "error")
+                  return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })
+                if (result?.info.status === "cancelled")
+                  return yield* new ToolFailure({ message: "Subagent cancelled" })
+                return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
+              }),
+          }),
+        ),
+      )
       .pipe(Effect.orDie)
   }),
 }

@@ -1,6 +1,7 @@
 import { OpenCode } from "@opencode-ai/client/effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { EventV2 } from "@opencode-ai/core/event"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { Project } from "@opencode-ai/core/project"
@@ -13,7 +14,7 @@ export const create = Effect.fn("OpenCode.create")(function* () {
   const memoMap = yield* Layer.makeMemoMap
   const sdkPlugins = SdkPlugins.makeStore()
   const context = yield* Layer.buildWithMemoMap(
-    AppNodeBuilder.build(LayerNode.group([PermissionSaved.node, Project.node, SdkPlugins.node]), [
+    AppNodeBuilder.build(LayerNode.group([EventV2.node, PermissionSaved.node, Project.node, SdkPlugins.node]), [
       [SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)],
     ]),
     memoMap,

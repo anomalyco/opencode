@@ -111,13 +111,26 @@ export type LogItem = Payload | EventLog.Synced
 
 export const isSynced = (item: LogItem): item is EventLog.Synced => item.type === "log.synced"
 
+export type SubscribePayload<D extends readonly Definition[]> = D[number] extends infer Item
+  ? Item extends Definition
+    ? Payload<Item>
+    : never
+  : never
+
+export interface Subscribe {
+  <D extends Definition>(definition: D): Stream.Stream<Payload<D>>
+  <const D extends readonly [Definition, ...Definition[]]>(definitions: D): Stream.Stream<SubscribePayload<D>>
+}
+
+const isDefinition = (input: Definition | readonly Definition[]): input is Definition => !Array.isArray(input)
+
 export interface Interface {
   readonly publish: <D extends Definition>(
     definition: D,
     data: Data<D>,
     options?: PublishOptions,
   ) => Effect.Effect<Payload<D>>
-  readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
+  readonly subscribe: Subscribe
   /**
    * Volatile live channel: every event published from now on, nothing before,
    * nothing across a disconnect. The only channel that carries non-durable
@@ -603,10 +616,20 @@ export const layerWith = (options?: LayerOptions) =>
           ),
         )
 
-      const subscribe = <D extends Definition>(definition: D): Stream.Stream<Payload<D>> =>
+      const subscribeOne = <D extends Definition>(definition: D): Stream.Stream<Payload<D>> =>
         local(Stream.unwrap(getOrCreate(definition).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))))).pipe(
           Stream.map((event) => event as Payload<D>),
         )
+
+      function subscribe<D extends Definition>(definition: D): Stream.Stream<Payload<D>>
+      function subscribe<const D extends readonly [Definition, ...Definition[]]>(
+        definitions: D,
+      ): Stream.Stream<SubscribePayload<D>>
+      function subscribe(input: Definition | readonly Definition[]): Stream.Stream<Payload> {
+        if (isDefinition(input)) return subscribeOne(input)
+        const types = new Set(input.map((definition) => definition.type))
+        return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
+      }
 
       const streamLive = (): Stream.Stream<Payload> => local(Stream.fromPubSub(pubsub.live))
 

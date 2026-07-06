@@ -63,133 +63,136 @@ export const Plugin = {
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
-      .register({
-        [name]: Tool.withPermission(
-          Tool.make({
-            description:
-              "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
-            input: Input,
-            output: Output,
-            toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
-            execute: (input, context) => {
-              const applied: Array<typeof Applied.Type> = []
-              const fail = (path: string) => {
-                const prefix =
-                  applied.length === 0
-                    ? `Unable to apply patch at ${path}`
-                    : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
-                return new ToolFailure({ message: prefix })
-              }
-              return Effect.gen(function* () {
-                const source = {
-                  type: "tool" as const,
-                  messageID: context.assistantMessageID,
-                  callID: context.toolCallID,
+      .transform((draft) =>
+        draft.add(
+          name,
+          Tool.withPermission(
+            Tool.make({
+              description:
+                "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
+              input: Input,
+              output: Output,
+              toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
+              execute: (input, context) => {
+                const applied: Array<typeof Applied.Type> = []
+                const fail = (path: string) => {
+                  const prefix =
+                    applied.length === 0
+                      ? `Unable to apply patch at ${path}`
+                      : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
+                  return new ToolFailure({ message: prefix })
                 }
-                if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
-                const hunks = yield* Effect.try({
-                  try: () => Patch.parse(input.patchText),
-                  catch: (cause) => new ToolFailure({ message: `apply_patch verification failed: ${String(cause)}` }),
-                })
-                if (hunks.length === 0) return yield* new ToolFailure({ message: "patch rejected: empty patch" })
-                const move = hunks.find((hunk) => hunk.type === "update" && hunk.movePath !== undefined)
-                if (move) return yield* new ToolFailure({ message: "apply_patch moves are not supported yet" })
+                return Effect.gen(function* () {
+                  const source = {
+                    type: "tool" as const,
+                    messageID: context.assistantMessageID,
+                    callID: context.toolCallID,
+                  }
+                  if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
+                  const hunks = yield* Effect.try({
+                    try: () => Patch.parse(input.patchText),
+                    catch: (cause) => new ToolFailure({ message: `apply_patch verification failed: ${String(cause)}` }),
+                  })
+                  if (hunks.length === 0) return yield* new ToolFailure({ message: "patch rejected: empty patch" })
+                  const move = hunks.find((hunk) => hunk.type === "update" && hunk.movePath !== undefined)
+                  if (move) return yield* new ToolFailure({ message: "apply_patch moves are not supported yet" })
 
-                const targets: Array<{ readonly hunk: Patch.Hunk; readonly target: LocationMutation.Target }> = []
-                for (const hunk of hunks)
-                  targets.push({ hunk, target: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
-                const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
-                for (const { target } of targets) {
-                  const external = target.externalDirectory
-                  if (external) externalDirectories.set(external.resource, external)
-                }
-                for (const external of externalDirectories.values()) {
+                  const targets: Array<{ readonly hunk: Patch.Hunk; readonly target: LocationMutation.Target }> = []
+                  for (const hunk of hunks)
+                    targets.push({ hunk, target: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
+                  const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
+                  for (const { target } of targets) {
+                    const external = target.externalDirectory
+                    if (external) externalDirectories.set(external.resource, external)
+                  }
+                  for (const external of externalDirectories.values()) {
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(external),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source,
+                    })
+                  }
                   yield* permission.assert({
-                    ...LocationMutation.externalDirectoryPermission(external),
+                    action: "edit",
+                    resources: [...new Set(targets.map(({ target }) => target.resource))],
+                    save: ["*"],
                     sessionID: context.sessionID,
                     agent: context.agent,
                     source,
                   })
-                }
-                yield* permission.assert({
-                  action: "edit",
-                  resources: [...new Set(targets.map(({ target }) => target.resource))],
-                  save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
 
-                const prepared: Prepared[] = []
-                for (const { hunk, target } of targets) {
-                  yield* Effect.gen(function* () {
-                    if (hunk.type === "add") {
+                  const prepared: Prepared[] = []
+                  for (const { hunk, target } of targets) {
+                    yield* Effect.gen(function* () {
+                      if (hunk.type === "add") {
+                        prepared.push({
+                          ...hunk,
+                          target,
+                          before: "",
+                          after:
+                            hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`,
+                        })
+                        return
+                      }
+                      if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
+                      const source = yield* fs.readFile(target.canonical)
+                      const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
+                      const before = original.replace(/^\uFEFF/, "")
+                      if (hunk.type === "delete") {
+                        prepared.push({ ...hunk, target, before, after: "" })
+                        return
+                      }
+                      const update = Patch.derive(hunk.path, hunk.chunks, original)
                       prepared.push({
                         ...hunk,
                         target,
-                        before: "",
-                        after:
-                          hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`,
+                        source,
+                        content: Patch.joinBom(update.content, update.bom),
+                        before,
+                        after: update.content,
                       })
-                      return
-                    }
-                    if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
-                    const source = yield* fs.readFile(target.canonical)
-                    const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
-                    const before = original.replace(/^\uFEFF/, "")
-                    if (hunk.type === "delete") {
-                      prepared.push({ ...hunk, target, before, after: "" })
-                      return
-                    }
-                    const update = Patch.derive(hunk.path, hunk.chunks, original)
-                    prepared.push({
-                      ...hunk,
-                      target,
-                      source,
-                      content: Patch.joinBom(update.content, update.bom),
-                      before,
-                      after: update.content,
-                    })
-                  }).pipe(Effect.mapError(() => fail(hunk.path)))
-                }
+                    }).pipe(Effect.mapError(() => fail(hunk.path)))
+                  }
 
-                const patchFiles = prepared.map(patchFile)
-                yield* Effect.forEach(
-                  prepared,
-                  (change) =>
-                    Effect.gen(function* () {
-                      if (change.type === "add") {
-                        const result = yield* files.create({
+                  const patchFiles = prepared.map(patchFile)
+                  yield* Effect.forEach(
+                    prepared,
+                    (change) =>
+                      Effect.gen(function* () {
+                        if (change.type === "add") {
+                          const result = yield* files.create({
+                            target: change.target,
+                            content:
+                              change.contents.endsWith("\n") || change.contents === ""
+                                ? change.contents
+                                : `${change.contents}\n`,
+                          })
+                          applied.push({ type: change.type, resource: result.resource, target: result.target })
+                          return
+                        }
+                        if (change.type === "delete") {
+                          const result = yield* files.remove({ target: change.target })
+                          applied.push({ type: change.type, resource: result.resource, target: result.target })
+                          return
+                        }
+                        const result = yield* files.writeIfUnchanged({
                           target: change.target,
-                          content:
-                            change.contents.endsWith("\n") || change.contents === ""
-                              ? change.contents
-                              : `${change.contents}\n`,
+                          expected: change.source,
+                          content: change.content,
                         })
                         applied.push({ type: change.type, resource: result.resource, target: result.target })
-                        return
-                      }
-                      if (change.type === "delete") {
-                        const result = yield* files.remove({ target: change.target })
-                        applied.push({ type: change.type, resource: result.resource, target: result.target })
-                        return
-                      }
-                      const result = yield* files.writeIfUnchanged({
-                        target: change.target,
-                        expected: change.source,
-                        content: change.content,
-                      })
-                      applied.push({ type: change.type, resource: result.resource, target: result.target })
-                    }).pipe(Effect.mapError(() => fail(change.path))),
-                  { discard: true },
-                )
-                return { applied, files: patchFiles }
-              }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))
-            },
-          }),
-          "edit",
+                      }).pipe(Effect.mapError(() => fail(change.path))),
+                    { discard: true },
+                  )
+                  return { applied, files: patchFiles }
+                }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch"))))
+              },
+            }),
+            "edit",
+          ),
         ),
-      })
+      )
       .pipe(Effect.orDie)
   }),
 }

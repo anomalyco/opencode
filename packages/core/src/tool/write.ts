@@ -50,44 +50,47 @@ export const Plugin = {
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
-      .register({
-        [name]: Tool.withPermission(
-          Tool.make({
-            description:
-              "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
-            input: Input,
-            output: Output,
-            toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
-            execute: (input, context) =>
-              Effect.gen(function* () {
-                const source = {
-                  type: "tool" as const,
-                  messageID: context.assistantMessageID,
-                  callID: context.toolCallID,
-                }
-                const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-                const external = target.externalDirectory
-                if (external)
+      .transform((draft) =>
+        draft.add(
+          name,
+          Tool.withPermission(
+            Tool.make({
+              description:
+                "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
+              input: Input,
+              output: Output,
+              toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
+              execute: (input, context) =>
+                Effect.gen(function* () {
+                  const source = {
+                    type: "tool" as const,
+                    messageID: context.assistantMessageID,
+                    callID: context.toolCallID,
+                  }
+                  const target = yield* mutation.resolve({ path: input.path, kind: "file" })
+                  const external = target.externalDirectory
+                  if (external)
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(external),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source,
+                    })
                   yield* permission.assert({
-                    ...LocationMutation.externalDirectoryPermission(external),
+                    action: "edit",
+                    resources: [target.resource],
+                    save: ["*"],
                     sessionID: context.sessionID,
                     agent: context.agent,
                     source,
                   })
-                yield* permission.assert({
-                  action: "edit",
-                  resources: [target.resource],
-                  save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
-                return yield* files.writeTextPreservingBom({ target, content: input.content })
-              }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
-          }),
-          "edit",
+                  return yield* files.writeTextPreservingBom({ target, content: input.content })
+                }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
+            }),
+            "edit",
+          ),
         ),
-      })
+      )
       .pipe(Effect.orDie)
   }),
 }

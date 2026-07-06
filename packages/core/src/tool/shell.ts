@@ -58,8 +58,7 @@ const modelOutput = (output: Output): string | undefined => {
   const warnings = output.warnings?.length
     ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
     : ""
-  if (output.status === "running")
-    return `${warnings.trimStart()}${warnings ? "\n\n" : ""}${BACKGROUND_INSTRUCTION}`
+  if (output.status === "running") return `${warnings.trimStart()}${warnings ? "\n\n" : ""}${BACKGROUND_INSTRUCTION}`
   if (output.timeout) return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command timed out before completion.`
   return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command exited with code ${output.exit}.`
 }
@@ -140,136 +139,142 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .register({
-        [name]: Tool.make({
-          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
-          input: Input,
-          output: Output,
-          structured: StructuredOutput,
-          toStructuredOutput: ({ output }) => ({
-            truncated: output.truncated,
-            ...(output.exit === undefined ? {} : { exit: output.exit }),
-            ...(output.shellID === undefined ? {} : { shellID: output.shellID }),
-            ...(output.timeout === undefined ? {} : { timeout: output.timeout }),
-          }),
-          toModelOutput: ({ output }) => {
-            const parts: Content[] = [{ type: "text", text: output.output }]
-            const model = modelOutput(output)
-            if (model) parts.push({ type: "text", text: model })
-            return parts
-          },
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.assistantMessageID,
-                callID: context.toolCallID,
-              }
-              const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
-              const external = target.externalDirectory
-              if (external)
+      .transform((draft) =>
+        draft.add(
+          name,
+          Tool.make({
+            description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
+            input: Input,
+            output: Output,
+            structured: StructuredOutput,
+            toStructuredOutput: ({ output }) => ({
+              truncated: output.truncated,
+              ...(output.exit === undefined ? {} : { exit: output.exit }),
+              ...(output.shellID === undefined ? {} : { shellID: output.shellID }),
+              ...(output.timeout === undefined ? {} : { timeout: output.timeout }),
+            }),
+            toModelOutput: ({ output }) => {
+              const parts: Content[] = [{ type: "text", text: output.output }]
+              const model = modelOutput(output)
+              if (model) parts.push({ type: "text", text: model })
+              return parts
+            },
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                const source = {
+                  type: "tool" as const,
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                }
+                const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
+                const external = target.externalDirectory
+                if (external)
+                  yield* permission.assert({
+                    ...LocationMutation.externalDirectoryPermission(external),
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+                const warnings = (yield* externalCommandDirectories(fsUtil, input.command, target.canonical)).map(
+                  (directory) =>
+                    `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
+                )
                 yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
+                  action: name,
+                  resources: [input.command],
+                  save: [input.command],
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,
                 })
-              const warnings = (yield* externalCommandDirectories(fsUtil, input.command, target.canonical)).map(
-                (directory) =>
-                  `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
-              )
-              yield* permission.assert({
-                action: name,
-                resources: [input.command],
-                save: [input.command],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
-              })
 
-              if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
-                return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
+                if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
+                  return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
-              const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
-              const info = yield* shell.create({
-                command: input.command,
-                cwd: target.canonical,
-                timeout,
-                metadata: { sessionID: context.sessionID },
-              })
+                const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
+                const info = yield* shell.create({
+                  command: input.command,
+                  cwd: target.canonical,
+                  timeout,
+                  metadata: { sessionID: context.sessionID },
+                })
 
-              const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
-                const final = yield* shell.wait(info.id)
-                const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+                const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
+                  const final = yield* shell.wait(info.id)
+                  const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
 
-                if (final.status === "timeout") {
+                  if (final.status === "timeout") {
+                    return {
+                      exit: final.exit,
+                      output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                      truncated: false,
+                      timeout: true,
+                      status: "completed" as const,
+                    }
+                  }
+
+                  const truncated = page.size > page.cursor
+                  const body = page.output || "(no output)"
+                  const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
                   return {
                     exit: final.exit,
-                    output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
-                    truncated: false,
-                    timeout: true,
+                    output: `${body}${notice}`,
+                    truncated,
                     status: "completed" as const,
+                  }
+                })
+
+                const run = settleShell().pipe(
+                  Effect.map((output) => output.output),
+                  Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
+                )
+                const job = yield* runtime.job.start({
+                  id: context.toolCallID,
+                  type: name,
+                  title: input.command,
+                  metadata: { sessionID: context.sessionID, shellID: info.id },
+                  run,
+                })
+
+                if (input.background === true) {
+                  yield* runtime.job.background(job.id)
+                  yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                  return {
+                    output: BACKGROUND_STARTED,
+                    shellID: info.id,
+                    truncated: false,
+                    status: "running" as const,
+                    ...(warnings.length ? { warnings } : {}),
                   }
                 }
 
-                const truncated = page.size > page.cursor
-                const body = page.output || "(no output)"
-                const notice = truncated ? `\n\n[output truncated; full output saved to: ${final.file}]` : ""
-                return {
-                  exit: final.exit,
-                  output: `${body}${notice}`,
-                  truncated,
-                  status: "completed" as const,
+                const result = yield* runtime.job
+                  .block({ id: job.id, sessionID: context.sessionID })
+                  .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
+                if (result?.type === "backgrounded") {
+                  yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                  return {
+                    output: BACKGROUND_STARTED,
+                    shellID: info.id,
+                    truncated: false,
+                    status: "running" as const,
+                    ...(warnings.length ? { warnings } : {}),
+                  }
                 }
-              })
+                if (result?.info.status === "error")
+                  return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
+                if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
 
-              const run = settleShell().pipe(
-                Effect.map((output) => output.output),
-                Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
-              )
-              const job = yield* runtime.job.start({
-                id: context.toolCallID,
-                type: name,
-                title: input.command,
-                metadata: { sessionID: context.sessionID, shellID: info.id },
-                run,
-              })
-
-              if (input.background === true) {
-                yield* runtime.job.background(job.id)
-                yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
                 return {
-                  output: BACKGROUND_STARTED,
-                  shellID: info.id,
-                  truncated: false,
-                  status: "running" as const,
+                  ...(yield* settleShell()),
                   ...(warnings.length ? { warnings } : {}),
                 }
-              }
-
-              const result = yield* runtime.job.block({ id: job.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)),
-              )
-              if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
-                return {
-                  output: BACKGROUND_STARTED,
-                  shellID: info.id,
-                  truncated: false,
-                  status: "running" as const,
-                  ...(warnings.length ? { warnings } : {}),
-                }
-              }
-              if (result?.info.status === "error") return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
-              if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
-
-              return {
-                ...(yield* settleShell()),
-                ...(warnings.length ? { warnings } : {}),
-              }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
-        }),
-      })
+              }).pipe(
+                Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` })),
+              ),
+          }),
+        ),
+      )
       .pipe(Effect.orDie)
   }),
 }
