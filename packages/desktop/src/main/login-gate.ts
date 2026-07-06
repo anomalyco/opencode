@@ -576,19 +576,27 @@ async function checkExistingAuth(): Promise<boolean> {
     const fs = await import("node:fs")
     // The auth module stores tokens at Global.Path.data/auth.json
     // which resolves to {XDG_DATA_HOME}/opencode/auth.json.
-    // XDG_DATA_HOME defaults to ~/.local/share on Linux, ~/Library/Application Support on macOS,
-    // and %APPDATA% on Windows (via the xdg-basedir package).
-    const xdgDataHome = process.env["XDG_DATA_HOME"]
-    const defaultDataHome =
+    // XDG_DATA_HOME uses xdg-basedir which on some Windows installs falls
+    // back to ~/.local/share instead of %LOCALAPPDATA% or %APPDATA%
+    // (e.g. when env-paths resolution fails in a bundled asar).
+    // Check multiple candidate locations to cover all possible resolutions.
+    const xdgEnv = process.env["XDG_DATA_HOME"]
+    const candidates = new Set([
+      xdgEnv,
       process.platform === "darwin"
         ? join(homedir(), "Library", "Application Support")
         : process.platform === "win32"
           ? process.env["APPDATA"] ?? join(homedir(), "AppData", "Roaming")
-          : join(homedir(), ".local", "share")
-    const dataHome = xdgDataHome ?? defaultDataHome
-    const authPath = join(dataHome, "opencode", "auth.json")
+          : undefined,
+      // Unix XDG fallback — used by xdg-basedir when platform detection
+      // or env-paths resolution fails (observed on Windows packaged builds).
+      join(homedir(), ".local", "share"),
+    ])
 
-    if (fs.existsSync(authPath)) {
+    for (const dataHome of candidates) {
+      if (!dataHome) continue
+      const authPath = join(dataHome, "opencode", "auth.json")
+      if (!fs.existsSync(authPath)) continue
       const content = fs.readFileSync(authPath, "utf-8")
       const data = JSON.parse(content)
       if (data?.microsoft?.type === "oauth" && data.microsoft.access && data.microsoft.refresh) {
