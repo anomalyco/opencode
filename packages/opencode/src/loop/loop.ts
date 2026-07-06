@@ -12,6 +12,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionID } from "@/session/schema"
+import { AbortedError } from "@opencode-ai/core/v1/session"
 import { Context, Effect, Layer, Ref, Result, Schema, Scope } from "effect"
 
 export const COMPLETE_SIGNAL = "<promise>COMPLETE</promise>"
@@ -180,6 +181,7 @@ export const layer = Layer.effect(
             output: "",
             complete: false,
             error: true,
+            aborted: false,
             startedAt,
             finishedAt,
           }
@@ -192,6 +194,12 @@ export const layer = Layer.effect(
           .map((part) => part.text)
           .join("")
 
+        // A user interrupt (TUI escape → session.abort) finalizes the iteration's
+        // assistant message with AbortedError and returns it normally. Without
+        // this the loop would treat an aborted turn as "no progress" and fire
+        // the next iteration — making it impossible to stop from the session.
+        const aborted = message.info.role === "assistant" && AbortedError.isInstance(message.info.error)
+
         return {
           iteration: iterationNumber,
           sessionID: record.info.sessionID,
@@ -200,6 +208,7 @@ export const layer = Layer.effect(
           output,
           complete: output.includes(COMPLETE_SIGNAL),
           error: false,
+          aborted,
           startedAt,
           finishedAt,
         }
@@ -275,6 +284,12 @@ export const layer = Layer.effect(
 
           if (result.error) {
             yield* finalize(id, "error")
+            return
+          }
+          if (result.aborted) {
+            // User interrupted the iteration's turn — stop the loop rather
+            // than grinding on.
+            yield* finalize(id, "cancelled")
             return
           }
           if (result.complete) {

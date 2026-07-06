@@ -245,6 +245,39 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
   const event = useEvent()
 
+  // Track a loop running/paused in THIS session so the UI can show it and the
+  // interrupt/submit paths can stop it (a loop re-prompts the session, so it
+  // must be cancelled to hand control back to the user).
+  const [activeLoop, setActiveLoop] = createSignal<
+    { id: string; status: string; iteration: number; maxIterations: number } | undefined
+  >()
+  const isLoopLive = (status: string) => status === "running" || status === "paused"
+  const refreshActiveLoop = async () => {
+    if (!props.sessionID) {
+      setActiveLoop(undefined)
+      return
+    }
+    const result = await sdk.client.loop.list().catch(() => undefined)
+    const live = (result?.data ?? [])
+      .filter((loop) => loop.sessionID === props.sessionID && isLoopLive(loop.status))
+      .sort((a, b) => b.startedAt - a.startedAt)[0]
+    setActiveLoop(
+      live
+        ? { id: live.id, status: live.status, iteration: live.iteration, maxIterations: live.maxIterations }
+        : undefined,
+    )
+  }
+  createEffect(on(() => props.sessionID, () => void refreshActiveLoop()))
+  event.on("loop.updated", (evt) => {
+    const loop = evt.properties.loop
+    if (loop.sessionID !== props.sessionID) return
+    setActiveLoop(
+      isLoopLive(loop.status)
+        ? { id: loop.id, status: loop.status, iteration: loop.iteration, maxIterations: loop.maxIterations }
+        : undefined,
+    )
+  })
+
   event.on("tui.prompt.append", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     if (!input || input.isDestroyed) return
@@ -402,7 +435,9 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        // Also enabled while a loop is live but the session is momentarily
+        // idle between iterations — otherwise escape can't reach the loop.
+        enabled: status().type !== "idle" || activeLoop() !== undefined,
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
@@ -412,6 +447,21 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (!props.sessionID) return
+
+          // A loop keeps re-prompting the session, so aborting the current
+          // turn alone can never stop it — cancel the loop on the first
+          // escape (it also aborts the in-flight iteration server-side).
+          const loop = activeLoop()
+          if (loop) {
+            void sdk.client.loop.cancel({ loopID: loop.id }).then(() => {
+              toast.show({ variant: "success", message: "Loop stopped" })
+            })
+            setActiveLoop(undefined)
+            void sdk.client.session.abort({ sessionID: props.sessionID })
+            setStore("interrupt", 0)
+            dialog.clear()
+            return
+          }
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -971,6 +1021,16 @@ export function Prompt(props: PromptProps) {
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
+    }
+    // Sending a message while a loop drives this session would race the loop's
+    // own iteration prompts. Stop the loop first so the user's message takes
+    // over cleanly (the /loop command itself is handled earlier and skips this).
+    if (activeLoop() && !trimmed.startsWith("/loop")) {
+      const loop = activeLoop()!
+      await sdk.client.loop.cancel({ loopID: loop.id }).catch(() => undefined)
+      await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => undefined)
+      setActiveLoop(undefined)
+      toast.show({ variant: "success", message: "Loop stopped — sending your message" })
     }
     const selectedModel = local.model.current()
     if (!selectedModel) {
@@ -1684,6 +1744,15 @@ export function Prompt(props: PromptProps) {
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
+              <Show when={activeLoop()}>
+                {(loop) => (
+                  <text fg={theme.accent} wrapMode="none">
+                    ⟳ loop {loop().iteration}/{loop().maxIterations}
+                    {loop().status === "paused" ? " (paused)" : ""}
+                    <span style={{ fg: theme.textMuted }}> · esc to stop</span>
+                  </text>
+                )}
+              </Show>
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>
