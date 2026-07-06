@@ -13,8 +13,10 @@ import fuzzysort from "fuzzysort"
 import { DEFAULT_PALETTE_KEYBIND, formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { SettingsList } from "./settings-list"
 import { SettingsListV2 } from "./settings-v2/parts/list"
+import { SettingsScroll } from "./settings-scroll"
 
 const IconV2 = lazy(() => import("@opencode-ai/ui/v2/icon").then((module) => ({ default: module.Icon })))
 
@@ -448,7 +450,7 @@ function SettingsKeybindsV2View(props: {
   const hasResults = createMemo(() => props.groups.some((group) => (filtered().get(group)?.length ?? 0) > 0))
 
   return (
-    <>
+    <ScrollView class="flex-1 min-h-0">
       <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
         <div class="settings-v2-tab-header-row">
           <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
@@ -525,7 +527,7 @@ function SettingsKeybindsV2View(props: {
           </Show>
         </div>
       </div>
-    </>
+    </ScrollView>
   )
 }
 
@@ -745,7 +747,7 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
   )
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+    <SettingsScroll>
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <div class="flex items-center justify-between gap-4">
@@ -776,6 +778,6 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
         </div>
       </div>
       {groups}
-    </div>
+    </SettingsScroll>
   )
 }

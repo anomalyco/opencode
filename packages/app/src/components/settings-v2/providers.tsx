@@ -2,6 +2,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Accessor, type Component, For, Show } from "solid-js"
@@ -143,7 +144,7 @@ export const SettingsProvidersV2: Component<{
   }
 
   return (
-    <>
+    <ScrollView class="flex-1 min-h-0">
       <div class="settings-v2-tab-header">
         <h2 class="settings-v2-tab-title">{language.t("settings.providers.title")}</h2>
       </div>
@@ -262,6 +263,6 @@ export const SettingsProvidersV2: Component<{
           </button>
         </div>
       </div>
-    </>
+    </ScrollView>
   )
 }

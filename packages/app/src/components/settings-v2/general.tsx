@@ -4,6 +4,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -536,7 +537,7 @@ export const SettingsGeneralV2: Component<{
   )
 
   return (
-    <>
+    <ScrollView class="flex-1 min-h-0">
       <div class="settings-v2-tab-header">
         <h2 class="settings-v2-tab-title">{language.t("settings.tab.general")}</h2>
       </div>
@@ -566,6 +567,6 @@ export const SettingsGeneralV2: Component<{
 
         <AdvancedSection />
       </div>
-    </>
+    </ScrollView>
   )
 }

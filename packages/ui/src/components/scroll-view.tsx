@@ -291,6 +291,9 @@ export function ScrollView(props: ScrollViewProps) {
   // We can also explicitly catch PageUp/Down if we want smooth scroll or specific behavior,
   // but native usually handles this perfectly. Let's explicitly ensure it behaves well.
   const onKeyDown = (e: KeyboardEvent) => {
+    // Defer to a descendant that already handled the key (e.g. an opening/open
+    // dropdown, listbox, or menu) — don't additionally scroll the viewport.
+    if (e.defaultPrevented) return
     // If user is focused on an input inside the scroll view, don't hijack keys
     if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
       return
