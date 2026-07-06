@@ -1403,6 +1403,84 @@ class Interpreter<R> {
     })
   }
 
+  private assignPattern(pattern: AstNode, value: unknown, node: AstNode): Effect.Effect<void, unknown, R> {
+    const self = this
+    return Effect.gen(function* () {
+      if (pattern.type === "Identifier") {
+        self.setIdentifierValue(getString(pattern, "name"), value, pattern)
+        return
+      }
+
+      if (pattern.type === "MemberExpression") {
+        yield* self.writeMember(pattern, value)
+        return
+      }
+
+      if (pattern.type === "AssignmentPattern") {
+        const resolved = value === undefined ? yield* self.evaluateExpression(getNode(pattern, "right")) : value
+        yield* self.assignPattern(getNode(pattern, "left"), resolved, node)
+        return
+      }
+
+      if (pattern.type === "ObjectPattern") {
+        if (value === null || typeof value !== "object" || Array.isArray(value) || isRuntimeReference(value)) {
+          throw new InterpreterRuntimeError(
+            "Object destructuring requires a data object value.",
+            pattern,
+            "InvalidDataValue",
+          )
+        }
+
+        const source = value as SafeObject
+        const consumed = new Set<string>()
+        for (const propertyValue of getArray(pattern, "properties")) {
+          const property = asNode(propertyValue, "properties")
+          if (property.type === "RestElement") {
+            const rest: SafeObject = Object.create(null) as SafeObject
+            for (const [key, item] of Object.entries(source)) {
+              if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
+            }
+            yield* self.assignPattern(getNode(property, "argument"), rest, property)
+            continue
+          }
+          if (
+            property.type !== "Property" ||
+            getBoolean(property, "computed") ||
+            getString(property, "kind") !== "init"
+          ) {
+            throw new InterpreterRuntimeError("Only named object destructuring properties are supported.", property)
+          }
+          const keyNode = getNode(property, "key")
+          const key = keyNode.type === "Identifier" ? getString(keyNode, "name") : String(keyNode.value)
+          if (isBlockedMember(key)) {
+            throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, keyNode)
+          }
+          consumed.add(key)
+          yield* self.assignPattern(getNode(property, "value"), source[key], property)
+        }
+        return
+      }
+
+      if (pattern.type === "ArrayPattern") {
+        if (!Array.isArray(value)) {
+          throw new InterpreterRuntimeError("Array destructuring requires an array value.", pattern)
+        }
+        for (const [index, item] of getArray(pattern, "elements").entries()) {
+          if (item === null) continue
+          const element = asNode(item, `elements[${index}]`)
+          if (element.type === "RestElement") {
+            yield* self.assignPattern(getNode(element, "argument"), value.slice(index), element)
+            break
+          }
+          yield* self.assignPattern(element, value[index], pattern)
+        }
+        return
+      }
+
+      throw new InterpreterRuntimeError(`Unsupported assignment pattern '${pattern.type}'.`, node)
+    })
+  }
+
   private evaluateExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
     switch (node.type) {
       case "Literal": {
@@ -1803,6 +1881,11 @@ class Interpreter<R> {
     return Effect.gen(function* () {
       if (operator === "??=" || operator === "||=" || operator === "&&=") {
         return yield* self.evaluateLogicalAssignment(node, left, operator)
+      }
+      if (operator === "=" && (left.type === "ObjectPattern" || left.type === "ArrayPattern")) {
+        const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
+        yield* self.assignPattern(left, rightValue, node)
+        return rightValue
       }
       if (left.type === "Identifier") {
         const name = getString(left, "name")

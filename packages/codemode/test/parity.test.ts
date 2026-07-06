@@ -463,3 +463,38 @@ describe("H5: builtin coercion functions work as array callbacks", () => {
     expect(err.message).toContain("callback")
   })
 })
+
+describe("destructuring assignment", () => {
+  test("assigns object and array patterns to existing bindings", async () => {
+    expect(
+      await value(`
+        let a = 0
+        let b = 0
+        ;({ a } = { a: 2 })
+        ;[a, b] = [3, 4]
+        return [a, b]
+      `),
+    ).toEqual([3, 4])
+  })
+
+  test("supports defaults, nesting, rest, and member targets", async () => {
+    expect(
+      await value(`
+        let first = 0
+        let fallback = 0
+        let rest = {}
+        const target = {}
+        ;[first, fallback = 2, ...target.tail] = [1]
+        ;({ nested: { value: target.value }, kept: target.kept = 3, ...rest } = {
+          nested: { value: 4 },
+          extra: 5,
+        })
+        return { first, fallback, target, rest }
+      `),
+    ).toEqual({ first: 1, fallback: 2, target: { tail: [], value: 4, kept: 3 }, rest: { extra: 5 } })
+  })
+
+  test("returns the assigned value", async () => {
+    expect(await value(`let a = 0; const result = ([a] = [7]); return [a, result]`)).toEqual([7, [7]])
+  })
+})
