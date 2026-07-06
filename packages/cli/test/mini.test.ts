@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import path from "node:path"
 import { mergeInteractiveInput, mergeNonInteractiveInput, pickRunModel } from "../src/mini"
 
 async function cli(args: string[]) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
-    cwd: new URL("..", import.meta.url).pathname,
+    cwd: path.join(import.meta.dir, ".."),
     stdout: "pipe",
     stderr: "pipe",
   })
