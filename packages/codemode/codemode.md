@@ -129,18 +129,18 @@ represent accurately rather than guessing semantics.
 
 ## Decisions and Rationale
 
-| Decision | Rationale |
-| --- | --- |
-| Keep an owned tree-walking interpreter. | The product need is bounded tool orchestration, not arbitrary JavaScript. Owning the language surface keeps authority and behavior explicit. |
-| Treat schemas as the model-facing interface. | Signatures drive correct calls; Effect Schema also provides the runtime validation boundary, while JSON Schema supports adapter interoperability. |
-| Keep authority host-owned. | CodeMode can only confine programs to supplied tools. The host chooses those tools, and each tool enforces its own authorization and side-effect policy. |
-| Use progressive catalog disclosure plus search. | Large tool sets should not consume the prompt, but every namespace must remain discoverable and speculative search calls should remain valid. |
-| Start tool promises eagerly and supervise them. | This preserves normal call-time parallelism while giving each call run-once settlement and interruption safety. |
-| Keep files outside the sandbox value space. | Models should compose structured data without routing binary payloads through generated code or context. |
+| Decision                                                 | Rationale                                                                                                                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Keep an owned tree-walking interpreter.                  | The product need is bounded tool orchestration, not arbitrary JavaScript. Owning the language surface keeps authority and behavior explicit.                                                                             |
+| Treat schemas as the model-facing interface.             | Signatures drive correct calls; Effect Schema also provides the runtime validation boundary, while JSON Schema supports adapter interoperability.                                                                        |
+| Keep authority host-owned.                               | CodeMode can only confine programs to supplied tools. The host chooses those tools, and each tool enforces its own authorization and side-effect policy.                                                                 |
+| Use progressive catalog disclosure plus search.          | Large tool sets should not consume the prompt, but every namespace must remain discoverable and speculative search calls should remain valid.                                                                            |
+| Start tool promises eagerly and supervise them.          | This preserves normal call-time parallelism while giving each call run-once settlement and interruption safety.                                                                                                          |
+| Keep files outside the sandbox value space.              | Models should compose structured data without routing binary payloads through generated code or context.                                                                                                                 |
 | Treat `execute` as the model-facing invocation boundary. | Nested calls are implementation details of one orchestration program. Reusing the outer context and bounding only the final result preserves complete intermediate data without inventing durable child-call identities. |
-| Return expected failures as data. | Models need actionable diagnostics without exposing private host causes; host interruption and defects must still propagate correctly. |
-| Leave execution-limit defaults to hosts. | Appropriate budgets depend on the surrounding product and its own cancellation, retention, and output-bounding policies. |
-| Skip unsupported OpenAPI operations. | Incorrect parameter encoding, authentication, or transport behavior is worse than a precise `skipped` reason. |
+| Return expected failures as data.                        | Models need actionable diagnostics without exposing private host causes; host interruption and defects must still propagate correctly.                                                                                   |
+| Leave execution-limit defaults to hosts.                 | Appropriate budgets depend on the surrounding product and its own cancellation, retention, and output-bounding policies.                                                                                                 |
+| Skip unsupported OpenAPI operations.                     | Incorrect parameter encoding, authentication, or transport behavior is worse than a precise `skipped` reason.                                                                                                            |
 
 ## Remaining Work
 

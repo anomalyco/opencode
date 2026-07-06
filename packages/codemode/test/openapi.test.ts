@@ -54,7 +54,9 @@ const json = (value: unknown, status = 200) =>
 
 const singleOperation = (operation: Record<string, unknown>, method = "get"): Document => ({
   openapi: "3.1.0",
-  paths: { "/test": { [method]: { operationId: "test", responses: { 200: { description: "Success" } }, ...operation } } },
+  paths: {
+    "/test": { [method]: { operationId: "test", responses: { 200: { description: "Success" } }, ...operation } },
+  },
 })
 
 describe("OpenAPI.fromSpec", () => {
@@ -94,7 +96,12 @@ describe("OpenAPI.fromSpec", () => {
     const remove = toolAt(api.tools, "users.remove")
 
     expect(api.skipped).toEqual([])
-    if (!Tool.isDefinition(get) || !Tool.isDefinition(create) || !Tool.isDefinition(search) || !Tool.isDefinition(remove)) {
+    if (
+      !Tool.isDefinition(get) ||
+      !Tool.isDefinition(create) ||
+      !Tool.isDefinition(search) ||
+      !Tool.isDefinition(remove)
+    ) {
       throw new Error("happy-path fixture did not generate every operation")
     }
     expect(inputTypeScript(get)).toBe(
@@ -110,7 +117,8 @@ describe("OpenAPI.fromSpec", () => {
 
     const result = await Effect.runPromise(
       CodeMode.make({ tools: { api: api.tools } })
-        .execute(`
+        .execute(
+          `
           const user = await tools.api.users.get({
             userId: "user-1",
             include: ["profile", "permissions"],
@@ -128,7 +136,8 @@ describe("OpenAPI.fromSpec", () => {
           })
           const removed = await tools.api.users.remove({ userId: "user-1" })
           return { user, created, summary, removed }
-        `)
+        `,
+        )
         .pipe(Effect.provide(client.layer)),
     )
 
@@ -482,9 +491,9 @@ describe("OpenAPI.fromSpec", () => {
     expect(url.searchParams.get("nullable")).toBe("null")
     expect(url.searchParams.get("constructor")).toBe("safe")
     expect(client.requests[0]!.headers.meta).toBe("a=b,c=d")
-    await expect(
-      Effect.runPromise(tool.run({ keys: [undefined] }).pipe(Effect.provide(client.layer))),
-    ).rejects.toThrow("unsupported nested value")
+    await expect(Effect.runPromise(tool.run({ keys: [undefined] }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+      "unsupported nested value",
+    )
   })
 
   test("skips unsupported parameter encodings and malformed security", () => {
@@ -586,7 +595,10 @@ describe("OpenAPI.fromSpec", () => {
 
   test("applies authentication carriers without prototype or collision loss", async () => {
     const client = recordingClient(() => json({ ok: true }))
-    const authenticated = (security: ReadonlyArray<Record<string, ReadonlyArray<string>>>, schemes: Record<string, unknown>) =>
+    const authenticated = (
+      security: ReadonlyArray<Record<string, ReadonlyArray<string>>>,
+      schemes: Record<string, unknown>,
+    ) =>
       OpenAPI.fromSpec({
         baseUrl,
         spec: { ...singleOperation({}), security, components: { securitySchemes: schemes } },
@@ -602,13 +614,10 @@ describe("OpenAPI.fromSpec", () => {
     expect(new URL(client.requests[0]!.url).searchParams.get("__proto__")).toBe("secret")
 
     const duplicate = toolAt(
-      authenticated(
-        [{ first: [], second: [] }],
-        {
-          first: { type: "apiKey", in: "header", name: "x-key" },
-          second: { type: "apiKey", in: "header", name: "x-key" },
-        },
-      ).tools,
+      authenticated([{ first: [], second: [] }], {
+        first: { type: "apiKey", in: "header", name: "x-key" },
+        second: { type: "apiKey", in: "header", name: "x-key" },
+      }).tools,
       "test",
     )
     if (!Tool.isDefinition(duplicate)) throw new Error("duplicate auth tool was not generated")
@@ -633,8 +642,7 @@ describe("OpenAPI.fromSpec", () => {
         },
       },
       auth: {
-        resolve: ({ name }) =>
-          Effect.succeed(name === "bearer" ? { type: "bearer", token: "secret" } : undefined),
+        resolve: ({ name }) => Effect.succeed(name === "bearer" ? { type: "bearer", token: "secret" } : undefined),
       },
     })
     const alternativeTool = toolAt(alternative.tools, "test")
@@ -766,9 +774,7 @@ describe("OpenAPI.fromSpec", () => {
     const oversized = recordingClient(
       () => new Response(null, { headers: { "content-length": String(50 * 1024 * 1024 + 1) } }),
     )
-    const malformed = recordingClient(
-      () => new Response("{", { headers: { "content-type": "application/json" } }),
-    )
+    const malformed = recordingClient(() => new Response("{", { headers: { "content-type": "application/json" } }))
     const chunked = recordingClient(() => new Response(new Uint8Array(50 * 1024 * 1024 + 1)))
 
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(oversized.layer)))).rejects.toThrow(
