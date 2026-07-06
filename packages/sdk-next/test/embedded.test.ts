@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Deferred, Effect, Latch, Layer, Option, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Latch, Layer, Option, Schema, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src"
@@ -25,6 +25,95 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
+
+it.live(
+  "activates SDK plugins before the first Location response",
+  () =>
+    withEmbedded("opencode-embedded-plugin-ready-", (fixture) =>
+      Effect.gen(function* () {
+        const opencode = yield* fixture.sdk.OpenCode.create()
+        const started = yield* Deferred.make<void>()
+        const release = yield* Latch.make(false)
+        const id = `startup-ready-${crypto.randomUUID()}`
+
+        yield* opencode.plugin({
+          id,
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(started, undefined)
+              yield* release.await
+              yield* ctx.tool
+                .register({
+                  startup_ready_tool: fixture.sdk.Tool.make({
+                    description: "Tool available in the first Location response",
+                    input: Schema.Struct({}),
+                    output: Schema.Void,
+                    execute: () => Effect.void,
+                  }),
+                })
+                .pipe(Effect.orDie)
+            }),
+        })
+
+        const listing = yield* Effect.forkChild(opencode.plugin.list({ location: location(fixture) }))
+        yield* Deferred.await(started)
+        yield* release.open
+
+        expect((yield* Fiber.join(listing)).data.map((plugin) => String(plugin.id))).toContain(id)
+      }),
+    ),
+  10_000,
+)
+
+it.live(
+  "reloads a booted Location after SDK plugin registration",
+  () =>
+    withEmbedded("opencode-embedded-plugin-reload-", (fixture) =>
+      Effect.gen(function* () {
+        const opencode = yield* fixture.sdk.OpenCode.create()
+        const booted = yield* Deferred.make<void>()
+        const activated = yield* Deferred.make<void>()
+        const ref = location(fixture)
+        const bootstrapID = `bootstrap-sdk-${crypto.randomUUID()}`
+        const id = `late-sdk-${crypto.randomUUID()}`
+
+        yield* opencode.plugin({
+          id: bootstrapID,
+          effect: (ctx) =>
+            ctx.tool
+              .register({
+                bootstrap_sdk_tool: fixture.sdk.Tool.make({
+                  description: "Marks the initial Location plugin generation",
+                  input: Schema.Struct({}),
+                  output: Schema.Void,
+                  execute: () => Effect.void,
+                }),
+              })
+              .pipe(Effect.orDie, Effect.andThen(Deferred.succeed(booted, undefined))),
+        })
+        yield* opencode.plugin.list({ location: ref })
+        yield* Deferred.await(booted).pipe(Effect.timeout("4 seconds"))
+        yield* opencode.plugin({
+          id,
+          effect: (ctx) =>
+            ctx.tool
+              .register({
+                late_sdk_tool: fixture.sdk.Tool.make({
+                  description: "Tool registered after Location boot",
+                  input: Schema.Struct({}),
+                  output: Schema.Void,
+                  execute: () => Effect.void,
+                }),
+              })
+              .pipe(Effect.orDie, Effect.andThen(Deferred.succeed(activated, undefined))),
+        })
+
+        yield* Deferred.await(activated).pipe(Effect.timeout("1 second"))
+        expect((yield* opencode.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).toContain(id)
+      }),
+    ),
+  10_000,
+)
 
 it.live(
   "embedded client uses the real router and handlers",
