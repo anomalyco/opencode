@@ -211,8 +211,9 @@ describe("code mode execute", () => {
       "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string,\n}): Promise<unknown>",
     )
     expect(description).toContain("tools.$codemode.search(")
-    expect(description).toContain("limit?: number, offset?: number")
-    expect(description).toContain("remaining: number; next: { offset: number } | null")
+    expect(description).toContain("  limit?: number,\n  offset?: number,")
+    expect(description).toContain("  remaining: number,\n  next: {")
+    expect(description).toContain("      offset: number,\n    } | null,")
     expect(description).toContain("1. If the exact signature is not listed below, first search:")
     expect(description).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
@@ -245,7 +246,7 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls).toEqual([])
   })
 
-  test("Object.keys(tools) enumerates the MCP server namespaces", async () => {
+  test("Object.keys(tools) enumerates the MCP server and CodeMode namespaces", async () => {
     const tool = await build({
       github_list_issues: mcpTool("list_issues", () => ""),
       linear_search: mcpTool("search", () => ""),
@@ -256,7 +257,7 @@ describe("code mode execute", () => {
         ctx,
       ),
     )
-    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear"], count: 2 })
+    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear", "$codemode"], count: 3 })
   })
 
   test("calls a namespaced MCP tool and flows its text result back into the program", async () => {

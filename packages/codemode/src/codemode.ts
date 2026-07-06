@@ -3921,8 +3921,8 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
   const tools = ToolRuntime.make(
     (options.tools ?? {}) as HostTools<Services<Tools>>,
     limits.maxToolCalls,
-    hooks,
     searchIndex,
+    hooks,
   )
   const logs: Array<string> = []
   const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})

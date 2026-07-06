@@ -79,6 +79,10 @@ limit?, offset? })` over the final tool tree, owned by this package.
   usable as the call site; the internal `ToolDescription.path` stays unprefixed.
 - `offset` is zero-based and defaults to 0. `remaining` counts matches after the current page;
   `next` is `{ offset }` when another page exists and `null` on the final page.
+- Search is an internal `Tool.make` definition backed by Effect input/output schemas. Its
+  validation, output checking, call observation, and TypeScript signature use the same path as
+  host-provided schema tools. Host-only catalog preparation keeps internal tools out of their
+  own search index; only conditional advertisement remains special.
 - Default limit: **10** (done). Exact-path lookup goes through search too: a query equal to a
   canonical tool path, `tools.`-prefixed path, or rendered JavaScript expression returns that
   tool alone (done).
@@ -442,9 +446,9 @@ adapter needed **no changes**.
   defeating discovery. Fixes, all in this package:
   - `ToolRuntime.make` now returns a `keys(path)` capability (`namespaceKeys` in
     `tool-runtime.ts`) threaded into the `Interpreter` alongside `invoke` - the interpreter
-    still never holds the host tool tree. `Object.keys(tools)` yields the top-level namespace
-    names (never `$codemode`, which is virtual - but `Object.keys(tools.$codemode)` yields
-    `["search"]`), `Object.keys(tools.ns)` the names at that node; a callable tool leaf
+    still never holds the callable tool tree. `Object.keys(tools)` yields the top-level namespace
+    names, including the internally registered `$codemode`; `Object.keys(tools.$codemode)` yields
+    `["search"]`, and `Object.keys(tools.ns)` yields names at that node; a callable tool leaf
     enumerates as `[]` (like `Object.keys` of a JS function); an unknown path throws an
     `UnknownTool` diagnostic suggesting `Object.keys(tools)` and `$codemode.search` (matching
     call-time unknown-tool behavior rather than silently returning `[]`).
@@ -462,7 +466,7 @@ adapter needed **no changes**.
   - `supportedSyntaxMessage`, the instructions loops line, and README "Supported Programs"
     mention the new surface; tests in `test/enumeration.test.ts` (14, incl. the exact
     transcript program) plus one adapter-level assertion that `Object.keys(tools)` returns
-    MCP server names.
+    MCP server and CodeMode namespace names.
 
 - **Search ranking, namespace scoping, prefixed result paths (done).**
   Motivation: the Wave 4 e2e run showed a model retrying calls because search-result paths

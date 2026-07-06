@@ -66,4 +66,19 @@ Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `
 }>> // Search Linear issues
 
 Search returns complete callable signatures:
-- tools.$codemode.search({ query?: string, namespace?: string, limit?: number, offset?: number }): Promise<{ items: Array<{ path: string; description: string; signature: string }>; remaining: number; next: { offset: number } | null }>
+- tools.$codemode.search(input: {
+  query?: string,
+  namespace?: string,
+  limit?: number,
+  offset?: number,
+}): Promise<{
+  items: Array<{
+      path: string,
+      description: string,
+      signature: string,
+    }>,
+  remaining: number,
+  next: {
+      offset: number,
+    } | null,
+}>

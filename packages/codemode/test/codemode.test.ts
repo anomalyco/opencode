@@ -636,7 +636,7 @@ describe("CodeMode public contract", () => {
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
     )
     expect(partial).toContain("When `page.next` is not null")
-    expect(partial).toContain("limit?: number, offset?: number")
+    expect(partial).toContain("  limit?: number,\n  offset?: number,")
     expect(partial).not.toContain("total_count")
     expect(partial).not.toContain("tools.orders.lookup({")
   })
