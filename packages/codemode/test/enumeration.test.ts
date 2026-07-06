@@ -41,7 +41,7 @@ describe("Object.keys over tool references", () => {
       const namespaces = Object.keys(tools)
       return { namespaces, count: namespaces.length }
     `),
-    ).toEqual({ namespaces: ["github", "memory", "playwright"], count: 3 })
+    ).toEqual({ namespaces: ["github", "memory", "playwright", "$codemode"], count: 4 })
   })
 
   test("enumerates tool names at a nested namespace", async () => {
@@ -52,7 +52,7 @@ describe("Object.keys over tool references", () => {
     expect(await value(`return Object.keys(tools.github.list_issues)`)).toEqual([])
   })
 
-  test("the virtual discovery namespace enumerates its callable surface", async () => {
+  test("the internal discovery namespace enumerates its callable surface", async () => {
     expect(await value(`return Object.keys(tools.$codemode)`)).toEqual(["search"])
   })
 
@@ -137,7 +137,7 @@ describe("for...in", () => {
     ).toBe("only")
   })
 
-  test("enumerates namespaces and tools from the host tool tree", async () => {
+  test("enumerates namespaces and tools from the callable tool tree", async () => {
     expect(
       await value(`
       const names = []
@@ -146,7 +146,13 @@ describe("for...in", () => {
       }
       return names
     `),
-    ).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate"])
+    ).toEqual([
+      "github.list_issues",
+      "github.get_issue",
+      "memory.search",
+      "playwright.navigate",
+      "$codemode.search",
+    ])
   })
 
   test("unsupported values fail with a hint at for...of and Object.keys", async () => {

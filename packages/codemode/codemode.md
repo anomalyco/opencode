@@ -65,17 +65,24 @@ From issue #34787 and design discussion. Do not relitigate these casually.
 ### Discovery / search
 
 - **Search only - no separate `describe`.** `tools.$codemode.search({ query?, namespace?,
-limit? })` over the final tool tree, owned by this package.
-- Search result item shape: `{ path, description, signature }` in an `{ items, total }`
-  wrapper. The `signature` string embeds the full input/output TypeScript types - in search
-  results it is the pretty, JSDoc-annotated multiline form (Fix 7), so per-field schema
-  `description`s and constraints (`@default`, `@format`, `@deprecated`, `@minItems`,
-  `@maxItems`) ride along as field comments. The original spec's separate `input`/`output`
+limit?, offset? })` over the final tool tree, owned by this package.
+- Search result item shape: `{ path, description, signature }` in an
+  `{ items, remaining, next }`
+  wrapper. The `signature` string embeds the full input/output TypeScript types and uses the
+  same pretty, JSDoc-annotated multiline form in inline catalogs and search results, so
+  per-field schema `description`s and constraints (`@default`, `@format`, `@deprecated`,
+  `@minItems`, `@maxItems`) ride along as field comments. The original spec's separate `input`/`output`
   raw-schema fields are deliberately NOT added: shapes are already fully expressed in the
   TypeScript signature and schema annotations now arrive as JSDoc - intent satisfied, letter
   deviated. Result `path`s render a JavaScript expression rooted at `tools` (for example
   `tools.github.list_issues` or `tools.context7["resolve-library-id"]`) so each is directly
   usable as the call site; the internal `ToolDescription.path` stays unprefixed.
+- `offset` is zero-based and defaults to 0. `remaining` counts matches after the current page;
+  `next` is `{ offset }` when another page exists and `null` on the final page.
+- Search is an internal `Tool.make` definition backed by Effect input/output schemas. Its
+  validation, output checking, call observation, and TypeScript signature use the same path as
+  host-provided schema tools. Host-only catalog preparation keeps internal tools out of their
+  own search index; only conditional advertisement remains special.
 - Default limit: **10** (done). Exact-path lookup goes through search too: a query equal to a
   canonical tool path, `tools.`-prefixed path, or rendered JavaScript expression returns that
   tool alone (done).
@@ -251,7 +258,7 @@ output limit; return a smaller value]`; logs keep leading lines within the remai
     truncation is now the only result-size mechanism.)
 - **Search polish**: default limit 12 -> **10** (`defaultSearchLimit`); exact-path lookup - a
   trimmed query equal to one tool path (optionally `tools.`-prefixed) returns that tool alone
-  (`total: 1`), bypassing ranking. Tokenization/ranking/shape unchanged.
+  (`remaining: 0`, `next: null`), bypassing ranking. Tokenization/ranking/shape unchanged.
 
 ### Wave 3 - OpenCode MCP adapter (done)
 
@@ -312,10 +319,10 @@ Instructions are now the budgeted-catalog + prompting-guidance form; verified e2
 real MCP config. Package still 101 tests / 0 fail; opencode adapter suites still 34 + 16; both
 packages typecheck clean.
 
-- **Budgeted catalog** (`discoveryPlan` in `tool-runtime.ts`): the all-or-nothing
+- **Budgeted catalog** (`prepare` in `tool-runtime.ts`): the all-or-nothing
   inline/search modes are gone - `DiscoveryMode` deleted, `CodeMode.DiscoveryOptions` is just
   `{ maxInlineCatalogBytes? }` (default 16,000 UTF-8 bytes; later converted to
-  `maxInlineCatalogTokens`, default 4,000 estimated tokens - see Post-wave fixes). Port of
+  `catalogBudget`, default 4,000 estimated tokens - see Post-wave fixes). Port of
   the old opencode
   `describe()` `PREVIEW_BUDGET` algorithm, adapted to `ToolDescription`: every namespace is
   ALWAYS listed with its tool count; full signature lines
@@ -439,9 +446,9 @@ adapter needed **no changes**.
   defeating discovery. Fixes, all in this package:
   - `ToolRuntime.make` now returns a `keys(path)` capability (`namespaceKeys` in
     `tool-runtime.ts`) threaded into the `Interpreter` alongside `invoke` - the interpreter
-    still never holds the host tool tree. `Object.keys(tools)` yields the top-level namespace
-    names (never `$codemode`, which is virtual - but `Object.keys(tools.$codemode)` yields
-    `["search"]`), `Object.keys(tools.ns)` the names at that node; a callable tool leaf
+    still never holds the callable tool tree. `Object.keys(tools)` yields the top-level namespace
+    names, including the internally registered `$codemode`; `Object.keys(tools.$codemode)` yields
+    `["search"]`, and `Object.keys(tools.ns)` yields names at that node; a callable tool leaf
     enumerates as `[]` (like `Object.keys` of a JS function); an unknown path throws an
     `UnknownTool` diagnostic suggesting `Object.keys(tools)` and `$codemode.search` (matching
     call-time unknown-tool behavior rather than silently returning `[]`).
@@ -459,7 +466,7 @@ adapter needed **no changes**.
   - `supportedSyntaxMessage`, the instructions loops line, and README "Supported Programs"
     mention the new surface; tests in `test/enumeration.test.ts` (14, incl. the exact
     transcript program) plus one adapter-level assertion that `Object.keys(tools)` returns
-    MCP server names.
+    MCP server and CodeMode namespace names.
 
 - **Search ranking, namespace scoping, prefixed result paths (done).**
   Motivation: the Wave 4 e2e run showed a model retrying calls because search-result paths
@@ -480,7 +487,7 @@ adapter needed **no changes**.
     An empty query now browses ALPHABETICALLY by path (was declaration order). Kept:
     `{ path, description, signature }` result items, default limit 10, exact-path instant
     lookup, input validation errors.
-  - **Namespace scoping**: `tools.$codemode.search({ query?, namespace?, limit? })` -
+  - **Namespace scoping**: `tools.$codemode.search({ query?, namespace?, limit?, offset? })` -
     `namespace` (validated as a string when provided) filters `SearchEntry`s to one top-level
     namespace before ranking; `{ query: "", namespace: "github" }` lists that namespace
     alphabetically. `searchSignature` updated.
@@ -489,7 +496,7 @@ adapter needed **no changes**.
     segments), directly usable as the call site. Internal `ToolDescription.path` stays
     unprefixed; only the search RESULT items are rendered this way. Exact-path queries accept
     canonical paths and rendered expressions.
-  - **Instructions** (`discoveryPlan`): an explicit calling-convention line and a browse
+  - **Instructions** (`prepare`): an explicit calling-convention line and a browse
     hint on the search advertisement (both since absorbed into the `## Rules` section by
     the instructions restructure below).
   - **Tests**: package search/discovery tests updated (prefixed paths, alphabetical browse)
@@ -499,28 +506,23 @@ adapter needed **no changes**.
 
 - **Instructions restructure: markdown sections, placeholder-only call forms (done).**
   The flat prose instructions (which mixed a real catalog tool with fabricated result
-  fields in the worked example) are replaced by structured markdown in `discoveryPlan`,
+  fields in the worked example) are replaced by structured markdown in `prepare`,
   ordered so the workflow sits at the top (the least likely part of a long description to
   be truncated or skimmed away) and the catalog at the bottom (the per-section content
-  described here was later condensed by Fix 8 - Workflow/Rules deduped, Syntax inverted):
-  - **Intro** (2 lines): "Write a CodeMode program... Return code only." + "Execute
-    JavaScript in a confined runtime with access to the tools listed below under
-    `tools.*`." (the second line drops the tools clause when the tree is empty).
-  - **`## Workflow`**: numbered steps - find a tool via `tools.$codemode.search` -> read
-    the `{ path, description, signature }` matches -> call by path -> `typeof res ===
-"string" ? JSON.parse(res) : res` -> return only the needed fields. When the catalog is
-    COMPLETE the search/read steps collapse into "Pick a tool from the list under
-    `## Available tools`" and the steps renumber (4 instead of 5).
-  - **`## Rules`**: call-by-exact-path; TEXT-is-JSON -> JSON.parse; return small (never raw
-    payloads); filter/aggregate large collections in code instead of per-item round-trips;
+  described here was later condensed by Fix 8 and the language-accuracy pass):
+  - **Intro**: identifies the language as restricted JavaScript for calling tools rather than
+    a general-purpose runtime.
+  - **`## Workflow`**: with a partial catalog, return search results from one execution, then
+    copy a selected path into the next execution. With a complete catalog, pick and call an
+    inlined signature, then return only the needed fields.
+  - **`## Rules`**: narrow unknown results at runtime; filter/aggregate large collections in code instead of per-item round-trips;
     console.log/warn/error/dir/table for intermediates; `Promise.all` parallelism (no
     .then/.catch - await + try/catch); `Object.keys(tools)`/`for...in` enumeration;
     browse-one-namespace via search (PARTIAL only); and host-side media handling (files/
     images never enter the program; a media-only call yields a small text marker - wording
     verified against the adapter's `toSandboxResult`/`mediaMarker`).
-  - **`## Syntax`**: the dense syntax lines unchanged, minus the Promise.all and console
-    lines (moved into Rules) and the `for (const ns in tools)` fragment (redundant with
-    the enumeration rule).
+  - **`## Language`**: a concise positive capability summary plus the major unavailable
+    runtime capabilities and the data-boundary serialization note.
   - **`## Available tools`**: the budgeted catalog unchanged, with the COMPLETE/PARTIAL
     header merged into the section heading (no trailing colon); the search-signature
     advertisement follows when PARTIAL (its description-reading and browse clauses moved
@@ -532,7 +534,7 @@ adapter needed **no changes**.
     appear anywhere in the instructions. Zero tools keep "No tools are currently
     available." under minimal sections (intro + Syntax + Available tools).
   - **Tests**: the package worked-example test replaced by section-structure/placeholder
-    assertions (section order; JSON.parse + return-small rules present; no
+    assertions (section order; unknown-result + return-small rules present; no
     `total_count`/`list_issues`/real-tool example lines; browse hint only when PARTIAL;
     zero-tool minimal sections) - 156 pass / 0 fail; adapter suites gain the same
     assertions on the built description (still 35 + 16, green).
@@ -542,9 +544,9 @@ budget; namespaces must always be present):
 
 - `src/token.ts` added: copy of `@opencode-ai/core/util/token` (`round(chars / 4)`), so
   the package stays dependency-free; keep in sync if the core heuristic changes.
-- `CodeMode.DiscoveryOptions.maxInlineCatalogBytes` -> `maxInlineCatalogTokens` (default 4,000
+- `CodeMode.DiscoveryOptions.maxInlineCatalogBytes` -> `catalogBudget` (default 4,000
   estimated tokens ~ the old 16,000 bytes at 4 chars/token - behavior parity, not a size
-  reduction). `discoveryPlan` charges `estimate(catalogLine(tool))` per line; cheapest-first
+  reduction). `prepare` charges `estimate(catalogLine(tool))` per line; cheapest-first
   - stop-on-first-miss unchanged at the time (stop-on-first-miss replaced by round-robin in
     Fix 8). Namespace stub lines were and remain unbudgeted - every
     namespace always appears with its tool count, even at budget 0 (asserted in package and
@@ -672,10 +674,8 @@ along). All in `tool-runtime.ts`; no interpreter changes.
   interfaces/type aliases are stripped and TS **enums actually work** (transpileModule
   compiles them to an IIFE the interpreter runs), hence enums deliberately unmentioned.
   `supportedSyntaxMessage` (the in-diagnostic text in `codemode.ts`) is untouched.
-- **Workflow/Rules deduped**: the call-by-exact-path, JSON.parse-string-results, and
-  return-small content now lives ONLY in the numbered Workflow steps (with their
-  compliance-driving justifications inline: "most tools return JSON as a string", "raw
-  payloads get truncated and waste context"); Rules keeps only bullets adding new
+- **Workflow/Rules deduped**: the call-by-exact-path and return-small content now lives ONLY
+  in the numbered Workflow steps; Rules keeps only bullets adding new
   content - filter/aggregate collections in code, console.\* intermediates (logs ride
   back), Promise.all parallelism, Object.keys/for...in enumeration, browse-namespace
   (PARTIAL only), and the media rule compressed to one line. The no-.then/.catch
@@ -690,7 +690,7 @@ along). All in `tool-runtime.ts`; no interpreter changes.
   (332 -> 176), Syntax 453 -> 188 (419 -> 174); fixed prose total 1,005 -> 610 (927 -> 562),
   ~ 40% reduction with no behavioral content dropped. Workflow grew slightly because it
   absorbed the deduped parse/return-small justifications.
-- **Round-robin namespace inlining** (`discoveryPlan`): the ported stop-on-first-miss
+- **Round-robin namespace inlining** (`prepare`): the ported stop-on-first-miss
   behavior (alphabetically-late namespaces starved to "none shown" while an early
   namespace inlines everything) is replaced by round-robin fairness - in each round
   (namespaces alphabetical), every namespace still holding un-inlined tools attempts to
@@ -708,9 +708,9 @@ along). All in `tool-runtime.ts`; no interpreter changes.
   the four field checks passes when ANY form matches. Weights, exact-path lookup, and
   namespace scoping untouched. A true plural path match still outranks a singular-only
   description match (path substring 8 + searchable 2 > description 4 + searchable 2).
-- **Tests**: package instruction/structure assertions updated to the new text; new
-  syntax-section test (leads with "Standard modern JavaScript works", names the
-  verified not-supported list, keeps the data-boundary note); the budget-exhaustion
+- **Tests**: package instruction/structure assertions updated to the new text; the
+  language-section test rejects full-runtime wording, names major unavailable capabilities,
+  and keeps the data-boundary note; the budget-exhaustion
   test rewritten to assert the new fairness (alpha.expensive not fitting must NOT
   prevent beta.cheap from showing: PARTIAL 2 of 3, `- beta (1 tool)` fully shown); new
   plural/singular test (query "issues" finds a singular-only tool; ranking still
@@ -724,7 +724,7 @@ along). All in `tool-runtime.ts`; no interpreter changes.
 **Fix 9 - prompting trims per user review of Fix 8** (user reviewed the condensed
 instructions and directed further cuts):
 
-- Default `maxInlineCatalogTokens` 4,000 -> **2,000** (user wants ~2k tokens of signatures
+- Default `catalogBudget` 4,000 -> **2,000** (user wants ~2k tokens of signatures
   auto-inlined; round-robin fairness from Fix 8 spreads it across all namespaces).
 - Console rule and files/images rule DROPPED from `## Rules`. Replaced by a single
   `unknown`-treatment warning: "A result typed `Promise<unknown>` has no guaranteed
@@ -733,9 +733,9 @@ instructions and directed further cuts):
   return the same data; the prompt stays console-neutral, neither for nor against.)
   The media-stripping MECHANISM is unchanged and still tested; only the prose about it
   is gone - the `[N images attached]` marker is self-explanatory in context.
-- Kept as-is per user: the JSON.parse workflow step (maps to the original motivating
-  transcript failure; NOT copied from prior art - see section 5 note), the browse-namespace rule
-  (undecided), no no-fetch/ambient-authority rule added (proposed, not approved).
+- Later revised: unconditional JSON parsing was removed because text results are not
+  necessarily JSON. The browse-namespace rule remains; the language section now states that
+  ambient `fetch` is unavailable and external operations go through Code Mode tools.
 - Explicitly REJECTED for now: auto-parsing JSON-looking text results at the adapter
   boundary ("could get weird" - type flips, program-sees vs tool-sent divergence). Logged
   as a next-iteration follow-up below.
@@ -1004,11 +1004,19 @@ focused interpreter-surface pass rather than picked off piecemeal.
 - [x] Sandbox values nested inside logged containers print `[CodeMode reference]`
       (`console.log({ m: map })`) - could deep-format instead.
 
+### Next iteration: optional search input boundary
+
+- [ ] `SearchInput` uses Effect's exact `optionalKey`, so an omitted field is accepted but an
+      explicitly present `undefined` field is rejected. The previous handwritten validator
+      treated explicit `undefined` as omission. Decide whether search should preserve that
+      convenience locally or whether all tool arguments should adopt JSON-style undefined
+      normalization; do not broaden `copyOut` semantics solely to fix search.
+
 ### Next iteration: text-result handling (deliberate follow-up, user-directed)
 
 - [ ] Revisit how MCP text results reach the program. Today: `structuredContent` when the
-      server sends it, else joined text as a plain string (the program JSON.parses it,
-      guided by a workflow step). Considered and deferred: (a) conservative boundary
+      server sends it, else joined text as a plain string. Programs narrow unknown results
+      before use; the prompt no longer recommends unconditional JSON parsing. Considered and deferred: (a) conservative boundary
       auto-parse (text starting with `{`/`[` that parses cleanly becomes an object) -
       rejected for now as potentially confusing (type flips; program sees something other
       than what the tool sent); (b) raw-envelope passthrough with the envelope shape
