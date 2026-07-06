@@ -274,6 +274,15 @@ const copyBounded = (
 
   if (Array.isArray(value)) {
     const copied = value.map((item) => copyBounded(item, label, depth + 1, seen, preserveSandboxValues))
+    if (preserveSandboxValues) {
+      for (const [key, item] of Object.entries(value)) {
+        if (Object.hasOwn(copied, key)) continue
+        if (isBlockedMember(key)) {
+          throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
+        }
+        Object.assign(copied, { [key]: copyBounded(item, label, depth + 1, seen, true) })
+      }
+    }
     seen.delete(value)
     return copied
   }

@@ -2981,7 +2981,7 @@ class Interpreter<R> {
     return Effect.gen(function* () {
       for (const elementValue of elements) {
         if (elementValue === null) {
-          values.length += 1
+          values.push(undefined)
           continue
         }
         const element = asNode(elementValue, "elements")

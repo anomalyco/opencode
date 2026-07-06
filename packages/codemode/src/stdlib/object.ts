@@ -77,7 +77,7 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         if (pair === null || typeof pair !== "object" || isSandboxValue(pair))
           throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
         const entry = pair as Record<string, unknown>
-        guardedSet(out, String(entry[0]), entry[1])
+        guardedSet(out, coerceToString(entry[0]), entry[1])
       }
       return out
     }

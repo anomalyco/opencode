@@ -594,10 +594,12 @@ describe("stdlib integration", () => {
         ["1", "b"],
       ],
     ])
-    expect(await value(`return [Object.keys([, "a"]), Object.values([, "a"]), Object.entries([, "a"])]`)).toEqual([
-      ["1"],
-      ["a"],
-      [["1", "a"]],
+    expect(await value(`const match = /a/.exec("ba"); return [Object.values(match), Object.entries(match)]`)).toEqual([
+      ["a", 1],
+      [
+        ["0", "a"],
+        ["index", 1],
+      ],
     ])
   })
 
@@ -625,9 +627,17 @@ describe("stdlib integration", () => {
           Object.fromEntries(new Set([["c", 3]])),
           Object.fromEntries(new URLSearchParams("d=4")),
           Object.fromEntries([{ 0: "e", 1: 5 }]),
+          Object.fromEntries(new Set([[{}, 6], [new Date(0), 7], [null, 8], [undefined, 9]])),
         ]
       `),
-    ).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }, { d: "4" }, { e: 5 }])
+    ).toEqual([
+      { a: 1 },
+      { b: 2 },
+      { c: 3 },
+      { d: "4" },
+      { e: 5 },
+      { "[object Object]": 6, "1970-01-01T00:00:00.000Z": 7, null: 8, undefined: 9 },
+    ])
   })
 
   test("deterministic Math methods match the host runtime", async () => {
