@@ -639,6 +639,35 @@ async function checkExistingAuth(): Promise<boolean> {
   return false
 }
 
+export async function clearAuth(): Promise<number> {
+  const fs = await import("node:fs")
+  const { unlinkSync } = fs
+  const xdgEnv = process.env["XDG_DATA_HOME"]
+  const candidates = new Set([
+    xdgEnv,
+    process.platform === "darwin"
+      ? join(homedir(), "Library", "Application Support")
+      : process.platform === "win32"
+        ? process.env["APPDATA"] ?? join(homedir(), "AppData", "Roaming")
+        : undefined,
+    join(homedir(), ".local", "share"),
+  ])
+
+  let deleted = 0
+  for (const dataHome of candidates) {
+    if (!dataHome) continue
+    const authPath = join(dataHome, "opencode", "auth.json")
+    try {
+      unlinkSync(authPath)
+      deleted++
+      getLogger().log("auth deleted", { path: authPath })
+    } catch {
+      // File doesn't exist or can't be deleted — ignore
+    }
+  }
+  return deleted
+}
+
 function showLoginDialog(serverUrl: string, serverPassword: string): Promise<void> {
   const logger = getLogger()
   const preloadPath = join(PRELOAD_ROOT, "../preload/login.cjs")

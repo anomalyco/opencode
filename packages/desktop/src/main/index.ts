@@ -27,7 +27,7 @@ import {
   type SidecarListener,
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
-import { enforceDesktopLogin } from "./login-gate"
+import { clearAuth, enforceDesktopLogin } from "./login-gate"
 import {
   createMainWindow,
   registerRendererProtocol,
@@ -267,6 +267,11 @@ const main = Effect.gen(function* () {
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
+    logout: async () => {
+      const deleted = await clearAuth()
+      logger.log("logout: auth files deleted", { count: deleted })
+      return deleted
+    },
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()

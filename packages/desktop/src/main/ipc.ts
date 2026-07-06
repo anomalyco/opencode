@@ -37,6 +37,7 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
+  logout: () => Promise<number>
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -231,6 +232,7 @@ export function registerIpcHandlers(deps: Deps) {
       relaunch: deps.relaunch,
     })
   })
+  ipcMain.handle("logout", () => deps.logout())
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
