@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import { Component, createSignal, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -13,10 +13,17 @@ import { SettingsServers } from "./settings-servers"
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
+  const [tab, setTab] = createSignal("general")
 
   return (
     <Dialog size="x-large" transition>
-      <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
+      <Tabs
+        orientation="vertical"
+        variant="settings"
+        value={tab()}
+        onChange={(value) => void startTransition(() => setTab(value))}
+        class="h-full settings-dialog"
+      >
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full gap-4">
             <div class="flex flex-col gap-3 w-full pt-3">
