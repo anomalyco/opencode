@@ -8,7 +8,7 @@ export class Timeout extends Schema.Class<Timeout>("ConfigV2.MCP.Timeout")({
     description: "Maximum time in milliseconds to establish and initialize the MCP server.",
   }),
   catalog: PositiveInt.pipe(Schema.optional).annotate({
-    description: "Maximum time in milliseconds to wait for MCP discovery requests after initialization.",
+    description: "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list.",
   }),
   execution: PositiveInt.pipe(Schema.optional).annotate({
     description: "Maximum time in milliseconds to wait for MCP tool and prompt execution.",
