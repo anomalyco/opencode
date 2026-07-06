@@ -98,6 +98,13 @@ describe("code mode execute", () => {
     const decode = Schema.decodeUnknownEffect(Parameters)
     await expect(Effect.runPromise(decode({ code: "return 1" }))).resolves.toEqual({ code: "return 1" })
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
+    expect(Schema.toJsonSchemaDocument(Parameters).schema).toMatchObject({
+      properties: {
+        code: {
+          description: "Script body executed by the confined interpreter.",
+        },
+      },
+    })
   })
 
   test("groups multi-underscore server names by longest matching prefix", () => {
@@ -130,7 +137,7 @@ describe("code mode execute", () => {
   test("the static base description carries no catalog; the registry appends it", async () => {
     const tool = await build({ github_list_issues: mcpTool("list_issues", () => "") })
     expect(tool.id).toBe(CODE_MODE_TOOL)
-    expect(tool.description).toContain("confined runtime")
+    expect(tool.description).toBe("Run a confined orchestration script with access to connected MCP tools.")
     expect(tool.description).not.toContain("Available tools")
     expect(tool.description).not.toContain("list_issues")
   })

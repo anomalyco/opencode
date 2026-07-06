@@ -599,10 +599,12 @@ describe("CodeMode public contract", () => {
     // Sections in order: workflow at the top, catalog at the bottom.
     expect(instructions).toContain("## Workflow")
     expect(instructions).toContain("## Rules")
-    expect(instructions).toContain("## Syntax")
+    expect(instructions).toContain("## Language")
     expect(instructions.indexOf("## Workflow")).toBeLessThan(instructions.indexOf("## Rules"))
-    expect(instructions.indexOf("## Rules")).toBeLessThan(instructions.indexOf("## Syntax"))
-    expect(instructions.indexOf("## Syntax")).toBeLessThan(instructions.indexOf("\n## Available tools (COMPLETE list"))
+    expect(instructions.indexOf("## Rules")).toBeLessThan(instructions.indexOf("## Language"))
+    expect(instructions.indexOf("## Language")).toBeLessThan(
+      instructions.indexOf("\n## Available tools (COMPLETE list"),
+    )
     // The workflow carries the result-shape guidance; Rules only add content beyond it.
     expect(instructions).toContain(
       '`const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string',
@@ -611,8 +613,8 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("raw payloads get truncated and waste context")
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain("bracket notation and quotes are part of the path")
-    expect(instructions).toContain("surrounding agent tools are not available unless listed here")
-    expect(instructions).toContain("Only tools listed here are available inside `tools`")
+    expect(instructions).toContain("surrounding agent tools are not available")
+    expect(instructions).toContain("Only Code Mode tools listed here and internal runtime tools")
     // Placeholders use generic namespace/tool/field names only - no fabricated real tools
     // and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`return { <field>: data.<field> }`")
@@ -627,10 +629,11 @@ describe("CodeMode public contract", () => {
     // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
     // a query string, never a tool name) and the browse-namespace rule appears.
     expect(partial).toContain(
-      '1. If the exact signature is not listed below, first search: `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+      '1. If the exact signature is not listed below, first search: `const request = { query: "<intent + key nouns>" }; const page = await tools.$codemode.search(request)`.',
     )
+    expect(partial).toContain("Read `page.items`")
     expect(partial).toContain(
-      "Only tools listed here or returned by `tools.$codemode.search` are available inside `tools`",
+      "Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools",
     )
     expect(partial).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
@@ -641,20 +644,15 @@ describe("CodeMode public contract", () => {
     expect(partial).not.toContain("tools.orders.lookup({")
   })
 
-  test("the syntax section names what is unusual or missing, not an allowlist", () => {
+  test("the language section describes the restricted runtime without overclaiming", () => {
     const instructions = CodeMode.make({ tools }).instructions()
-    // Models already know JavaScript; the section leads with that.
-    expect(instructions).toContain("Standard modern JavaScript works")
-    expect(instructions).toContain("TypeScript type annotations are allowed and stripped before execution")
-    // The not-supported list is derived from (and verified against) the interpreter.
-    expect(instructions).toContain("Not supported")
-    for (const missing of ["classes", "generators", "for await...of", ".then/.catch/.finally"]) {
+    expect(instructions).toContain("restricted JavaScript language for calling tools")
+    expect(instructions).toContain("not a general-purpose runtime")
+    expect(instructions).not.toContain("Standard modern JavaScript works")
+    expect(instructions).not.toContain("TypeScript type annotations")
+    for (const missing of ["Modules/imports", "classes", "generators", "network access", "promise chaining"]) {
       expect(instructions).toContain(missing)
     }
-    // Implemented by the DSL-expansion pass, so no longer listed as missing.
-    expect(instructions).not.toContain("instanceof Error")
-    expect(instructions).not.toContain("splice")
-    // The data-boundary note survives.
     expect(instructions).toContain(
       "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
     )
@@ -664,7 +662,7 @@ describe("CodeMode public contract", () => {
     const runtime = CodeMode.make({})
     const instructions = runtime.instructions()
     expect(instructions).toContain("No tools are currently available.")
-    expect(instructions).toContain("## Syntax")
+    expect(instructions).toContain("## Language")
     expect(instructions).toContain("## Available tools")
     expect(instructions).not.toContain("## Workflow")
     expect(instructions).not.toContain("## Rules")

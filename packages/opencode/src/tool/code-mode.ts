@@ -11,18 +11,11 @@ import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
 
-const DESCRIPTION = [
-  "Execute a JavaScript/TypeScript program that orchestrates the connected MCP tools inside a confined runtime.",
-  "The full usage guide and the catalog of available tools follow below.",
-].join("\n")
+const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
-    description: [
-      "JavaScript source to execute.",
-      "Inside CodeMode, `tools` contains only the MCP/CodeMode tools listed in this execute tool's description; top-level opencode tools like bash, read, or lsp are not available unless listed there.",
-      "Call available tools using the exact signatures shown in this execute tool's description, compose the results, and `return` the final value.",
-    ].join(" "),
+    description: "Script body executed by the confined interpreter.",
   }),
 })
 

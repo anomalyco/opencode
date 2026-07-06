@@ -509,10 +509,9 @@ adapter needed **no changes**.
   fields in the worked example) are replaced by structured markdown in `prepare`,
   ordered so the workflow sits at the top (the least likely part of a long description to
   be truncated or skimmed away) and the catalog at the bottom (the per-section content
-  described here was later condensed by Fix 8 - Workflow/Rules deduped, Syntax inverted):
-  - **Intro** (2 lines): "Write a CodeMode program... Return code only." + "Execute
-    JavaScript in a confined runtime with access to the tools listed below under
-    `tools.*`." (the second line drops the tools clause when the tree is empty).
+  described here was later condensed by Fix 8 and the language-accuracy pass):
+  - **Intro** (2 lines): asks for orchestration source only, then identifies the language
+    as restricted JavaScript for calling tools rather than a general-purpose runtime.
   - **`## Workflow`**: numbered steps - find a tool via `tools.$codemode.search` -> read
     the `{ path, description, signature }` matches -> call by path -> `typeof res ===
 "string" ? JSON.parse(res) : res` -> return only the needed fields. When the catalog is
@@ -525,9 +524,8 @@ adapter needed **no changes**.
     browse-one-namespace via search (PARTIAL only); and host-side media handling (files/
     images never enter the program; a media-only call yields a small text marker - wording
     verified against the adapter's `toSandboxResult`/`mediaMarker`).
-  - **`## Syntax`**: the dense syntax lines unchanged, minus the Promise.all and console
-    lines (moved into Rules) and the `for (const ns in tools)` fragment (redundant with
-    the enumeration rule).
+  - **`## Language`**: a concise positive capability summary plus the major unavailable
+    runtime capabilities and the data-boundary serialization note.
   - **`## Available tools`**: the budgeted catalog unchanged, with the COMPLETE/PARTIAL
     header merged into the section heading (no trailing colon); the search-signature
     advertisement follows when PARTIAL (its description-reading and browse clauses moved
@@ -715,9 +713,9 @@ along). All in `tool-runtime.ts`; no interpreter changes.
   the four field checks passes when ANY form matches. Weights, exact-path lookup, and
   namespace scoping untouched. A true plural path match still outranks a singular-only
   description match (path substring 8 + searchable 2 > description 4 + searchable 2).
-- **Tests**: package instruction/structure assertions updated to the new text; new
-  syntax-section test (leads with "Standard modern JavaScript works", names the
-  verified not-supported list, keeps the data-boundary note); the budget-exhaustion
+- **Tests**: package instruction/structure assertions updated to the new text; the
+  language-section test rejects full-runtime wording, names major unavailable capabilities,
+  and keeps the data-boundary note; the budget-exhaustion
   test rewritten to assert the new fairness (alpha.expensive not fitting must NOT
   prevent beta.cheap from showing: PARTIAL 2 of 3, `- beta (1 tool)` fully shown); new
   plural/singular test (query "issues" finds a singular-only tool; ranking still

@@ -371,7 +371,7 @@ const termForms = (term: string): Array<string> => {
 
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>) =>
   Tool.make({
-    description: "Search available CodeMode tools",
+    description: "Search available Code Mode tools",
     input: SearchInput,
     output: SearchOutput,
     run: (request) =>
@@ -540,12 +540,11 @@ export const prepare = <R>(
   // catalog at the bottom. Example call forms use placeholders - never a real or fabricated
   // tool name - and show both dot and bracket notation so non-identifier names are not normalized.
   const intro = [
-    "Write a CodeMode program to answer the request. Return code only.",
     empty
-      ? "Execute JavaScript in a confined runtime."
+      ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime."
       : complete
-        ? "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed below; surrounding agent tools are not available unless listed here."
-        : "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed or searchable below; surrounding agent tools are not available unless listed here.",
+        ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed below and internal runtime tools; surrounding agent tools are not available."
+        : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed or searchable below and internal runtime tools; surrounding agent tools are not available.",
     ...(empty
       ? []
       : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
@@ -567,8 +566,8 @@ export const prepare = <R>(
               "4. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
             ]
           : [
-              '1. If the exact signature is not listed below, first search: `const { items } = await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
-              "2. Read the matches: each item is `{ path, description, signature }` - read the description before using an unfamiliar tool.",
+              '1. If the exact signature is not listed below, first search: `const request = { query: "<intent + key nouns>" }; const page = await tools.$codemode.search(request)`.',
+              "2. Read `page.items`: each match is `{ path, description, signature }` - read the description before using an unfamiliar tool.",
               "3. Call the result's `path` as-is; bracket notation and quotes are part of the path.",
               '4. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string.',
               "5. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
@@ -582,8 +581,8 @@ export const prepare = <R>(
         "## Rules",
         "",
         complete
-          ? "- Only tools listed here are available inside `tools`; tools from the surrounding agent/runtime are not implicitly exposed."
-          : "- Only tools listed here or returned by `tools.$codemode.search` are available inside `tools`; tools from the surrounding agent/runtime are not implicitly exposed.",
+          ? "- Only Code Mode tools listed here and internal runtime tools are available; surrounding agent tools are not implicitly exposed."
+          : "- Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
         "- A result typed `Promise<unknown>` has no guaranteed shape - verify what actually came back before relying on its fields.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
@@ -596,13 +595,12 @@ export const prepare = <R>(
             ]),
       ]
 
-  const syntax = [
+  const language = [
     "",
-    "## Syntax",
+    "## Language",
     "",
-    "Standard modern JavaScript works: functions/closures, destructuring, template literals, loops, try/catch, spread, optional chaining, the usual Array/String/Object/Math/JSON methods, plus Date, RegExp, Map, Set, and Promise.all/allSettled/race/resolve/reject.",
-    "TypeScript type annotations are allowed and stripped before execution (decorators are not supported).",
-    "Not supported (each fails with a message naming the alternative): classes, generators, for await...of, .then/.catch/.finally (use await with try/catch).",
+    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls.",
+    "Modules/imports, classes, generators, timers, network access, eval, prototype access, arbitrary methods, and promise chaining are unavailable. Use await with try/catch.",
     "Dates serialize to ISO strings at data boundaries; Map/Set/RegExp serialize to `{}`.",
   ]
 
@@ -635,7 +633,7 @@ export const prepare = <R>(
     }
   }
 
-  const lines = [...intro, ...workflow, ...rules, ...syntax, ...toolSection]
+  const lines = [...intro, ...workflow, ...rules, ...language, ...toolSection]
   return {
     catalog: described,
     instructions: lines.join("\n"),
