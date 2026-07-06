@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "test": "bun test --timeout 5000",
     "typecheck": "tsgo --noEmit",
     "build": "tsc"
   },

@@ -21,6 +21,14 @@ import { Api } from "@opencode-ai/server/api"
 import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
 import { ClientApi, endpointNames, groupNames, promiseOmitEndpoints } from "../src/contract"
 
+const Client = await import("../src/effect")
+
+test("effect entrypoint exposes canonical Schema contracts", () => {
+  expect(Client.Agent).toBe(Agent)
+  expect(Client.Model).toBe(Model)
+  expect(Client.Session).toBe(Session)
+})
+
 test("Core and Server reuse the authoritative Schema and Protocol values", () => {
   expect(AgentV2.ID).toBe(Agent.ID)
   expect(CoreLocation.Ref).toBe(Location.Ref)

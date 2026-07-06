@@ -7,16 +7,16 @@ import { makeGlobalNode } from "../effect/app-node"
 import { SessionHistory } from "./history"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
+import { Session } from "@opencode-ai/schema/session"
 import { SessionMessageTable, SessionTable } from "./sql"
 import { fromRow } from "./info"
 
 export interface Interface {
-  readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info | undefined>
-  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], MessageDecodeError>
+  readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
+  readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Message[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
-  ) => Effect.Effect<{ readonly sessionID: SessionSchema.ID; readonly message: SessionMessage.Message } | undefined>
+  ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Message } | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionStore") {}
@@ -44,7 +44,7 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         return row
           ? {
-              sessionID: SessionSchema.ID.make(row.session_id),
+              sessionID: Session.ID.make(row.session_id),
               message: yield* decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie),
             }
           : undefined

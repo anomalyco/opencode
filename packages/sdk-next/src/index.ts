@@ -2,17 +2,26 @@ export * as OpenCode from "./opencode"
 export * as Tool from "./tool"
 
 export { ClientError } from "@opencode-ai/client/effect"
-export {
-  AbsolutePath,
-  Agent,
-  Location,
-  Model,
-  Prompt,
-  PromptInput,
-  Provider,
-  RelativePath,
-  Session,
-  SessionInput,
-  SessionMessage,
-} from "@opencode-ai/client/effect"
 export type { OpenCodeEvent } from "@opencode-ai/client/effect"
+export { Agent } from "@opencode-ai/schema/agent"
+export { Command } from "@opencode-ai/schema/command"
+export { Credential } from "@opencode-ai/schema/credential"
+export { FileSystem } from "@opencode-ai/schema/filesystem"
+export { Integration } from "@opencode-ai/schema/integration"
+export { Location } from "@opencode-ai/schema/location"
+export { Model } from "@opencode-ai/schema/model"
+export { Permission } from "@opencode-ai/schema/permission"
+export { PermissionSaved } from "@opencode-ai/schema/permission-saved"
+export { Project } from "@opencode-ai/schema/project"
+export { ProjectCopy } from "@opencode-ai/schema/project-copy"
+export { Prompt } from "@opencode-ai/schema/prompt"
+export { PromptInput } from "@opencode-ai/schema/prompt-input"
+export { Provider } from "@opencode-ai/schema/provider"
+export { Pty } from "@opencode-ai/schema/pty"
+export { Question } from "@opencode-ai/schema/question"
+export { Reference } from "@opencode-ai/schema/reference"
+export { AbsolutePath, RelativePath } from "@opencode-ai/schema/schema"
+export { Session } from "@opencode-ai/schema/session"
+export { SessionInput } from "@opencode-ai/schema/session-input"
+export { SessionMessage } from "@opencode-ai/schema/session-message"
+export { Skill } from "@opencode-ai/schema/skill"
