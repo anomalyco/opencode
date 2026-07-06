@@ -317,7 +317,7 @@ MCP timeouts have separate startup, catalog, and execution budgets, expressed in
 ```jsonc
 {
   "mcp": {
-    "timeout": { "startup": 30000, "catalog": 30000, "execution": 100000000 },
+    "timeout": { "startup": 30000, "catalog": 30000, "execution": 43200000 },
     "servers": {
       "github": {
         "type": "local",

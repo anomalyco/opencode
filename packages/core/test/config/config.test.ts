@@ -467,7 +467,7 @@ describe("Config", () => {
                 },
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
                 mcp: {
-                  timeout: { startup: 5000, catalog: 60000, execution: 100000000 },
+                  timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
                   servers: {
                     local: {
                       type: "local",
@@ -552,7 +552,7 @@ describe("Config", () => {
             })
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
             expect(documents[0]?.info.mcp).toEqual({
-              timeout: { startup: 5000, catalog: 60000, execution: 100000000 },
+              timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
               servers: {
                 local: {
                   type: "local",
