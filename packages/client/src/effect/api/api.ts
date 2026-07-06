@@ -196,33 +196,35 @@ export type Endpoint4_18Input = { readonly sessionID: Endpoint4_18Request["param
 export type Endpoint4_18Output = EffectValue<ReturnType<RawClient["server.session"]["session.context"]>>["data"]
 export type SessionContextOperation<E = never> = (input: Endpoint4_18Input) => Effect.Effect<Endpoint4_18Output, E>
 
-type Endpoint4_19Request = Parameters<RawClient["server.session"]["session.context.entry.list"]>[0]
+type Endpoint4_19Request = Parameters<RawClient["server.session"]["session.instructions.entry.list"]>[0]
 export type Endpoint4_19Input = { readonly sessionID: Endpoint4_19Request["params"]["sessionID"] }
 export type Endpoint4_19Output = EffectValue<
-  ReturnType<RawClient["server.session"]["session.context.entry.list"]>
+  ReturnType<RawClient["server.session"]["session.instructions.entry.list"]>
 >["data"]
-export type SessionListContextEntriesOperation<E = never> = (
+export type SessionInstructionsEntryListOperation<E = never> = (
   input: Endpoint4_19Input,
 ) => Effect.Effect<Endpoint4_19Output, E>
 
-type Endpoint4_20Request = Parameters<RawClient["server.session"]["session.context.entry.put"]>[0]
+type Endpoint4_20Request = Parameters<RawClient["server.session"]["session.instructions.entry.put"]>[0]
 export type Endpoint4_20Input = {
   readonly sessionID: Endpoint4_20Request["params"]["sessionID"]
   readonly key: Endpoint4_20Request["params"]["key"]
   readonly value: Endpoint4_20Request["payload"]["value"]
 }
-export type Endpoint4_20Output = EffectValue<ReturnType<RawClient["server.session"]["session.context.entry.put"]>>
-export type SessionPutContextEntryOperation<E = never> = (
+export type Endpoint4_20Output = EffectValue<ReturnType<RawClient["server.session"]["session.instructions.entry.put"]>>
+export type SessionInstructionsEntryPutOperation<E = never> = (
   input: Endpoint4_20Input,
 ) => Effect.Effect<Endpoint4_20Output, E>
 
-type Endpoint4_21Request = Parameters<RawClient["server.session"]["session.context.entry.remove"]>[0]
+type Endpoint4_21Request = Parameters<RawClient["server.session"]["session.instructions.entry.remove"]>[0]
 export type Endpoint4_21Input = {
   readonly sessionID: Endpoint4_21Request["params"]["sessionID"]
   readonly key: Endpoint4_21Request["params"]["key"]
 }
-export type Endpoint4_21Output = EffectValue<ReturnType<RawClient["server.session"]["session.context.entry.remove"]>>
-export type SessionRemoveContextEntryOperation<E = never> = (
+export type Endpoint4_21Output = EffectValue<
+  ReturnType<RawClient["server.session"]["session.instructions.entry.remove"]>
+>
+export type SessionInstructionsEntryRemoveOperation<E = never> = (
   input: Endpoint4_21Input,
 ) => Effect.Effect<Endpoint4_21Output, E>
 
@@ -273,9 +275,13 @@ export interface SessionApi<E = never> {
   readonly revertClear: SessionRevertClearOperation<E>
   readonly revertCommit: SessionRevertCommitOperation<E>
   readonly context: SessionContextOperation<E>
-  readonly listContextEntries: SessionListContextEntriesOperation<E>
-  readonly putContextEntry: SessionPutContextEntryOperation<E>
-  readonly removeContextEntry: SessionRemoveContextEntryOperation<E>
+  readonly instructions: {
+    readonly entry: {
+      readonly list: SessionInstructionsEntryListOperation<E>
+      readonly put: SessionInstructionsEntryPutOperation<E>
+      readonly remove: SessionInstructionsEntryRemoveOperation<E>
+    }
+  }
   readonly log: SessionLogOperation<E>
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>

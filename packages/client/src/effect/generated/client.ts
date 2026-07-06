@@ -266,33 +266,33 @@ const Endpoint4_18 = (raw: RawClient["server.session"]) => (input: Endpoint4_18I
     Effect.map((value) => value.data),
   )
 
-type Endpoint4_19Request = Parameters<RawClient["server.session"]["session.context.entry.list"]>[0]
+type Endpoint4_19Request = Parameters<RawClient["server.session"]["session.instructions.entry.list"]>[0]
 type Endpoint4_19Input = { readonly sessionID: Endpoint4_19Request["params"]["sessionID"] }
 const Endpoint4_19 = (raw: RawClient["server.session"]) => (input: Endpoint4_19Input) =>
-  raw["session.context.entry.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
+  raw["session.instructions.entry.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
     Effect.mapError(mapClientError),
     Effect.map((value) => value.data),
   )
 
-type Endpoint4_20Request = Parameters<RawClient["server.session"]["session.context.entry.put"]>[0]
+type Endpoint4_20Request = Parameters<RawClient["server.session"]["session.instructions.entry.put"]>[0]
 type Endpoint4_20Input = {
   readonly sessionID: Endpoint4_20Request["params"]["sessionID"]
   readonly key: Endpoint4_20Request["params"]["key"]
   readonly value: Endpoint4_20Request["payload"]["value"]
 }
 const Endpoint4_20 = (raw: RawClient["server.session"]) => (input: Endpoint4_20Input) =>
-  raw["session.context.entry.put"]({
+  raw["session.instructions.entry.put"]({
     params: { sessionID: input["sessionID"], key: input["key"] },
     payload: { value: input["value"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint4_21Request = Parameters<RawClient["server.session"]["session.context.entry.remove"]>[0]
+type Endpoint4_21Request = Parameters<RawClient["server.session"]["session.instructions.entry.remove"]>[0]
 type Endpoint4_21Input = {
   readonly sessionID: Endpoint4_21Request["params"]["sessionID"]
   readonly key: Endpoint4_21Request["params"]["key"]
 }
 const Endpoint4_21 = (raw: RawClient["server.session"]) => (input: Endpoint4_21Input) =>
-  raw["session.context.entry.remove"]({ params: { sessionID: input["sessionID"], key: input["key"] } }).pipe(
+  raw["session.instructions.entry.remove"]({ params: { sessionID: input["sessionID"], key: input["key"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
@@ -354,9 +354,7 @@ const adaptGroup4 = (raw: RawClient["server.session"]) => ({
   revertClear: Endpoint4_16(raw),
   revertCommit: Endpoint4_17(raw),
   context: Endpoint4_18(raw),
-  listContextEntries: Endpoint4_19(raw),
-  putContextEntry: Endpoint4_20(raw),
-  removeContextEntry: Endpoint4_21(raw),
+  instructions: { entry: { list: Endpoint4_19(raw), put: Endpoint4_20(raw), remove: Endpoint4_21(raw) } },
   log: Endpoint4_22(raw),
   interrupt: Endpoint4_23(raw),
   background: Endpoint4_24(raw),

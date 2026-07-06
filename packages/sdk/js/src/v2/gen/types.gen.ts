@@ -25,7 +25,7 @@ export type Event =
   | EventSessionPromptPromoted
   | EventSessionPromptAdmitted
   | EventSessionExecutionSettled
-  | EventSessionContextUpdated
+  | EventSessionInstructionsUpdated
   | EventSessionSynthetic
   | EventSessionSkillActivated
   | EventSessionShellStarted
@@ -929,7 +929,7 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.context.updated"
+        type: "session.instructions.updated"
         properties: {
           sessionID: string
           text: string
@@ -1731,7 +1731,7 @@ export type GlobalEvent = {
     | SyncEventSessionForked
     | SyncEventSessionPromptPromoted
     | SyncEventSessionPromptAdmitted
-    | SyncEventSessionContextUpdated
+    | SyncEventSessionInstructionsUpdated
     | SyncEventSessionSynthetic
     | SyncEventSessionSkillActivated
     | SyncEventSessionShellStarted
@@ -2894,7 +2894,7 @@ export type SessionDurableEvent =
   | SessionForked
   | SessionPromptPromoted
   | SessionPromptAdmitted
-  | SessionContextUpdated
+  | SessionInstructionsUpdated
   | SessionSynthetic
   | SessionSkillActivated
   | SessionShellStarted
@@ -3035,7 +3035,7 @@ export type V2Event =
   | SessionPromptPromoted
   | SessionPromptAdmitted
   | SessionExecutionSettled
-  | SessionContextUpdated
+  | SessionInstructionsUpdated
   | SessionSynthetic
   | SessionSkillActivated
   | SessionShellStarted
@@ -3731,11 +3731,11 @@ export type SyncEventSessionPromptAdmitted = {
   }
 }
 
-export type SyncEventSessionContextUpdated = {
+export type SyncEventSessionInstructionsUpdated = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.context.updated.1"
+    type: "session.instructions.updated.1"
     id: string
     seq: number
     aggregateID: string
@@ -4527,10 +4527,10 @@ export type SessionMessage =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
-export type SessionContextEntryKey = string
+export type InstructionEntryKey = string
 
-export type SessionContextEntryInfo = {
-  key: SessionContextEntryKey
+export type InstructionEntryInfo = {
+  key: InstructionEntryKey
   value: unknown
 }
 
@@ -4671,13 +4671,13 @@ export type SessionPromptAdmitted = {
   }
 }
 
-export type SessionContextUpdated = {
+export type SessionInstructionsUpdated = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.context.updated"
+  type: "session.instructions.updated"
   durable: {
     aggregateID: string
     seq: number
@@ -6839,9 +6839,9 @@ export type EventSessionExecutionSettled = {
   }
 }
 
-export type EventSessionContextUpdated = {
+export type EventSessionInstructionsUpdated = {
   id: string
-  type: "session.context.updated"
+  type: "session.instructions.updated"
   properties: {
     sessionID: string
     text: string
@@ -8246,12 +8246,12 @@ export type SessionMessage2 =
   | SessionMessageCompaction2
 
 /**
- * Context entry key (lowercase alphanumerics plus . _ -)
+ * Instruction entry key (lowercase alphanumerics plus . _ -)
  */
-export type SessionContextEntryKey2 = string
+export type InstructionEntryKey2 = string
 
-export type SessionContextEntryInfo2 = {
-  key: SessionContextEntryKey2
+export type InstructionEntryInfo2 = {
+  key: InstructionEntryKey2
   value: unknown
 }
 
@@ -8392,13 +8392,13 @@ export type SessionPromptAdmitted2 = {
   }
 }
 
-export type SessionContextUpdated2 = {
+export type SessionInstructionsUpdated2 = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.context.updated"
+  type: "session.instructions.updated"
   durable: {
     aggregateID: string
     seq: number
@@ -8991,7 +8991,7 @@ export type SessionDurableEventV2 =
   | SessionForked2
   | SessionPromptPromoted2
   | SessionPromptAdmitted2
-  | SessionContextUpdated2
+  | SessionInstructionsUpdated2
   | SessionSynthetic2
   | SessionSkillActivated2
   | SessionShellStarted2
@@ -11207,7 +11207,7 @@ export type V2EventV2 =
   | SessionPromptPromoted2
   | SessionPromptAdmitted2
   | SessionExecutionSettled2
-  | SessionContextUpdated2
+  | SessionInstructionsUpdated2
   | SessionSynthetic2
   | SessionSkillActivated2
   | SessionShellStarted2
@@ -16421,16 +16421,16 @@ export type V2SessionContextResponses = {
 
 export type V2SessionContextResponse = V2SessionContextResponses[keyof V2SessionContextResponses]
 
-export type V2SessionContextEntryListData = {
+export type V2SessionInstructionsEntryListData = {
   body?: never
   path: {
     sessionID: string
   }
   query?: never
-  url: "/api/session/{sessionID}/context-entry"
+  url: "/api/session/{sessionID}/instructions/entries"
 }
 
-export type V2SessionContextEntryListErrors = {
+export type V2SessionInstructionsEntryListErrors = {
   /**
    * InvalidRequestError
    */
@@ -16445,31 +16445,32 @@ export type V2SessionContextEntryListErrors = {
   404: SessionNotFoundErrorV2
 }
 
-export type V2SessionContextEntryListError = V2SessionContextEntryListErrors[keyof V2SessionContextEntryListErrors]
+export type V2SessionInstructionsEntryListError =
+  V2SessionInstructionsEntryListErrors[keyof V2SessionInstructionsEntryListErrors]
 
-export type V2SessionContextEntryListResponses = {
+export type V2SessionInstructionsEntryListResponses = {
   /**
    * Success
    */
   200: {
-    data: Array<SessionContextEntryInfo2>
+    data: Array<InstructionEntryInfo2>
   }
 }
 
-export type V2SessionContextEntryListResponse =
-  V2SessionContextEntryListResponses[keyof V2SessionContextEntryListResponses]
+export type V2SessionInstructionsEntryListResponse =
+  V2SessionInstructionsEntryListResponses[keyof V2SessionInstructionsEntryListResponses]
 
-export type V2SessionContextEntryRemoveData = {
+export type V2SessionInstructionsEntryRemoveData = {
   body?: never
   path: {
     sessionID: string
-    key: SessionContextEntryKey2
+    key: InstructionEntryKey2
   }
   query?: never
-  url: "/api/session/{sessionID}/context-entry/{key}"
+  url: "/api/session/{sessionID}/instructions/entries/{key}"
 }
 
-export type V2SessionContextEntryRemoveErrors = {
+export type V2SessionInstructionsEntryRemoveErrors = {
   /**
    * InvalidRequestError
    */
@@ -16484,32 +16485,32 @@ export type V2SessionContextEntryRemoveErrors = {
   404: SessionNotFoundErrorV2
 }
 
-export type V2SessionContextEntryRemoveError =
-  V2SessionContextEntryRemoveErrors[keyof V2SessionContextEntryRemoveErrors]
+export type V2SessionInstructionsEntryRemoveError =
+  V2SessionInstructionsEntryRemoveErrors[keyof V2SessionInstructionsEntryRemoveErrors]
 
-export type V2SessionContextEntryRemoveResponses = {
+export type V2SessionInstructionsEntryRemoveResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2SessionContextEntryRemoveResponse =
-  V2SessionContextEntryRemoveResponses[keyof V2SessionContextEntryRemoveResponses]
+export type V2SessionInstructionsEntryRemoveResponse =
+  V2SessionInstructionsEntryRemoveResponses[keyof V2SessionInstructionsEntryRemoveResponses]
 
-export type V2SessionContextEntryPutData = {
+export type V2SessionInstructionsEntryPutData = {
   body: {
     value: unknown
   }
   path: {
     sessionID: string
-    key: SessionContextEntryKey2
+    key: InstructionEntryKey2
   }
   query?: never
-  url: "/api/session/{sessionID}/context-entry/{key}"
+  url: "/api/session/{sessionID}/instructions/entries/{key}"
 }
 
-export type V2SessionContextEntryPutErrors = {
+export type V2SessionInstructionsEntryPutErrors = {
   /**
    * InvalidRequestError
    */
@@ -16524,17 +16525,18 @@ export type V2SessionContextEntryPutErrors = {
   404: SessionNotFoundErrorV2
 }
 
-export type V2SessionContextEntryPutError = V2SessionContextEntryPutErrors[keyof V2SessionContextEntryPutErrors]
+export type V2SessionInstructionsEntryPutError =
+  V2SessionInstructionsEntryPutErrors[keyof V2SessionInstructionsEntryPutErrors]
 
-export type V2SessionContextEntryPutResponses = {
+export type V2SessionInstructionsEntryPutResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2SessionContextEntryPutResponse =
-  V2SessionContextEntryPutResponses[keyof V2SessionContextEntryPutResponses]
+export type V2SessionInstructionsEntryPutResponse =
+  V2SessionInstructionsEntryPutResponses[keyof V2SessionInstructionsEntryPutResponses]
 
 export type V2SessionLogData = {
   body?: never

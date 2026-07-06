@@ -43,12 +43,12 @@ import type {
   SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
-  SessionListContextEntriesInput,
-  SessionListContextEntriesOutput,
-  SessionPutContextEntryInput,
-  SessionPutContextEntryOutput,
-  SessionRemoveContextEntryInput,
-  SessionRemoveContextEntryOutput,
+  SessionInstructionsEntryListInput,
+  SessionInstructionsEntryListOutput,
+  SessionInstructionsEntryPutInput,
+  SessionInstructionsEntryPutOutput,
+  SessionInstructionsEntryRemoveInput,
+  SessionInstructionsEntryRemoveOutput,
   SessionLogInput,
   SessionLogOutput,
   SessionInterruptInput,
@@ -607,40 +607,44 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      listContextEntries: (input: SessionListContextEntriesInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionListContextEntriesOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry`,
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      putContextEntry: (input: SessionPutContextEntryInput, requestOptions?: RequestOptions) =>
-        request<SessionPutContextEntryOutput>(
-          {
-            method: "PUT",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry/${encodeURIComponent(input.key)}`,
-            body: { value: input["value"] },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      removeContextEntry: (input: SessionRemoveContextEntryInput, requestOptions?: RequestOptions) =>
-        request<SessionRemoveContextEntryOutput>(
-          {
-            method: "DELETE",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry/${encodeURIComponent(input.key)}`,
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
+      instructions: {
+        entry: {
+          list: (input: SessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: SessionInstructionsEntryListOutput }>(
+              {
+                method: "GET",
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries`,
+                successStatus: 200,
+                declaredStatuses: [404, 400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          put: (input: SessionInstructionsEntryPutInput, requestOptions?: RequestOptions) =>
+            request<SessionInstructionsEntryPutOutput>(
+              {
+                method: "PUT",
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                body: { value: input["value"] },
+                successStatus: 204,
+                declaredStatuses: [404, 400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+          remove: (input: SessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions) =>
+            request<SessionInstructionsEntryRemoveOutput>(
+              {
+                method: "DELETE",
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                successStatus: 204,
+                declaredStatuses: [404, 400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
+      },
       log: (input: SessionLogInput, requestOptions?: RequestOptions): AsyncIterable<SessionLogOutput> =>
         sse<SessionLogOutput>(
           {

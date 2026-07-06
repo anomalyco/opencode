@@ -126,6 +126,26 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`instruction_checkpoint\` (
+          \`session_id\` text PRIMARY KEY,
+          \`baseline\` text NOT NULL,
+          \`snapshot\` text NOT NULL,
+          \`baseline_seq\` integer NOT NULL,
+          CONSTRAINT \`fk_instruction_checkpoint_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`instruction_entry\` (
+          \`session_id\` text NOT NULL,
+          \`key\` text NOT NULL,
+          \`value\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`instruction_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
+          CONSTRAINT \`fk_instruction_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
@@ -144,26 +164,6 @@ export default {
           \`time_updated\` integer NOT NULL,
           \`data\` text NOT NULL,
           CONSTRAINT \`fk_part_message_id_message_id_fk\` FOREIGN KEY (\`message_id\`) REFERENCES \`message\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`session_context_epoch\` (
-          \`session_id\` text PRIMARY KEY,
-          \`baseline\` text NOT NULL,
-          \`snapshot\` text NOT NULL,
-          \`baseline_seq\` integer NOT NULL,
-          CONSTRAINT \`fk_session_context_epoch_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`session_context_entry\` (
-          \`session_id\` text NOT NULL,
-          \`key\` text NOT NULL,
-          \`value\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`session_context_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
-          CONSTRAINT \`fk_session_context_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`

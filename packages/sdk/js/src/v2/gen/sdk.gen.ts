@@ -92,6 +92,7 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
+  InstructionEntryKey2,
   LocationRef2,
   LspStatusErrors,
   LspStatusResponses,
@@ -185,7 +186,6 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
-  SessionContextEntryKey2,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -364,12 +364,6 @@ import type {
   V2SessionCommandResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
-  V2SessionContextEntryListErrors,
-  V2SessionContextEntryListResponses,
-  V2SessionContextEntryPutErrors,
-  V2SessionContextEntryPutResponses,
-  V2SessionContextEntryRemoveErrors,
-  V2SessionContextEntryRemoveResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
   V2SessionCreateErrors,
@@ -390,6 +384,12 @@ import type {
   V2SessionFormStateResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
+  V2SessionInstructionsEntryListErrors,
+  V2SessionInstructionsEntryListResponses,
+  V2SessionInstructionsEntryPutErrors,
+  V2SessionInstructionsEntryPutResponses,
+  V2SessionInstructionsEntryRemoveErrors,
+  V2SessionInstructionsEntryRemoveResponses,
   V2SessionInterruptErrors,
   V2SessionInterruptResponses,
   V2SessionListErrors,
@@ -5262,9 +5262,9 @@ export class Revert extends HeyApiClient {
 
 export class Entry extends HeyApiClient {
   /**
-   * List context entries
+   * List instruction entries
    *
-   * List API-managed context entries attached to the session's system context.
+   * List API-managed instruction entries attached to the session.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
@@ -5274,25 +5274,25 @@ export class Entry extends HeyApiClient {
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).get<
-      V2SessionContextEntryListResponses,
-      V2SessionContextEntryListErrors,
+      V2SessionInstructionsEntryListResponses,
+      V2SessionInstructionsEntryListErrors,
       ThrowOnError
     >({
-      url: "/api/session/{sessionID}/context-entry",
+      url: "/api/session/{sessionID}/instructions/entries",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Remove context entry
+   * Remove instruction entry
    *
-   * Remove one context entry; the removal is announced to the model at the next turn boundary.
+   * Remove one instruction entry; the removal is announced to the model at the next step boundary.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      key: SessionContextEntryKey2
+      key: InstructionEntryKey2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5308,25 +5308,25 @@ export class Entry extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).delete<
-      V2SessionContextEntryRemoveResponses,
-      V2SessionContextEntryRemoveErrors,
+      V2SessionInstructionsEntryRemoveResponses,
+      V2SessionInstructionsEntryRemoveErrors,
       ThrowOnError
     >({
-      url: "/api/session/{sessionID}/context-entry/{key}",
+      url: "/api/session/{sessionID}/instructions/entries/{key}",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Put context entry
+   * Put instruction entry
    *
-   * Attach or replace one durable context entry. The value is rendered into the session's system context; changes announce as updates at the next turn boundary.
+   * Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.
    */
   public put<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      key: SessionContextEntryKey2
+      key: InstructionEntryKey2
       value?: unknown
     },
     options?: Options<never, ThrowOnError>,
@@ -5344,11 +5344,11 @@ export class Entry extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).put<
-      V2SessionContextEntryPutResponses,
-      V2SessionContextEntryPutErrors,
+      V2SessionInstructionsEntryPutResponses,
+      V2SessionInstructionsEntryPutErrors,
       ThrowOnError
     >({
-      url: "/api/session/{sessionID}/context-entry/{key}",
+      url: "/api/session/{sessionID}/instructions/entries/{key}",
       ...options,
       ...params,
       headers: {
@@ -5360,7 +5360,7 @@ export class Entry extends HeyApiClient {
   }
 }
 
-export class Context extends HeyApiClient {
+export class Instructions extends HeyApiClient {
   private _entry?: Entry
   get entry(): Entry {
     return (this._entry ??= new Entry({ client: this.client }))
@@ -6479,9 +6479,9 @@ export class Session3 extends HeyApiClient {
     return (this._revert ??= new Revert({ client: this.client }))
   }
 
-  private _context?: Context
-  get context2(): Context {
-    return (this._context ??= new Context({ client: this.client }))
+  private _instructions?: Instructions
+  get instructions(): Instructions {
+    return (this._instructions ??= new Instructions({ client: this.client }))
   }
 
   private _form?: Form

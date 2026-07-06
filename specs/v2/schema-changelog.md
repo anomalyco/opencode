@@ -1,5 +1,18 @@
 # V2 Schema Changelog
 
+## 2026-07-05: Rename Session Context Contracts To Instructions
+
+- Rename the System Context algebra to `Instructions`, API-managed `SessionContextEntry` records to `InstructionEntry`, and the session-owned context checkpoint to `InstructionCheckpoint`.
+- Rename the tables `session_context_entry` and `session_context_epoch` to `instruction_entry` and `instruction_checkpoint`.
+- Rename the durable update event from `session.context.updated` to `session.instructions.updated`; the migration rewrites existing durable event types in place.
+- Rename the API-managed entry routes from `/api/session/:sessionID/context-entry` to `/api/session/:sessionID/instructions/entries` and their operation identifiers from `session.context.entry.*` to `session.instructions.entry.*`, keeping bare `session.instructions.*` free for the composed instruction surface.
+
+Compatibility:
+
+- The V2 contracts remain experimental. The renamed tables, event, endpoints, schemas, and generated client names are intentionally breaking changes for beta consumers.
+- Existing changelog entries retain the names that were accurate when those changes occurred.
+- Behavior is unchanged: this is a vocabulary and contract rename only.
+
 ## 2026-07-03: Require Durable Envelope On Durable Events
 
 - Make the wire `durable` envelope required on durable event definitions.

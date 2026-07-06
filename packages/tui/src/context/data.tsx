@@ -302,7 +302,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             })
           })
           break
-        case "session.context.updated":
+        case "session.instructions.updated":
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),

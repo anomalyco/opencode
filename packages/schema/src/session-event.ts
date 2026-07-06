@@ -130,15 +130,15 @@ export const ExecutionSettled = Event.ephemeral({
 })
 export type ExecutionSettled = typeof ExecutionSettled.Type
 
-export const ContextUpdated = Event.durable({
-  type: "session.context.updated",
+export const InstructionsUpdated = Event.durable({
+  type: "session.instructions.updated",
   ...options,
   schema: {
     ...Base,
     text: Schema.String,
   },
 })
-export type ContextUpdated = typeof ContextUpdated.Type
+export type InstructionsUpdated = typeof InstructionsUpdated.Type
 
 export const Synthetic = Event.durable({
   type: "session.synthetic",
@@ -494,7 +494,7 @@ export const Definitions = Event.inventory(
   PromptPromoted,
   PromptAdmitted,
   ExecutionSettled,
-  ContextUpdated,
+  InstructionsUpdated,
   Synthetic,
   Skill.Activated,
   Shell.Started,

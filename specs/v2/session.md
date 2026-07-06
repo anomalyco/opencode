@@ -51,61 +51,71 @@ The local runner issues one explicit `llm.stream(request)` per step, projects ea
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 
-## Context Epochs
+## Instruction Checkpoints
 
-V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch stores one immutable provider-cache baseline and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
+V2 Sessions persist the exact privileged instructions shown to the model. `InstructionCheckpoint` stores one immutable instruction baseline, its baseline event sequence, and a model-hidden `Instructions.Applied` record used to compare independently observed instruction sources. Instructions are only one part of Model Context: the runner separately assembles agent or provider system text, Session History, tool definitions, and step-local additions for each request.
 
-The first complete observation initializes the epoch before any pending prompt becomes model-visible. If initial context is temporarily unavailable, execution stops while the prompt remains pending and retryable. On later steps, the runner promotes eligible input first, then reconciles current sources at the safe boundary. Changed context becomes one durable chronological System message, and its event commit advances the epoch snapshot atomically.
+The runner has no instruction registry. `loadInstructions` explicitly loads these producers concurrently and combines them in this fixed order:
 
-```text
-Client            Runner                         System Context Registry       Context Epoch Store       Session History         LLM
-   │                 │                                      │                           │                       │                 │
-   ├─ Admit prompt ─────────────────────────────────────────────────────────────────────────────────────────────▶                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Observe initial context ────────────▶                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ◀─ Complete baseline or unavailable ───┤                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Initialize missing epoch ───────────────────────────────────────▶                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Promote eligible input ─────────────────────────────────────────────────────────────────▶                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Reconcile at safe boundary ─────────▶                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ◀─ Unchanged or chronological update ──┤                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Advance snapshot atomically with update ────────────────────────▶                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Baseline + chronological history ─────────────────────────────────────────────────────────────────────────▶
-```
+1. Instruction built-ins, currently environment facts and the host-local date.
+2. `InstructionDiscovery`, observing ambient `AGENTS.md` files.
+3. Selected-agent available-skill guidance.
+4. Reference guidance.
+5. Selected-agent MCP guidance.
+6. API-managed `InstructionEntry` values for the Session.
 
-Agent and model selection are step-scoped. A switch admitted after the current safe step boundary applies to the next step without restarting the current step or replacing the baseline. Agent-specific skill guidance remains a Context Source, so changed guidance is admitted as a chronological System message. A completed compaction causes the next physical attempt to render a fresh baseline directly from current complete context. A Session move clears the epoch so the destination Location initializes a complete baseline on its next run.
+`Instructions.combine(...)` preserves that caller order and rejects duplicate namespaced source keys. Each source owns its typed observation, JSON codec, and pure baseline, update, and optional removal renderers.
+
+The first complete observation initializes `InstructionCheckpoint` before any pending prompt becomes model-visible. If an initial source is temporarily unavailable, execution stops while the prompt remains pending and retryable. Every later step attempt also prepares instructions before input promotion. Changed instructions publish one durable chronological System message through `session.instructions.updated`, and that event commit advances `Instructions.Applied` atomically.
 
 ```text
-Session                            Epoch
-   │                                 │
-   ├─ initialize complete baseline ──▶
-   │                                 │
-   │                                 ├─────────────────────────────────╮
-   │                                 │ reconcile chronological update  │
-   │                                 ◀─────────────────────────────────╯
-   │                                 │
-   ├─ completed compaction ──────────▶
-   │                                 ├─ render fresh baseline
-   │                                 │
-   ├─ clear after Location move ─────▶
+Client            Runner                 Explicit producers       InstructionCheckpoint      Inbox / History       LLM
+   │                 │                            │                          │                       │               │
+   ├─ Admit prompt ────────────────────────────────────────────────────────────────────────────────▶               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Load instructions ───────▶                          │                       │               │
+   │                 │                            │                          │                       │               │
+   │                 ◀─ Combined sources ─────────┤                          │                       │               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Initialize or reconcile ────────────────────────────▶                       │               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Publish update + advance Applied atomically ───────────────────────────────▶               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Promote eligible input ────────────────────────────────────────────────────▶               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ System text + instruction baseline + history + tools ──────────────────────────────────────▶
 ```
 
-Ambient project discovery canonicalizes and contains traversal within the project root and honors `OPENCODE_DISABLE_PROJECT_CONFIG`. An unavailable observation preserves the previously admitted value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation message.
+Agent and model selection are step-scoped. The runner selects the agent before loading agent-specific guidance; a switch admitted after the current boundary applies to the next step without restarting the current one. Changed guidance is admitted through `session.instructions.updated` while preserving the baseline. Model selection affects Model Context assembly but is not an instruction source and does not itself replace the instruction baseline.
 
-Current Context Epoch follow-ups:
+A completed compaction causes the next physical attempt to rebaseline from current instructions. Temporarily unavailable sources are restated from the model's last applied belief where possible. A Session move resets `InstructionCheckpoint` so the destination Location initializes a complete baseline on its next run. Committed revert also resets the checkpoint.
 
-- Add configured, remote, and nested instruction sources with explicit precedence and removal semantics.
+```text
+Session                      InstructionCheckpoint
+   │                                   │
+   ├─ initialize complete baseline ────▶
+   │                                   │
+   │                                   ├──────────────────────────────╮
+   │                                   │ reconcile instruction update │
+   │                                   ◀──────────────────────────────╯
+   │                                   │
+   ├─ completed compaction ────────────▶ rebaseline
+   │                                   │
+   ├─ move or committed revert ────────▶ reset
+```
+
+`InstructionDiscovery` observes ambient instructions as one ordered aggregate source. Ambient discovery canonicalizes traversal within the project root, reads global and upward-project `AGENTS.md` files, and honors `OPENCODE_DISABLE_PROJECT_CONFIG` for project files.
+
+An unavailable observation preserves the previously applied value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation message.
+
+Current instruction follow-ups:
+
+- Add configured and remote instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash continuation recovery for promoted or provider-dispatched work.
 - Add explicit manual compaction on top of automatic request-budget compaction.
 - Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
-- Consider watcher-backed per-file caching only if measurements show direct safe-boundary observation is too expensive.
-- Expose plugin-defined Context Sources only after plugin reload and scoped cleanup semantics are designed.
+- Consider watcher-backed per-file caching only if measurements show direct step-boundary observation is too expensive.
+- Design any plugin-defined instruction contribution as an explicit runner composition boundary; do not reintroduce a registry implicitly.
 - Add clustered Session execution ownership and stale-runtime fencing.
 
 ## Automatic Compaction
@@ -114,25 +124,25 @@ Before each step, the runner estimates the complete model-visible request and co
 
 Compaction keeps the full transcript durable while replacing its active model representation with one hidden checkpoint containing a structured rolling summary and token-bounded serialized recent context. Provider-native assistant, reasoning, and tool messages never survive across the boundary, avoiding signature and encrypted-reasoning failures when the earlier prefix changes.
 
-`session.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.compaction.ended.1` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next physical attempt, the runner observes that completed compaction and directly renders a fresh Context Epoch baseline. A failed or interrupted attempt therefore leaves the previous history boundary active.
+`session.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.compaction.ended.1` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next physical attempt, the runner observes that completed compaction and directly renders a fresh instruction baseline through `InstructionCheckpoint`. A failed or interrupted attempt therefore leaves the previous history boundary active.
 
 Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending step.
 
 When a provider rejects a request as context overflow before durable assistant output or tool execution, the runner attempts one overflow-triggered compaction even when the local estimate did not predict pressure. A completed checkpoint rebuilds the same logical step with one remaining physical attempt. A second overflow, unavailable compaction, or overflow after durable output becomes the ordinary terminal failure; recovery never loops or replays partial side effects. Deterministic old tool-result pruning remains a separate follow-up.
 
-## V1 Runtime Context Parity
+## V1 Model Context Parity
 
-This is the canonical checklist for model-visible runtime context still needed before the V2 runner replaces V1. Keep each behavior in its owning boundary rather than treating all model-visible text as a durable Context Source. Update this table in the PR that changes a status.
+This is the canonical checklist for Model Context still needed before the V2 runner replaces V1. Keep each behavior in its owning boundary rather than treating all model-visible text as durable Instructions. Update this table in the PR that changes a status.
 
 Status: `complete` is usable in the native V2 path, `partial` covers only part of V1 behavior, and `missing` has no native V2 equivalent.
 
 | Boundary                   | Behavior                                                                 | Status   | Remaining V2 work                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Durable Context Source     | Environment facts and host-local date                                    | partial  | Add selected provider/model identity without making model selection a stale Location-wide value.                                       |
-| Durable Context Source     | Global and upward project instructions                                   | partial  | Decide whether V2 also discovers legacy `CLAUDE.md` and deprecated `CONTEXT.md`.                                                       |
-| Durable Context Source     | Configured local/glob and remote URL instructions                        | missing  | Add independent sources with explicit precedence, unavailable, and removal semantics.                                                  |
-| Durable Context Source     | Nearby nested instructions discovered after successful reads             | missing  | Persist discoveries and admit them at the next safe step boundary.                                                                     |
-| Durable Context Source     | Selected-agent available skill guidance and skill-body loading           | partial  | Guidance and body exposure are permission-filtered; remove globally denied skill definitions during request-time tool materialization. |
+| Durable Instruction Source | Environment facts and host-local date                                    | partial  | Keep selected provider/model identity in step request assembly rather than a stale Location-wide instruction value.                    |
+| Durable Instruction Source | Global and upward project instructions                                   | partial  | Decide whether V2 also discovers legacy `CLAUDE.md` and deprecated `CONTEXT.md`.                                                       |
+| Durable Instruction Source | Configured local/glob and remote URL instructions                        | missing  | Add independent sources with explicit precedence, unavailable, and removal semantics.                                                  |
+| Durable Instruction Source | Nearby nested instructions discovered after successful reads             | missing  | Persist discoveries and admit them at the next safe step boundary.                                                                     |
+| Durable Instruction Source | Selected-agent available skill guidance and skill-body loading           | partial  | Guidance and body exposure are permission-filtered; remove globally denied skill definitions during request-time tool materialization. |
 | Step request assembly      | Placement, selected model, chronological history, and canonical lowering | complete | None.                                                                                                                                  |
 | Step request assembly      | Selected agent, agent prompt, and effective permissions                  | partial  | V2 uses selected-agent permissions for skill guidance and tool authorization; still apply the agent system prompt and request policy.  |
 | Step request assembly      | Provider/model-specific base instructions                                | complete | Native V2 selects the provider-family baseline unless the effective agent overrides it.                                                |

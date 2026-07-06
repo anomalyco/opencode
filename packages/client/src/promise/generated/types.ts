@@ -1091,26 +1091,26 @@ export type SessionContextOutput = {
   >
 }["data"]
 
-export type SessionListContextEntriesInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionInstructionsEntryListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionListContextEntriesOutput = {
+export type SessionInstructionsEntryListOutput = {
   readonly data: ReadonlyArray<{ readonly key: string; readonly value: JsonValue }>
 }["data"]
 
-export type SessionPutContextEntryInput = {
+export type SessionInstructionsEntryPutInput = {
   readonly sessionID: { readonly sessionID: string; readonly key: string }["sessionID"]
   readonly key: { readonly sessionID: string; readonly key: string }["key"]
   readonly value: { readonly value: JsonValue }["value"]
 }
 
-export type SessionPutContextEntryOutput = void
+export type SessionInstructionsEntryPutOutput = void
 
-export type SessionRemoveContextEntryInput = {
+export type SessionInstructionsEntryRemoveInput = {
   readonly sessionID: { readonly sessionID: string; readonly key: string }["sessionID"]
   readonly key: { readonly sessionID: string; readonly key: string }["key"]
 }
 
-export type SessionRemoveContextEntryOutput = void
+export type SessionInstructionsEntryRemoveOutput = void
 
 export type SessionLogInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -1212,7 +1212,7 @@ export type SessionLogOutput =
           readonly id: string
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.context.updated"
+          readonly type: "session.instructions.updated"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: { readonly sessionID: string; readonly text: string }
@@ -4506,7 +4506,7 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.context.updated"
+      readonly type: "session.instructions.updated"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly sessionID: string; readonly text: string }

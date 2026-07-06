@@ -27,6 +27,57 @@ test("session.get returns the decoded Effect projection", async () => {
   expect(DateTime.toEpochMillis(result.time.created)).toBe(1_717_171_717_000)
 })
 
+test("session instructions methods use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string; body?: unknown }> = []
+  const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]
+  const httpClient = HttpClient.make((request) => {
+    requests.push({
+      method: request.method,
+      url: request.url,
+      body: request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined,
+    })
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        request.method === "GET" ? Response.json({ data: instructions }) : new Response(null, { status: 204 }),
+      ),
+    )
+  })
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const listed = yield* client.session.instructions.entry.list({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.instructions.entry.put({
+      sessionID: Session.ID.make("ses_test"),
+      key: "review-notes",
+      value: instructions[0].value,
+    })
+    yield* client.session.instructions.entry.remove({
+      sessionID: Session.ID.make("ses_test"),
+      key: "review-notes",
+    })
+    return listed
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result).toEqual(instructions)
+  expect(requests).toEqual([
+    {
+      method: "GET",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
+      body: undefined,
+    },
+    {
+      method: "PUT",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      body: { value: { text: "Check the diff", priority: 1 } },
+    },
+    {
+      method: "DELETE",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      body: undefined,
+    },
+  ])
+})
+
 test("event.subscribe exposes and decodes the native Effect event stream", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(

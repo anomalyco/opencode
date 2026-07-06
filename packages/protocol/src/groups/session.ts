@@ -2,7 +2,7 @@ import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionContextEntry } from "@opencode-ai/schema/session-context-entry"
+import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Event } from "@opencode-ai/schema/event"
@@ -444,23 +444,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
-      HttpApiEndpoint.get("session.context.entry.list", "/api/session/:sessionID/context-entry", {
+      HttpApiEndpoint.get("session.instructions.entry.list", "/api/session/:sessionID/instructions/entries", {
         params: { sessionID: Session.ID },
-        success: Schema.Struct({ data: Schema.Array(SessionContextEntry.Info) }),
+        success: Schema.Struct({ data: Schema.Array(InstructionEntry.Info) }),
         error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context.entry.list",
-            summary: "List context entries",
-            description: "List API-managed context entries attached to the session's system context.",
+            identifier: "v2.session.instructions.entry.list",
+            summary: "List instruction entries",
+            description: "List API-managed instruction entries attached to the session.",
           }),
         ),
     )
     .add(
-      HttpApiEndpoint.put("session.context.entry.put", "/api/session/:sessionID/context-entry/:key", {
-        params: { sessionID: Session.ID, key: SessionContextEntry.Key },
+      HttpApiEndpoint.put("session.instructions.entry.put", "/api/session/:sessionID/instructions/entries/:key", {
+        params: { sessionID: Session.ID, key: InstructionEntry.Key },
         payload: Schema.Struct({ value: Schema.Json }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
@@ -468,25 +468,26 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context.entry.put",
-            summary: "Put context entry",
+            identifier: "v2.session.instructions.entry.put",
+            summary: "Put instruction entry",
             description:
-              "Attach or replace one durable context entry. The value is rendered into the session's system context; changes announce as updates at the next turn boundary.",
+              "Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.",
           }),
         ),
     )
     .add(
-      HttpApiEndpoint.delete("session.context.entry.remove", "/api/session/:sessionID/context-entry/:key", {
-        params: { sessionID: Session.ID, key: SessionContextEntry.Key },
+      HttpApiEndpoint.delete("session.instructions.entry.remove", "/api/session/:sessionID/instructions/entries/:key", {
+        params: { sessionID: Session.ID, key: InstructionEntry.Key },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context.entry.remove",
-            summary: "Remove context entry",
-            description: "Remove one context entry; the removal is announced to the model at the next turn boundary.",
+            identifier: "v2.session.instructions.entry.remove",
+            summary: "Remove instruction entry",
+            description:
+              "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
           }),
         ),
     )

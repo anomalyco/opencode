@@ -1169,7 +1169,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
   }
 })
 
-test("projects live context updates with their message ID", async () => {
+test("projects live instruction updates with their message ID", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -1199,21 +1199,21 @@ test("projects live context updates with their message ID", async () => {
   try {
     await mounted
     emitEvent(events, {
-      id: "evt_context_1",
+      id: "evt_instructions_1",
       created: 0,
-      type: "session.context.updated",
+      type: "session.instructions.updated",
       durable: durable("session-1"),
       data: {
         sessionID: "session-1",
-        text: "Updated context",
+        text: "Updated instructions",
       },
     })
 
     await wait(() => sync.session.message.list("session-1")?.length === 1)
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_context_1")),
+      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_instructions_1")),
       type: "system",
-      text: "Updated context",
+      text: "Updated instructions",
       time: { created: 0 },
     })
   } finally {

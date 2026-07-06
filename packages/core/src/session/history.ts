@@ -4,7 +4,7 @@ import { Database } from "../database/database"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
-import { SessionContextCheckpointTable, SessionMessageTable } from "./sql"
+import { InstructionCheckpointTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -70,9 +70,9 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
   const [epoch, compaction] = yield* Effect.all(
     [
       db
-        .select({ baselineSeq: SessionContextCheckpointTable.baseline_seq })
-        .from(SessionContextCheckpointTable)
-        .where(eq(SessionContextCheckpointTable.session_id, sessionID))
+        .select({ baselineSeq: InstructionCheckpointTable.baseline_seq })
+        .from(InstructionCheckpointTable)
+        .where(eq(InstructionCheckpointTable.session_id, sessionID))
         .get()
         .pipe(Effect.orDie),
       latestCompaction(db, sessionID),

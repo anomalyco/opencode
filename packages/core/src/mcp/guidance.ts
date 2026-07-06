@@ -7,7 +7,7 @@ import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { McpTool } from "../tool/mcp"
 import { MCP } from "./index"
-import { SystemContext } from "../system-context/index"
+import { Instructions } from "../instructions/index"
 
 const Summary = Schema.Struct({
   server: Schema.String,
@@ -31,7 +31,7 @@ const render = (servers: ReadonlyArray<Summary>) =>
   ["<mcp_instructions>", ...entries(servers), "</mcp_instructions>"].join("\n")
 
 const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
-  const diff = SystemContext.diffByKey(
+  const diff = Instructions.diffByKey(
     previous,
     current,
     (server) => server.server,
@@ -56,7 +56,7 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
 }
 
 export interface Interface {
-  readonly load: (agent: AgentV2.Selection) => Effect.Effect<SystemContext.SystemContext>
+  readonly load: (agent: AgentV2.Selection) => Effect.Effect<Instructions.Instructions>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/McpGuidance") {}
@@ -69,9 +69,9 @@ export const layer = Layer.effect(
     return Service.of({
       load: Effect.fn("McpGuidance.load")(function* (selection) {
         const agent = selection.info
-        if (!agent) return SystemContext.empty
+        if (!agent) return Instructions.empty
         if (Flag.CODEMODE_ENABLED && PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny")
-          return SystemContext.empty
+          return Instructions.empty
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
@@ -88,9 +88,9 @@ export const layer = Layer.effect(
             )
           })
           .map((item) => ({ server: item.server, instructions: item.instructions }))
-        if (visible.length === 0) return SystemContext.empty
-        return SystemContext.make({
-          key: SystemContext.Key.make("core/mcp-guidance"),
+        if (visible.length === 0) return Instructions.empty
+        return Instructions.make({
+          key: Instructions.Key.make("core/mcp-guidance"),
           codec: Schema.toCodecJson(Schema.Array(Summary)),
           load: Effect.succeed(visible),
           baseline: render,

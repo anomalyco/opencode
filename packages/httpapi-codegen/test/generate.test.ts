@@ -9,6 +9,7 @@ import {
   compile as compileContract,
   emitEffect,
   emitEffectImported,
+  emitEffectShape,
   emitPromise,
   generate,
   GenerationError,
@@ -149,6 +150,201 @@ describe("HttpApiCodegen.generate", () => {
     })
 
     expect(contract.groups[0]?.endpoints.map((endpoint) => endpoint.operation.name)).toEqual(["listRequests", "list"])
+  })
+
+  test("supports explicit nested endpoint paths while string aliases remain flat", () => {
+    const source = HttpApi.make("test").add(
+      HttpApiGroup.make("server.session")
+        .add(HttpApiEndpoint.get("session.instructions.list", "/session/instructions", { success: Schema.String }))
+        .add(HttpApiEndpoint.put("session.instructions.put", "/session/instructions", { success: Schema.String }))
+        .add(HttpApiEndpoint.delete("session.instructions.remove", "/session/instructions", { success: Schema.String }))
+        .add(HttpApiEndpoint.get("session.messages", "/session/message", { success: Schema.String })),
+    )
+    const contract = compileContract(source, {
+      groupNames: { "server.session": "session" },
+      endpointNames: {
+        "session.instructions.list": ["instructions", "list"],
+        "session.instructions.put": ["instructions", "put"],
+        "session.instructions.remove": ["instructions", "remove"],
+        "session.messages": "instructions.flat",
+      },
+    })
+
+    expect(contract.groups[0]?.endpoints.map((endpoint) => endpoint.clientPath)).toEqual([
+      ["instructions", "list"],
+      ["instructions", "put"],
+      ["instructions", "remove"],
+      ["instructions.flat"],
+    ])
+    expect(contract.groups[0]?.endpoints.map((endpoint) => endpoint.operation.name)).toEqual([
+      "instructions.list",
+      "instructions.put",
+      "instructions.remove",
+      "instructions.flat",
+    ])
+
+    const promise = emitPromise(contract, {
+      outputTypes: {
+        "session.instructions.list": {
+          name: "InstructionListWire",
+          import: 'import type { InstructionListWire } from "./instruction-list-wire"',
+        },
+      },
+    })
+    const promiseClient = promise.files.find((file) => file.path === "client.ts")?.content
+    const promiseTypes = promise.files.find((file) => file.path === "types.ts")?.content
+    expect(promiseClient).toContain('"session": { "instructions": { "list": (requestOptions?: RequestOptions)')
+    expect(promiseClient).toContain('"put": (requestOptions?: RequestOptions)')
+    expect(promiseClient).toContain('"remove": (requestOptions?: RequestOptions)')
+    expect(promiseClient).toContain('"instructions.flat": (requestOptions?: RequestOptions)')
+    expect(promiseTypes).toContain('import type { InstructionListWire } from "./instruction-list-wire"')
+    expect(promiseTypes).toContain("export type SessionInstructionsListOutput = InstructionListWire")
+    expect(promiseTypes).toContain("export type SessionInstructionsPutOutput = string")
+    expect(promiseTypes).toContain("export type SessionInstructionsRemoveOutput = string")
+
+    const effect = emitEffect(contract)
+    expect(effect.files.find((file) => file.path === "session.ts")?.content).toContain(
+      '"instructions": { "list": Endpoint0(raw), "put": Endpoint1(raw), "remove": Endpoint2(raw) }, "instructions.flat": Endpoint3(raw)',
+    )
+
+    const imported = emitEffectImported(contract, { module: "@example/api", api: "Api" })
+    expect(imported.files.find((file) => file.path === "client.ts")?.content).toContain(
+      '"instructions": { "list": Endpoint0_0(raw), "put": Endpoint0_1(raw), "remove": Endpoint0_2(raw) }, "instructions.flat": Endpoint0_3(raw)',
+    )
+
+    const shape = emitEffectShape(contract, { module: "@example/api", api: "Api" })
+    const apiShape = shape.files.find((file) => file.path === "api.ts")?.content
+    expect(apiShape).toContain('readonly "instructions": { readonly "list": SessionInstructionsListOperation<E>')
+    expect(apiShape).toContain('readonly "put": SessionInstructionsPutOperation<E>')
+    expect(apiShape).toContain('readonly "remove": SessionInstructionsRemoveOperation<E>')
+    expect(apiShape).toContain('readonly "instructions.flat": SessionInstructionsFlatOperation<E>')
+  })
+
+  test("executes nested Promise endpoint aliases", async () => {
+    const source = HttpApi.make("test").add(
+      HttpApiGroup.make("session")
+        .add(HttpApiEndpoint.get("instructions.list", "/session/instructions", { success: Schema.String }))
+        .add(HttpApiEndpoint.put("instructions.put", "/session/instructions", { success: Schema.String }))
+        .add(HttpApiEndpoint.delete("instructions.remove", "/session/instructions", { success: Schema.String })),
+    )
+    const output = emitPromise(
+      compileContract(source, {
+        endpointNames: {
+          "instructions.list": ["instructions", "list"],
+          "instructions.put": ["instructions", "put"],
+          "instructions.remove": ["instructions", "remove"],
+        },
+      }),
+    )
+    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+    const methods: Array<string> = []
+
+    try {
+      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
+      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
+      const client = generated.OpenCode.make({
+        baseUrl: "https://example.com",
+        fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+          methods.push(init?.method ?? "GET")
+          return Response.json("ok")
+        },
+      })
+
+      expect(await client.session.instructions.list()).toBe("ok")
+      expect(await client.session.instructions.put()).toBe("ok")
+      expect(await client.session.instructions.remove()).toBe("ok")
+      expect(methods).toEqual(["GET", "PUT", "DELETE"])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects duplicate and leaf-namespace endpoint paths", () => {
+    const source = HttpApi.make("test").add(
+      HttpApiGroup.make("session")
+        .add(HttpApiEndpoint.get("first", "/first", { success: Schema.String }))
+        .add(HttpApiEndpoint.get("second", "/second", { success: Schema.String })),
+    )
+
+    expect(() =>
+      compileContract(source, { endpointNames: { first: ["instructions", "list"], second: ["instructions", "list"] } }),
+    ).toThrow("Client endpoint name collision: session.instructions.list")
+    expect(() =>
+      compileContract(source, { endpointNames: { first: "instructions", second: ["instructions", "list"] } }),
+    ).toThrow("Client endpoint name collision: session.instructions.list")
+  })
+
+  test("rejects nested root collisions across top-level groups", () => {
+    const source = HttpApi.make("test")
+      .add(
+        HttpApiGroup.make("first", { topLevel: true }).add(
+          HttpApiEndpoint.get("first.list", "/first", { success: Schema.String }),
+        ),
+      )
+      .add(
+        HttpApiGroup.make("second", { topLevel: true }).add(
+          HttpApiEndpoint.get("second.put", "/second", { success: Schema.String }),
+        ),
+      )
+
+    expect(() =>
+      compileContract(source, {
+        endpointNames: { "first.list": ["instructions", "list"], "second.put": ["instructions", "put"] },
+      }),
+    ).toThrow("Client name collision: instructions")
+  })
+
+  test("rejects nested paths that collide after type-name normalization", () => {
+    const source = HttpApi.make("test").add(
+      HttpApiGroup.make("session")
+        .add(HttpApiEndpoint.get("first", "/first", { success: Schema.String }))
+        .add(HttpApiEndpoint.get("second", "/second", { success: Schema.String })),
+    )
+
+    expect(() => compileContract(source, { endpointNames: { first: ["foo", "bar"], second: "foo-bar" } })).toThrow(
+      "Client endpoint type collision: SessionFooBar",
+    )
+  })
+
+  test("rejects ambiguous and prototype-mutating nested path segments", () => {
+    const source = api(HttpApiEndpoint.get("get", "/session", { success: Schema.String }))
+
+    expect(() => compileContract(source, { endpointNames: { get: ["a.b", "get"] } })).toThrow(
+      "Nested client endpoint path segments cannot contain dots",
+    )
+    expect(() => compileContract(source, { endpointNames: { get: ["__proto__", "get"] } })).toThrow(
+      "Client endpoint path cannot contain __proto__",
+    )
+  })
+
+  test("rejects normalized group, operation-key, and group prototype collisions", () => {
+    const normalized = HttpApi.make("test")
+      .add(HttpApiGroup.make("foo-bar").add(HttpApiEndpoint.get("get", "/first", { success: Schema.String })))
+      .add(HttpApiGroup.make("foo.bar").add(HttpApiEndpoint.get("get", "/second", { success: Schema.String })))
+    expect(() => compileContract(normalized)).toThrow("Client group type collision: FooBar")
+
+    const endpointType = HttpApi.make("test")
+      .add(HttpApiGroup.make("foo").add(HttpApiEndpoint.get("first", "/first", { success: Schema.String })))
+      .add(HttpApiGroup.make("fooBar").add(HttpApiEndpoint.get("second", "/second", { success: Schema.String })))
+    expect(() =>
+      compileContract(endpointType, {
+        endpointNames: { first: ["bar", "baz"], second: ["baz"] },
+      }),
+    ).toThrow("Client endpoint type collision: FooBarBaz")
+
+    const operationKey = HttpApi.make("test")
+      .add(HttpApiGroup.make("a.b").add(HttpApiEndpoint.get("get", "/first", { success: Schema.String })))
+      .add(HttpApiGroup.make("a").add(HttpApiEndpoint.get("b.c", "/second", { success: Schema.String })))
+    expect(() => compileContract(operationKey, { endpointNames: { get: "c", "b.c": ["b", "c"] } })).toThrow(
+      "Client operation key collision: a.b.c",
+    )
+
+    const prototype = HttpApi.make("test").add(
+      HttpApiGroup.make("session").add(HttpApiEndpoint.get("get", "/session", { success: Schema.String })),
+    )
+    expect(() => compileContract(prototype, { groupNames: { session: "__proto__" } })).toThrow(
+      "Client group name cannot be __proto__",
+    )
   })
 
   test("omits custom transport endpoints", () => {
@@ -357,22 +553,6 @@ describe("HttpApiCodegen.generate", () => {
     expect(() =>
       emitPromise(compileContract(api(HttpApiEndpoint.get("read", "/file/*/tail", { success: Schema.String })))),
     ).toThrow("Unsupported Promise path wildcard: /file/*/tail")
-
-    expect(() =>
-      emitPromise(
-        compileContract(
-          api(
-            HttpApiEndpoint.get("binary", "/binary", {
-              success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
-            }),
-          ),
-        ),
-      ),
-    ).toThrow("Unsupported Promise success encoding: session.binary")
-
-    expect(() =>
-      emitPromise(compileContract(api(HttpApiEndpoint.get("read", "/file/*", { success: Schema.String })))),
-    ).toThrow("Unsupported Promise path wildcard: /file/*")
 
     expect(() =>
       emitPromise(

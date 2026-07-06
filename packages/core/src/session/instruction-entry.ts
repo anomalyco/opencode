@@ -1,17 +1,17 @@
-export * as SessionContextEntry from "./context-entry"
+export * as InstructionEntry from "./instruction-entry"
 
 import { and, asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SessionContextEntry } from "@opencode-ai/schema/session-context-entry"
+import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
-import { SystemContext } from "../system-context/index"
+import { Instructions } from "../instructions/index"
 import { SessionSchema } from "./schema"
-import { SessionContextEntryTable } from "./sql"
+import { InstructionEntryTable } from "./sql"
 
-export const Key = SessionContextEntry.Key
+export const Key = InstructionEntry.Key
 export type Key = typeof Key.Type
-export const Info = SessionContextEntry.Info
+export const Info = InstructionEntry.Info
 export type Info = typeof Info.Type
 
 export interface Interface {
@@ -22,11 +22,11 @@ export interface Interface {
     readonly value: Schema.Json
   }) => Effect.Effect<void>
   readonly remove: (input: { readonly sessionID: SessionSchema.ID; readonly key: Key }) => Effect.Effect<void>
-  /** Produces one SystemContext source per stored entry, keyed `api/<key>`. */
-  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<SystemContext.SystemContext>
+  /** Produces one Instructions source per stored entry, keyed `api/<key>`. */
+  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionContextEntry") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionEntry") {}
 
 const renderValue = (value: Schema.Json) => (typeof value === "string" ? value : JSON.stringify(value, null, 2))
 
@@ -36,8 +36,8 @@ const renderBlock = (key: Key, value: Schema.Json) =>
 // Rendering stays mechanism-neutral: the model sees session context, not how
 // it was attached. Only chronological updates and removals carry narration.
 const source = (entry: Info) =>
-  SystemContext.make({
-    key: SystemContext.Key.make(`api/${entry.key}`),
+  Instructions.make({
+    key: Instructions.Key.make(`api/${entry.key}`),
     codec: Schema.toCodecJson(Schema.Json),
     load: Effect.succeed(entry.value),
     baseline: (value) => renderBlock(entry.key, value),
@@ -54,49 +54,47 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
 
-    const list = Effect.fn("SessionContextEntry.list")(function* (sessionID: SessionSchema.ID) {
+    const list = Effect.fn("InstructionEntry.list")(function* (sessionID: SessionSchema.ID) {
       const rows = yield* db
         .select()
-        .from(SessionContextEntryTable)
-        .where(eq(SessionContextEntryTable.session_id, sessionID))
-        .orderBy(asc(SessionContextEntryTable.key))
+        .from(InstructionEntryTable)
+        .where(eq(InstructionEntryTable.session_id, sessionID))
+        .orderBy(asc(InstructionEntryTable.key))
         .all()
         .pipe(Effect.orDie)
       return rows.map((row) => ({ key: row.key, value: row.value }))
     })
 
-    const put = Effect.fn("SessionContextEntry.put")(function* (input: {
+    const put = Effect.fn("InstructionEntry.put")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly key: Key
       readonly value: Schema.Json
     }) {
       yield* db
-        .insert(SessionContextEntryTable)
+        .insert(InstructionEntryTable)
         .values({ session_id: input.sessionID, key: input.key, value: input.value })
         .onConflictDoUpdate({
-          target: [SessionContextEntryTable.session_id, SessionContextEntryTable.key],
+          target: [InstructionEntryTable.session_id, InstructionEntryTable.key],
           set: { value: input.value, time_updated: Date.now() },
         })
         .run()
         .pipe(Effect.orDie)
     })
 
-    const remove = Effect.fn("SessionContextEntry.remove")(function* (input: {
+    const remove = Effect.fn("InstructionEntry.remove")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly key: Key
     }) {
       yield* db
-        .delete(SessionContextEntryTable)
-        .where(
-          and(eq(SessionContextEntryTable.session_id, input.sessionID), eq(SessionContextEntryTable.key, input.key)),
-        )
+        .delete(InstructionEntryTable)
+        .where(and(eq(InstructionEntryTable.session_id, input.sessionID), eq(InstructionEntryTable.key, input.key)))
         .run()
         .pipe(Effect.orDie)
     })
 
-    const load = Effect.fn("SessionContextEntry.load")(function* (sessionID: SessionSchema.ID) {
+    const load = Effect.fn("InstructionEntry.load")(function* (sessionID: SessionSchema.ID) {
       const entries = yield* list(sessionID)
-      return SystemContext.combine(entries.map(source))
+      return Instructions.combine(entries.map(source))
     })
 
     return Service.of({ list, put, remove, load })

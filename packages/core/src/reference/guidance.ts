@@ -3,7 +3,7 @@ export * as ReferenceGuidance from "./guidance"
 import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Reference } from "../reference"
-import { SystemContext } from "../system-context/index"
+import { Instructions } from "../instructions/index"
 
 const Summary = Schema.Struct({
   name: Schema.String,
@@ -29,7 +29,7 @@ const render = (references: ReadonlyArray<typeof Summary.Type>) =>
   ].join("\n")
 
 const update = (previous: ReadonlyArray<typeof Summary.Type>, current: ReadonlyArray<typeof Summary.Type>) => {
-  const diff = SystemContext.diffByKey(
+  const diff = Instructions.diffByKey(
     previous,
     current,
     (reference) => reference.name,
@@ -54,7 +54,7 @@ const update = (previous: ReadonlyArray<typeof Summary.Type>, current: ReadonlyA
 }
 
 export interface Interface {
-  readonly load: () => Effect.Effect<SystemContext.SystemContext>
+  readonly load: () => Effect.Effect<Instructions.Instructions>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ReferenceGuidance") {}
@@ -74,9 +74,9 @@ const layer = Layer.effect(
             description: reference.description,
           }))
           .toSorted((a, b) => a.name.localeCompare(b.name))
-        if (available.length === 0) return SystemContext.empty
-        return SystemContext.make({
-          key: SystemContext.Key.make("core/reference-guidance"),
+        if (available.length === 0) return Instructions.empty
+        return Instructions.make({
+          key: Instructions.Key.make("core/reference-guidance"),
           codec: Schema.toCodecJson(Schema.Array(Summary)),
           load: Effect.succeed(available),
           baseline: render,

@@ -1,4 +1,4 @@
-export * as InstructionContext from "./instruction-context"
+export * as InstructionDiscovery from "./instruction-discovery"
 
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
@@ -7,22 +7,22 @@ import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
-import { SystemContext } from "./system-context/index"
+import { Instructions } from "./instructions/index"
 import { makeLocationNode } from "./effect/app-node"
 
-class File extends Schema.Class<File>("InstructionContext.File")({
+class File extends Schema.Class<File>("InstructionDiscovery.File")({
   path: AbsolutePath,
   content: Schema.String,
 }) {}
 
 const Files = Schema.Array(File)
-const key = SystemContext.Key.make("core/instructions")
+const key = Instructions.Key.make("core/instructions")
 
 export interface Interface {
-  readonly load: () => Effect.Effect<SystemContext.SystemContext>
+  readonly load: () => Effect.Effect<Instructions.Instructions>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionContext") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionDiscovery") {}
 
 const layer = Layer.effect(
   Service,
@@ -31,8 +31,8 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
 
-    const source = (value: ReadonlyArray<File> | SystemContext.Unavailable) =>
-      SystemContext.make({
+    const source = (value: ReadonlyArray<File> | Instructions.Unavailable) =>
+      Instructions.make({
         key,
         codec: Schema.toCodecJson(Files),
         load: Effect.succeed(value),
@@ -42,7 +42,7 @@ const layer = Layer.effect(
         removed: () => "Previously loaded instructions no longer apply.",
       })
 
-    const observe = Effect.fn("InstructionContext.observe")(function* () {
+    const observe = Effect.fn("InstructionDiscovery.observe")(function* () {
       const start = yield* fs.resolve(location.directory)
       const stop = yield* fs.resolve(location.project.directory)
       const fromProject = relative(stop, start)
@@ -74,7 +74,7 @@ const layer = Layer.effect(
         { concurrency: "unbounded" },
       )
       if (files.some((file, index) => file === undefined && discovered.has(paths[index])))
-        return SystemContext.unavailable
+        return Instructions.unavailable
       return files.filter((file): file is File => file !== undefined)
     })
 
@@ -82,14 +82,14 @@ const layer = Layer.effect(
       load: () =>
         observe().pipe(
           Effect.map((files) =>
-            files === SystemContext.unavailable
+            files === Instructions.unavailable
               ? source(files)
               : files.length === 0
-                ? SystemContext.empty
+                ? Instructions.empty
                 : source(files),
           ),
-          Effect.catch(() => Effect.succeed(source(SystemContext.unavailable))),
-          Effect.catchDefect(() => Effect.succeed(source(SystemContext.unavailable))),
+          Effect.catch(() => Effect.succeed(source(Instructions.unavailable))),
+          Effect.catchDefect(() => Effect.succeed(source(Instructions.unavailable))),
         ),
     })
   }),

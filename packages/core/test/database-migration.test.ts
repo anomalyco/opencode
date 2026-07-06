@@ -15,6 +15,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -73,11 +74,11 @@ describe("DatabaseMigration", () => {
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_input'`),
         ).toEqual({ name: "session_input" })
         expect(
-          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_context_epoch'`),
-        ).toEqual({ name: "session_context_epoch" })
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instruction_checkpoint'`),
+        ).toEqual({ name: "instruction_checkpoint" })
         expect(
           yield* db.get(
-            sql`SELECT name FROM pragma_table_info('session_context_epoch') WHERE name IN ('agent', 'replacement_seq', 'revision')`,
+            sql`SELECT name FROM pragma_table_info('instruction_checkpoint') WHERE name IN ('agent', 'replacement_seq', 'revision')`,
           ),
         ).toBeUndefined()
         expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })
@@ -127,6 +128,42 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT agent FROM session_context_epoch WHERE session_id = 'ses_existing'`)).toEqual({
           agent: "build",
         })
+      }),
+    )
+  })
+
+  test("renames instruction state without losing rows or durable updates", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(
+          sql`CREATE TABLE session_context_entry (session_id text NOT NULL, key text NOT NULL, value text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, PRIMARY KEY(session_id, key))`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE session_context_epoch (session_id text PRIMARY KEY, baseline text NOT NULL, snapshot text NOT NULL, baseline_seq integer NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE TABLE event (type text NOT NULL)`)
+        yield* db.run(sql`INSERT INTO session_context_entry VALUES ('ses_test', 'plan', '"ready"', 1, 2)`)
+        yield* db.run(sql`INSERT INTO session_context_epoch VALUES ('ses_test', 'baseline', '{}', 7)`)
+        yield* db.run(sql`INSERT INTO event VALUES ('session.context.updated.1')`)
+
+        yield* DatabaseMigration.applyOnly(db, [renameInstructionsMigration])
+
+        expect(yield* db.get(sql`SELECT * FROM instruction_entry`)).toEqual({
+          session_id: "ses_test",
+          key: "plan",
+          value: '"ready"',
+          time_created: 1,
+          time_updated: 2,
+        })
+        expect(yield* db.get(sql`SELECT * FROM instruction_checkpoint`)).toEqual({
+          session_id: "ses_test",
+          baseline: "baseline",
+          snapshot: "{}",
+          baseline_seq: 7,
+        })
+        expect(yield* db.get(sql`SELECT type FROM event`)).toEqual({ type: "session.instructions.updated.1" })
       }),
     )
   })
@@ -264,10 +301,12 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('projected', 'session', 'user', 9, 1, 1, '{}')`,
         )
         yield* db.run(
-          sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 9)`,
+          sql`INSERT INTO instruction_checkpoint (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 9)`,
         )
+        yield* db.run(sql`ALTER TABLE instruction_checkpoint RENAME TO session_context_epoch`)
         yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
+        yield* db.run(sql`ALTER TABLE session_context_epoch RENAME TO instruction_checkpoint`)
 
         const database = Layer.succeed(Database.Service, { db })
         yield* EventV2.Service.use((service) =>
@@ -299,7 +338,7 @@ describe("DatabaseMigration", () => {
               (SELECT COUNT(*) FROM workspace) AS workspaces,
               (SELECT COUNT(*) FROM session_input) AS sessionInputs,
               (SELECT COUNT(*) FROM session_message) AS sessionMessages,
-              (SELECT COUNT(*) FROM session_context_epoch) AS contextEpochs,
+              (SELECT COUNT(*) FROM instruction_checkpoint) AS instructionCheckpoints,
               (SELECT seq FROM event_sequence WHERE aggregate_id = 'session') AS seq,
               (SELECT type FROM event WHERE aggregate_id = 'session') AS eventType
           `),
@@ -311,7 +350,7 @@ describe("DatabaseMigration", () => {
           workspaces: 0,
           sessionInputs: 0,
           sessionMessages: 0,
-          contextEpochs: 0,
+          instructionCheckpoints: 0,
           seq: 0,
           eventType: "session.updated.1",
         })

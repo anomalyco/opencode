@@ -1,13 +1,13 @@
-export * as SystemContext from "./index"
+export * as Instructions from "./index"
 
 import { Effect, Option, Schema } from "effect"
 
 /**
- * Models privileged system context as independently refreshable typed sources.
+ * Models privileged instructions as independently refreshable typed sources.
  *
  * `Source<A>` describes how to observe, compare, and render one value. `make`
- * closes over `A`, producing an opaque `SystemContext` that composes uniformly
- * with contexts built from other value types.
+ * closes over `A`, producing opaque `Instructions` that compose uniformly with
+ * instructions built from other value types.
  *
  * The durable `Applied` record tracks what the model was last told, per source:
  * it is the model's current belief. Interpreters uphold one invariant —
@@ -16,21 +16,21 @@ import { Effect, Option, Schema } from "effect"
  * baseline text.
  *
  * Returning `unavailable` means observation failed temporarily. It differs from
- * removing a source from the context: the model's prior belief stands.
+ * removing a source from the instructions: the model's prior belief stands.
  * `reconcile` retains the applied value silently, and `rebaseline` restates the
  * belief by rendering the last-applied value instead of a live observation.
  *
  * @module
  */
 
-/** Stable namespaced identity for one independently refreshable context source. */
+/** Stable namespaced identity for one independently refreshable instruction source. */
 export const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/-]*$/)).pipe(
-  Schema.brand("SystemContext.Key"),
+  Schema.brand("Instructions.Key"),
 )
 export type Key = typeof Key.Type
 
 /** Indicates that a source could not be observed without treating it as removed. */
-export const unavailable = Symbol.for("@opencode/SystemContext.Unavailable")
+export const unavailable = Symbol.for("@opencode/Instructions.Unavailable")
 export type Unavailable = typeof unavailable
 
 /** Defines one typed source before its value type is hidden by `make`. */
@@ -43,11 +43,11 @@ export interface Source<A> {
   readonly removed?: (previous: A) => string
 }
 
-const ContextTypeId: unique symbol = Symbol.for("@opencode/SystemContext")
+const InstructionsTypeId: unique symbol = Symbol.for("@opencode/Instructions")
 
-/** Opaque carrier for composable system context sources. */
-export interface SystemContext {
-  readonly [ContextTypeId]: ReadonlyArray<PackedSource>
+/** Opaque carrier for composable instruction sources. */
+export interface Instructions {
+  readonly [InstructionsTypeId]: ReadonlyArray<PackedSource>
 }
 
 /** The value last applied to the model for one admitted source. */
@@ -76,19 +76,19 @@ export interface Updated {
 export type ReconcileResult = { readonly _tag: "Unchanged" } | Updated
 
 export class InitializationBlocked extends Schema.TaggedErrorClass<InitializationBlocked>()(
-  "SystemContext.InitializationBlocked",
+  "Instructions.InitializationBlocked",
   { keys: Schema.Array(Key) },
 ) {
   override get message() {
-    return `System context initialization blocked by unavailable sources: ${this.keys.join(", ")}`
+    return `Instruction initialization blocked by unavailable sources: ${this.keys.join(", ")}`
   }
 }
 
-export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError>()("SystemContext.DuplicateKeyError", {
+export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError>()("Instructions.DuplicateKeyError", {
   key: Key,
 }) {
   override get message() {
-    return `Duplicate system context key: ${this.key}`
+    return `Duplicate instruction key: ${this.key}`
   }
 }
 
@@ -112,16 +112,16 @@ interface Entry {
   readonly observed: Observed | Unavailable
 }
 
-/** The identity context. */
-export const empty = context([])
+/** The identity instruction set. */
+export const empty = instructions([])
 
-/** Closes a typed source into a context that composes with differently typed sources. */
-export function make<A>(source: Source<A>): SystemContext {
+/** Closes a typed source into instructions that compose with differently typed sources. */
+export function make<A>(source: Source<A>): Instructions {
   const decode = Schema.decodeUnknownOption(source.codec)
   const encode = Schema.encodeSync(source.codec)
   const equivalent = Schema.toEquivalence(source.codec)
   const baseline = (value: A) => requireText(source.key, "baseline", source.baseline(value))
-  return context([
+  return instructions([
     {
       key: source.key,
       recall: (stored) =>
@@ -179,23 +179,23 @@ export function diffByKey<A>(
   }
 }
 
-/** Combines contexts in order and rejects duplicate source keys immediately. */
-export function combine(values: ReadonlyArray<SystemContext>): SystemContext {
-  const sources = values.flatMap((value) => value[ContextTypeId])
+/** Combines instructions in order and rejects duplicate source keys immediately. */
+export function combine(values: ReadonlyArray<Instructions>): Instructions {
+  const sources = values.flatMap((value) => value[InstructionsTypeId])
   assertUniqueKeys(sources)
-  return context(sources)
+  return instructions(sources)
 }
 
-const observe = (value: SystemContext) =>
+const observe = (value: Instructions) =>
   Effect.forEach(
-    value[ContextTypeId],
+    value[InstructionsTypeId],
     (source) =>
       source.load.pipe(Effect.map((observed): Entry => ({ key: source.key, recall: source.recall, observed }))),
     { concurrency: "unbounded" },
   )
 
 /** Creates the first baseline. Blocks rather than admit a baseline missing an unobservable source. */
-export function initialize(value: SystemContext): Effect.Effect<Baseline, InitializationBlocked> {
+export function initialize(value: Instructions): Effect.Effect<Baseline, InitializationBlocked> {
   return observe(value).pipe(
     Effect.flatMap((entries) => {
       const blocked = entries.flatMap((entry) => (entry.observed === unavailable ? [entry.key] : []))
@@ -213,7 +213,7 @@ export function initialize(value: SystemContext): Effect.Effect<Baseline, Initia
 }
 
 /** Narrates drift between current source values and the model's beliefs. Never rewrites the baseline. */
-export function reconcile(value: SystemContext, previous: Applied): Effect.Effect<ReconcileResult> {
+export function reconcile(value: Instructions, previous: Applied): Effect.Effect<ReconcileResult> {
   return observe(value).pipe(
     Effect.map((entries): ReconcileResult => {
       const updates: string[] = []
@@ -253,7 +253,7 @@ export function reconcile(value: SystemContext, previous: Applied): Effect.Effec
 }
 
 /** Rebuilds the baseline, restating unobservable sources from the model's last-applied beliefs. */
-export function rebaseline(value: SystemContext, previous: Applied): Effect.Effect<Baseline> {
+export function rebaseline(value: Instructions, previous: Applied): Effect.Effect<Baseline> {
   return observe(value).pipe(
     Effect.map((entries): Baseline => {
       const parts: string[] = []
@@ -277,8 +277,8 @@ export function rebaseline(value: SystemContext, previous: Applied): Effect.Effe
   )
 }
 
-function context(sources: ReadonlyArray<PackedSource>): SystemContext {
-  return { [ContextTypeId]: sources }
+function instructions(sources: ReadonlyArray<PackedSource>): Instructions {
+  return { [InstructionsTypeId]: sources }
 }
 
 function render(parts: ReadonlyArray<string>) {
@@ -294,7 +294,7 @@ function isUnavailable(value: unknown): value is Unavailable {
 }
 
 function requireText(key: Key, kind: string, text: string) {
-  if (text.length === 0) throw new Error(`System context source ${key} rendered an empty ${kind}`)
+  if (text.length === 0) throw new Error(`Instruction source ${key} rendered an empty ${kind}`)
   return text
 }
 

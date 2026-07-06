@@ -145,7 +145,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.prompt.promoted": () => Effect.void,
       "session.prompt.admitted": () => Effect.void,
       "session.execution.settled": () => Effect.void,
-      "session.context.updated": (event) =>
+      "session.instructions.updated": (event) =>
         adapter.appendMessage(
           SessionMessage.System.make({
             id: SessionMessage.ID.fromEvent(event.id),
@@ -154,6 +154,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             time: { created: event.created },
           }),
         ),
+      "session.instructions.discovered": () => Effect.void,
       "session.synthetic": (event) => {
         return adapter.appendMessage(
           SessionMessage.Synthetic.make({

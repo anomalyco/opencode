@@ -21,7 +21,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { Shell } from "@opencode-ai/schema/shell"
 import {
-  SessionContextCheckpointTable,
+  InstructionCheckpointTable,
   SessionInputTable,
   SessionMessageTable,
   SessionTable,
@@ -80,7 +80,7 @@ describe("SessionProjector", () => {
         ])
         .run()
       yield* db
-        .insert(SessionContextCheckpointTable)
+        .insert(InstructionCheckpointTable)
         .values({ session_id: sessionID, baseline: "baseline", snapshot: {}, baseline_seq: 0 })
         .run()
       const events = yield* EventV2.Service
@@ -107,7 +107,7 @@ describe("SessionProjector", () => {
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
       ).toEqual([earlier])
       // A committed revert resets the context checkpoint so the next turn re-initializes.
-      expect(yield* db.select().from(SessionContextCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
+      expect(yield* db.select().from(InstructionCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
     }),
   )
 

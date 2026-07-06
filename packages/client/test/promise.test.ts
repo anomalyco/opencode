@@ -148,6 +148,51 @@ test("session.get returns the wire projection", async () => {
   expect(result.time.created).toBe(1_717_171_717_000)
 })
 
+test("session instructions methods use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string; body?: unknown }> = []
+  const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push({
+        method: request.method,
+        url: request.url,
+        body: request.method === "PUT" ? await request.json() : undefined,
+      })
+      if (request.method === "GET") return Response.json({ data: instructions })
+      return new Response(null, { status: 204 })
+    },
+  })
+
+  const result = await client.session.instructions.entry.list({ sessionID: "ses_test" })
+  await client.session.instructions.entry.put({
+    sessionID: "ses_test",
+    key: "review-notes",
+    value: instructions[0].value,
+  })
+  await client.session.instructions.entry.remove({ sessionID: "ses_test", key: "review-notes" })
+
+  expect(result).toEqual(instructions)
+  expect(requests).toEqual([
+    {
+      method: "GET",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
+      body: undefined,
+    },
+    {
+      method: "PUT",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      body: { value: { text: "Check the diff", priority: 1 } },
+    },
+    {
+      method: "DELETE",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      body: undefined,
+    },
+  ])
+})
+
 test("event.subscribe exposes the Promise event stream wire projection", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

@@ -6,10 +6,10 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
-import { InstructionContext } from "@opencode-ai/core/instruction-context"
+import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SystemContext } from "@opencode-ai/core/system-context"
+import { Instructions } from "@opencode-ai/core/instructions"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -21,13 +21,13 @@ const instructionLayer = (input: {
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
 }) =>
-  AppNodeBuilder.build(InstructionContext.node, [
+  AppNodeBuilder.build(InstructionDiscovery.node, [
     [Global.node, Global.layerWith({ config: input.config })],
     [Location.node, input.locationServiceLayer],
     ...(input.filesystemLayer ? [[FSUtil.node, input.filesystemLayer] as const] : []),
   ])
 
-describe("InstructionContext", () => {
+describe("InstructionDiscovery", () => {
   it.live("loads global and upward project AGENTS.md files as one aggregate context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -51,7 +51,7 @@ describe("InstructionContext", () => {
             await fs.writeFile(packageFile, "package")
           })
 
-          const load = InstructionContext.Service.pipe(
+          const load = InstructionDiscovery.Service.pipe(
             Effect.flatMap((service) => service.load()),
             Effect.provide(
               instructionLayer({
@@ -69,7 +69,7 @@ describe("InstructionContext", () => {
             ),
           )
 
-          const initialized = yield* SystemContext.initialize(yield* load)
+          const initialized = yield* Instructions.initialize(yield* load)
           expect(initialized.text).toBe(
             [
               `Instructions from: ${globalFile}\nglobal`,
@@ -80,13 +80,13 @@ describe("InstructionContext", () => {
           expect(initialized.text).not.toContain("outside")
 
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
-          expect(yield* SystemContext.reconcile(yield* load, initialized.applied)).toMatchObject({
+          expect(yield* Instructions.reconcile(yield* load, initialized.applied)).toMatchObject({
             _tag: "Updated",
             text: expect.stringContaining(`Instructions from: ${packageFile}\nchanged`),
           })
 
           yield* Effect.promise(() => fs.rm(packageFile))
-          const partial = yield* SystemContext.reconcile(yield* load, initialized.applied)
+          const partial = yield* Instructions.reconcile(yield* load, initialized.applied)
           expect(partial).toEqual({
             _tag: "Updated",
             text: [
@@ -98,7 +98,7 @@ describe("InstructionContext", () => {
           })
 
           yield* Effect.promise(() => Promise.all([fs.rm(globalFile), fs.rm(projectFile)]))
-          expect(yield* SystemContext.reconcile(yield* load, initialized.applied)).toEqual({
+          expect(yield* Instructions.reconcile(yield* load, initialized.applied)).toEqual({
             _tag: "Updated",
             text: "Previously loaded instructions no longer apply.",
             applied: {},
@@ -117,7 +117,7 @@ describe("InstructionContext", () => {
         Effect.gen(function* () {
           const file = path.join(tmp.path, "AGENTS.md")
           yield* Effect.promise(() => fs.writeFile(file, ""))
-          const context = yield* InstructionContext.Service.pipe(
+          const context = yield* InstructionDiscovery.Service.pipe(
             Effect.flatMap((service) => service.load()),
             Effect.provide(
               instructionLayer({
@@ -130,7 +130,7 @@ describe("InstructionContext", () => {
             ),
           )
 
-          expect((yield* SystemContext.initialize(context)).text).toBe(`Instructions from: ${file}\n`)
+          expect((yield* Instructions.initialize(context)).text).toBe(`Instructions from: ${file}\n`)
         }),
       ),
     ),
@@ -146,7 +146,7 @@ describe("InstructionContext", () => {
           ),
         ),
       ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-      const context = yield* InstructionContext.Service.pipe(
+      const context = yield* InstructionDiscovery.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -161,7 +161,7 @@ describe("InstructionContext", () => {
       )
 
       expect(
-        yield* SystemContext.reconcile(context, {
+        yield* Instructions.reconcile(context, {
           "core/instructions": {
             value: [{ path: "/repo/AGENTS.md", content: "old" }],
             removed: "Previously loaded instructions no longer apply.",
@@ -186,7 +186,7 @@ describe("InstructionContext", () => {
           ),
         ),
       ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-      const context = yield* InstructionContext.Service.pipe(
+      const context = yield* InstructionDiscovery.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -201,7 +201,7 @@ describe("InstructionContext", () => {
       )
 
       expect(
-        yield* SystemContext.reconcile(context, {
+        yield* Instructions.reconcile(context, {
           "core/instructions": {
             value: [{ path: file, content: "old" }],
             removed: "Previously loaded instructions no longer apply.",
@@ -230,7 +230,7 @@ describe("InstructionContext", () => {
         ),
       ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
-      yield* InstructionContext.Service.pipe(
+      yield* InstructionDiscovery.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -260,7 +260,7 @@ describe("InstructionContext", () => {
       let scanned = false
       process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
 
-      yield* InstructionContext.Service.pipe(
+      yield* InstructionDiscovery.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
@@ -292,7 +292,7 @@ describe("InstructionContext", () => {
   it.effect("does not discover project instructions outside the canonical project root", () =>
     Effect.gen(function* () {
       let scanned = false
-      yield* InstructionContext.Service.pipe(
+      yield* InstructionDiscovery.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({

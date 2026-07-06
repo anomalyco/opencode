@@ -13,11 +13,11 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
-import { SessionContextCheckpoint } from "./context-checkpoint"
+import { InstructionCheckpoint } from "./instruction-checkpoint"
 import {
   MessageTable,
   PartTable,
-  SessionContextCheckpointTable,
+  InstructionCheckpointTable,
   SessionInputTable,
   SessionMessageTable,
   SessionTable,
@@ -220,13 +220,13 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
   // folding at the same baseline horizon.
   const checkpoint = yield* db
     .select()
-    .from(SessionContextCheckpointTable)
-    .where(eq(SessionContextCheckpointTable.session_id, event.data.parentID))
+    .from(InstructionCheckpointTable)
+    .where(eq(InstructionCheckpointTable.session_id, event.data.parentID))
     .get()
     .pipe(Effect.orDie)
   if (checkpoint) {
     yield* db
-      .insert(SessionContextCheckpointTable)
+      .insert(InstructionCheckpointTable)
       .values({ ...checkpoint, session_id: event.data.sessionID })
       .run()
       .pipe(Effect.orDie)
@@ -497,7 +497,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* SessionContextCheckpoint.reset(db, event.data.sessionID)
+        yield* InstructionCheckpoint.reset(db, event.data.sessionID)
       }),
     )
     yield* events.project(SessionV1.Event.Deleted, (event) =>
@@ -634,7 +634,7 @@ const layer = Layer.effectDiscard(
         })
       }),
     )
-    yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
+    yield* events.project(SessionEvent.InstructionsUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Skill.Activated, (event) =>
       insertMessage(db, event, {
@@ -718,7 +718,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* SessionContextCheckpoint.reset(db, event.data.sessionID)
+        yield* InstructionCheckpoint.reset(db, event.data.sessionID)
       }),
     )
   }),

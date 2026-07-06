@@ -1,37 +1,37 @@
-export * as SessionContextCheckpoint from "./context-checkpoint"
+export * as InstructionCheckpoint from "./instruction-checkpoint"
 
 import { eq } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
-import { SystemContext } from "../system-context/index"
+import { Instructions } from "../instructions/index"
 import { SessionEvent } from "./event"
 import { SessionHistory } from "./history"
 import { SessionSchema } from "./schema"
-import { SessionContextCheckpointTable } from "./sql"
+import { InstructionCheckpointTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-const decodeApplied = Schema.decodeUnknownOption(SystemContext.Applied)
+const decodeApplied = Schema.decodeUnknownOption(Instructions.Applied)
 
 /**
- * Loads or creates the session's durable context checkpoint, narrating any
+ * Loads or creates the session's durable instruction checkpoint, narrating any
  * drift since the model was last told as a chronological update. Completed
  * compaction rebaselines; nothing else rewrites the baseline. Runs before
  * input promotion so a blocked first step leaves pending inputs untouched.
  */
-export const prepare = Effect.fn("SessionContextCheckpoint.prepare")(function* (
+export const prepare = Effect.fn("InstructionCheckpoint.prepare")(function* (
   db: DatabaseService,
   events: EventV2.Interface,
-  context: Effect.Effect<SystemContext.SystemContext>,
+  instructions: Effect.Effect<Instructions.Instructions>,
   sessionID: SessionSchema.ID,
 ) {
   const [value, stored, compaction] = yield* Effect.all(
-    [context, find(db, sessionID), SessionHistory.latestCompaction(db, sessionID)],
+    [instructions, find(db, sessionID), SessionHistory.latestCompaction(db, sessionID)],
     { concurrency: "unbounded" },
   )
   if (!stored) {
-    const baseline = yield* SystemContext.initialize(value)
+    const baseline = yield* Instructions.initialize(value)
     const baselineSeq = yield* insert(db, sessionID, baseline)
     return { baseline: baseline.text, baselineSeq }
   }
@@ -40,28 +40,28 @@ export const prepare = Effect.fn("SessionContextCheckpoint.prepare")(function* (
   // treating every source as new, re-announcing baselines as updates.
   const applied = Option.getOrElse(decodeApplied(stored.snapshot), () => ({}))
   if (compaction !== undefined && compaction.seq > stored.baseline_seq) {
-    const baseline = yield* SystemContext.rebaseline(value, applied)
+    const baseline = yield* Instructions.rebaseline(value, applied)
     yield* rewrite(db, sessionID, compaction.seq, baseline)
     return { baseline: baseline.text, baselineSeq: compaction.seq }
   }
-  const result = yield* SystemContext.reconcile(value, applied)
+  const result = yield* Instructions.reconcile(value, applied)
   if (result._tag === "Unchanged") return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
 
   yield* events.publish(
-    SessionEvent.ContextUpdated,
+    SessionEvent.InstructionsUpdated,
     { sessionID, text: result.text },
     { commit: () => advance(db, sessionID, result.applied).pipe(Effect.orDie) },
   )
   return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
 })
 
-export const reset = Effect.fn("SessionContextCheckpoint.reset")(function* (
+export const reset = Effect.fn("InstructionCheckpoint.reset")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
   yield* db
-    .delete(SessionContextCheckpointTable)
-    .where(eq(SessionContextCheckpointTable.session_id, sessionID))
+    .delete(InstructionCheckpointTable)
+    .where(eq(InstructionCheckpointTable.session_id, sessionID))
     .run()
     .pipe(Effect.orDie)
 })
@@ -69,8 +69,8 @@ export const reset = Effect.fn("SessionContextCheckpoint.reset")(function* (
 const find = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db
     .select()
-    .from(SessionContextCheckpointTable)
-    .where(eq(SessionContextCheckpointTable.session_id, sessionID))
+    .from(InstructionCheckpointTable)
+    .where(eq(InstructionCheckpointTable.session_id, sessionID))
     .get()
     .pipe(Effect.orDie)
 })
@@ -78,11 +78,11 @@ const find = Effect.fnUntraced(function* (db: DatabaseService, sessionID: Sessio
 const insert = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  baseline: SystemContext.Baseline,
+  baseline: Instructions.Baseline,
 ) {
   const baselineSeq = yield* EventV2.latestSequence(db, sessionID)
   yield* db
-    .insert(SessionContextCheckpointTable)
+    .insert(InstructionCheckpointTable)
     .values({
       session_id: sessionID,
       baseline: baseline.text,
@@ -98,33 +98,33 @@ const rewrite = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   baselineSeq: number,
-  baseline: SystemContext.Baseline,
+  baseline: Instructions.Baseline,
 ) {
   const updated = yield* db
-    .update(SessionContextCheckpointTable)
+    .update(InstructionCheckpointTable)
     .set({
       baseline: baseline.text,
       snapshot: baseline.applied,
       baseline_seq: baselineSeq,
     })
-    .where(eq(SessionContextCheckpointTable.session_id, sessionID))
-    .returning({ sessionID: SessionContextCheckpointTable.session_id })
+    .where(eq(InstructionCheckpointTable.session_id, sessionID))
+    .returning({ sessionID: InstructionCheckpointTable.session_id })
     .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die(new Error("Context checkpoint not found"))
+  if (!updated) return yield* Effect.die(new Error("Instruction checkpoint not found"))
 })
 
 const advance = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  applied: SystemContext.Applied,
+  applied: Instructions.Applied,
 ) {
   const updated = yield* db
-    .update(SessionContextCheckpointTable)
+    .update(InstructionCheckpointTable)
     .set({ snapshot: applied })
-    .where(eq(SessionContextCheckpointTable.session_id, sessionID))
-    .returning({ sessionID: SessionContextCheckpointTable.session_id })
+    .where(eq(InstructionCheckpointTable.session_id, sessionID))
+    .returning({ sessionID: InstructionCheckpointTable.session_id })
     .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die(new Error("Context checkpoint not found"))
+  if (!updated) return yield* Effect.die(new Error("Instruction checkpoint not found"))
 })

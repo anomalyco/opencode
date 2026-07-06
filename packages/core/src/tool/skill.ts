@@ -23,11 +23,11 @@ export const Output = Schema.Struct({
 })
 
 export const description = [
-  "Load a specialized skill when the task at hand matches one of the available skills in the system context.",
+  "Load a specialized skill when the task at hand matches one of the available skills in the instructions.",
   "",
   "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
   "",
-  "The skill name must match one of the available skills in the system context.",
+  "The skill name must match one of the available skills in the instructions.",
 ].join("\n")
 
 export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>) => {

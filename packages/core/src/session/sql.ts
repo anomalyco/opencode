@@ -11,8 +11,7 @@ import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
-import type { SystemContext } from "../system-context/index"
-import { AgentV2 } from "../agent"
+import type { Instructions } from "../instructions/index"
 import type { Revert } from "@opencode-ai/schema/revert"
 import type { Schema } from "effect"
 
@@ -166,8 +165,8 @@ export const SessionInputTable = sqliteTable(
   ],
 )
 
-export const SessionContextEntryTable = sqliteTable(
-  "session_context_entry",
+export const InstructionEntryTable = sqliteTable(
+  "instruction_entry",
   {
     session_id: text()
       .$type<SessionSchema.ID>()
@@ -180,12 +179,12 @@ export const SessionContextEntryTable = sqliteTable(
   (table) => [primaryKey({ columns: [table.session_id, table.key] })],
 )
 
-export const SessionContextCheckpointTable = sqliteTable("session_context_epoch", {
+export const InstructionCheckpointTable = sqliteTable("instruction_checkpoint", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),
   baseline: text().notNull(),
-  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Applied>(),
+  snapshot: text({ mode: "json" }).notNull().$type<Instructions.Applied>(),
   baseline_seq: integer().notNull(),
 })
