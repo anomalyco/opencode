@@ -7,7 +7,7 @@ import type { EventHooks } from "./event.js"
 import type { IntegrationHooks } from "./integration.js"
 import type { PluginDomain } from "./plugin.js"
 import type { ReferenceHooks } from "./reference.js"
-import type { SessionHooks } from "./runtime.js"
+import type { SessionHooks } from "./session.js"
 import type { SkillHooks } from "./skill.js"
 
 export interface PluginContext {

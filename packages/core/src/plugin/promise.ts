@@ -110,6 +110,10 @@ export function fromPromise(plugin: Plugin) {
             prompt: (input) => run(host.session.prompt(input)),
             command: (input) => run(host.session.command(input)),
             interrupt: (input) => run(host.session.interrupt(input)),
+            request: {
+              before: (callback) =>
+                register(host.session.request.before((event) => Effect.promise(() => Promise.resolve(callback(event))))),
+            },
           },
         }
 

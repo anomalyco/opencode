@@ -50,6 +50,7 @@ import { llmClient } from "../../effect/app-node-platform"
 import { StepFailedError, UserInterruptedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
+import { SessionRequestHooks } from "../request-hooks"
 
 type StepTokens = {
   readonly input: number
@@ -132,6 +133,7 @@ const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const agents = yield* AgentV2.Service
     const tools = yield* ToolRegistry.Service
+    const requestHooks = yield* SessionRequestHooks.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
@@ -252,10 +254,40 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
+      const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
+      const requestEvent: SessionRequestHooks.BeforeEvent = {
+        sessionID: session.id,
+        agent: agent.id,
+        model: resolved.ref,
+        system: [...request.system],
+        messages: [...request.messages],
+        tools: Object.fromEntries(
+          request.tools.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
+        ),
+      }
+      // Model policy shapes the initial draft; plugins may override it, but cannot
+      // advertise tools excluded earlier by permissions or registration state.
+      const usePatch = model.provider.toLowerCase() === "openai" || model.id.toLowerCase().includes("gpt")
+      if (usePatch) {
+        delete requestEvent.tools.edit
+        delete requestEvent.tools.write
+      }
+      if (!usePatch) delete requestEvent.tools.patch
+      yield* requestHooks.runBefore(requestEvent)
+      const hookedRequest = LLM.updateRequest(request, {
+        system: requestEvent.system,
+        messages: requestEvent.messages,
+        tools: Object.entries(requestEvent.tools).flatMap(([name, tool]) => {
+          const registered = availableTools.get(name)
+          if (!registered) return []
+          return [{ ...registered, description: tool.description, inputSchema: tool.input }]
+        }),
+      })
+      const advertisedTools = new Set(hookedRequest.tools.map((tool) => tool.name))
       // Automatic compaction completed; rebuild the request from compacted history.
       if (
         !(yield* SessionInput.pendingCompaction(db, session.id)) &&
-        (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request }))
+        (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request: hookedRequest }))
       )
         return { _tag: "RestartAfterCompaction", step: currentStep } as const
       const startSnapshot = yield* snapshots.capture()
@@ -276,7 +308,7 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = [], error?: SessionError.Error) =>
         serialized(publisher.publish(event, outputPaths, error))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(request).pipe(
+      const providerStream = llm.stream(hookedRequest).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
@@ -288,11 +320,11 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            if (!toolMaterialization) {
+            if (!toolMaterialization || !advertisedTools.has(event.name)) {
               yield* serialized(
                 publisher.failUnsettledTools({
                   type: "tool.execution",
-                  message: "Tools are disabled after the maximum agent steps",
+                  message: `Tool is not available for this request: ${event.name}`,
                 }),
               )
               return
@@ -625,6 +657,7 @@ export const node = makeLocationNode({
     llmClient,
     AgentV2.node,
     ToolRegistry.node,
+    SessionRequestHooks.node,
     SessionRunnerModel.node,
     SessionStore.node,
     Location.node,

@@ -11,7 +11,7 @@ export type { ReferenceDraft, ReferenceHooks } from "./reference.js"
 export type { SkillDraft, SkillHooks } from "./skill.js"
 export * as Tool from "./tool.js"
 export type { ToolDomain, ToolDraft, ToolExecuteBeforeEvent, ToolExecuteAfterEvent } from "./tool.js"
-export type { SessionHooks } from "./runtime.js"
+export type { SessionHooks, SessionRequestBeforeEvent } from "./session.js"
 
 export { Agent } from "@opencode-ai/schema/agent"
 export { Command } from "@opencode-ai/schema/command"

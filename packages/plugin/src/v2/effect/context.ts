@@ -9,7 +9,7 @@ import type { PluginDomain } from "./plugin.js"
 import type { ReferenceHooks } from "./reference.js"
 import type { SkillHooks } from "./skill.js"
 import type { ToolDomain } from "./tool.js"
-import type { SessionHooks } from "./runtime.js"
+import type { SessionHooks } from "./session.js"
 
 export interface PluginContext {
   readonly options: PluginOptions

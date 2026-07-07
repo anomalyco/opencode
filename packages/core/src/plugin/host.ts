@@ -22,6 +22,7 @@ import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
 import { ToolHooks } from "../tool/hooks"
 import { WorkspaceV2 } from "../workspace"
+import { SessionRequestHooks } from "../session/request-hooks"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
@@ -36,6 +37,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
   const toolHooks = yield* ToolHooks.Service
+  const requestHooks = yield* SessionRequestHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
     new Location.Info({
@@ -374,6 +376,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       prompt: runtime.session.prompt,
       command: runtime.session.command,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      request: {
+        before: requestHooks.before,
+      },
     },
   } satisfies PluginContext
 })
