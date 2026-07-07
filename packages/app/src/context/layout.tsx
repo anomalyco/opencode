@@ -504,6 +504,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
+    createEffect(() => {
+      if (!serverSync().ready) return
+      if (server.projects.list().length > 0) return
+      const serverProjects = serverSync().data.project
+      if (serverProjects.length === 0) return
+      batch(() => {
+        for (const p of serverProjects) {
+          if (p.worktree && p.id !== "global" && p.worktree !== "/") {
+            server.projects.open(p.worktree)
+            void serverSync().project.loadSessions(p.worktree)
+          }
+        }
+      })
+    })
+
     const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()

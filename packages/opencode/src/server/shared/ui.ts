@@ -4,9 +4,34 @@ import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerR
 import { createHash } from "node:crypto"
 import { ProxyUtil } from "../proxy-util"
 
+import path from "node:path"
+import fs from "node:fs"
+
 let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
 
-export const UI_UPSTREAM = new URL("https://app.opencode.ai")
+export const UI_UPSTREAM = new URL(process.env.UI_UPSTREAM || "https://app.opencode.ai")
+
+function getLocalWebUI(): Record<string, string> | null {
+  const distDir = path.resolve(import.meta.dirname, "../../../../app/dist")
+  if (!fs.existsSync(distDir)) return null
+  
+  const map: Record<string, string> = {}
+  function walk(dir: string) {
+    const list = fs.readdirSync(dir)
+    for (const file of list) {
+      const fullPath = path.join(dir, file)
+      const stat = fs.statSync(fullPath)
+      if (stat.isDirectory()) {
+        walk(fullPath)
+      } else {
+        const rel = path.relative(distDir, fullPath).replaceAll("\\", "/")
+        map[rel] = fullPath
+      }
+    }
+  }
+  walk(distDir)
+  return map
+}
 
 export const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src * data:`
@@ -45,7 +70,9 @@ export function embeddedUI(disableEmbeddedWebUi: boolean) {
   if (disableEmbeddedWebUi) return Promise.resolve(null)
   return (embeddedUIPromise ??=
     // @ts-expect-error - generated file at build time
-    import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null))
+    import("opencode-web-ui.gen.ts")
+      .then((module) => module.default as Record<string, string>)
+      .catch(() => getLocalWebUI()))
 }
 
 function notFound() {
@@ -81,12 +108,13 @@ export function serveUIEffect(
 ) {
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
-    const path = new URL(request.url, "http://localhost").pathname
+    const parsedUrl = new URL(request.url, "http://localhost")
+    const path = parsedUrl.pathname
 
     if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
 
     const response = yield* services.client.execute(
-      HttpClientRequest.make(request.method)(upstreamURL(path), {
+      HttpClientRequest.make(request.method)(upstreamURL(path + parsedUrl.search), {
         headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
         body: requestBody(request),
       }),
