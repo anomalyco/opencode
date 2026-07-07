@@ -1,6 +1,40 @@
 import { test, expect, describe, afterEach } from "bun:test"
+import { createConnection, createServer as createNetServer } from "net"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { parseRedirectUri } from "../../src/mcp/oauth-provider"
+
+async function getFreeLoopbackPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createNetServer()
+    probe.once("error", reject)
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address()
+      probe.close(() => {
+        if (typeof address === "object" && address) {
+          resolve(address.port)
+          return
+        }
+        reject(new Error("Could not allocate a loopback port"))
+      })
+    })
+  })
+}
+
+async function canConnect(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host, port })
+    const done = (ok: boolean) => {
+      socket.removeAllListeners()
+      socket.destroy()
+      resolve(ok)
+    }
+
+    socket.setTimeout(500)
+    socket.once("connect", () => done(true))
+    socket.once("error", () => done(false))
+    socket.once("timeout", () => done(false))
+  })
+}
 
 describe("parseRedirectUri", () => {
   test("returns defaults when no URI provided", () => {
@@ -67,6 +101,14 @@ describe("McpOAuthCallback.ensureRunning", () => {
       `${redirectUri}?state=test&error=access_denied&error_description=${encodeURIComponent("The user denied access")}`,
     )
 
-    expect(await response.text()).toContain('<div class="error">The user denied access</div>')
+    expect(await response.text()).toContain('<pre class="detail" id="oc-detail">The user denied access</pre>')
+  })
+
+  test("binds the callback server to IPv4 loopback", async () => {
+    const port = await getFreeLoopbackPort()
+    await McpOAuthCallback.ensureRunning(`http://127.0.0.1:${port}/custom/callback`)
+
+    expect(await canConnect("127.0.0.1", port)).toBe(true)
+    expect(await canConnect("::1", port)).toBe(false)
   })
 })

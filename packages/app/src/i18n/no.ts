@@ -309,6 +309,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Søk etter mapper",
   "dialog.directory.empty": "Ingen mapper funnet",
+  "dialog.directory.action.selectFile": "Velg fil",
+  "dialog.directory.action.selectFolder": "Velg mappe",
+  "dialog.directory.root": "Rot",
+  "dialog.directory.parent": "Overordnet",
+  "dialog.directory.readError": "Kan ikke lese denne mappen",
 
   "dialog.server.title": "Servere",
   "dialog.server.description": "Bytt hvilken OpenCode-server denne appen kobler til.",
@@ -659,9 +664,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-verktøydeler utvidet som standard i tidslinjen",
-  "settings.general.row.showSessionProgressBar.title": "Vis fremdriftslinje for sesjonen",
-  "settings.general.row.showSessionProgressBar.description":
-    "Vis den animerte fremdriftslinjen øverst i sesjonen når agenten jobber",
   "settings.general.row.wayland.title": "Bruk innebygd Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
   "settings.general.row.wayland.tooltip":

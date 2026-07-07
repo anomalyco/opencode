@@ -11,6 +11,7 @@ import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
 import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
+import { makeLocationNode } from "../effect/app-node"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -123,7 +124,7 @@ const registryLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Tools.Service,
   Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
@@ -133,7 +134,14 @@ function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
   return rule?.resource === "*" && rule.effect === "deny"
 }
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(ApplicationTools.layer),
-  Layer.provide(ToolOutputStore.defaultLayer),
-)
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [ApplicationTools.node, ToolOutputStore.node],
+})
+
+export const toolsNode = makeLocationNode({
+  service: Tools.Service,
+  layer,
+  deps: [ApplicationTools.node, ToolOutputStore.node],
+})
