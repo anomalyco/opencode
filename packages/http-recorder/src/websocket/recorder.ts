@@ -9,9 +9,8 @@ import { makeReplayState, resolveAutoMode } from "../replay/state.js"
 import { webSocketInteractions, type Interaction } from "../cassette/model.js"
 import type { WebSocketEvent, WebSocketInteraction } from "./model.js"
 
-export interface WebSocketRecorderOptions extends SocketRecorderOptions {
+interface WebSocketRecorderOptions extends SocketRecorderOptions {
   readonly compareClientMessagesAsJson?: boolean
-  readonly open?: { readonly url: string; readonly headers: Record<string, string> }
 }
 interface ActiveReplay {
   readonly interaction: WebSocketInteraction
@@ -216,20 +215,11 @@ const makeRecordingSocket = (
                       yield* Ref.set(state.accepting, false)
                       yield* Ref.set(active, undefined)
                       if (!Exit.isSuccess(exit) || !state.opened || !state.valid) return
-                      const open = options.open
-                        ? redactor.request({
-                            method: "GET",
-                            url: options.open.url,
-                            headers: options.open.headers,
-                            body: "",
-                          })
-                        : undefined
                       yield* cassette
                         .append(
                           name,
                           {
                             transport: "websocket",
-                            open: open ? { url: open.url, headers: open.headers } : undefined,
                             events: [...state.events],
                           },
                           options.metadata,
@@ -270,27 +260,14 @@ const makeReplaySocket = (
     const replay = yield* makeReplayState(cassette, name, webSocketInteractions)
     const active = yield* Ref.make<ActiveReplay | undefined>(undefined)
     const runLock = yield* Semaphore.make(1)
-    const expectedOpen = options.open
-      ? redactor.request({ method: "GET", url: options.open.url, headers: options.open.headers, body: "" })
-      : undefined
     return Socket.make({
       runRaw: (handler, runOptions) =>
         runLock
           .withPermitsIfAvailable(1)(
             Effect.gen(function* () {
               const claimed = yield* replay
-                .claim((interaction, index) =>
-                  Effect.sync(() => {
-                    if (!interaction) throw new Error("Missing recorded WebSocket interaction")
-                    if (!expectedOpen) return
-                    const incoming = { url: expectedOpen.url, headers: expectedOpen.headers }
-                    if (
-                      interaction.open &&
-                      JSON.stringify(canonicalizeJson(incoming)) === JSON.stringify(canonicalizeJson(interaction.open))
-                    )
-                      return
-                    throw new Error(`WebSocket open ${index + 1} does not match ${safeText(incoming)}`)
-                  }),
+                .claim((interaction) =>
+                  interaction ? Effect.void : Effect.die("Missing recorded WebSocket interaction"),
                 )
                 .pipe(Effect.orDie)
               const state = {

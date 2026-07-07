@@ -29,12 +29,6 @@ export const WebSocketInteractionSchema = Schema.Struct({
       }),
     }),
   ),
-  open: Schema.optional(
-    Schema.Struct({
-      url: Schema.String,
-      headers: Schema.Record(Schema.String, Schema.String),
-    }),
-  ),
   events: Schema.Array(WebSocketEventSchema),
 })
 

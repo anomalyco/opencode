@@ -12,8 +12,6 @@ export const HttpRecorder: {
     options?: Api.RecorderOptions,
   ) => Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient>
   readonly layerFetch: (name: string, options?: Api.RecorderOptions) => Layer.Layer<HttpClient.HttpClient>
-  /** @deprecated Use `layerFetch`. Retained for the V1 OpenCode test harness. */
-  readonly http: (name: string, options?: Api.RecorderOptions) => Layer.Layer<HttpClient.HttpClient>
   readonly layerSocket: (
     name: string,
     options?: Api.SocketRecorderOptions,
@@ -22,10 +20,10 @@ export const HttpRecorder: {
     name: string,
     options?: Api.SocketRecorderOptions,
   ) => Layer.Layer<Socket.WebSocketConstructor, never, Socket.WebSocketConstructor>
-} = { layer, layerFetch, http: layerFetch, layerSocket, layerWebSocketConstructor }
+} = { layer, layerFetch, layerSocket, layerWebSocketConstructor }
 
 export namespace HttpRecorder {
-  /** JSON-compatible cassette metadata value. */
+  /** Additional JSON metadata stored with a cassette. */
   export type JsonValue = Api.JsonValue
   /** Additional JSON metadata stored with a cassette. */
   export type CassetteMetadata = Api.CassetteMetadata

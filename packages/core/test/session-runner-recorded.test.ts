@@ -1,5 +1,4 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Database } from "@opencode-ai/core/database/database"
@@ -40,18 +39,17 @@ import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
+import { rmSync } from "node:fs"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 
-const cassette =
-  process.env.RECORD === "true"
-    ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
-        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-        mode: "record",
-      })
-    : HttpRecorder.layerFetch("session-runner/openai-chat-streams-text", {
-        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-      })
+const cassetteName = "session-runner/openai-chat-streams-text"
+const cassetteDirectory = path.resolve(import.meta.dir, "fixtures/recordings")
+if (process.env.RECORD === "true") {
+  if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
+  rmSync(path.join(cassetteDirectory, `${cassetteName}.json`), { force: true })
+}
+const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDirectory })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const permission = Layer.succeed(

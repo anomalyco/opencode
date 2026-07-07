@@ -320,7 +320,7 @@ recorded.effect("streams text", () =>
 )
 ```
 
-Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
+Replay is the default. `RECORD=true` records fresh cassettes locally and requires the listed env vars; unset `CI` before recording because CI always forces replay. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
 
 Pass `provider`, `protocol`, and optional `tags` to `recordedTests(...)` / `recorded.effect.with(...)` so cassettes carry searchable metadata. Use recorded-test filters to replay or record a narrow subset without rewriting a whole file:
 

@@ -28,4 +28,14 @@ export const pack = async () => {
   }
 }
 
+export const withPackedArchive = async <A>(use: (archive: string) => Promise<A>) => {
+  const archive = await pack()
+  try {
+    return await use(archive)
+  } finally {
+    const file = Bun.file(archive)
+    if (await file.exists()) await file.delete()
+  }
+}
+
 if (import.meta.main) await pack()
