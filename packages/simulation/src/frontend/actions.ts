@@ -113,7 +113,6 @@ export function actions(renderer: CliRenderer, options: { text?: string } = {}):
 
 export function state(harness: Harness) {
   return {
-    screen: harness.screen(),
     focused: {
       renderable: harness.renderer.currentFocusedRenderable?.num,
       editor: Boolean(harness.renderer.currentFocusedEditor),

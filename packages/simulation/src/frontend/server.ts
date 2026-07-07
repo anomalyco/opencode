@@ -11,10 +11,11 @@ function parseRequest(input: string | Buffer) {
   return SimulationProtocol.Frontend.decodeRequest(JSON.parse(typeof input === "string" ? input : input.toString()))
 }
 
-async function handle(harness: Harness, request: SimulationProtocol.Frontend.Request, headless: boolean) {
+async function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) {
   switch (request.method) {
+    case "ui.render":
+      return
     case "ui.state": {
-      if (headless) await harness.renderOnce()
       const result = SimulationActions.state(harness)
       SimulationTrace.add("ui.state", { elements: result.elements.length, actions: result.actions.length })
       return result
@@ -33,11 +34,11 @@ async function handle(harness: Harness, request: SimulationProtocol.Frontend.Req
 
 export function start(harness: Harness, endpoint: string, headless: boolean): Server {
   const url = new URL(endpoint)
-  const server = Bun.serve<{ readonly drive: true }>({
+  const server = Bun.serve<{ readonly drive: true; readonly headless: boolean }>({
     hostname: url.hostname,
     port: Number(url.port),
     fetch(request, server) {
-      if (server.upgrade(request, { data: { drive: true } })) return undefined
+      if (server.upgrade(request, { data: { drive: true, headless } })) return undefined
       return new Response("opencode drive ui websocket", { status: 426 })
     },
     websocket: {
@@ -51,7 +52,7 @@ export function start(harness: Harness, endpoint: string, headless: boolean): Se
         let request: SimulationProtocol.Frontend.Request | undefined
         try {
           request = parseRequest(message)
-          const result = await handle(harness, request, headless)
+          const result = await handle(harness, request)
           const next = SimulationProtocol.JsonRpc.success(request.id, result)
           if (next) socket.send(JSON.stringify(next))
         } catch (error) {
