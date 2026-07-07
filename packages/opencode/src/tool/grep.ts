@@ -73,6 +73,16 @@ export const GrepTool = Tool.define(
             line: item.line,
             text: item.text,
           }))
+          yield* ctx.ask({
+            permission: "grep",
+            patterns: Array.from(new Set(rows.map((item) => path.relative(ins.worktree, item.path)))),
+            always: ["*"],
+            metadata: {
+              pattern: params.pattern,
+              path: params.path,
+              include: params.include,
+            },
+          })
 
           const limit = 100
           const truncated = rows.length === limit

@@ -170,6 +170,47 @@ describe("tool.grep", () => {
     }),
   )
 
+  it.instance("checks grep permission rules against matched files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "src", "config.php")
+      yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(file, "any-string"))
+
+      const ruleset = Permission.fromConfig({
+        grep: {
+          "**": "allow",
+          "**/config.php": "deny",
+        },
+      })
+      const next: Tool.Context = {
+        ...ctx,
+        ask: (req) =>
+          Effect.sync(() => {
+            const denied = req.patterns.some(
+              (pattern) => Permission.evaluate(req.permission, pattern, ruleset).action === "deny",
+            )
+            if (denied) throw new PermissionV1.DeniedError({ ruleset })
+          }),
+      }
+
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const exit = yield* grep
+        .execute(
+          {
+            pattern: "any-string",
+            path: test.directory,
+            include: "config.php",
+          },
+          next,
+        )
+        .pipe(Effect.exit)
+
+      expect(exit._tag).toBe("Failure")
+    }),
+  )
+
   it.instance("does not ask for external_directory when alias path is allowed", () =>
     Effect.gen(function* () {
       if (process.platform === "win32") return
