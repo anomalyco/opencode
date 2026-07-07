@@ -205,9 +205,17 @@ export function Session() {
   })
   onCleanup(() => setEpilogue())
   const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
+    const parentID = session()?.id
+    if (!parentID) return []
     return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .filter((x) => x.parentID === parentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+  const siblings = createMemo(() => {
+    const parentID = session()?.parentID
+    if (!parentID) return []
+    return sync.data.session
+      .filter((x) => x.parentID === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
@@ -432,15 +440,14 @@ export function Session() {
   }
 
   function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
+    const next = children()[0]
     if (next) enterChild(next.id)
   }
 
   function moveChild(direction: number) {
-    if (children().length === 1) return
+    const sessions = siblings()
+    if (sessions.length === 0) return
 
-    const sessions = children().filter((x) => !!x.parentID)
     let next = sessions.findIndex((x) => x.id === session()?.id) - direction
 
     if (next >= sessions.length) next = 0
@@ -1893,6 +1900,10 @@ function InlineTool(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         if (failed()) {
+          if (props.onClick) {
+            props.onClick()
+            return
+          }
           setErrorExpanded((value) => !value)
           return
         }

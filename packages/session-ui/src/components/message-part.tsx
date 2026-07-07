@@ -62,6 +62,7 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { taskSessionIdFromMetadata } from "./message-part-task"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
 async function writeClipboard(text: string): Promise<boolean> {
@@ -1501,10 +1502,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const input = () => part().state?.input ?? emptyInput
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const topLevelPartMetadata = () =>
+    ("metadata" in part() ? part().metadata : undefined) as Record<string, unknown> | undefined
   const taskId = createMemo(() => {
     if (part().tool !== "task") return
-    const value = partMetadata().sessionId
-    if (typeof value === "string" && value) return value
+    return taskSessionIdFromMetadata(partMetadata(), topLevelPartMetadata())
   })
   const taskHref = createMemo(() => {
     if (part().tool !== "task") return

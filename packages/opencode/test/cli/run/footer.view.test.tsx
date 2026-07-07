@@ -1052,7 +1052,7 @@ test("direct footer separates a lone context hint from model and command hint", 
   }
 })
 
-test("direct footer hides the subagent hint when only completed subagents remain", async () => {
+test("direct footer keeps the subagent hint when only completed subagents remain", async () => {
   const app = await renderFooter({
     providers: [provider()],
     currentModel: { providerID: "opencode", modelID: "gpt-5" },
@@ -1072,8 +1072,33 @@ test("direct footer hides the subagent hint when only completed subagents remain
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("GPT-5")
-    expect(frame).toContain("xhigh · ctrl+p cmd")
-    expect(frame).not.toContain("ctrl+x down subagents")
+    expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer keeps the subagent hint when only cancelled subagents remain", async () => {
+  const app = await renderFooter({
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "xhigh",
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "cancelled" })],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: false,
+    width: 160,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("GPT-5")
+    expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
   } finally {
     app.cleanup()
   }
