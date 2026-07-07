@@ -203,6 +203,16 @@ export namespace Shell {
 }
 
 export namespace Step {
+  const Tokens = Schema.Struct({
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
+    cache: Schema.Struct({
+      read: Schema.Finite,
+      write: Schema.Finite,
+    }),
+  })
+
   export const Started = Event.durable({
     type: "session.step.started",
     ...options,
@@ -224,15 +234,7 @@ export namespace Step {
       assistantMessageID: SessionMessage.ID,
       finish: FinishReason,
       cost: Schema.Finite,
-      tokens: Schema.Struct({
-        input: Schema.Finite,
-        output: Schema.Finite,
-        reasoning: Schema.Finite,
-        cache: Schema.Struct({
-          read: Schema.Finite,
-          write: Schema.Finite,
-        }),
-      }),
+      tokens: Tokens,
       snapshot: Schema.String.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
     },
@@ -246,6 +248,8 @@ export namespace Step {
       ...Base,
       assistantMessageID: SessionMessage.ID,
       error: SessionError.Error,
+      cost: Schema.Finite.pipe(optional),
+      tokens: Tokens.pipe(optional),
     },
   })
   export type Failed = typeof Failed.Type

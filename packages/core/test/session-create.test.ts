@@ -225,9 +225,17 @@ describe("SessionV2.create", () => {
         promotedSeq: 2,
       })
 
-      yield* session.prompt({ sessionID: parent.id, prompt: PromptInput.Prompt.make({ text: "Parent changed" }), resume: false })
+      yield* session.prompt({
+        sessionID: parent.id,
+        prompt: PromptInput.Prompt.make({ text: "Parent changed" }),
+        resume: false,
+      })
       yield* SessionInput.promoteSteers(db, events, parent.id)
-      yield* session.prompt({ sessionID: forked.id, prompt: PromptInput.Prompt.make({ text: "Child continues" }), resume: false })
+      yield* session.prompt({
+        sessionID: forked.id,
+        prompt: PromptInput.Prompt.make({ text: "Child continues" }),
+        resume: false,
+      })
       yield* SessionInput.promoteSteers(db, events, forked.id)
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -260,8 +268,25 @@ describe("SessionV2.create", () => {
         resume: false,
       })
       yield* SessionInput.promoteSteers(db, events, parent.id)
+      const assistantMessageID = SessionMessage.ID.create()
+      const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        agent: "build",
+        model,
+      })
+      yield* events.publish(SessionEvent.Step.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        finish: "stop",
+        cost: 0.75,
+        tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
+      })
 
       const forked = yield* session.fork({ sessionID: parent.id, messageID: second.id })
+      const beforeFirst = yield* session.fork({ sessionID: parent.id, messageID: first.id })
+      const complete = yield* session.fork({ sessionID: parent.id })
 
       const context = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
@@ -269,6 +294,13 @@ describe("SessionV2.create", () => {
       expect(context).toMatchObject([{ text: "First" }])
       expect(context[0]?.id).not.toBe(first.id)
       expect(history[0]).toMatchObject({ data: { from: second.id } })
+      expect(forked).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
+      expect(yield* session.context(beforeFirst.id)).toEqual([])
+      expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
+      expect(complete).toMatchObject({
+        cost: 0.75,
+        tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
+      })
     }),
   )
 
@@ -375,7 +407,11 @@ describe("SessionV2.create", () => {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
-      yield* session.prompt({ sessionID: created.id, prompt: PromptInput.Prompt.make({ text: "Hello" }), resume: false })
+      yield* session.prompt({
+        sessionID: created.id,
+        prompt: PromptInput.Prompt.make({ text: "Hello" }),
+        resume: false,
+      })
       yield* SessionInput.promoteSteers(db, events, created.id)
 
       expect(

@@ -110,8 +110,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
-    const sessionUsageGeneration = new Map<string, number>()
-    const sessionUsageApplied = new Map<string, number>()
+    const sessionRefreshGeneration = new Map<string, number>()
+    const sessionRefreshApplied = new Map<string, number>()
     let connectionGeneration = 0
     let statusChanges: Set<string> | undefined
     let bootstrapping: Promise<void> | undefined
@@ -119,6 +119,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     function setSessionStatus(sessionID: string, status: DataSessionStatus) {
       statusChanges?.add(sessionID)
       setStore("session", "status", sessionID, status)
+    }
+
+    function nextSessionRefresh(sessionID: string) {
+      const generation = (sessionRefreshGeneration.get(sessionID) ?? 0) + 1
+      sessionRefreshGeneration.set(sessionID, generation)
+      return generation
+    }
+
+    function applySessionRefresh(sessionID: string, generation: number) {
+      if ((sessionRefreshApplied.get(sessionID) ?? 0) > generation) return false
+      sessionRefreshApplied.set(sessionID, generation)
+      return true
     }
 
     const message = {
@@ -224,6 +236,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     }
 
     function removeSession(sessionID: string) {
+      sessionRefreshApplied.set(sessionID, nextSessionRefresh(sessionID))
       messageIndex.delete(sessionID)
       setStore(
         "session",
@@ -440,7 +453,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             currentAssistant.finish = "error"
             currentAssistant.error = event.data.error
             currentAssistant.retry = undefined
+            if (event.data.cost !== undefined && event.data.tokens !== undefined) {
+              currentAssistant.cost = event.data.cost
+              currentAssistant.tokens = event.data.tokens
+            }
           })
+          if (event.data.cost !== undefined && event.data.tokens !== undefined)
+            void result.session
+              .refreshUsage(event.data.sessionID)
+              .catch((error) => console.error("Failed to refresh failed session usage", error))
           break
         case "session.text.started":
           message.update(event.data.sessionID, (draft, index) => {
@@ -815,15 +836,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           return store.session.compaction[sessionID]
         },
         async refresh(sessionID: string) {
-          setStore("session", "info", sessionID, mutable(await sdk.api.session.get({ sessionID })))
+          const generation = nextSessionRefresh(sessionID)
+          const info = mutable(await sdk.api.session.get({ sessionID }))
+          if (!applySessionRefresh(sessionID, generation)) return
+          setStore("session", "info", sessionID, info)
           registerSession(sessionID)
         },
         async refreshUsage(sessionID: string) {
-          const generation = (sessionUsageGeneration.get(sessionID) ?? 0) + 1
-          sessionUsageGeneration.set(sessionID, generation)
+          const generation = nextSessionRefresh(sessionID)
           const info = mutable(await sdk.api.session.get({ sessionID }))
-          if ((sessionUsageApplied.get(sessionID) ?? 0) > generation) return
-          sessionUsageApplied.set(sessionID, generation)
+          if (!applySessionRefresh(sessionID, generation)) return
           setStore("session", "info", sessionID, (current) =>
             current ? { ...current, cost: info.cost, tokens: info.tokens } : info,
           )
@@ -1009,7 +1031,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     async function bootstrap() {
       if (bootstrapping) return bootstrapping
-      const usageApplied = new Map(sessionUsageApplied)
+      const generation = new Map(sessionRefreshApplied)
       bootstrapping = Promise.allSettled([
         sdk.api.session
           .list({
@@ -1024,12 +1046,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               "info",
               produce((draft) => {
                 for (const session of response.data) {
-                  const current = draft[session.id]
+                  if ((sessionRefreshApplied.get(session.id) ?? 0) !== (generation.get(session.id) ?? 0)) continue
                   draft[session.id] = mutable(session)
-                  if ((sessionUsageApplied.get(session.id) ?? 0) === (usageApplied.get(session.id) ?? 0) || !current)
-                    continue
-                  draft[session.id].cost = current.cost
-                  draft[session.id].tokens = current.tokens
                 }
               }),
             )

@@ -217,7 +217,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     if (replace || stepFailure === undefined) stepFailure = error
   })
 
-  const publishStepFailure = Effect.fnUntraced(function* () {
+  const publishStepFailure = Effect.fnUntraced(function* (usage?: {
+    readonly cost: number
+    readonly tokens: ReturnType<typeof tokens>
+  }) {
     if (stepFailed || stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
     stepFailed = true
@@ -225,6 +228,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       sessionID: input.sessionID,
       assistantMessageID,
       error: stepFailure,
+      ...usage,
     })
   })
 
@@ -410,15 +414,19 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "step-finish":
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
-        if (event.reason === "content-filter") {
-          providerFailed = true
-          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)
-          return
+        const providerMetadata = {
+          ...event.providerMetadata,
+          ...event.usage?.providerMetadata,
         }
         stepSettlement = {
           finish: event.reason,
           tokens: tokens(event.usage),
-          providerMetadata: event.usage?.providerMetadata ?? event.providerMetadata,
+          providerMetadata: Object.keys(providerMetadata).length === 0 ? undefined : providerMetadata,
+        }
+        if (event.reason === "content-filter") {
+          providerFailed = true
+          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)
+          return
         }
         return
       case "finish":

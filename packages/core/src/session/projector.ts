@@ -187,7 +187,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .limit(1)
     .get()
     .pipe(Effect.orDie)
-  const copiedSeq = copied?.seq ?? 0
+  const copiedSeq = copied?.seq
 
   const stored = yield* db
     .insert(SessionTable)
@@ -239,7 +239,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
   const usage = emptyUsage()
   let cursor = -1
-  while (true) {
+  while (copiedSeq !== undefined) {
     const rows = yield* db
       .select()
       .from(SessionMessageTable)
@@ -247,7 +247,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         and(
           eq(SessionMessageTable.session_id, event.data.parentID),
           gt(SessionMessageTable.seq, cursor),
-          copiedSeq === 0 ? undefined : lt(SessionMessageTable.seq, copiedSeq + 1),
+          lt(SessionMessageTable.seq, copiedSeq + 1),
           sql`${SessionMessageTable.type} != 'compaction' or json_extract(${SessionMessageTable.data}, '$.status') not in ('queued', 'running')`,
         ),
       )
@@ -338,7 +338,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .where(eq(SessionTable.id, event.data.sessionID))
     .run()
     .pipe(Effect.orDie)
-  if (copiedSeq > 0) yield* EventV2.reserveSequence(db, event.data.sessionID, copiedSeq)
+  if (copiedSeq !== undefined) yield* EventV2.reserveSequence(db, event.data.sessionID, copiedSeq)
 })
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -703,7 +703,13 @@ const layer = Layer.effectDiscard(
         yield* applyUsage(db, event.data.sessionID, event.data)
       }),
     )
-    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Failed, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        if (event.data.cost !== undefined && event.data.tokens !== undefined)
+          yield* applyUsage(db, event.data.sessionID, { cost: event.data.cost, tokens: event.data.tokens })
+      }),
+    )
     yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))

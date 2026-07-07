@@ -199,6 +199,7 @@ test("refreshes usage without applying stale session snapshots", async () => {
       cache: { read: 1, write: 1 },
     })
 
+    const fullRefresh = data.session.refresh(sessionID)
     emitEvent(events, {
       id: "evt_usage_3",
       created: 3,
@@ -210,19 +211,6 @@ test("refreshes usage without applying stale session snapshots", async () => {
         finish: "stop",
         cost: 0.25,
         tokens: { input: 3, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    })
-    emitEvent(events, {
-      id: "evt_usage_4",
-      created: 4,
-      type: "session.step.ended",
-      durable: durable(sessionID, 4),
-      data: {
-        sessionID,
-        assistantMessageID: "msg_usage_4",
-        finish: "stop",
-        cost: 0.25,
-        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
       },
     })
     await wait(() => resolveSession.length === 3)
@@ -260,6 +248,7 @@ test("refreshes usage without applying stale session snapshots", async () => {
         },
       }),
     )
+    await fullRefresh
     await Bun.sleep(20)
     expect(data.session.get(sessionID)?.cost).toBe(1)
     expect(data.session.get(sessionID)?.title).toBe("Live title")
@@ -319,6 +308,43 @@ test("refreshes usage without applying stale session snapshots", async () => {
         },
       }),
     )
+
+    emitEvent(events, {
+      id: "evt_usage_8",
+      created: 8,
+      type: "session.step.ended",
+      durable: durable(sessionID, 8),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_usage_8",
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    await wait(() => resolveSession.length === 6)
+    emitEvent(events, {
+      id: "evt_usage_deleted",
+      created: 9,
+      type: "session.deleted",
+      durable: durable(sessionID, 9),
+      data: { sessionID },
+    })
+    resolveSession[5](
+      json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 1.5,
+          tokens: { input: 14, output: 6, reasoning: 1, cache: { read: 1, write: 1 } },
+          time: { created: 0, updated: 0 },
+          title: "Deleted session",
+          location: { directory },
+        },
+      }),
+    )
+    await Bun.sleep(20)
+    expect(data.session.get(sessionID)).toBeUndefined()
   } finally {
     app.renderer.destroy()
   }
@@ -813,6 +839,18 @@ test("tracks session status from active sessions and execution events", async ()
           location: { directory },
         },
       })
+    if (url.pathname === "/api/session/session-failed")
+      return json({
+        data: {
+          id: "session-failed",
+          projectID: "proj_test",
+          cost: 0.25,
+          tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: "Failed session",
+          location: { directory },
+        },
+      })
   }, events)
   let data!: ReturnType<typeof useData>
   let rows!: SessionRow[]
@@ -927,6 +965,8 @@ test("tracks session status from active sessions and execution events", async ()
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
         error: { type: "provider.content-filter", message: "Provider blocked the response" },
+        cost: 0.25,
+        tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
       },
     })
     await wait(() => {
@@ -936,6 +976,13 @@ test("tracks session status from active sessions and execution events", async ()
         assistant.finish === "error" &&
         assistant.error?.type === "provider.content-filter"
       )
+    })
+    await wait(() => data.session.get("session-failed")?.cost === 0.25)
+    expect(data.session.get("session-failed")?.tokens).toEqual({
+      input: 5,
+      output: 1,
+      reasoning: 1,
+      cache: { read: 1, write: 0 },
     })
     expect(data.session.status("session-failed")).toBe("running")
 

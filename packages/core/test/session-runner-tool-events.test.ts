@@ -151,15 +151,45 @@ test("step finish records settlement without publishing step ended", async () =>
 test("content-filter finish retains failure evidence until step closeout", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
-  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "content-filter" })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.stepFinish({
+        index: 0,
+        reason: "content-filter",
+        usage: {
+          nonCachedInputTokens: 8,
+          outputTokens: 3,
+          reasoningTokens: 1,
+          providerMetadata: { openai: { requestID: "request" } },
+        },
+        providerMetadata: { copilot: { totalNanoAiu: 4_473_525_000 } },
+      }),
+    ),
+  )
 
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
-  await Effect.runPromise(publisher.publishStepFailure())
+  const settlement = publisher.stepSettlement()
+  expect(settlement).toMatchObject({
+    finish: "content-filter",
+    tokens: { input: 8, output: 2, reasoning: 1 },
+    providerMetadata: {
+      openai: { requestID: "request" },
+      copilot: { totalNanoAiu: 4_473_525_000 },
+    },
+  })
+  if (!settlement) throw new Error("Expected content-filter settlement")
+  await Effect.runPromise(
+    publisher.publishStepFailure({
+      cost: 0.04473525,
+      tokens: settlement.tokens,
+    }),
+  )
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
   expect(published.at(-1)?.data).toMatchObject({
     error: { type: "provider.content-filter", message: "Provider blocked the response" },
+    cost: 0.04473525,
+    tokens: { input: 8, output: 2, reasoning: 1 },
   })
-  expect(publisher.stepSettlement()).toBeUndefined()
 })
 
 test("content-filter finish preserves partial streamed text and never ends the step successfully", async () => {

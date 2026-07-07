@@ -1416,6 +1416,13 @@ export type SessionLogOutput =
             readonly sessionID: string
             readonly assistantMessageID: string
             readonly error: { readonly type: string; readonly message: string }
+            readonly cost?: number
+            readonly tokens?: {
+              readonly input: number
+              readonly output: number
+              readonly reasoning: number
+              readonly cache: { readonly read: number; readonly write: number }
+            }
           }
         }
       | {
@@ -4712,6 +4719,13 @@ export type EventSubscribeOutput =
         readonly sessionID: string
         readonly assistantMessageID: string
         readonly error: { readonly type: string; readonly message: string }
+        readonly cost?: number
+        readonly tokens?: {
+          readonly input: number
+          readonly output: number
+          readonly reasoning: number
+          readonly cache: { readonly read: number; readonly write: number }
+        }
       }
     }
   | {

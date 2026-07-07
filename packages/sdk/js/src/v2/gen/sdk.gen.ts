@@ -277,6 +277,8 @@ import type {
   V2CredentialUpdateErrors,
   V2CredentialUpdateResponses,
   V2DebugLocationErrors,
+  V2DebugLocationEvictErrors,
+  V2DebugLocationEvictResponses,
   V2DebugLocationResponses,
   V2EventSubscribeErrors,
   V2EventSubscribeResponses,
@@ -8117,6 +8119,34 @@ export class Vcs2 extends HeyApiClient {
   }
 }
 
+export class Location2 extends HeyApiClient {
+  /**
+   * Evict a loaded location
+   *
+   * Dispose the requested location's cached services so its next use boots them fresh.
+   */
+  public evict<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).delete<
+      V2DebugLocationEvictResponses,
+      V2DebugLocationEvictErrors,
+      ThrowOnError
+    >({
+      url: "/api/debug/location",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Debug extends HeyApiClient {
   /**
    * List loaded locations
@@ -8128,6 +8158,11 @@ export class Debug extends HeyApiClient {
       url: "/api/debug/location",
       ...options,
     })
+  }
+
+  private _location?: Location2
+  get location2(): Location2 {
+    return (this._location ??= new Location2({ client: this.client }))
   }
 }
 

@@ -1042,6 +1042,16 @@ export type GlobalEvent = {
           sessionID: string
           assistantMessageID: string
           error: SessionStructuredError
+          cost?: number
+          tokens?: {
+            input: number
+            output: number
+            reasoning: number
+            cache: {
+              read: number
+              write: number
+            }
+          }
         }
       }
     | {
@@ -3982,6 +3992,16 @@ export type SyncEventSessionStepFailed = {
       sessionID: string
       assistantMessageID: string
       error: SessionStructuredError
+      cost?: number
+      tokens?: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
+      }
     }
   }
 }
@@ -5088,6 +5108,16 @@ export type SessionStepFailed = {
     sessionID: string
     assistantMessageID: string
     error: SessionStructuredError
+    cost?: number
+    tokens?: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
   }
 }
 
@@ -7171,6 +7201,16 @@ export type EventSessionStepFailed = {
     sessionID: string
     assistantMessageID: string
     error: SessionStructuredError
+    cost?: number
+    tokens?: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
   }
 }
 
@@ -9272,6 +9312,16 @@ export type SessionStepFailedV2 = {
     sessionID: string
     assistantMessageID: string
     error: SessionStructuredError
+    cost?: number
+    tokens?: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
   }
 }
 
@@ -18548,6 +18598,40 @@ export type V2VcsDiffResponses = {
 }
 
 export type V2VcsDiffResponse = V2VcsDiffResponses[keyof V2VcsDiffResponses]
+
+export type V2DebugLocationEvictData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/debug/location"
+}
+
+export type V2DebugLocationEvictErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2DebugLocationEvictError = V2DebugLocationEvictErrors[keyof V2DebugLocationEvictErrors]
+
+export type V2DebugLocationEvictResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2DebugLocationEvictResponse = V2DebugLocationEvictResponses[keyof V2DebugLocationEvictResponses]
 
 export type V2DebugLocationData = {
   body?: never

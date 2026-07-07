@@ -67,7 +67,7 @@ export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens, m
   const tier = costs
     .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
     .toSorted((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
-  const cost = tier ?? costs.find((cost) => cost.tier === undefined) ?? costs[0]
+  const cost = tier ?? costs.find((cost) => cost.tier === undefined)
   if (!cost) return 0
   return (
     (tokens.input * cost.input +
@@ -340,6 +340,11 @@ const layer = Layer.effect(
         Effect.ensuring(serialized(publisher.flush())),
       )
 
+      const stepUsage = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) => ({
+        cost: calculateCost(resolved.cost, settlement.tokens, settlement.providerMetadata),
+        tokens: settlement.tokens,
+      })
+
       // Captures the end snapshot, diffs it against the step's start, and durably ends the
       // assistant step.
       const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
@@ -356,8 +361,7 @@ const layer = Layer.effect(
               sessionID: session.id,
               assistantMessageID: yield* publisher.startAssistant(),
               finish: settlement.finish,
-              cost: calculateCost(resolved.cost, settlement.tokens, settlement.providerMetadata),
-              tokens: settlement.tokens,
+              ...stepUsage(settlement),
               snapshot: endSnapshot,
               files,
             }),
@@ -480,7 +484,8 @@ const layer = Layer.effect(
           const stepEndedCleanly =
             !streamInterrupted && !toolsInterrupted && infraError === undefined && !providerFailed && !stepFailure
           if (stepSettlement && stepEndedCleanly) yield* publishStepEnd(stepSettlement)
-          if (stepFailure) yield* serialized(publisher.publishStepFailure())
+          if (stepFailure)
+            yield* serialized(publisher.publishStepFailure(stepSettlement ? stepUsage(stepSettlement) : undefined))
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (userDeclined) return yield* Effect.interrupt

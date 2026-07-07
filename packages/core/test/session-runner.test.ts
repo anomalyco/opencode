@@ -139,6 +139,15 @@ test("prefers Copilot billed cost over token estimation", () => {
   ).toBeCloseTo(0.04473525)
 })
 
+test("does not apply an ineligible tier without base pricing", () => {
+  expect(
+    SessionRunnerLLM.calculateCost(
+      [{ tier: { type: "context", size: 100 }, input: 3, output: 4, cache: { read: 0.2, write: 0.6 } }],
+      { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 0 } },
+    ),
+  ).toBe(0)
+})
+
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
 const permission = Layer.succeed(
@@ -3660,7 +3669,12 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "partial" }),
         LLMEvent.textDelta({ id: "partial", text: "Partial" }),
-        LLMEvent.stepFinish({ index: 0, reason: "content-filter" }),
+        LLMEvent.stepFinish({
+          index: 0,
+          reason: "content-filter",
+          usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
+          providerMetadata: { copilot: { totalNanoAiu: 4_473_525_000 } },
+        }),
         LLMEvent.finish({ reason: "content-filter" }),
       ]
 
@@ -3671,9 +3685,15 @@ describe("SessionRunnerLLM", () => {
           type: "assistant",
           finish: "error",
           error: { type: "provider.content-filter" },
+          cost: 0.04473525,
+          tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
           content: [{ type: "text", text: "Partial" }],
         },
       ])
+      expect(yield* session.get(sessionID)).toMatchObject({
+        cost: 0.04473525,
+        tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
+      })
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
     }),
   )
