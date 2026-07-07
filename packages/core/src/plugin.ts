@@ -18,7 +18,7 @@ import { SkillV2 } from "./skill"
 import { State } from "./state"
 import { ToolRegistry } from "./tool/registry"
 import { ToolHooks } from "./tool/hooks"
-import { SessionRequestHooks } from "./session/request-hooks"
+import { PluginHooks } from "./plugin/hooks"
 
 export interface Interface {
   readonly activate: (plugins: readonly { readonly plugin: Plugin; readonly version?: string }[]) => Effect.Effect<void>
@@ -132,7 +132,7 @@ export const node = makeLocationNode({
     SkillV2.node,
     ToolRegistry.toolsNode,
     ToolHooks.node,
-    SessionRequestHooks.node,
+    PluginHooks.node,
     PluginRuntime.node,
   ],
 })

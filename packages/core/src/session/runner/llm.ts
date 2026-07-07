@@ -50,7 +50,8 @@ import { llmClient } from "../../effect/app-node-platform"
 import { StepFailedError, UserInterruptedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
-import { SessionRequestHooks } from "../request-hooks"
+import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
+import { PluginHooks } from "../../plugin/hooks"
 
 type StepTokens = {
   readonly input: number
@@ -133,7 +134,7 @@ const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const agents = yield* AgentV2.Service
     const tools = yield* ToolRegistry.Service
-    const requestHooks = yield* SessionRequestHooks.Service
+    const hooks = yield* PluginHooks.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
@@ -255,7 +256,7 @@ const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
       })
       const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
-      const requestEvent: SessionRequestHooks.BeforeEvent = {
+      const requestEvent: SessionHooks["request"] = {
         sessionID: session.id,
         agent: agent.id,
         model: resolved.ref,
@@ -273,7 +274,7 @@ const layer = Layer.effect(
         delete requestEvent.tools.write
       }
       if (!usePatch) delete requestEvent.tools.patch
-      yield* requestHooks.runBefore(requestEvent)
+      yield* hooks.trigger("session", "request", requestEvent)
       const hookedRequest = LLM.updateRequest(request, {
         system: requestEvent.system,
         messages: requestEvent.messages,
@@ -657,7 +658,7 @@ export const node = makeLocationNode({
     llmClient,
     AgentV2.node,
     ToolRegistry.node,
-    SessionRequestHooks.node,
+    PluginHooks.node,
     SessionRunnerModel.node,
     SessionStore.node,
     Location.node,
