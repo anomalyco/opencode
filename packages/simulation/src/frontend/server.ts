@@ -1,7 +1,6 @@
 import type { CapturedFrame } from "@opentui/core"
 import { SimulationProtocol } from "../protocol"
 import { SimulationActions, type Harness } from "./actions"
-import { SimulationTrace } from "./trace"
 
 export interface Server {
   readonly url: string
@@ -28,9 +27,7 @@ async function handle(
     case "ui.screenshot":
       return SimulationActions.screenshot(harness)
     case "ui.state": {
-      const result = SimulationActions.state(harness)
-      SimulationTrace.add("ui.state", { elements: result.elements.length })
-      return result
+      return SimulationActions.state(harness)
     }
     case "ui.start-record": {
       if (recording.current) throw new Error("UI recording is already active")
@@ -93,12 +90,6 @@ export function start(harness: Harness, endpoint: string, headless: boolean): Se
       return new Response("opencode drive ui websocket", { status: 426 })
     },
     websocket: {
-      open() {
-        SimulationTrace.add("control.connect")
-      },
-      close() {
-        SimulationTrace.add("control.disconnect")
-      },
       async message(socket, message) {
         let request: SimulationProtocol.Frontend.Request | undefined
         try {
@@ -112,12 +103,10 @@ export function start(harness: Harness, endpoint: string, headless: boolean): Se
       },
     },
   })
-  SimulationTrace.add("control.start", { url: endpoint })
   return {
     url: endpoint,
     stop: () => {
       if (recording.current) clearInterval(recording.current.timer)
-      SimulationTrace.add("control.stop", { url: endpoint })
       server.stop(true)
     },
   }

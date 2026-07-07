@@ -6,7 +6,6 @@ import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from 
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
 import { SimulationPng } from "./png"
-import { SimulationTrace } from "./trace"
 
 export type Action = SimulationProtocol.Frontend.Action
 export type Element = SimulationProtocol.Frontend.Element
@@ -167,7 +166,6 @@ export async function video(frames: CapturedFrame[]) {
 }
 
 export async function execute(harness: Harness, action: Action) {
-  SimulationTrace.add("ui.action", { action })
   switch (action.type) {
     case "ui.type":
       await harness.mockInput.typeText(action.text)
