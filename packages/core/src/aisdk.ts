@@ -23,10 +23,12 @@ export interface LanguageEvent {
   language?: LanguageModelV3
 }
 
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+function wrapSSE(res: Response, ms: number, ctl: AbortController, extraContentTypes: string[] = []) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
-  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+  const contentType = res.headers.get("content-type") ?? ""
+  const chunkedContentTypes = ["text/event-stream", "eventstream", ...extraContentTypes]
+  if (!chunkedContentTypes.some((type) => contentType.includes(type))) return res
 
   const reader = res.body.getReader()
   const body = new ReadableStream<Uint8Array>({
@@ -82,6 +84,8 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
   delete options.chunkTimeout
+  const chunkTimeoutContentTypes = options.chunkTimeoutContentTypes
+  delete options.chunkTimeoutContentTypes
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     const signals = [
@@ -115,7 +119,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
       timeout: false,
     })
     if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
-    return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+    return wrapSSE(res, chunkTimeout, chunkAbortCtl, Array.isArray(chunkTimeoutContentTypes) ? chunkTimeoutContentTypes : [])
   }
 
   return options

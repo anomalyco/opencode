@@ -34,10 +34,12 @@ import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+function wrapSSE(res: Response, ms: number, ctl: AbortController, extraContentTypes: string[] = []) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
-  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+  const contentType = res.headers.get("content-type") ?? ""
+  const chunkedContentTypes = ["text/event-stream", "eventstream", ...extraContentTypes]
+  if (!chunkedContentTypes.some((type) => contentType.includes(type))) return res
 
   const reader = res.body.getReader()
   const body = new ReadableStream<Uint8Array>({
@@ -1709,6 +1711,8 @@ const layer = Layer.effect(
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
+        const chunkTimeoutContentTypes = options["chunkTimeoutContentTypes"]
+        delete options["chunkTimeoutContentTypes"]
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
@@ -1734,7 +1738,7 @@ const layer = Layer.effect(
           }).finally(() => headerTimeoutCtl?.clear())
 
           if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          return wrapSSE(res, chunkTimeout, chunkAbortCtl, Array.isArray(chunkTimeoutContentTypes) ? chunkTimeoutContentTypes : [])
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]

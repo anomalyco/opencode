@@ -112,6 +112,10 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        chunkTimeoutContentTypes: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+          description:
+            "Additional response content-type substrings (besides text/event-stream and eventstream) that should be monitored by chunkTimeout. Useful for providers using non-standard streaming content types.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),
