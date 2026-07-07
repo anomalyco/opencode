@@ -10,7 +10,7 @@ import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
 import { MessageID, SessionID } from "@/session/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Cause, Effect, Exit, Layer, Schema } from "effect"
 
 const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_code-mode"),
@@ -86,11 +86,25 @@ function describeFor(mcpTools: Record<string, MCP.McpTool>, servers?: string[], 
   return describeCatalog(Permission.visibleTools(mcpTools, permission), serverNames(mcpTools, servers))
 }
 
+// Program failures die at the tool boundary; recover the defect for message assertions.
+async function failure(effect: Effect.Effect<unknown>) {
+  const exit = await Effect.runPromise(effect.pipe(Effect.exit))
+  if (Exit.isSuccess(exit)) throw new Error("expected the tool to fail")
+  return Cause.squash(exit.cause) as Error
+}
+
 describe("code mode execute", () => {
   test("defines execute input with an Effect schema", async () => {
     const decode = Schema.decodeUnknownEffect(Parameters)
     await expect(Effect.runPromise(decode({ code: "return 1" }))).resolves.toEqual({ code: "return 1" })
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
+    expect(Schema.toJsonSchemaDocument(Parameters).schema).toMatchObject({
+      properties: {
+        code: {
+          description: "Script body executed by the confined interpreter.",
+        },
+      },
+    })
   })
 
   test("groups multi-underscore server names by longest matching prefix", () => {
@@ -117,13 +131,15 @@ describe("code mode execute", () => {
       },
       ["weather"],
     )
-    expect(description).toContain("tools.weather.current(input: { city: string }): Promise<{ tempC: number }>")
+    expect(description).toContain(
+      "tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n}>",
+    )
   })
 
   test("the static base description carries no catalog; the registry appends it", async () => {
     const tool = await build({ github_list_issues: mcpTool("list_issues", () => "") })
     expect(tool.id).toBe(CODE_MODE_TOOL)
-    expect(tool.description).toContain("confined runtime")
+    expect(tool.description).toBe("Run a confined orchestration script with access to connected MCP tools.")
     expect(tool.description).not.toContain("Available tools")
     expect(tool.description).not.toContain("list_issues")
   })
@@ -143,7 +159,7 @@ describe("code mode execute", () => {
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
     expect(description).toContain(
-      "tools.github.create_issue(input: { title: string; body?: string }): Promise<unknown>",
+      "tools.github.create_issue(input: {\n  title: string,\n  body?: string,\n}): Promise<unknown>",
     )
     expect(description).toContain("tools.github.list_issues(")
     expect(description).toContain("tools.linear.search(")
@@ -152,9 +168,8 @@ describe("code mode execute", () => {
     expect(description).not.toContain("Browse one namespace")
     expect(description).toContain("## Workflow")
     expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(description).toContain(
-      '`const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string',
-    )
+    expect(description).not.toContain("JSON.parse(res)")
+    expect(description).toContain("check that it is a non-null object and not an array")
     expect(description).toContain("Return only the fields you need")
     expect(description).not.toContain("total_count")
   })
@@ -173,7 +188,7 @@ describe("code mode execute", () => {
       ),
     })
     expect(description).toContain(
-      "tools.weather.current(input: { city: string }): Promise<{ tempC: number; summary?: string }>",
+      "tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n  summary?: string,\n}>",
     )
   })
 
@@ -200,9 +215,16 @@ describe("code mode execute", () => {
     expect(description).toContain("Available tools (PARTIAL - ")
     expect(description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
     expect(description).toContain("- zeta (1 tool)\n")
-    expect(description).toContain("tools.zeta.only_tool(input: { topic: string }): Promise<unknown>")
+    expect(description).toContain(
+      "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string,\n}): Promise<unknown>",
+    )
     expect(description).toContain("tools.$codemode.search(")
-    expect(description).toContain("1. Find a tool (skip when it is already listed below)")
+    expect(description).toContain("  limit?: number,\n  offset?: number,")
+    expect(description).toContain("  remaining: number,\n  next: {")
+    expect(description).toContain("      offset: number,\n    } | null,")
+    expect(description).toContain(
+      '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+    )
     expect(description).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
     )
@@ -212,17 +234,18 @@ describe("code mode execute", () => {
 
     const tool = await build(tools, ["alpha", "zeta"])
     const out = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3 })" }, ctx),
+      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3, offset: 0 })" }, ctx),
     )
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toContain("tools.zeta.only_tool")
+    expect(result).toMatchObject({ remaining: 0, next: null })
     expect(result.items[0].signature).toContain("tools.")
     const signature = result.items.find((i: any) => i.path === "tools.zeta.only_tool").signature
     expect(signature).toContain("tools.zeta.only_tool(input: {\n")
     expect(signature).toContain("  /** Subject to look up */\n  topic: string")
-    expect(description).not.toContain("/**")
+    expect(description).toContain("/** Subject to look up */")
     expect(out.metadata.toolCalls).toEqual([
-      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3 } },
+      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3, offset: 0 } },
     ])
   })
 
@@ -233,7 +256,7 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls).toEqual([])
   })
 
-  test("Object.keys(tools) enumerates the MCP server namespaces", async () => {
+  test("Object.keys(tools) enumerates the MCP server and CodeMode namespaces", async () => {
     const tool = await build({
       github_list_issues: mcpTool("list_issues", () => ""),
       linear_search: mcpTool("search", () => ""),
@@ -244,7 +267,7 @@ describe("code mode execute", () => {
         ctx,
       ),
     )
-    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear"], count: 2 })
+    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear", "$codemode"], count: 3 })
   })
 
   test("calls a namespaced MCP tool and flows its text result back into the program", async () => {
@@ -313,18 +336,16 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls.every((c) => c.status === "completed")).toBe(true)
   })
 
-  test("returns a readable error when the program throws", async () => {
+  test("a program failure fails the tool with a readable error", async () => {
     const tool = await build({})
-    const output = await Effect.runPromise(tool.execute({ code: "throw new Error('boom')" }, ctx))
-    expect(output.output).toBe("Uncaught: boom")
-    expect(output.metadata.error).toBe(true)
+    const error = await failure(tool.execute({ code: "throw new Error('boom')" }, ctx))
+    expect(error.message).toBe("Uncaught: boom")
   })
 
   test("reports an unknown tool as a failed execution", async () => {
     const tool = await build({ known_tool: mcpTool("tool", () => "ok") })
-    const output = await Effect.runPromise(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
-    expect(output.metadata.error).toBe(true)
-    expect(output.output).toContain("Unknown tool 'known.missing'")
+    const error = await failure(tool.execute({ code: "return await tools.known.missing({})" }, ctx))
+    expect(error.message).toContain("Unknown tool 'known.missing'")
   })
 
   test("propagates an MCP tool error into the program as a catchable failure", async () => {
@@ -576,8 +597,8 @@ describe("code mode execute", () => {
 
   test("isolates the sandbox from host globals", async () => {
     const tool = await build({})
-    const output = await Effect.runPromise(tool.execute({ code: "return process.env" }, ctx))
-    expect(output.metadata.error).toBe(true)
+    const error = await failure(tool.execute({ code: "return process.env" }, ctx))
+    expect(error.message).toContain("process")
   })
 
   test("cancelling via ctx.abort interrupts the running program", async () => {
@@ -627,12 +648,9 @@ describe("code mode execute", () => {
     )
     expect(ok.output).toBe("done\n\nLogs:\nstep one\n[warn] careful")
 
-    const err = await Effect.runPromise(
-      tool.execute({ code: "console.log('before the throw'); throw new Error('boom')" }, ctx),
-    )
-    expect(err.metadata.error).toBe(true)
-    expect(err.output).toContain("Uncaught: boom")
-    expect(err.output).toContain("Logs:\nbefore the throw")
+    const error = await failure(tool.execute({ code: "console.log('before the throw'); throw new Error('boom')" }, ctx))
+    expect(error.message).toContain("Uncaught: boom")
+    expect(error.message).toContain("Logs:\nbefore the throw")
   })
 })
 
@@ -677,12 +695,9 @@ describe("code mode permission visibility", () => {
       [deny("github_create_issue")],
     )
 
-    const denied = await Effect.runPromise(
-      tool.execute({ code: "return await tools.github.create_issue({ title: 'x' })" }, ctx),
-    )
-    expect(denied.metadata.error).toBe(true)
-    expect(denied.output).toContain("Unknown tool 'github.create_issue'")
-    expect(denied.output).not.toContain("permission")
+    const denied = await failure(tool.execute({ code: "return await tools.github.create_issue({ title: 'x' })" }, ctx))
+    expect(denied.message).toContain("Unknown tool 'github.create_issue'")
+    expect(denied.message).not.toContain("permission")
     expect(called).toEqual([])
 
     const allowed = await Effect.runPromise(tool.execute({ code: "return await tools.github.list_issues({})" }, ctx))

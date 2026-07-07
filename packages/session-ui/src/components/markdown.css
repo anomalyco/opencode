@@ -121,6 +121,20 @@
     margin: 0;
   }
 
+  li:has(> input[type="checkbox"]),
+  li:has(> p > input[type="checkbox"]) {
+    position: relative;
+    list-style-type: none;
+  }
+
+  li > input[type="checkbox"],
+  li > p > input[type="checkbox"] {
+    position: absolute;
+    top: 4px;
+    left: -20px;
+    margin: 0;
+  }
+
   li > p + p {
     display: block;
     margin-top: 0.5rem;
