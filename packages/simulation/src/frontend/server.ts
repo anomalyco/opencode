@@ -15,21 +15,16 @@ function parseRequest(input: string | Buffer) {
   return SimulationProtocol.JsonRpc.decodeRequest(JSON.parse(typeof input === "string" ? input : input.toString()))
 }
 
-async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Request) {
+async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Request, headless: boolean) {
   switch (request.method) {
     case "ui.state": {
+      if (headless) await harness.renderOnce()
       const result = SimulationActions.state(harness)
       SimulationTrace.add("ui.state", { elements: result.elements.length, actions: result.actions.length })
       return result
     }
     case "ui.action":
       return SimulationActions.execute(harness, actionParam(request.params))
-    case "ui.render": {
-      await harness.renderOnce()
-      const result = SimulationActions.state(harness)
-      SimulationTrace.add("ui.render", { elements: result.elements.length, actions: result.actions.length })
-      return result
-    }
     case "trace.list":
       return { records: SimulationTrace.list() }
     case "trace.clear":
@@ -41,7 +36,7 @@ async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Requ
   throw new Error(`Unknown simulation method: ${request.method}`)
 }
 
-export function start(harness: Harness, endpoint: string): Server {
+export function start(harness: Harness, endpoint: string, headless: boolean): Server {
   const url = new URL(endpoint)
   const server = Bun.serve<{ readonly drive: true }>({
     hostname: url.hostname,
@@ -61,7 +56,7 @@ export function start(harness: Harness, endpoint: string): Server {
         let request: SimulationProtocol.JsonRpc.Request | undefined
         try {
           request = parseRequest(message)
-          const result = await handle(harness, request)
+          const result = await handle(harness, request, headless)
           const next = SimulationProtocol.JsonRpc.success(request.id, result)
           if (next) socket.send(JSON.stringify(next))
         } catch (error) {

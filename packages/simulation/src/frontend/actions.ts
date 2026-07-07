@@ -47,7 +47,7 @@ function hit(renderer: CliRenderer, renderable: Renderable) {
 /**
  * Builds the harness the simulation server drives.
  *
- * When the renderer is the fake simulation renderer, its TestRendererSetup
+ * When the renderer is the headless simulation renderer, its TestRendererSetup
  * provides the supported testing APIs. For the visible terminal renderer the
  * harness falls back to `requestRender` + `idle` and reading the private
  * `currentRenderBuffer`.
