@@ -31,6 +31,7 @@ export type UpdaterAPI = {
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
+  scheme?: "system" | "light" | "dark"
 }
 export type FatalRendererError = {
   error: string
