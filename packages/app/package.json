@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.17.12",
+  "version": "1.17.14",
   "description": "",
   "type": "module",
   "exports": {
@@ -13,6 +13,7 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
+    "typecheck:e2e": "tsgo -p e2e/tsconfig.json",
     "start": "vite",
     "dev": "vite",
     "build": "vite build",
@@ -25,6 +26,7 @@
     "test:e2e:local": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
+    "test:stability": "bun test ./e2e/performance/unit/visual-stability.test.ts && playwright test --config e2e/performance/timeline-stability/playwright.config.ts",
     "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts"
   },
   "license": "MIT",
@@ -51,6 +53,7 @@
     "@dnd-kit/solid": "0.5.0",
     "@kobalte/core": "catalog:",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",

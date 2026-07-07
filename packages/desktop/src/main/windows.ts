@@ -9,9 +9,10 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
-import { getStore } from "./store"
+import { getStore, removeStoreFile } from "./store"
 import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
+import { createWindowRegistry } from "./window-registry"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -41,15 +42,21 @@ protocol.registerSchemesAsPrivileged([
 
 let backgroundColor: string | undefined
 let relaunchHandler = () => {
+  setAppQuitting()
   app.relaunch()
   app.exit(0)
 }
-let appQuitting = false
-let lastFocusedWindowID: string | undefined
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
-const windowsByID = new Map<string, BrowserWindow>()
+const registry = createWindowRegistry<BrowserWindow>({
+  read: () => getStore().get(WINDOW_IDS_KEY),
+  write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
+  cleanup: (id) => {
+    rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
+    removeStoreFile(windowDataFile(id))
+  },
+})
 const titlebarHeight = 40
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
@@ -58,13 +65,16 @@ export function setRelaunchHandler(handler: () => void) {
   relaunchHandler = handler
 }
 
-export function setAppQuitting() {
-  appQuitting = true
+export function setAppQuitting(quitting = true) {
+  registry.setQuitting(quitting)
 }
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
-  BrowserWindow.getAllWindows().forEach((win) => win.setBackgroundColor(color))
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.setBackgroundColor(color)
+    if (process.platform === "darwin") win.invalidateShadow()
+  })
 }
 
 export function getBackgroundColor(): string | undefined {
@@ -99,6 +109,13 @@ function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
   titlebarThemes.set(win, theme)
+  // macOS draws the window frame hairline and shadow using the NSWindow
+  // appearance, which follows nativeTheme rather than the rendered content.
+  // Align it with the app theme so a light app on a dark system does not get
+  // the dark-appearance border and shadow. A "system" scheme must map to
+  // "system" (not the resolved mode) or prefers-color-scheme stops tracking
+  // OS appearance changes in the renderer.
+  if (process.platform === "darwin") nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
   updateTitlebar(win)
 }
 
@@ -128,14 +145,13 @@ export function getWindowID(win: BrowserWindow) {
 export function getLastFocusedWindow() {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused) return focused
-  if (!lastFocusedWindowID) return null
-  const win = windowsByID.get(lastFocusedWindowID)
+  const win = registry.lastFocused()
   if (!win || win.isDestroyed()) return null
   return win
 }
 
 export function restoreMainWindows() {
-  const ids = readWindowIDs()
+  const ids = registry.persisted()
   return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
 }
 
@@ -166,7 +182,7 @@ export function createMainWindow(id: string = randomUUID()) {
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
-          trafficLightPosition: { x: 12, y: 14 },
+          trafficLightPosition: { x: 14, y: 14 },
         }
       : {}),
     ...(process.platform === "win32"
@@ -213,42 +229,23 @@ export function createMainWindow(id: string = randomUUID()) {
 
 function registerWindow(win: BrowserWindow, id: string) {
   windowIDs.set(win, id)
-  windowsByID.set(id, win)
-  persistWindowID(id)
+  registry.register(id, win)
 
-  win.on("focus", () => {
-    lastFocusedWindowID = id
-  })
-  win.on("closed", () => {
-    windowsByID.delete(id)
-    if (lastFocusedWindowID === id) lastFocusedWindowID = windowsByID.keys().next().value
-    if (!appQuitting) removeWindowID(id)
-  })
-}
-
-function readWindowIDs() {
-  const value = getStore().get(WINDOW_IDS_KEY)
-  if (!Array.isArray(value)) return []
-  return value.filter((id): id is string => typeof id === "string" && id.length > 0)
-}
-
-function writeWindowIDs(ids: string[]) {
-  getStore().set(WINDOW_IDS_KEY, [...new Set(ids)])
-}
-
-function persistWindowID(id: string) {
-  const ids = readWindowIDs()
-  if (ids.includes(id)) return
-  writeWindowIDs([...ids, id])
-}
-
-function removeWindowID(id: string) {
-  writeWindowIDs(readWindowIDs().filter((item) => item !== id))
-  rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
+  win.on("focus", () => registry.focused(id))
+  // Windows never emits before-quit on OS shutdown/logoff, but each window
+  // gets session-end before it closes; flag the quit so ids stay persisted.
+  win.on("session-end", () => registry.setQuitting())
+  win.on("closed", () => registry.closed(id))
 }
 
 function windowStateFile(id: string) {
   return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+}
+
+// Mirrors windowStorage() in packages/app/src/utils/persist.ts, which names
+// the per-window renderer store this window persists its tabs into.
+function windowDataFile(id: string) {
+  return `opencode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
 }
 
 export function registerRendererProtocol() {

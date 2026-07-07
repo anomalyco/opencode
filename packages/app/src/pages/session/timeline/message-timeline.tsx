@@ -40,7 +40,7 @@ import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencod
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
@@ -441,6 +441,16 @@ export function MessageTimeline(props: {
     },
   })
   const resizeItem = virtualizer.resizeItem
+  let resizeAnchorScheduled = false
+  const anchorResizedBottom = () => {
+    if (resizeAnchorScheduled || props.hasScrollGesture()) return
+    resizeAnchorScheduled = true
+    queueMicrotask(() => {
+      resizeAnchorScheduled = false
+      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      virtualizer.scrollToEnd()
+    })
+  }
   virtualizer.resizeItem = (index, size) => {
     const item = virtualizer.measurementsCache[index]
     const previous = item ? (virtualizer.itemSizeCache.get(item.key) ?? item.size) : undefined
@@ -462,9 +472,13 @@ export function MessageTimeline(props: {
       })
     }
     resizeItem(index, size)
+    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
   }
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-    item.end <= instance.getLogicalScrollOffset()
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
+    if (props.shouldAnchorBottom()) return false
+    const first = virtualizer.range?.startIndex
+    return first !== undefined && item.index < first
+  }
   const virtualItemByKey = createMemo(
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
@@ -491,24 +505,13 @@ export function MessageTimeline(props: {
     })
   })
 
-  let bottomAnchorSessionKey = ""
-  let bottomAnchorFrame: number | undefined
-
   const maybeAnchorBottom = () => {
-    const key = sessionKey()
-    if (bottomAnchorSessionKey === key) return
     if (timelineRows().length === 0) return
-    bottomAnchorSessionKey = key
-    if (!props.shouldAnchorBottom()) return
-    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
+    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
-    bottomAnchorFrame = requestAnimationFrame(() => {
-      bottomAnchorFrame = undefined
-      if (sessionKey() !== key) return
-      virtualizer.scrollToEnd()
-    })
+    virtualizer.scrollToEnd()
   }
 
   let measuredSessionKey = sessionKey()
@@ -527,7 +530,6 @@ export function MessageTimeline(props: {
     timelineCache.delete(ownerSessionKey)
     timelineCache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
     while (timelineCache.size > 16) timelineCache.delete(timelineCache.keys().next().value!)
-    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     if (overscanFrame !== undefined) cancelAnimationFrame(overscanFrame)
     props.setRevealMessage?.(() => {})
@@ -596,7 +598,20 @@ export function MessageTimeline(props: {
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
-    if (event.target !== event.currentTarget) return
+    props.onMarkScrollGesture(event.target)
+  }
+
+  const handleListPointerMove = (event: PointerEvent) => {
+    if (event.buttons !== 1) return
+    props.onMarkScrollGesture(event.target)
+  }
+
+  const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
+    const key = scrollKey(event)
+    if (!key) return
+    if (!isScrollKeyTarget(event.target, key)) return
+    if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
+    if (!prependLoading) clearPrependAnchor()
     props.onMarkScrollGesture(event.currentTarget)
   }
 
@@ -976,10 +991,16 @@ export function MessageTimeline(props: {
           .map((ref) => getMsgPart(ref.messageID, ref.partID))
           .filter((part): part is ToolPart => part?.type === "tool")
       })
+      const contextOpenKey = () => `context:${row().group.key}`
+      const open = createMemo(() => {
+        return toolOpen[contextOpenKey()] === true
+      })
 
       return (
         <ContextToolGroup
           parts={parts()}
+          open={open()}
+          onOpenChange={(value) => setToolOpen(contextOpenKey(), value)}
           busy={
             workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
           }
@@ -1339,6 +1360,8 @@ export function MessageTimeline(props: {
         onTouchEnd={handleListTouchEnd}
         onTouchCancel={handleListTouchEnd}
         onPointerDown={handleListPointerDown}
+        onPointerMove={handleListPointerMove}
+        onKeyDown={handleListKeyDown}
         onScroll={handleListScroll}
         onClick={props.onAutoScrollInteraction}
         class="relative min-w-0 w-full h-full"
@@ -1375,14 +1398,14 @@ export function MessageTimeline(props: {
                     <button
                       type="button"
                       data-slot="session-title-parent"
-                      class="min-w-0 max-w-[40%] truncate text-14-medium text-text-weak transition-colors hover:text-text-base"
+                      class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
                       onClick={navigateParent}
                     >
                       {parentTitle()}
                     </button>
                     <span
                       data-slot="session-title-separator"
-                      class="px-2 text-14-medium text-text-weak"
+                      class="-translate-y-[0.5px] pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
                       aria-hidden="true"
                     >
                       /
@@ -1395,7 +1418,7 @@ export function MessageTimeline(props: {
                         <h1
                           data-slot="session-title-child"
                           classList={{
-                            "text-14-medium text-text-strong truncate": true,
+                            "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
                             "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
                               settings.general.newLayoutDesigns(),
                             "grow-1 min-w-0": !settings.general.newLayoutDesigns(),
@@ -1414,7 +1437,7 @@ export function MessageTimeline(props: {
                         value={title.draft}
                         disabled={titleMutation.isPending}
                         classList={{
-                          "text-14-medium text-text-strong block": true,
+                          "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
                           "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !settings.general.newLayoutDesigns(),
                           "field-sizing-content self-start rounded-[6px] px-2 py-1 ":
                             settings.general.newLayoutDesigns(),

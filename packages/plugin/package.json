@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/plugin",
-  "version": "1.17.12",
+  "version": "1.17.14",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -27,9 +27,9 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.3.4",
-    "@opentui/keymap": ">=0.3.4",
-    "@opentui/solid": ">=0.3.4"
+    "@opentui/core": ">=0.4.3",
+    "@opentui/keymap": ">=0.4.3",
+    "@opentui/solid": ">=0.4.3"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {

@@ -294,8 +294,6 @@ export function createRoutes(
       HttpServer.layerServices,
     ]),
     Layer.provide(Layer.succeed(CorsConfig)(options)),
-    Layer.provideMerge(Observability.layer),
-
     Layer.provide(sessionLocationLayer),
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
@@ -308,6 +306,11 @@ export function createRoutes(
     Layer.provide(locationServiceMapV2),
 
     Layer.provide(AppNodeBuilderV1.build(app)),
+    // Must stay last: layers provided later in this pipe build beneath earlier ones,
+    // so Observability must come after every service graph. Otherwise eagerly forked
+    // fibers (e.g. the ModelsDev background refresh) capture Effect's default stdout
+    // logger and corrupt the TUI (#34730).
+    Layer.provideMerge(Observability.layer),
   )
 }
 
