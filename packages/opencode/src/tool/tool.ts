@@ -43,6 +43,17 @@ export type Context<M extends Metadata = Metadata> = {
   messages: SessionV1.WithParts[]
   metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
   ask(input: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
+  /**
+   * Silently evaluate a permission rule against the static config ruleset,
+   * without triggering the ask UI. Checks config rules only — does NOT include
+   * dynamic session-approved rules (rules approved at runtime via "always allow").
+   * Use `ask()` when you need the full permission flow including dynamic approvals.
+   *
+   * Tools that discover affected files only after running (e.g. grep, which
+   * learns matched paths from ripgrep output) use this to filter out denied
+   * results they couldn't have checked up front.
+   */
+  evaluate(input: { permission: string; pattern: string }): PermissionV1.Rule
 }
 
 export interface ExecuteResult<M extends Metadata = Metadata> {

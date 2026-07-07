@@ -39,6 +39,11 @@ const ctx = {
   messages: [],
   metadata: () => Effect.void,
   ask: () => Effect.void,
+  evaluate: ({ permission, pattern }: { permission: string; pattern: string }): PermissionV1.Rule => ({
+    permission,
+    pattern,
+    action: "ask",
+  }),
 }
 
 const root = path.join(__dirname, "../..")
@@ -216,6 +221,40 @@ describe("tool.grep", () => {
 
       expect(result.metadata.matches).toBe(1)
       expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
+    }),
+  )
+
+  // Regression for #35503: per-pattern deny rules under "grep" were ignored
+  // because grep passed the search regex (not file paths) to the permission
+  // check. Denied files should now be filtered out of the results, while
+  // matches in allowed files are still returned.
+  it.instance("filters out matches in files denied by grep permission rules", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      // Two files, both containing the pattern. "secret.txt" is denied.
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "secret.txt"), "needle here\n"))
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "open.txt"), "needle there\n"))
+
+      const deniedCtx: Tool.Context = {
+        ...ctx,
+        evaluate: ({ permission, pattern }) => ({
+          permission,
+          pattern,
+          // deny anything matching the secret file; allow everything else
+          action: pattern.endsWith("secret.txt") ? "deny" : "allow",
+        }),
+      }
+
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute({ pattern: "needle", path: test.directory, include: "*.txt" }, deniedCtx)
+
+      // The allowed file's match is returned...
+      expect(result.output).toContain("open.txt")
+      expect(result.output).toContain("needle there")
+      // ...and the denied file is filtered out.
+      expect(result.output).not.toContain("secret.txt")
+      expect(result.output).not.toContain("needle here")
     }),
   )
 })

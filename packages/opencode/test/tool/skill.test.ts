@@ -21,6 +21,11 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
+  evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({
+    permission,
+    pattern,
+    action: "ask" as const,
+  }),
 }
 
 afterEach(async () => {

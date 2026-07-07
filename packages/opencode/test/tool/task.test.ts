@@ -242,6 +242,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -282,6 +283,7 @@ describe("tool.task", () => {
               Effect.sync(() => {
                 calls.push(input)
               }),
+            evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
           },
         )
 
@@ -338,6 +340,7 @@ describe("tool.task", () => {
             messages: [],
             metadata: () => Effect.void,
             ask: () => Effect.void,
+            evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
           },
         )
         .pipe(Effect.forkChild)
@@ -376,6 +379,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -414,6 +418,7 @@ describe("tool.task", () => {
             messages: [],
             metadata: () => Effect.void,
             ask: () => Effect.void,
+            evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
           },
         )
 
@@ -479,6 +484,7 @@ describe("tool.task", () => {
             messages: [],
             metadata: () => Effect.void,
             ask: () => Effect.void,
+            evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
           },
         )
         .pipe(Effect.exit)
@@ -529,6 +535,7 @@ describe("tool.task", () => {
             messages: [],
             metadata: () => Effect.void,
             ask: () => Effect.void,
+            evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
           },
         )
         .pipe(Effect.forkChild)
@@ -581,6 +588,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -624,6 +632,7 @@ describe("tool.task", () => {
         messages: [],
         metadata: () => Effect.void,
         ask: () => Effect.void,
+        evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
       }
 
       const started = yield* def.execute(
@@ -688,6 +697,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -727,6 +737,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -765,6 +776,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -804,6 +816,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 
@@ -843,6 +856,7 @@ describe("tool.task", () => {
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
+          evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
         },
       )
 

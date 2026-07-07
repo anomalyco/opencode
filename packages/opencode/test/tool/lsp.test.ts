@@ -28,6 +28,7 @@ const ctx = {
   messages: [],
   metadata: () => Effect.void,
   ask: () => Effect.void,
+  evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
 }
 
 const workspaceSymbolQueries: string[] = []

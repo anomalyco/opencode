@@ -28,6 +28,7 @@ const baseCtx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
+  evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
 }
 
 type AskInput = {

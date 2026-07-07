@@ -32,6 +32,7 @@ const ctx: Tool.Context = {
   messages: [],
   metadata: () => Effect.void,
   ask: () => Effect.void,
+  evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
 }
 
 // Avoid the SDK Client here; other MCP tests mock it process-globally.

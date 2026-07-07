@@ -346,6 +346,8 @@ const layer = Layer.effect(
                 ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
               })
               .pipe(Effect.orDie),
+          evaluate: ({ permission: p, pattern }) =>
+            Permission.evaluate(p, pattern, Permission.merge(taskAgent.permission, session.permission ?? [])),
         })
         .pipe(
           Effect.catchCause((cause) => {
@@ -823,6 +825,7 @@ const layer = Layer.effect(
                     messages: [],
                     metadata: () => Effect.void,
                     ask: () => Effect.void,
+                    evaluate: ({ permission, pattern }) => ({ permission, pattern, action: "ask" as const }),
                   })
                   .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
               }

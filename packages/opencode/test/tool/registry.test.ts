@@ -453,6 +453,7 @@ describe("tool.registry", () => {
         messages: [],
         metadata: () => Effect.void,
         ask: () => Effect.void,
+  evaluate: ({ permission, pattern }: { permission: string; pattern: string }) => ({ permission, pattern, action: "ask" as const }),
       } satisfies Tool.Context)
 
       expect(result.output).toBe("here is an image")

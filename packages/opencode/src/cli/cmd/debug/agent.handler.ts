@@ -189,5 +189,8 @@ const createToolContext = Effect.fn("Cli.debug.agent.createToolContext")(functio
         }
       })
     },
+    evaluate({ permission, pattern }: { permission: string; pattern: string }) {
+      return Permission.evaluate(permission, pattern, ruleset)
+    },
   }
 })

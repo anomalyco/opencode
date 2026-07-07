@@ -24,6 +24,9 @@ function makeCtx(): Tool.Context {
     ask() {
       return Effect.void
     },
+    evaluate({ permission, pattern }) {
+      return { permission, pattern, action: "ask" as const }
+    },
   }
 }
 

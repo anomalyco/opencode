@@ -68,11 +68,20 @@ export const GrepTool = Tool.define(
           })
           if (result.length === 0) return empty
 
-          const rows = result.map((item) => ({
+          const allRows = result.map((item) => ({
             path: path.resolve(cwd, item.entry.path),
             line: item.line,
             text: item.text,
           }))
+
+          // Filter out matches in files denied by grep permission rules. Unlike
+          // read/glob, grep can't check up front — it only learns which files
+          // matched from ripgrep output — so denied paths are filtered here,
+          // after the search. (#35503)
+          const rows = allRows.filter((row) => {
+            const relPath = path.relative(ins.worktree, row.path)
+            return ctx.evaluate({ permission: "grep", pattern: relPath }).action !== "deny"
+          })
 
           const limit = 100
           const truncated = rows.length === limit

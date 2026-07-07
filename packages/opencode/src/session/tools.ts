@@ -87,6 +87,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
         })
         .pipe(Effect.orDie),
+    evaluate: (req) =>
+      Permission.evaluate(
+        req.permission,
+        req.pattern,
+        Permission.merge(input.agent.permission, input.session.permission ?? []),
+      ),
   })
 
   for (const item of yield* registry.tools({
