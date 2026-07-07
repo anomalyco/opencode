@@ -150,31 +150,44 @@ export type LocationError = LayerNode.Error<typeof locationServices>
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
+  // Structural Equal is own-key-set sensitive, so `{ directory }` (schema-decoded
+  // payloads omit optional keys) and `{ directory, workspaceID: undefined }` are
+  // different RcMap keys. The RcMap caches by the raw key before the build
+  // callback runs, so canonicalize at the map boundary to the key-present shape.
+  const canonical = (ref: Location.Ref) => Location.Ref.make({ directory: ref.directory, workspaceID: ref.workspaceID })
   return Layer.effect(
     LocationServiceMap.Service,
-    LayerMap.make(
-      (ref: Location.Ref) => {
-        const startedAt = performance.now()
-        const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
-        // Apply replacements during hoist, not afterward: replacements can
-        // introduce new tagged dependencies (Location.boundNode depends on
-        // Project), and the hoist walk is the only pass that can still slice
-        // those back out.
-        const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
+    Effect.map(
+      LayerMap.make(
+        (ref: Location.Ref) => {
+          const startedAt = performance.now()
+          const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+          // Apply replacements during hoist, not afterward: replacements can
+          // introduce new tagged dependencies (Location.boundNode depends on
+          // Project), and the hoist walk is the only pass that can still slice
+          // those back out.
+          const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
 
-        return LayerNode.compile(location.node).pipe(
-          Layer.fresh,
-          Layer.tap(() =>
-            Effect.logInfo("location services booted", {
-              directory: ref.directory,
-              workspaceID: ref.workspaceID,
-              durationMs: Math.round(performance.now() - startedAt),
-            }),
-          ),
-          Layer.provide(LayerNode.compile(location.hoisted)),
-        )
-      },
-      { idleTimeToLive: "60 minutes" },
+          return LayerNode.compile(location.node).pipe(
+            Layer.fresh,
+            Layer.tap(() =>
+              Effect.logInfo("location services booted", {
+                directory: ref.directory,
+                workspaceID: ref.workspaceID,
+                durationMs: Math.round(performance.now() - startedAt),
+              }),
+            ),
+            Layer.provide(LayerNode.compile(location.hoisted)),
+          )
+        },
+        { idleTimeToLive: "60 minutes" },
+      ),
+      (inner) => ({
+        ...inner,
+        get: (ref: Location.Ref) => inner.get(canonical(ref)),
+        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
+        invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
+      }),
     ),
   )
 }

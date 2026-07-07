@@ -3,7 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
-import { Context, DateTime, Effect, Equal, Hash, Schema, Stream } from "effect"
+import { Context, DateTime, Effect, Equal, Hash, RcMap, Schema, Stream } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -202,6 +202,36 @@ describe("LocationServiceMap", () => {
             expect(Equal.equals(constructed, decoded)).toBe(true)
             expect(Hash.hash(constructed)).toBe(Hash.hash(decoded))
             expect(yield* locations.contextEffect(constructed)).toBe(yield* locations.contextEffect(decoded))
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.live("normalizes ref key shapes to one cached location graph", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const locations = yield* LocationServiceMap.Service
+            const directory = AbsolutePath.make(dir.path)
+            const absent = Location.Ref.make({ directory })
+            const present = Location.Ref.make({ directory, workspaceID: undefined })
+            // The two shapes are not structurally Equal: own-key sets differ.
+            expect(Object.keys(absent)).toEqual(["directory"])
+            expect(Object.keys(present)).toEqual(["directory", "workspaceID"])
+            expect(Equal.equals(absent, present)).toBe(false)
+
+            const first = yield* locations.contextEffect(absent)
+            expect(yield* locations.contextEffect(present)).toBe(first)
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+
+            // Invalidating with the shape opposite to the one that booted must evict.
+            yield* locations.invalidate(present)
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
           }),
         ),
       ),
