@@ -21,6 +21,11 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
   const directory = () => decode64(local.slug())
   const providers = useProviders(directory)
   const language = useLanguage()
+  const modelKey = (item: ReturnType<ModelState["list"]>[number]) => `${item.provider.id}:${item.id}`
+  const currentKey = createMemo(() => {
+    const c = model.current()
+    return c ? `${c.provider.id}:${c.id}` : undefined
+  })
   const freeModels = createMemo(() =>
     model.list().filter((item) => item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)),
   )
@@ -78,6 +83,9 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                     <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
                     <Show when={item.latest}>
                       <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
+                    </Show>
+                    <Show when={currentKey() === modelKey(item)}>
+                      <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
                     </Show>
                   </button>
                 </TooltipV2>
