@@ -54,6 +54,7 @@ type NotificationIndex = {
 
 const MAX_NOTIFICATIONS = 500
 const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
+const EMPTY_NOTIFICATIONS: Notification[] = []
 
 function pruneNotifications(list: Notification[]) {
   const cutoff = Date.now() - NOTIFICATION_TTL_MS
@@ -123,6 +124,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const language = useLanguage()
     const owner = getOwner()
     const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
+    const missingServerState = createMissingServerNotificationState()
 
     const activeServer = createMemo(() => {
       if (params.serverKey) return requireServerKey(params.serverKey)
@@ -137,7 +139,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const ensure = (key: ServerConnection.Key) => {
       const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
-      if (!conn) throw new Error(`Notification server not found: ${key}`)
+      if (!conn) return missingServerState
       const ctx = global.ensureServerCtx(conn)
       const existing = states.get(ctx.sdk.scope)
       if (existing) return existing.state
@@ -200,6 +202,26 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 })
 
 type NotificationState = ReturnType<typeof createServerNotificationState>
+
+function createMissingServerNotificationState(): NotificationState {
+  return {
+    ready: Object.assign(() => false, { promise: undefined }),
+    session: {
+      all: () => EMPTY_NOTIFICATIONS,
+      unseen: () => EMPTY_NOTIFICATIONS,
+      unseenCount: () => 0,
+      unseenHasError: () => false,
+      markViewed: () => {},
+    },
+    project: {
+      all: () => EMPTY_NOTIFICATIONS,
+      unseen: () => EMPTY_NOTIFICATIONS,
+      unseenCount: () => 0,
+      unseenHasError: () => false,
+      markViewed: () => {},
+    },
+  }
+}
 
 function createServerNotificationState(input: {
   sdk: ServerSDK
