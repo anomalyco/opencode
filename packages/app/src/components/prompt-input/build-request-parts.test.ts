@@ -333,6 +333,29 @@ describe("buildRequestParts", () => {
     }
   })
 
+  test("handles UNC workspace paths without producing invalid file URLs", () => {
+    const prompt: Prompt = [{ type: "file", path: "src\\foo.ts", content: "@src\\foo.ts", start: 0, end: 11 }]
+
+    const result = buildRequestParts({
+      prompt,
+      context: [{ key: "ctx_unc", type: "file", path: "docs\\guide.md" }],
+      images: [],
+      text: "@src\\foo.ts",
+      messageID: "msg_unc",
+      sessionID: "ses_unc",
+      sessionDirectory: "\\\\server\\share\\project",
+    })
+
+    const fileParts = result.requestParts.filter((part) => part.type === "file")
+    expect(fileParts).toHaveLength(2)
+    fileParts.forEach((part) => {
+      if (part.type !== "file") return
+      expect(part.url.startsWith("file://server/share/project/")).toBe(true)
+      expect(part.url.startsWith("file:////")).toBe(false)
+      expect(() => new URL(part.url)).not.toThrow()
+    })
+  })
+
   test("handles selection with query parameters on Windows", () => {
     const prompt: Prompt = [
       {

@@ -38,6 +38,10 @@ const absolute = (directory: string, path: string) => {
 
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
+const fileUrl = (path: string, selection?: FileSelection) => {
+  const prefix = path.startsWith("\\\\") || path.startsWith("//") ? "file:" : "file://"
+  return `${prefix}${encodeFilePath(path)}${fileQuery(selection)}`
+}
 
 const mention = /(^|[\s([{"'])@(\S+)/g
 
@@ -121,7 +125,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       id: Identifier.ascending("part"),
       type: "file",
       mime: attachment.mime ?? "text/plain",
-      url: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
+      url: attachment.url ?? fileUrl(path, attachment.selection),
       filename: attachment.filename ?? getFilename(attachment.path),
       source,
     } satisfies PromptRequestPart
@@ -143,7 +147,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   const used = new Set(files.map((part) => part.url))
   const context = input.context.flatMap((item) => {
     const path = absolute(input.sessionDirectory, item.path)
-    const url = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
+    const url = fileUrl(path, item.selection)
     const comment = item.comment?.trim()
     if (!comment && used.has(url)) return []
     used.add(url)
@@ -159,7 +163,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     if (!comment) return [filePart]
 
     const mentions = parseCommentMentions(comment).flatMap((path) => {
-      const url = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+      const url = fileUrl(absolute(input.sessionDirectory, path))
       if (used.has(url)) return []
       used.add(url)
       return [

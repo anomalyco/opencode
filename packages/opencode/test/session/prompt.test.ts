@@ -2099,6 +2099,41 @@ noLLMServer.instance(
 )
 
 noLLMServer.instance(
+  "does not fail the prompt when a file URL is invalid",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review @bad-url" },
+          {
+            type: "file",
+            mime: "text/plain",
+            url: "file://[",
+            filename: "bad-url",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const hasFailure = msg.parts.some(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("Read tool failed to read bad-url"),
+      )
+      expect(hasFailure).toBe(true)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
   "keeps stored part order stable when file resolution is async",
   () =>
     Effect.gen(function* () {

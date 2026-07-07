@@ -187,6 +187,18 @@ describe("encodeFilePath", () => {
       expect(() => new URL(fileUrl)).not.toThrow()
       expect(result).toBe("/c:/users/test/file.txt")
     })
+
+    test("should handle UNC paths without introducing extra slashes", () => {
+      const uncPath = "\\\\server\\share\\project\\README.md"
+      const result = encodeFilePath(uncPath)
+      const fileUrl = `file:${result}`
+
+      expect(result).toBe("//server/share/project/README.md")
+      expect(() => new URL(fileUrl)).not.toThrow()
+      const url = new URL(fileUrl)
+      expect(url.hostname).toBe("server")
+      expect(url.pathname).toBe("/share/project/README.md")
+    })
   })
 
   describe("Cross-platform compatibility", () => {

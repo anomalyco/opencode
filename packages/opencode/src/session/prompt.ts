@@ -782,6 +782,23 @@ const layer = Layer.effect(
             }
             return pieces
           }
+          if (!URL.canParse(part.url)) {
+            const message = `Invalid file URL: ${part.url}`
+            yield* Effect.logError("failed to parse file URL", { url: part.url, sessionID: input.sessionID })
+            yield* events.publish(Session.Event.Error, {
+              sessionID: input.sessionID,
+              error: new NamedError.Unknown({ message }).toObject(),
+            })
+            return [
+              {
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `Read tool failed to read ${part.filename ?? part.url} with the following error: ${message}`,
+              },
+            ]
+          }
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
@@ -807,7 +824,26 @@ const layer = Layer.effect(
               break
             case "file:": {
               yield* Effect.logInfo("file", { mime: part.mime })
-              const filepath = fileURLToPath(part.url)
+              const pathExit = yield* Effect.sync(() => fileURLToPath(part.url)).pipe(Effect.exit)
+              if (Exit.isFailure(pathExit)) {
+                const error = Cause.squash(pathExit.cause)
+                yield* Effect.logError("failed to resolve file URL", { error, url: part.url })
+                const message = error instanceof Error ? error.message : String(error)
+                yield* events.publish(Session.Event.Error, {
+                  sessionID: input.sessionID,
+                  error: new NamedError.Unknown({ message }).toObject(),
+                })
+                return [
+                  {
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Read tool failed to read ${part.filename ?? part.url} with the following error: ${message}`,
+                  },
+                ]
+              }
+              const filepath = pathExit.value
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
               const { read } = yield* registry.named()
