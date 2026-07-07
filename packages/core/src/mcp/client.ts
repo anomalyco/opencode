@@ -3,7 +3,7 @@ export * as MCPClient from "./client"
 import path from "node:path"
 import { execFile } from "node:child_process"
 import { pathToFileURL } from "node:url"
-import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
@@ -19,6 +19,7 @@ import {
   ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
+  isJSONRPCRequest,
   PromptListChangedNotificationSchema,
   PromptSchema,
   ResourceListChangedNotificationSchema,
@@ -31,13 +32,6 @@ import {
 import { Cause, Effect, Exit, Schema, Scope, Semaphore } from "effect"
 import { ConfigMCP } from "../config/mcp"
 import { InstallationVersion } from "../installation/version"
-
-declare module "@modelcontextprotocol/sdk/client/streamableHttp.js" {
-  interface StreamableHTTPClientTransport {
-    /** Added by the repository's MCP SDK session-recovery patch. */
-    onsessionexpired?: () => Promise<void>
-  }
-}
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -256,10 +250,10 @@ export const connect = Effect.fnUntraced(function* (
     const resourceSubscriptions = new Map<string, Set<() => void>>()
     const resourceListChangedCallbacks = new Set<() => void>()
     const resourceSubscriptionLock = Semaphore.makeUnsafe(1)
-    const notify = async (callbacks: Iterable<() => void>) => {
+    const notify = (callbacks: Iterable<() => void>) => {
       for (const callback of callbacks) {
         try {
-          await callback()
+          callback()
         } catch {}
       }
     }
@@ -268,36 +262,41 @@ export const connect = Effect.fnUntraced(function* (
     )
     client.setNotificationHandler(ResourceListChangedNotificationSchema, () => notify(resourceListChangedCallbacks))
     if (transport instanceof StreamableHTTPClientTransport) {
-      const recover = transport.onsessionexpired
-      transport.onsessionexpired = async () => {
-        await recover?.()
-        await notify(resourceListChangedCallbacks)
-        if (client.getServerCapabilities()?.resources?.subscribe)
-          // The transport cannot send ordinary requests until its recovery callback returns.
-          setTimeout(() => {
-            Effect.runFork(
-              resourceSubscriptionLock.withPermit(
-                Effect.forEach(
-                  resourceSubscriptions.keys(),
-                  (uri) =>
-                    Effect.tryPromise({
-                      try: (signal) => client.subscribeResource({ uri }, { signal, timeout: catalogTimeout }),
-                      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-                    }).pipe(
-                      Effect.tapError((error) =>
-                        Effect.logWarning("failed to restore MCP resource subscription", {
-                          server,
-                          uri,
-                          error: error.message,
-                        }),
-                      ),
-                      Effect.ignore,
-                    ),
-                  { discard: true },
+      transport.onsessionrecovered = async (request, triggeringMessage) => {
+        notify(resourceListChangedCallbacks)
+        if (!client.getServerCapabilities()?.resources?.subscribe) return undefined
+        const triggeringSubscription =
+          isJSONRPCRequest(triggeringMessage) &&
+          triggeringMessage.method === "resources/subscribe" &&
+          typeof triggeringMessage.params?.uri === "string"
+            ? triggeringMessage.params.uri
+            : undefined
+        const restored = new Set(
+          await Effect.runPromise(
+            Effect.forEach(resourceSubscriptions.keys(), (uri) => {
+              if (uri === triggeringSubscription) return Effect.succeed(undefined)
+              return Effect.tryPromise({
+                try: (signal) => request(() => client.subscribeResource({ uri }, { signal, timeout: catalogTimeout })),
+                catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("failed to restore MCP resource subscription", {
+                    server,
+                    uri,
+                    error: error.message,
+                  }),
                 ),
-              ),
-            )
-          }, 0)
+                Effect.as(uri),
+              )
+            }),
+          ),
+        )
+        return (message) =>
+          !Array.isArray(message) &&
+          isJSONRPCRequest(message) &&
+          message.method === "resources/subscribe" &&
+          typeof message.params?.uri === "string" &&
+          restored.has(message.params.uri)
       }
     }
     return {
@@ -439,6 +438,8 @@ export const connect = Effect.fnUntraced(function* (
               const current = resourceSubscriptions.get(input.uri)
               if (current) current.add(listener)
               if (!current) {
+                const listeners = new Set([listener])
+                resourceSubscriptions.set(input.uri, listeners)
                 yield* Effect.tryPromise({
                   try: (signal) => client.subscribeResource({ uri: input.uri }, { signal, timeout: catalogTimeout }),
                   catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -450,8 +451,13 @@ export const connect = Effect.fnUntraced(function* (
                       error: error.message,
                     }),
                   ),
+                  Effect.onExit((exit) => {
+                    if (Exit.isSuccess(exit)) return Effect.void
+                    return Effect.sync(() => {
+                      if (resourceSubscriptions.get(input.uri) === listeners) resourceSubscriptions.delete(input.uri)
+                    })
+                  }),
                 )
-                resourceSubscriptions.set(input.uri, new Set([listener]))
               }
               return listener
             }),

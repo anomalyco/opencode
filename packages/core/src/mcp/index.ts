@@ -416,24 +416,28 @@ export const layer = Layer.effect(
       entry: ServerEntry,
       connection: MCPClient.Connection,
     ) {
-      const revision = entry.resourceRevision
-      const result = yield* Effect.all(
-        {
-          resources:
-            entry.resources === undefined
-              ? connection.resources().pipe(Effect.catch(() => Effect.succeed(undefined)))
-              : Effect.succeed(undefined),
-          templates:
-            entry.resourceTemplates === undefined
-              ? connection.resourceTemplates().pipe(Effect.catch(() => Effect.succeed(undefined)))
-              : Effect.succeed(undefined),
-        },
-        { concurrency: "unbounded" },
-      )
-      if (entry.client !== connection || entry.resourceRevision !== revision) return
-      if (result.resources !== undefined) entry.resources = result.resources.map((def) => toResource(name, def))
-      if (result.templates !== undefined)
-        entry.resourceTemplates = result.templates.map((def) => toResourceTemplate(name, def))
+      while (true) {
+        const revision = entry.resourceRevision
+        const result = yield* Effect.all(
+          {
+            resources:
+              entry.resources === undefined
+                ? connection.resources().pipe(Effect.catch(() => Effect.succeed(undefined)))
+                : Effect.succeed(undefined),
+            templates:
+              entry.resourceTemplates === undefined
+                ? connection.resourceTemplates().pipe(Effect.catch(() => Effect.succeed(undefined)))
+                : Effect.succeed(undefined),
+          },
+          { concurrency: "unbounded" },
+        )
+        if (entry.client !== connection) return
+        if (entry.resourceRevision !== revision) continue
+        if (result.resources !== undefined) entry.resources = result.resources.map((def) => toResource(name, def))
+        if (result.templates !== undefined)
+          entry.resourceTemplates = result.templates.map((def) => toResourceTemplate(name, def))
+        return
+      }
     })
 
     const refreshTools = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
