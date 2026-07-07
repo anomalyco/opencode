@@ -461,7 +461,7 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata from failed assistant turns", () => {
+  test("lowers failed assistant reasoning to text", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -501,7 +501,7 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "reasoning", text: "Partial thought", providerMetadata: undefined },
+      { type: "text", text: "Partial thought" },
       {
         type: "tool-call",
         id: "hosted-failed",

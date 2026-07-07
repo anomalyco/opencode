@@ -120,12 +120,12 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
-      return sameModel
+      return reuseProviderMetadata
         ? [
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: reuseProviderMetadata ? providerMetadata(model.providerID, item.state) : undefined,
+              providerMetadata: providerMetadata(model.providerID, item.state),
             },
           ]
         : item.text.length > 0
