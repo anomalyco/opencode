@@ -59,7 +59,7 @@ import { createSessionLineage } from "@/pages/session/session-lineage"
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
 
-const NewSession = lazy(() => import("@/pages/new-session"))
+import NewSession from "@/pages/new-session"
 
 const SessionRoute = () => {
   const settings = useSettings()
