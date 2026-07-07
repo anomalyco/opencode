@@ -58,8 +58,27 @@ async function handle(
       recording.current = undefined
       return SimulationActions.video(current.frames)
     }
-    case "ui.action":
-      return SimulationActions.execute(harness, request.params.action)
+    case "ui.type":
+      return SimulationActions.execute(harness, { type: "typeText", text: request.params.text })
+    case "ui.enter":
+      return SimulationActions.execute(harness, { type: "pressEnter" })
+    case "ui.press":
+      return SimulationActions.execute(harness, {
+        type: "pressKey",
+        key: request.params.key,
+        modifiers: request.params.modifiers,
+      })
+    case "ui.arrow":
+      return SimulationActions.execute(harness, { type: "pressArrow", direction: request.params.direction })
+    case "ui.focus":
+      return SimulationActions.execute(harness, { type: "focus", target: request.params.target })
+    case "ui.click":
+      return SimulationActions.execute(harness, {
+        type: "click",
+        target: request.params.target,
+        x: request.params.x,
+        y: request.params.y,
+      })
     case "trace.list":
       return { records: SimulationTrace.list() }
     case "trace.clear":

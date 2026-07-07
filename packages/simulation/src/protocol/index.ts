@@ -101,14 +101,31 @@ export namespace Frontend {
   export const EndRecord = Schema.String
   export type EndRecord = Schema.Schema.Type<typeof EndRecord>
 
-  export const ActionParams = Schema.Struct({ action: Action })
-  export interface ActionParams extends Schema.Schema.Type<typeof ActionParams> {}
+  export const TypeParams = Schema.Struct({ text: Schema.String })
+  export interface TypeParams extends Schema.Schema.Type<typeof TypeParams> {}
+
+  export const PressParams = Schema.Struct({ key: Schema.String, modifiers: Schema.optional(KeyModifiers) })
+  export interface PressParams extends Schema.Schema.Type<typeof PressParams> {}
+
+  export const ArrowParams = Schema.Struct({ direction: Schema.Literals(["up", "down", "left", "right"]) })
+  export interface ArrowParams extends Schema.Schema.Type<typeof ArrowParams> {}
+
+  export const FocusParams = Schema.Struct({ target: Schema.Number })
+  export interface FocusParams extends Schema.Schema.Type<typeof FocusParams> {}
+
+  export const ClickParams = Schema.Struct({ target: Schema.Number, x: Schema.Number, y: Schema.Number })
+  export interface ClickParams extends Schema.Schema.Type<typeof ClickParams> {}
 
   export const Request = Schema.Union([
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.action"), params: ActionParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.type"), params: TypeParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.press"), params: PressParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.focus"), params: FocusParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literals([
+        "ui.enter",
         "ui.screenshot",
         "ui.state",
         "ui.start-record",
