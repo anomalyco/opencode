@@ -119,7 +119,7 @@ export function retryable(error: Err, provider: string) {
         },
       }
     }
-    return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
+    return { message: retryMessage(error) }
   }
 
   // Check for rate limit patterns in plain text error messages
@@ -149,6 +149,21 @@ export function retryable(error: Err, provider: string) {
     return { message: "Rate Limited" }
   }
   return undefined
+}
+
+function retryMessage(error: SessionV1.APIError) {
+  if (error.data.message.includes("Overloaded")) return "Provider is overloaded"
+  if (isHtmlDocument(error.data.message) || isHtmlDocument(error.data.responseBody)) {
+    const status = error.data.statusCode
+    if (status !== undefined && status >= 500) return `Provider temporarily unavailable (HTTP ${status})`
+    if (status !== undefined) return `Provider request failed (HTTP ${status})`
+    return "Provider request failed"
+  }
+  return error.data.message
+}
+
+function isHtmlDocument(value: unknown) {
+  return typeof value === "string" && /<(?:!doctype\s+html|html|head|body)(?:\s|>)/i.test(value)
 }
 
 function str(value: unknown) {

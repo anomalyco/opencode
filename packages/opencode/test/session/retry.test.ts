@@ -228,6 +228,28 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Service unavailable" })
   })
 
+  test("bounds html retry messages for provider 503 errors", () => {
+    const html = `<html>
+<head><title>503 Service Temporarily Unavailable</title></head>
+<body>
+<center><h1>503 Service Temporarily Unavailable</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>`
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: `Provider request failed with HTTP 503: ${html}`,
+        isRetryable: false,
+        statusCode: 503,
+        responseBody: html,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "Provider temporarily unavailable (HTTP 503)",
+    })
+  })
+
   test("does not retry 4xx errors when isRetryable is false", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({
