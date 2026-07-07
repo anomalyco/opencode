@@ -16,6 +16,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
     "@opentui/core": "catalog:",
