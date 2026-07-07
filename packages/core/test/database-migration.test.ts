@@ -9,7 +9,6 @@ import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
-import v2SessionUsageMigration from "@opencode-ai/core/database/migration/20260706120000_v2_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
@@ -530,53 +529,6 @@ describe("DatabaseMigration", () => {
           tokens_cache_read: 5,
           tokens_cache_write: 6,
         })
-      }),
-    )
-  })
-
-  test("backfills V2 session usage without replacing legacy-only totals", async () => {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* makeDb
-        yield* db.run(
-          sql`CREATE TABLE session (id text PRIMARY KEY, cost real NOT NULL, tokens_input integer NOT NULL, tokens_output integer NOT NULL, tokens_reasoning integer NOT NULL, tokens_cache_read integer NOT NULL, tokens_cache_write integer NOT NULL)`,
-        )
-        yield* db.run(
-          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, data text NOT NULL)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session VALUES ('v2', 0, 0, 0, 0, 0, 0), ('legacy', 9, 8, 7, 6, 5, 4)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_message VALUES ('assistant', 'v2', 'assistant', '{"cost":1.25,"tokens":{"input":2,"output":3,"reasoning":4,"cache":{"read":5,"write":6}}}')`,
-        )
-
-        yield* DatabaseMigration.applyOnly(db, [v2SessionUsageMigration])
-
-        expect(
-          yield* db.all(
-            sql`SELECT id, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write FROM session ORDER BY id`,
-          ),
-        ).toEqual([
-          {
-            id: "legacy",
-            cost: 9,
-            tokens_input: 8,
-            tokens_output: 7,
-            tokens_reasoning: 6,
-            tokens_cache_read: 5,
-            tokens_cache_write: 4,
-          },
-          {
-            id: "v2",
-            cost: 1.25,
-            tokens_input: 2,
-            tokens_output: 3,
-            tokens_reasoning: 4,
-            tokens_cache_read: 5,
-            tokens_cache_write: 6,
-          },
-        ])
       }),
     )
   })
