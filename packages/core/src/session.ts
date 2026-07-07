@@ -743,11 +743,7 @@ function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Inf
 const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (input: PromptInput.Prompt) {
   const fs = yield* FSUtil.Service
   const files = input.files
-    ? yield* Effect.forEach(
-        input.files,
-        (file) => materializeAttachment(fs, file),
-        { concurrency: 8 },
-      )
+    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file), { concurrency: 8 })
     : undefined
   return Prompt.make({ text: input.text, agents: input.agents, files })
 })
@@ -778,7 +774,11 @@ const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(funct
   const content =
     mime === "text/plain" && resolved.start !== undefined
       ? Buffer.from(
-          Buffer.from(resolved.bytes).toString("utf8").split("\n").slice(resolved.start - 1, resolved.end).join("\n"),
+          Buffer.from(resolved.bytes)
+            .toString("utf8")
+            .split("\n")
+            .slice(resolved.start - 1, resolved.end)
+            .join("\n"),
         )
       : resolved.bytes
   return FileAttachment.create({
@@ -808,13 +808,13 @@ const readFileAttachment = Effect.fn("V2Session.readFileAttachment")(function* (
     },
     catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
   })
-  const info = yield* fs.stat(target).pipe(
-    Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })),
-  )
+  const info = yield* fs
+    .stat(target)
+    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
   if (info.type === "Directory") {
-    const entries = yield* fs.readDirectoryEntries(target).pipe(
-      Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })),
-    )
+    const entries = yield* fs
+      .readDirectoryEntries(target)
+      .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
     return {
       bytes: Buffer.from(
         entries
@@ -836,9 +836,9 @@ const readFileAttachment = Effect.fn("V2Session.readFileAttachment")(function* (
       uri,
       message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${uri}`,
     })
-  const bytes = yield* fs.readFile(target).pipe(
-    Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })),
-  )
+  const bytes = yield* fs
+    .readFile(target)
+    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
   return { bytes, source: { type: "uri" as const, uri }, start, end, name: path.basename(target), mime: undefined }
 })
 

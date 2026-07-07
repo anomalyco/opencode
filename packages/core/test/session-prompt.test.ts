@@ -338,7 +338,8 @@ describe("SessionV2.prompt", () => {
           name: "image.png",
         },
       ])
-      expect((yield* admitted(message.id))?.prompt.files).toEqual(message.prompt.files)
+      const stored = yield* admitted(message.id)
+      expect(stored?.type === "prompt" ? stored.prompt.files : undefined).toEqual(message.prompt.files)
     }),
   )
 

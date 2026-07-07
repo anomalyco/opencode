@@ -151,10 +151,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     }
     if (url.endsWith("/api/session/active")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          Response.json({ data: { ses_test: { type: "running" } } }),
-        ),
+        HttpClientResponse.fromWeb(request, Response.json({ data: { ses_test: { type: "running" } } })),
       )
     }
     if (request.method === "POST" && url.endsWith("/api/session")) {
@@ -164,10 +161,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
     }
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
-        request,
-        Response.json({ data: [session.data], cursor: { next: "next" } }),
-      ),
+      HttpClientResponse.fromWeb(request, Response.json({ data: [session.data], cursor: { next: "next" } })),
     )
   })
   const result = await Effect.gen(function* () {

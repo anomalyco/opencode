@@ -46,7 +46,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.vcs)).toEqual(["status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
-  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
+  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
 })
 
@@ -243,8 +243,7 @@ test("session methods use the public HTTP contract", async () => {
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
-      if (url.endsWith("/api/session/active"))
-        return Response.json({ data: { ses_test: { type: "running" } } })
+      if (url.endsWith("/api/session/active")) return Response.json({ data: { ses_test: { type: "running" } } })
       if (init?.method === "POST" && url.endsWith("/api/session")) return Response.json(session)
       if (init?.method === "POST") return new Response(null, { status: 204 })
       return Response.json({ data: [session.data], cursor: { next: "next" } })

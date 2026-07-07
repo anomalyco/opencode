@@ -1338,7 +1338,7 @@ describe("SessionRunnerLLM", () => {
         fragmentFixture("text", "text-steer", ["Steer complete"]).completeEvents,
         fragmentFixture("text", "text-queue", ["Queue complete"]).completeEvents,
       ]
-      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Active work" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Active work" }), resume: false })
       const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
 
@@ -1353,10 +1353,14 @@ describe("SessionRunnerLLM", () => {
         status: "queued",
       })
 
-      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Steer after compaction" }), resume: false })
       yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Queue after compaction" }),
+        prompt: PromptInput.Prompt.make({ text: "Steer after compaction" }),
+        resume: false,
+      })
+      yield* session.prompt({
+        sessionID,
+        prompt: PromptInput.Prompt.make({ text: "Queue after compaction" }),
         delivery: "queue",
         resume: false,
       })
@@ -1391,14 +1395,14 @@ describe("SessionRunnerLLM", () => {
         [],
         fragmentFixture("text", "text-after-failure", ["Continued"]).completeEvents,
       ]
-      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Active work" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Active work" }), resume: false })
       const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
 
       const compaction = yield* session.compact({ sessionID })
       yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Continue after failure" }),
+        prompt: PromptInput.Prompt.make({ text: "Continue after failure" }),
         delivery: "queue",
         resume: false,
       })

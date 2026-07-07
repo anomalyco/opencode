@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
 export default {
-  id: "20260704161518_durable_session_inbox",
+  id: "20260707010146_durable_session_inbox",
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`PRAGMA foreign_keys=OFF;`)

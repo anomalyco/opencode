@@ -108,6 +108,64 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("restores running manual compaction before applying live deltas", async () => {
+  const events = createEventStream()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-compaction/message")
+      return json({
+        data: [
+          {
+            id: "message-compaction",
+            type: "compaction",
+            status: "running",
+            reason: "manual",
+            summary: "Existing ",
+            recent: "",
+            time: { created: 1 },
+          },
+        ],
+        cursor: {},
+      })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.refresh("session-compaction")
+    expect(data.session.compaction("session-compaction")).toBe("Existing ")
+
+    emitEvent(events, {
+      id: "evt_compaction_delta",
+      created: 2,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-compaction", text: "summary" },
+    })
+
+    await wait(() => {
+      const message = data.session.message.get("session-compaction", "message-compaction")
+      return message?.type === "compaction" && message.summary === "Existing summary"
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("reconnects the event stream and bootstraps fresh data", async () => {
   const events = createEventStream()
   const requests = { active: 0, event: 0, model: 0 }
@@ -402,10 +460,12 @@ test("tracks session status from active sessions and execution events", async ()
   }, events)
   let data!: ReturnType<typeof useData>
   let rows!: SessionRow[]
+  let manualRows!: SessionRow[]
 
   function Probe() {
     data = useData()
     rows = createSessionRows(() => "session-retry")
+    manualRows = createSessionRows(() => "session-manual")
     return <box />
   }
 
@@ -649,6 +709,9 @@ test("tracks session status from active sessions and execution events", async ()
       const message = data.session.message.get("session-manual", "message-compaction")
       return message?.type === "compaction" && message.status === "completed"
     })
+    expect(manualRows.filter((row) => row.type === "message")).toEqual([
+      { type: "message", messageID: "message-compaction" },
+    ])
 
     emitEvent(events, {
       id: "evt_compaction_started",

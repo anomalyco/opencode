@@ -305,13 +305,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInput.Admitted }),
-        error: [
-          ConflictError,
-          InvalidRequestError,
-          SessionNotFoundError,
-          CommandNotFoundError,
-          CommandEvaluationError,
-        ],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

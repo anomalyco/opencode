@@ -16,7 +16,7 @@ import contextEpochAgentMigration from "@opencode-ai/core/database/migration/202
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
 import resetSessionEventsMigration from "@opencode-ai/core/database/migration/20260703200000_reset_v2_session_events"
-import durableSessionInboxMigration from "@opencode-ai/core/database/migration/20260704161518_durable_session_inbox"
+import durableSessionInboxMigration from "@opencode-ai/core/database/migration/20260707010146_durable_session_inbox"
 import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import addSessionForkMigration from "@opencode-ai/core/database/migration/20260706223930_add-session-fork"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"

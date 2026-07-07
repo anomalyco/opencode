@@ -84,7 +84,13 @@ export function createSessionRows(sessionID: Accessor<string>) {
                 },
               ]
             : message.type === "compaction"
-              ? [{ id: message.id, created: message.time.created, status: message.status }]
+              ? [
+                  {
+                    id: message.id,
+                    created: message.time.created,
+                    input: message.status === "queued" || message.status === "running",
+                  },
+                ]
               : [],
         ),
       () => setRows(reconcile(reduce())),
@@ -97,7 +103,8 @@ export function createSessionRows(sessionID: Accessor<string>) {
         if (draft.some((row) => row.type === "message" && row.messageID === messageID)) return
         const pending = isPending(messageID)
         const message = data.session.message.get(sessionID(), messageID)
-        const index = message?.type === "compaction" && pending ? queuedStart(draft) : pending ? draft.length : queuedStart(draft)
+        const index =
+          message?.type === "compaction" && pending ? queuedStart(draft) : pending ? draft.length : queuedStart(draft)
         if (!pending) completePrevious(draft, index)
         draft.splice(index, 0, { type: "message", messageID })
       }),
@@ -175,7 +182,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.shell.started", message),
     data.on("session.agent.selected", message),
     data.on("session.model.selected", message),
-    data.on("session.compaction.ended", message),
+    data.on("session.compaction.ended", (event) => {
+      if (event.data.reason !== "manual") message(event)
+    }),
     data.on("session.text.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
@@ -221,30 +230,29 @@ export function reduceSessionRows(messages: SessionMessage[], inputs = new Set<s
     (message) => message.type === "compaction" && (message.status === "queued" || message.status === "running"),
   )
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
-  return [...messages.filter((message) => !pending.has(message.id)), ...pendingCompactions, ...messages.filter(isInput)].reduce<
-    SessionRow[]
-  >(
-    (rows, message) => {
-      if (message.type !== "assistant") {
-        if (message.type === "synthetic" && !message.description?.trim()) return rows
-        if (!pending.has(message.id)) completePrevious(rows)
-        rows.push({ type: "message", messageID: message.id })
-        return rows
-      }
-      const ordinals = { text: 0, reasoning: 0 }
-      message.content.forEach((part) => {
-        const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
-        if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-        append(rows, { messageID: message.id, partID }, part)
-      })
-      if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error || message.retry) {
-        completePrevious(rows)
-        rows.push({ type: "assistant-footer", messageID: message.id })
-      }
+  return [
+    ...messages.filter((message) => !pending.has(message.id)),
+    ...pendingCompactions,
+    ...messages.filter(isInput),
+  ].reduce<SessionRow[]>((rows, message) => {
+    if (message.type !== "assistant") {
+      if (message.type === "synthetic" && !message.description?.trim()) return rows
+      if (!pending.has(message.id)) completePrevious(rows)
+      rows.push({ type: "message", messageID: message.id })
       return rows
-    },
-    [],
-  )
+    }
+    const ordinals = { text: 0, reasoning: 0 }
+    message.content.forEach((part) => {
+      const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
+      if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
+      append(rows, { messageID: message.id, partID }, part)
+    })
+    if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error || message.retry) {
+      completePrevious(rows)
+      rows.push({ type: "assistant-footer", messageID: message.id })
+    }
+    return rows
+  }, [])
 }
 
 export function resolvePart(message: SessionMessageAssistant, partID: string) {

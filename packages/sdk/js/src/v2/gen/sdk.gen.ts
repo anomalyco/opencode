@@ -448,6 +448,8 @@ import type {
   V2ShellOutputResponses,
   V2ShellRemoveErrors,
   V2ShellRemoveResponses,
+  V2ShellTimeoutErrors,
+  V2ShellTimeoutResponses,
   V2SkillListErrors,
   V2SkillListResponses,
   V2VcsDiffErrors,
@@ -7800,6 +7802,46 @@ export class Shell extends HeyApiClient {
       url: "/api/shell/{id}",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update shell timeout
+   *
+   * Replace a running shell command's timeout from now, or clear it with zero.
+   */
+  public timeout<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      timeout?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "location" },
+            { in: "body", key: "timeout" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<V2ShellTimeoutResponses, V2ShellTimeoutErrors, ThrowOnError>({
+      url: "/api/shell/{id}/timeout",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

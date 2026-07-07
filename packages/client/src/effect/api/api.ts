@@ -168,8 +168,11 @@ export type Endpoint4_13Output = EffectValue<ReturnType<RawClient["server.sessio
 export type SessionShellOperation<E = never> = (input: Endpoint4_13Input) => Effect.Effect<Endpoint4_13Output, E>
 
 type Endpoint4_14Request = Parameters<RawClient["server.session"]["session.compact"]>[0]
-export type Endpoint4_14Input = { readonly sessionID: Endpoint4_14Request["params"]["sessionID"] }
-export type Endpoint4_14Output = EffectValue<ReturnType<RawClient["server.session"]["session.compact"]>>
+export type Endpoint4_14Input = {
+  readonly sessionID: Endpoint4_14Request["params"]["sessionID"]
+  readonly id?: Endpoint4_14Request["payload"]["id"]
+}
+export type Endpoint4_14Output = EffectValue<ReturnType<RawClient["server.session"]["session.compact"]>>["data"]
 export type SessionCompactOperation<E = never> = (input: Endpoint4_14Input) => Effect.Effect<Endpoint4_14Output, E>
 
 type Endpoint4_15Request = Parameters<RawClient["server.session"]["session.wait"]>[0]

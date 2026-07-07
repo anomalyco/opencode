@@ -214,7 +214,6 @@ test("places a pending compaction barrier before every queued user message", () 
     type: "user",
     id,
     text,
-    metadata: { queued: true },
     time: { created },
   })
   const messages: SessionMessage[] = [
@@ -231,7 +230,7 @@ test("places a pending compaction barrier before every queued user message", () 
     queued("user-after", "After", 3),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  expect(reduceSessionRows(messages, new Set(["user-before", "user-after"]))).toEqual([
     { type: "message", messageID: "compaction" },
     { type: "message", messageID: "user-before" },
     { type: "message", messageID: "user-after" },

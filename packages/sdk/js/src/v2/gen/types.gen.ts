@@ -17957,7 +17957,7 @@ export type V2ShellCreateData = {
   body: {
     command: string
     cwd?: string
-    timeout?: number
+    timeout: number
     metadata?: {
       [key: string]: unknown
     }
@@ -18079,6 +18079,51 @@ export type V2ShellGetResponses = {
 }
 
 export type V2ShellGetResponse = V2ShellGetResponses[keyof V2ShellGetResponses]
+
+export type V2ShellTimeoutData = {
+  body: {
+    timeout: number
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/shell/{id}/timeout"
+}
+
+export type V2ShellTimeoutErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * ShellNotFoundError
+   */
+  404: ShellNotFoundError
+}
+
+export type V2ShellTimeoutError = V2ShellTimeoutErrors[keyof V2ShellTimeoutErrors]
+
+export type V2ShellTimeoutResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfoV2
+    data: ShellV2
+  }
+}
+
+export type V2ShellTimeoutResponse = V2ShellTimeoutResponses[keyof V2ShellTimeoutResponses]
 
 export type V2ShellOutputData = {
   body?: never

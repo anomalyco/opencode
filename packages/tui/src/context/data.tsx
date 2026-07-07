@@ -838,6 +838,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             ].toSorted((a, b) => a.time.created - b.time.created)
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, messages)
+            const running = messages.find((message) => message.type === "compaction" && message.status === "running")
+            setStore("session", "compaction", sessionID, running?.type === "compaction" ? running.summary : undefined)
+            setStore(
+              "session",
+              "compactionReason",
+              sessionID,
+              running?.type === "compaction" ? running.reason : undefined,
+            )
           },
         },
         permission: {
