@@ -109,7 +109,8 @@ export const Plugin = define({
 })
 
 function expandPermissions(rules: PermissionV2.Ruleset, home: string): PermissionV2.Ruleset {
-  // Only expand resources resolved as paths; rewriting raw commands can make deny rules stop matching.
+  // Bash permissions match raw commands, so changing a deny from `$HOME/private/**`
+  // to `/Users/me/private/**` would let the raw command `$HOME/private/key` bypass it.
   const pathActions = new Set(["external_directory", "read", "edit"])
   return rules.map((rule) =>
     pathActions.has(rule.action) ? { ...rule, resource: expandHome(rule.resource, home) } : rule,
