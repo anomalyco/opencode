@@ -2212,19 +2212,21 @@ class Interpreter<R> {
       // Promise.resolve of a promise is that promise (JS flattens); anything else is a
       // promise already fulfilled with the value.
       const value = args[0]
-      return Effect.succeed(
-        value instanceof SandboxPromise ? value : new SandboxPromise(undefined, Effect.succeed(value)),
-      )
+      return value instanceof SandboxPromise ? Effect.succeed(value) : this.createPromise(Effect.succeed(value))
     }
     if (ref.name === "reject") {
-      return Effect.sync(() => new SandboxPromise(undefined, Effect.fail(new ProgramThrow(args[0]))))
+      return this.createPromise(Effect.fail(new ProgramThrow(args[0])))
     }
 
     const items = Array.isArray(args[0]) ? args[0] : spreadItems(args[0])
     if (items === undefined) {
-      throw new InterpreterRuntimeError(
-        `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
-        node,
+      return this.createPromise(
+        Effect.fail(
+          new InterpreterRuntimeError(
+            `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
+            node,
+          ),
+        ),
       )
     }
 
@@ -2238,7 +2240,7 @@ class Interpreter<R> {
             ? Effect.map(this.observePromise(item), (exit) => ({ index, item, exit }))
             : Effect.succeed({ index, item: undefined, exit: Exit.succeed(item) }),
         )
-        return Effect.gen(function* () {
+        const aggregate = Effect.gen(function* () {
           const remaining = [...observations]
           const values: Array<unknown> = []
           values.length = items.length
@@ -2250,18 +2252,24 @@ class Interpreter<R> {
               values[winner.index] = winner.exit.value
               continue
             }
-            yield* self.createPromise(
-              Effect.asVoid(
-                Effect.forEach(
-                  items,
-                  (item) => (item instanceof SandboxPromise ? self.observePromise(item) : Effect.void),
-                  { concurrency: "unbounded" },
-                ),
-              ),
-            )
             return yield* self.unwrapPromiseExit(winner.item, winner.exit, node)
           }
           return values
+        })
+        return Effect.gen(function* () {
+          const promise = yield* self.createPromise(aggregate)
+          // Keep observing every member after fail-fast settlement without tying the drain
+          // fiber to the aggregate fiber, whose completion interrupts its own children.
+          yield* self.createPromise(
+            Effect.asVoid(
+              Effect.forEach(
+                items,
+                (item) => (item instanceof SandboxPromise ? self.observePromise(item) : Effect.void),
+                { concurrency: "unbounded" },
+              ),
+            ),
+          )
+          return promise
         })
       }
       case "allSettled": {
@@ -2270,42 +2278,48 @@ class Interpreter<R> {
             ? Effect.map(this.observePromise(item), (exit) => ({ promise: item as SandboxPromise | undefined, exit }))
             : Effect.succeed({ promise: undefined as SandboxPromise | undefined, exit: Exit.succeed(item as unknown) }),
         )
-        return Effect.gen(function* () {
-          const outcomes: Array<unknown> = []
-          for (const observation of observations) {
-            const { exit, promise } = yield* observation
-            if (Exit.isSuccess(exit)) {
-              outcomes.push(
-                Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
-              )
-              continue
-            }
-            const raceInterrupted = promise?.interrupted === true && Cause.hasInterruptsOnly(exit.cause)
-            if (Cause.hasInterruptsOnly(exit.cause) && !raceInterrupted) {
-              // Execution teardown (timeout/host interruption), not a program-level rejection.
-              return yield* Effect.failCause(exit.cause)
-            }
-            const thrown = raceInterrupted
-              ? new InterpreterRuntimeError(
-                  "This tool call was interrupted because another value settled a Promise.race first.",
-                  node,
+        return this.createPromise(
+          Effect.gen(function* () {
+            const outcomes: Array<unknown> = []
+            for (const observation of observations) {
+              const { exit, promise } = yield* observation
+              if (Exit.isSuccess(exit)) {
+                outcomes.push(
+                  Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
                 )
-              : Cause.squash(exit.cause)
-            outcomes.push(
-              Object.assign(Object.create(null) as SafeObject, {
-                status: "rejected",
-                reason: caughtErrorValue(thrown),
-              }),
-            )
-          }
-          return outcomes
-        })
+                continue
+              }
+              const raceInterrupted = promise?.interrupted === true && Cause.hasInterruptsOnly(exit.cause)
+              if (Cause.hasInterruptsOnly(exit.cause) && !raceInterrupted) {
+                // Execution teardown (timeout/host interruption), not a program-level rejection.
+                return yield* Effect.failCause(exit.cause)
+              }
+              const thrown = raceInterrupted
+                ? new InterpreterRuntimeError(
+                    "This tool call was interrupted because another value settled a Promise.race first.",
+                    node,
+                  )
+                : Cause.squash(exit.cause)
+              outcomes.push(
+                Object.assign(Object.create(null) as SafeObject, {
+                  status: "rejected",
+                  reason: caughtErrorValue(thrown),
+                }),
+              )
+            }
+            return outcomes
+          }),
+        )
       }
       case "race": {
         if (items.length === 0) {
-          throw new InterpreterRuntimeError(
-            "Promise.race([]) would never settle; provide at least one promise or value.",
-            node,
+          return this.createPromise(
+            Effect.fail(
+              new InterpreterRuntimeError(
+                "Promise.race([]) would never settle; provide at least one promise or value.",
+                node,
+              ),
+            ),
           )
         }
         const observations = items.map((item, index) =>
@@ -2313,22 +2327,24 @@ class Interpreter<R> {
             ? Effect.map(this.observePromise(item), (exit) => ({ index, exit }))
             : Effect.succeed({ index, exit: Exit.succeed(item as unknown) }),
         )
-        return Effect.gen(function* () {
-          // First settlement (fulfilled OR rejected) wins; the observations never fail, so
-          // racing them yields exactly that. Losing in-flight calls are then interrupted.
-          const winner = yield* Effect.raceAll(observations)
-          for (const [index, item] of items.entries()) {
-            if (index === winner.index || !(item instanceof SandboxPromise) || item.fiber === undefined) continue
-            item.interrupted = true
-            yield* Fiber.interrupt(item.fiber)
-          }
-          const winningItem = items[winner.index]
-          return yield* self.unwrapPromiseExit(
-            winningItem instanceof SandboxPromise ? winningItem : undefined,
-            winner.exit,
-            node,
-          )
-        })
+        return this.createPromise(
+          Effect.gen(function* () {
+            // First settlement (fulfilled OR rejected) wins; the observations never fail, so
+            // racing them yields exactly that. Losing in-flight calls are then interrupted.
+            const winner = yield* Effect.raceAll(observations)
+            for (const [index, item] of items.entries()) {
+              if (index === winner.index || !(item instanceof SandboxPromise) || item.fiber === undefined) continue
+              item.interrupted = true
+              yield* Fiber.interrupt(item.fiber)
+            }
+            const winningItem = items[winner.index]
+            return yield* self.unwrapPromiseExit(
+              winningItem instanceof SandboxPromise ? winningItem : undefined,
+              winner.exit,
+              node,
+            )
+          }),
+        )
       }
     }
   }

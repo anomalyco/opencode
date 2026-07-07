@@ -270,6 +270,59 @@ describe("promises at data boundaries", () => {
 })
 
 describe("Promise.all over arbitrary arrays", () => {
+  test("combinators return promises that can be assigned and awaited later", async () => {
+    expect(
+      await value(`
+        const all = Promise.all([Promise.resolve(1)])
+        const settled = Promise.allSettled([Promise.reject("no")])
+        const race = Promise.race([Promise.resolve(2)])
+        const promises = [all instanceof Promise, settled instanceof Promise, race instanceof Promise]
+        return [promises, await all, await settled, await race]
+      `),
+    ).toEqual([[true, true, true], [1], [{ status: "rejected", reason: "no" }], 2])
+  })
+
+  test("separately-created aggregate batches overlap before either is awaited", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const first = Promise.all([tools.host.sleepy({ id: 1, ms: 40 })])
+          const second = Promise.all([tools.host.sleepy({ id: 2, ms: 40 })])
+          return [await first, await second]
+        `,
+        { trace },
+      ),
+    ).toEqual([[1], [2]])
+    expect(trace.starts).toEqual([1, 2])
+    expect(trace.maxActive).toBeGreaterThan(1)
+  })
+
+  test("an aggregate created before a try block rejects at its later await", async () => {
+    expect(
+      await value(`
+        const aggregate = Promise.all([tools.host.fail({})])
+        try {
+          await aggregate
+          return "no"
+        } catch (error) {
+          return error.message
+        }
+      `),
+    ).toBe("Lookup refused")
+  })
+
+  test("awaiting an aggregate repeatedly does not rerun its members", async () => {
+    const result = await run(`
+      const aggregate = Promise.all([tools.host.sleepy({ id: 7 })])
+      return [await aggregate, await aggregate]
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toEqual([[7], [7]])
+    expect(result.toolCalls).toStrictEqual([{ name: "host.sleepy" }])
+  })
+
   test("mixes promises and plain values, preserving order", async () => {
     expect(
       await value(`
@@ -370,6 +423,30 @@ describe("Promise.all over arbitrary arrays", () => {
         { trace },
       ),
     ).toBe(0)
+    expect(trace.completed).toBe(1)
+    expect(trace.interrupted).toBe(0)
+  })
+
+  test("drains a later sibling rejection after failing fast", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const failLater = async () => {
+            await tools.host.sleepy({ id: 1, ms: 40 })
+            throw new Error("later")
+          }
+          const aggregate = Promise.all([Promise.reject(new Error("first")), failLater()])
+          try {
+            await aggregate
+            return "no"
+          } catch (error) {
+            return error.message
+          }
+        `,
+        { trace },
+      ),
+    ).toBe("first")
     expect(trace.completed).toBe(1)
     expect(trace.interrupted).toBe(0)
   })
@@ -484,6 +561,9 @@ describe("Promise.resolve / Promise.reject", () => {
     expect(await value(`return await Promise.resolve(42)`)).toBe(42)
     expect(await value(`return await Promise.resolve(Promise.resolve("nested"))`)).toBe("nested")
     expect(await value(`return await Promise.resolve(tools.host.sleepy({ id: 3 }))`)).toBe(3)
+    expect(await value(`const promise = Promise.resolve(1); return [promise].includes(Promise.resolve(promise))`)).toBe(
+      true,
+    )
   })
 
   test("reject produces a promise whose await throws the reason", async () => {
@@ -497,6 +577,16 @@ describe("Promise.resolve / Promise.reject", () => {
       }
     `),
     ).toBe("nope")
+  })
+
+  test("an abandoned rejected promise is reported as unhandled", async () => {
+    const diagnostic = await error(`
+      Promise.reject(new Error("abandoned"))
+      return "done"
+    `)
+    expect(diagnostic.kind).toBe("ExecutionFailure")
+    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
+    expect(diagnostic.message).toContain("abandoned")
   })
 })
 
