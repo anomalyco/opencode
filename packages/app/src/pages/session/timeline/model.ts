@@ -45,7 +45,7 @@ export function createTimelineModel(input: {
   })
   const ready = createMemo(() => {
     const id = input.sessionID()
-    return !id || sync().data.message[id] !== undefined
+    return !id || isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id))
   })
   const userMessages = createMemo(() => selectUserMessages(messages()), emptyUserMessages, { equals: same })
   const visibleUserMessages = createMemo(
@@ -96,6 +96,10 @@ export function createTimelineModel(input: {
 
 export function selectUserMessages(messages: Message[]) {
   return messages.filter((message): message is UserMessage => message.role === "user")
+}
+
+export function isTimelineReady(messages: Message[] | undefined, loading: boolean) {
+  return messages !== undefined && (messages.some((message) => message.role === "user") || !loading)
 }
 
 export function selectVisibleUserMessages(messages: UserMessage[], revertMessageID?: string) {
