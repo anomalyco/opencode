@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { GlobalFonts, createCanvas } from "@napi-rs/canvas"
-import { TextAttributes, type CliRenderer, type RGBA } from "@opentui/core"
+import { TextAttributes, type CapturedFrame, type CliRenderer, type RGBA } from "@opentui/core"
 
 const CellWidth = 10
 const CellHeight = 20
@@ -13,14 +13,22 @@ GlobalFonts.registerFromPath(
 )
 
 export function screenshot(renderer: CliRenderer) {
-  const buffer = renderer.currentRenderBuffer
-  const canvas = createCanvas(buffer.width * CellWidth, buffer.height * CellHeight)
+  return render({
+    cols: renderer.currentRenderBuffer.width,
+    rows: renderer.currentRenderBuffer.height,
+    cursor: [0, 0],
+    lines: renderer.currentRenderBuffer.getSpanLines(),
+  })
+}
+
+export function render(frame: CapturedFrame) {
+  const canvas = createCanvas(frame.cols * CellWidth, frame.rows * CellHeight)
   const context = canvas.getContext("2d")
   context.fillStyle = "#080808"
   context.fillRect(0, 0, canvas.width, canvas.height)
   context.textBaseline = "top"
 
-  buffer.getSpanLines().forEach((line, row) => {
+  frame.lines.forEach((line, row) => {
     let column = 0
     line.spans.forEach((span) => {
       const attributes = span.attributes & 0xff
