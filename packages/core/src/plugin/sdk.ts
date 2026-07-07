@@ -39,11 +39,6 @@ export const layerWithStore = (store: Store) =>
     Service,
     Effect.gen(function* () {
       const events = yield* EventV2.Service
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          store.plugins.clear()
-        }),
-      )
       return Service.of({
         register: (plugin) =>
           Effect.sync(() => {
