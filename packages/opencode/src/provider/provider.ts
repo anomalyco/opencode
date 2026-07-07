@@ -1508,7 +1508,13 @@ async function discoverOpenAICompatibleModels(input: {
           },
           capabilities: {
             temperature: existingModel?.capabilities.temperature ?? true,
-            reasoning: existingModel?.capabilities.reasoning ?? false,
+            // fork: honor a llama-skein-advertised `reasoning` flag from
+            // /v1/models so reasoning models (which stream reasoning_content
+            // first) render their thinking instead of appearing frozen. A
+            // hand-configured capability still wins over discovery.
+            reasoning:
+              existingModel?.capabilities.reasoning ??
+              (typeof item.reasoning === "boolean" ? item.reasoning : false),
             attachment: existingModel?.capabilities.attachment ?? false,
             toolcall: existingModel?.capabilities.toolcall ?? true,
             input: existingModel?.capabilities.input ?? {
