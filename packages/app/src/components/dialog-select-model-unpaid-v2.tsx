@@ -5,7 +5,7 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createMemo, type Component, For, Show } from "solid-js"
+import { createMemo, onCleanup, onMount, type Component, For, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { decode64 } from "@/utils/base64"
@@ -42,15 +42,24 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
     dialog.close()
   }
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
-    const buttons = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button"))
-    if (buttons.length === 0) return
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    const next = index < 0 ? (e.key === "ArrowDown" ? 0 : buttons.length - 1) : index + (e.key === "ArrowDown" ? 1 : -1)
-    buttons[(next + buttons.length) % buttons.length]?.focus()
-    e.preventDefault()
-  }
+  // Focus starts on the dialog's close button, outside the list, so listen at the
+  // document level while the dialog is mounted instead of on the list container.
+  let listEl: HTMLDivElement | undefined
+  onMount(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
+      if (!listEl) return
+      const buttons = Array.from(listEl.querySelectorAll<HTMLButtonElement>("button"))
+      if (buttons.length === 0) return
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+      const next =
+        index < 0 ? (e.key === "ArrowDown" ? 0 : buttons.length - 1) : index + (e.key === "ArrowDown" ? 1 : -1)
+      buttons[(next + buttons.length) % buttons.length]?.focus()
+      e.preventDefault()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
+  })
 
   return (
     <DialogV2 containerClass="!h-[min(calc(100vh_-_16px),480px)] !w-[min(calc(100vw_-_16px),560px)]">
@@ -60,7 +69,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
       <div class="h-px w-full shrink-0 bg-v2-border-border-muted" />
       <DialogBody class="min-h-0 flex-1 gap-0">
         <ScrollView class="min-h-0 flex-1 w-full">
-          <div class="flex min-h-full flex-col" onKeyDown={handleKeyDown}>
+          <div ref={listEl} class="flex min-h-full flex-col">
             <div class="flex h-fit w-full flex-col items-start gap-0.5 px-3.5 pb-3.5 pt-3">
               <div class="flex h-8 w-full flex-none select-none flex-row items-center gap-2 self-stretch px-2.5 pb-2 pt-1">
                 <div class="flex h-5 flex-none flex-row items-center p-0 font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
@@ -78,7 +87,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                   >
                     <button
                       type="button"
-                      class="flex w-full flex-row items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                      class="flex w-full scroll-my-3.5 flex-row items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
                       onClick={() => selectModel(item)}
                     >
                       <span class="min-w-0 truncate">{item.name}</span>
@@ -116,7 +125,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                     {(provider) => (
                       <button
                         type="button"
-                        class="flex w-full flex-row items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                        class="flex w-full scroll-my-3.5 flex-row items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
                         onClick={() => openProviders(provider.id)}
                       >
                         <ProviderIcon id={provider.id} class="size-4 shrink-0 text-v2-icon-icon-muted" />
@@ -143,7 +152,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                   </For>
                   <button
                     type="button"
-                    class="flex h-9 w-full flex-row items-center justify-start gap-2 rounded-[6px] px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                    class="flex h-9 w-full scroll-my-3.5 flex-row items-center justify-start gap-2 rounded-[6px] px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
                     onClick={() => openProviders()}
                   >
                     <span class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-muted">
