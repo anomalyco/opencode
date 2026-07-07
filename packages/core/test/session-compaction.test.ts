@@ -83,13 +83,14 @@ test("compaction prompt requires the checkpoint headings in order", () => {
     "## Objective",
     "## Important Details",
     "## Work State",
+    "### Completed",
+    "### Active",
+    "### Blocked",
     "## Next Move",
+    "## Relevant Files",
   ])
   expect(prompt).toContain("one or two brief sentences")
   expect(prompt).toContain("constraints/preferences, decisions and why")
-  expect(prompt).toContain("Completed:")
-  expect(prompt).toContain("Active:")
-  expect(prompt).toContain("Blocked:")
   expect(prompt).toContain("immediate concrete action")
   expect(prompt).toContain("next action if known")
   expect(prompt).toContain("Keep every section, even when empty.")
