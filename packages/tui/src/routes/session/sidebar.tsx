@@ -85,7 +85,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <pluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
+          <pluginRuntime.Slot
+            name="sidebar_footer"
+            mode="single_winner"
+            session_id={props.sessionID}
+            directory={session()?.location.directory ?? ""}
+          >
             <text fg={theme.textMuted}>
               <span style={{ fg: theme.success }}>•</span> <b>Open</b>
               <span style={{ fg: theme.text }}>
