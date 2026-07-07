@@ -82,11 +82,12 @@ export const GrepTool = Tool.define(
             const relPath = path.relative(ins.worktree, row.path)
             return ctx.evaluate({ permission: "grep", pattern: relPath }).action !== "deny"
           })
+          const denied = allRows.length - rows.length
 
           const limit = 100
           const truncated = rows.length === limit
           const final = rows
-          if (final.length === 0) return empty
+          if (final.length === 0 && denied === 0) return empty
 
           const total = rows.length
           const hasMore = truncated || result.length === limit
@@ -105,6 +106,16 @@ export const GrepTool = Tool.define(
           if (truncated) {
             output.push("")
             output.push("(Results truncated. Consider using a more specific path or pattern.)")
+          }
+
+          // Surface that some matches were hidden by deny rules, without
+          // revealing the denied paths themselves. Keeps the user/agent aware
+          // that the result is partial rather than silently dropping matches.
+          if (denied > 0) {
+            output.push("")
+            output.push(
+              `(${denied} match${denied === 1 ? "" : "es"} hidden by grep deny rules.)`,
+            )
           }
 
           return {

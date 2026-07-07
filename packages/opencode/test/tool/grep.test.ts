@@ -255,6 +255,36 @@ describe("tool.grep", () => {
       // ...and the denied file is filtered out.
       expect(result.output).not.toContain("secret.txt")
       expect(result.output).not.toContain("needle here")
+      // A notice surfaces that matches were hidden, without leaking the path.
+      expect(result.output).toContain("1 match hidden by grep deny rules.")
+    }),
+  )
+
+  // When every match is denied, the result must not read "No files found"
+  // (misleading — matches were found, just hidden). Instead it reports zero
+  // visible matches plus the hidden-by-deny notice. (#35503)
+  it.instance("reports hidden matches instead of 'No files found' when all matches are denied", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "secret.txt"), "needle here\n"))
+
+      const deniedCtx: Tool.Context = {
+        ...ctx,
+        evaluate: ({ permission, pattern }) => ({
+          permission,
+          pattern,
+          action: pattern.endsWith("secret.txt") ? "deny" : "allow",
+        }),
+      }
+
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute({ pattern: "needle", path: test.directory, include: "*.txt" }, deniedCtx)
+
+      expect(result.output).not.toContain("No files found")
+      expect(result.output).toContain("Found 0 matches")
+      expect(result.output).toContain("1 match hidden by grep deny rules.")
+      expect(result.output).not.toContain("secret.txt")
     }),
   )
 })
