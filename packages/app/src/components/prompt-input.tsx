@@ -2128,7 +2128,7 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
   return (
     <Show when={!props.state.loading}>
       <Show
-        when={props.state.paid && !props.state.newLayoutDesigns}
+        when={props.state.paid}
         fallback={
           <TooltipV2
             placement="top"
