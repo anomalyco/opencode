@@ -209,11 +209,17 @@ type Endpoint4_12Input = {
   readonly text: Endpoint4_12Request["payload"]["text"]
   readonly description?: Endpoint4_12Request["payload"]["description"]
   readonly metadata?: Endpoint4_12Request["payload"]["metadata"]
+  readonly resume?: Endpoint4_12Request["payload"]["resume"]
 }
 const Endpoint4_12 = (raw: RawClient["server.session"]) => (input: Endpoint4_12Input) =>
   raw["session.synthetic"]({
     params: { sessionID: input["sessionID"] },
-    payload: { text: input["text"], description: input["description"], metadata: input["metadata"] },
+    payload: {
+      text: input["text"],
+      description: input["description"],
+      metadata: input["metadata"],
+      resume: input["resume"],
+    },
   }).pipe(Effect.mapError(mapClientError))
 
 type Endpoint4_13Request = Parameters<RawClient["server.session"]["session.shell"]>[0]

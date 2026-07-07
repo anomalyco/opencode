@@ -538,7 +538,12 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
-            body: { text: input["text"], description: input["description"], metadata: input["metadata"] },
+            body: {
+              text: input["text"],
+              description: input["description"],
+              metadata: input["metadata"],
+              resume: input["resume"],
+            },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,

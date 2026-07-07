@@ -344,6 +344,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           text: Schema.String,
           description: Schema.String.pipe(Schema.optional),
           metadata: SessionMessage.Synthetic.fields.metadata,
+          resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,

@@ -856,17 +856,26 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
   }["text"]
   readonly description?: {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
   }["description"]
   readonly metadata?: {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
   }["metadata"]
+  readonly resume?: {
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
+  }["resume"]
 }
 
 export type SessionSyntheticOutput = void

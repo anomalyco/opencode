@@ -154,6 +154,7 @@ export type Endpoint4_12Input = {
   readonly text: Endpoint4_12Request["payload"]["text"]
   readonly description?: Endpoint4_12Request["payload"]["description"]
   readonly metadata?: Endpoint4_12Request["payload"]["metadata"]
+  readonly resume?: Endpoint4_12Request["payload"]["resume"]
 }
 export type Endpoint4_12Output = EffectValue<ReturnType<RawClient["server.session"]["session.synthetic"]>>
 export type SessionSyntheticOperation<E = never> = (input: Endpoint4_12Input) => Effect.Effect<Endpoint4_12Output, E>
