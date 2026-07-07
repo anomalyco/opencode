@@ -610,6 +610,21 @@ describe("Promise.resolve / Promise.reject", () => {
     ).toBe("nope")
   })
 
+  test("a rejection observed after settlement is handled", async () => {
+    expect(
+      await value(`
+        const rejected = Promise.reject(new Error("handled"))
+        await tools.host.sleepy({ id: 1 })
+        try {
+          await rejected
+          return "no"
+        } catch (error) {
+          return error.message
+        }
+      `),
+    ).toBe("handled")
+  })
+
   test("an abandoned rejected promise is reported as unhandled", async () => {
     const diagnostic = await error(`
       Promise.reject(new Error("abandoned"))
@@ -652,6 +667,20 @@ describe("timeout interruption of forked calls", () => {
     if (result.ok) return
     expect(result.error.kind).toBe("TimeoutExceeded")
     expect(trace.interrupted).toBe(2)
+  })
+
+  test("a non-settling race loser times out and is interrupted once", async () => {
+    const trace = makeTrace()
+    const result = await run(`return await Promise.race(["winner", tools.host.sleepy({ id: 1, ms: 60000 })])`, {
+      trace,
+      limits: { timeoutMs: 100 },
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.kind).toBe("TimeoutExceeded")
+    expect(trace.starts).toEqual([1])
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 })
 

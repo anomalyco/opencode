@@ -615,26 +615,36 @@ const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<s
 // rejection is reported. Awaiting work during final draining must not conflate the two.
 class PromiseRuntime<R> {
   private readonly active = new Set<SandboxPromise>()
-  private readonly settled = new Map<SandboxPromise, Exit.Exit<unknown, unknown>>()
-  private readonly unobserved = new Set<SandboxPromise>()
+  private readonly ids = new WeakMap<SandboxPromise, number>()
+  private readonly observed = new WeakSet<SandboxPromise>()
+  private readonly failures = new Map<number, Diagnostic>()
+  private nextID = 0
 
   constructor(private readonly scope: Scope.Scope) {}
 
   create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
     return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
       const promise = new SandboxPromise(fiber)
+      const id = this.nextID++
       this.active.add(promise)
-      this.unobserved.add(promise)
+      this.ids.set(promise, id)
       fiber.addObserver((exit) => {
         this.active.delete(promise)
-        this.settled.set(promise, exit)
+        if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause) || this.observed.has(promise)) {
+          this.ids.delete(promise)
+          return
+        }
+        this.failures.set(id, normalizeError(Cause.squash(exit.cause)))
       })
       return promise
     })
   }
 
   observe(promise: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
-    this.unobserved.delete(promise)
+    this.observed.add(promise)
+    const id = this.ids.get(promise)
+    this.ids.delete(promise)
+    if (id !== undefined) this.failures.delete(id)
     return Fiber.await(promise.fiber)
   }
 
@@ -645,10 +655,8 @@ class PromiseRuntime<R> {
         for (const promise of [...self.active]) yield* Fiber.await(promise.fiber)
       }
 
-      for (const promise of self.unobserved) {
-        const exit = self.settled.get(promise)
-        if (exit === undefined || Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) continue
-        const failure = normalizeError(Cause.squash(exit.cause))
+      const failure = [...self.failures].sort(([left], [right]) => left - right)[0]?.[1]
+      if (failure !== undefined) {
         throw new InterpreterRuntimeError(
           `Unhandled rejection from an un-awaited promise: ${failure.message}`,
           undefined,
