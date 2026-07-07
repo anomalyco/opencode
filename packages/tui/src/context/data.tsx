@@ -304,6 +304,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "title", event.data.title)
           break
+        case "session.moved":
+          if (store.session.info[event.data.sessionID]) {
+            setStore("session", "info", event.data.sessionID, "location", mutable(event.data.location))
+            setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
+          }
+          break
         case "session.prompt.promoted": {
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)

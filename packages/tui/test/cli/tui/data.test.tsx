@@ -108,6 +108,68 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("updates session location when moved", async () => {
+  const events = createEventStream()
+  const destination = "/tmp/opencode-moved"
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/ses_test")
+      return json({
+        data: {
+          id: "ses_test",
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: "Test session",
+          location: { directory },
+        },
+      })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    data = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await data.session.refresh("ses_test")
+    emitEvent(events, {
+      id: "evt_moved_1",
+      created: 1,
+      type: "session.moved",
+      durable: durable("ses_test"),
+      data: {
+        sessionID: "ses_test",
+        location: { directory: destination },
+        subpath: "packages/cli",
+      },
+    })
+    await wait(() => data.session.get("ses_test")?.location.directory === destination)
+    expect(data.session.get("ses_test")?.subpath).toBe("packages/cli")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("restores running manual compaction before applying live deltas", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {

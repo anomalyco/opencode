@@ -13,8 +13,6 @@ export type DialogPromptProps = {
   value?: string
   busy?: boolean
   busyText?: string
-  onGenerate?: () => string
-  generateHint?: string
   onConfirm?: (value: string) => void
   onCancel?: () => void
 }
@@ -32,13 +30,6 @@ export function DialogPrompt(props: DialogPromptProps) {
     props.onConfirm?.(textarea.plainText)
   }
 
-  function generate() {
-    if (props.busy) return
-    if (!props.onGenerate) return
-    textarea.setText(props.onGenerate())
-    textarea.gotoLineEnd()
-  }
-
   useBindings(() => ({
     target: textareaTarget,
     enabled: textareaTarget() !== undefined && !props.busy,
@@ -51,17 +42,8 @@ export function DialogPrompt(props: DialogPromptProps) {
         category: "Dialog",
         run: confirm,
       },
-      {
-        name: "dialog.prompt.generate",
-        title: "Generate dialog prompt value",
-        category: "Dialog",
-        run: generate,
-      },
     ],
-    bindings: tuiConfig.keybinds.gather("dialog.prompt", [
-      "dialog.prompt.submit",
-      ...(props.onGenerate ? ["dialog.prompt.generate"] : []),
-    ]),
+    bindings: tuiConfig.keybinds.gather("dialog.prompt", ["dialog.prompt.submit"]),
   }))
 
   onMount(() => {
@@ -124,11 +106,6 @@ export function DialogPrompt(props: DialogPromptProps) {
           <Show when={submitShortcut()}>
             <text fg={theme.text}>
               {submitShortcut()} <span style={{ fg: theme.textMuted }}>submit</span>
-            </text>
-          </Show>
-          <Show when={props.onGenerate}>
-            <text fg={theme.text}>
-              tab <span style={{ fg: theme.textMuted }}>{props.generateHint ?? "generate one"}</span>
             </text>
           </Show>
         </Show>
