@@ -1,11 +1,11 @@
-import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import type { LanguageModelV3CallOptions } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { LLM } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import { expect } from "bun:test"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -65,62 +65,5 @@ it.effect("projects request settings, headers, and body overlays", () =>
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
-  }),
-)
-
-it.effect("preserves Copilot billing metadata from raw provider chunks", () =>
-  Effect.gen(function* () {
-    const aisdk = yield* AISDK.Service
-    const parts: LanguageModelV3StreamPart[] = [
-      {
-        type: "raw",
-        rawValue: {
-          type: "message_delta",
-          copilot_usage: { total_nano_aiu: 4_473_525_000 },
-        },
-      },
-      {
-        type: "finish",
-        finishReason: { unified: "stop", raw: "end_turn" },
-        usage: {
-          inputTokens: { total: 10, noCache: 8, cacheRead: 2, cacheWrite: 0 },
-          outputTokens: { total: 3, text: 2, reasoning: 1 },
-        },
-        providerMetadata: { anthropic: { cacheCreationInputTokens: 0 } },
-      },
-    ]
-    const language: LanguageModelV3 = {
-      specificationVersion: "v3",
-      provider: "github-copilot",
-      modelId: "claude-sonnet",
-      supportedUrls: {},
-      doGenerate: () => Promise.reject(new Error("unused")),
-      doStream: () =>
-        Promise.resolve({
-          stream: new ReadableStream({
-            start(controller) {
-              for (const part of parts) controller.enqueue(part)
-              controller.close()
-            },
-          }),
-        }),
-    }
-    yield* aisdk.hook.sdk((event) => {
-      event.sdk = { languageModel: () => language }
-    })
-
-    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
-    const request = LLM.request({ model: resolved, prompt: "Hello" })
-    const body = yield* resolved.route.body.from(request)
-    const prepared = yield* resolved.route.prepareTransport(body, request)
-    const events = Array.from(
-      yield* resolved.route
-        .streamPrepared(prepared, request, { http: { execute: () => Effect.die("unused") } })
-        .pipe(Stream.runCollect),
-    )
-    expect(events.find((event) => event.type === "step-finish")?.providerMetadata).toEqual({
-      anthropic: { cacheCreationInputTokens: 0 },
-      copilot: { totalNanoAiu: 4_473_525_000 },
-    })
   }),
 )

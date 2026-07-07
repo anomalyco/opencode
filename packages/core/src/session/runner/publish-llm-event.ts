@@ -76,7 +76,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     | {
         readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]
         readonly tokens: ReturnType<typeof tokens>
-        readonly providerMetadata?: ProviderMetadata
       }
     | undefined
 
@@ -414,15 +413,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "step-finish":
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
-        const providerMetadata = {
-          ...event.providerMetadata,
-          ...event.usage?.providerMetadata,
-        }
-        stepSettlement = {
-          finish: event.reason,
-          tokens: tokens(event.usage),
-          providerMetadata: Object.keys(providerMetadata).length === 0 ? undefined : providerMetadata,
-        }
+        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
         if (event.reason === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)

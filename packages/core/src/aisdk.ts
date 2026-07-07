@@ -480,11 +480,7 @@ function providerOptions(input: LLMRequest["providerOptions"]): SharedV3Provider
 }
 
 function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions) {
-  const state = {
-    step: 0,
-    toolNames: {} as Record<string, string>,
-    copilotTotalNanoAiu: undefined as number | undefined,
-  }
+  const state = { step: 0, toolNames: {} as Record<string, string> }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
@@ -507,18 +503,16 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
 }
 
 function streamPartEvents(
-  state: { step: number; toolNames: Record<string, string>; copilotTotalNanoAiu?: number },
+  state: { step: number; toolNames: Record<string, string> },
   event: LanguageModelV3StreamPart,
 ): Effect.Effect<ReadonlyArray<LLMEvent>, LLMError> {
   switch (event.type) {
     case "stream-start":
     case "response-metadata":
+    case "raw":
     case "file":
     case "source":
     case "tool-approval-request":
-      return Effect.succeed([])
-    case "raw":
-      state.copilotTotalNanoAiu = copilotTotalNanoAiu(event.rawValue) ?? state.copilotTotalNanoAiu
       return Effect.succeed([])
     case "text-start":
       return Effect.succeed([
@@ -596,29 +590,17 @@ function streamPartEvents(
         }),
       ])
     case "finish":
-      const metadata = providerMetadata(event.providerMetadata)
-      const finishMetadata =
-        state.copilotTotalNanoAiu === undefined
-          ? metadata
-          : {
-              ...metadata,
-              copilot: {
-                ...metadata?.copilot,
-                totalNanoAiu: state.copilotTotalNanoAiu,
-              },
-            }
-      state.copilotTotalNanoAiu = undefined
       return Effect.succeed([
         LLMEvent.stepFinish({
           index: state.step++,
           reason: finishReason(event.finishReason),
           usage: usage(event.usage),
-          providerMetadata: finishMetadata,
+          providerMetadata: providerMetadata(event.providerMetadata),
         }),
         LLMEvent.finish({
           reason: finishReason(event.finishReason),
           usage: usage(event.usage),
-          providerMetadata: finishMetadata,
+          providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
     case "error":
@@ -649,19 +631,6 @@ function finishReason(value: unknown): FinishReason {
 
 function providerMetadata(value: unknown) {
   return Schema.is(ProviderMetadata)(value) ? value : undefined
-}
-
-// Copilot billing is only exposed in raw provider chunks by the AI SDK bridge.
-function copilotTotalNanoAiu(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const raw = value as Record<string, unknown>
-  const response =
-    raw.response && typeof raw.response === "object" ? (raw.response as Record<string, unknown>) : undefined
-  const usage = raw.copilot_usage ?? response?.copilot_usage
-  if (!usage || typeof usage !== "object") return
-  const total = (usage as Record<string, unknown>).total_nano_aiu
-  if (typeof total !== "number" || !Number.isFinite(total) || total < 0) return
-  return total
 }
 
 function parseToolInput(value: string) {

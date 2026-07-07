@@ -8,7 +8,6 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
-  type ProviderMetadata,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -59,10 +58,8 @@ type StepTokens = {
   readonly cache: { readonly read: number; readonly write: number }
 }
 
-export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens, metadata?: ProviderMetadata) {
-  const totalNanoAiu = metadata?.copilot?.totalNanoAiu
-  if (typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0)
-    return totalNanoAiu / 100_000_000_000
+// TODO(#35765): Use Copilot's reported billed amount once billing has a dedicated typed runtime contract.
+export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
   const context = tokens.input + tokens.cache.read + tokens.cache.write
   const tier = costs
     .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
@@ -341,7 +338,7 @@ const layer = Layer.effect(
       )
 
       const stepUsage = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) => ({
-        cost: calculateCost(resolved.cost, settlement.tokens, settlement.providerMetadata),
+        cost: calculateCost(resolved.cost, settlement.tokens),
         tokens: settlement.tokens,
       })
 

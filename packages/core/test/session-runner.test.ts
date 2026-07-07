@@ -129,16 +129,6 @@ test("calculates step cost using the matching context tier", () => {
   ).toBeCloseTo(0.0002926)
 })
 
-test("prefers Copilot billed cost over token estimation", () => {
-  expect(
-    SessionRunnerLLM.calculateCost(
-      [{ input: 1, output: 2, cache: { read: 0.1, write: 0.5 } }],
-      { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
-      { copilot: { totalNanoAiu: 4_473_525_000 } },
-    ),
-  ).toBeCloseTo(0.04473525)
-})
-
 test("does not apply an ineligible tier without base pricing", () => {
   expect(
     SessionRunnerLLM.calculateCost(
@@ -1716,7 +1706,6 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.stepFinish({
           index: 0,
           reason: "tool-calls",
-          providerMetadata: { copilot: { totalNanoAiu: 4_473_525_000 } },
           usage: {
             inputTokens: 10,
             nonCachedInputTokens: 8,
@@ -1737,7 +1726,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           finish: "tool-calls",
-          cost: 0.04473525,
+          cost: 0,
           tokens: { input: 8, output: 3, reasoning: 1, cache: { read: 2, write: 0 } },
           content: [
             { type: "reasoning", text: "Think" },
@@ -3673,7 +3662,6 @@ describe("SessionRunnerLLM", () => {
           index: 0,
           reason: "content-filter",
           usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
-          providerMetadata: { copilot: { totalNanoAiu: 4_473_525_000 } },
         }),
         LLMEvent.finish({ reason: "content-filter" }),
       ]
@@ -3685,13 +3673,13 @@ describe("SessionRunnerLLM", () => {
           type: "assistant",
           finish: "error",
           error: { type: "provider.content-filter" },
-          cost: 0.04473525,
+          cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
           content: [{ type: "text", text: "Partial" }],
         },
       ])
       expect(yield* session.get(sessionID)).toMatchObject({
-        cost: 0.04473525,
+        cost: 0,
         tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
       })
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
