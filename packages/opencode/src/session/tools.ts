@@ -340,11 +340,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: MCP_RESOURCE_TOOLS.read, sessionID: ctx.sessionID, callID: opts.toolCallId },
               { args },
             )
+            const permissionPattern = `mcp:${parsed.server}:${parsed.uri}`
             yield* ctx.ask({
               permission: "read",
               metadata: { server: parsed.server, uri: parsed.uri },
-              patterns: [`mcp:${parsed.server}:${parsed.uri}`],
-              always: [`mcp:${parsed.server}:*`],
+              patterns: [permissionPattern],
+              always: [permissionPattern],
             })
 
             const content = yield* mcp.readResource(parsed.server, parsed.uri)
