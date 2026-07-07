@@ -28,7 +28,6 @@ import {
   formatCatalogLabName,
   getModelCatalog,
   type ModelCatalog,
-  type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
 import { SectionHeading } from "../section-heading"
@@ -881,35 +880,32 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
         }
       >
         {(data) => (
-          <div data-component="model-metric-grid" data-variant="dense">
-            <MetricCard
-              label={i18n.t("model.cost")}
-              value={formatMoney(data().totals.cost)}
-              detail={i18n.t("model.totalSpend")}
-            />
-            <MetricCard
-              label={i18n.t("model.costPerMillion")}
-              value={
-                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
-              }
-              detail={props.catalog?.cost ? i18n.t("model.inputOutput") : i18n.t("model.observedTokens")}
-            />
-            <MetricCard
-              label={i18n.t("model.costSession")}
-              value={formatSessionCost(data().totals.costPerSession)}
-              detail={i18n.t("model.average")}
-            />
-            <MetricCard
-              label={i18n.t("model.tokensSession")}
-              value={formatTokens(data().totals.tokensPerSession)}
-              detail={i18n.t("model.average")}
-            />
-            <MetricCard
-              label={i18n.t("model.cacheRatio")}
-              value={formatPercent(data().totals.cacheRatio)}
-              detail={i18n.t("model.inputTokens")}
-            />
-          </div>
+          <>
+            <div data-slot="model-efficiency-pattern" aria-hidden="true" />
+            <div data-component="model-efficiency-grid">
+              <MetricCard label={i18n.t("model.totalSpendLabel")} value={formatMoney(data().totals.cost)} />
+              <MetricCard
+                label={i18n.t("model.costInput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.input)}
+              />
+              <MetricCard
+                label={i18n.t("model.costOutput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.output)}
+              />
+              <MetricCard
+                label={i18n.t("model.averageCostSession")}
+                value={formatSessionCost(data().totals.costPerSession)}
+              />
+              <MetricCard
+                label={i18n.t("model.averageTokensSession")}
+                value={formatTokens(data().totals.tokensPerSession)}
+              />
+              <MetricCard
+                label={i18n.t("model.cacheRatio")}
+                value={`${formatPercent(data().totals.cacheRatio)} ${i18n.t("model.inputTokens")}`}
+              />
+            </div>
+          </>
         )}
       </Show>
     </section>
@@ -1129,12 +1125,12 @@ function ModelPeersSection(props: { data: StatsModelData | null }) {
   )
 }
 
-function MetricCard(props: { label: string; value: string; detail: string; state?: "positive" | "negative" }) {
+function MetricCard(props: { label: string; value: string; detail?: string; state?: "positive" | "negative" }) {
   return (
     <article data-component="model-metric" data-state={props.state}>
       <span>{props.label}</span>
       <strong>{props.value}</strong>
-      <p>{props.detail}</p>
+      <Show when={props.detail}>{(detail) => <p>{detail()}</p>}</Show>
     </article>
   )
 }
@@ -1147,10 +1143,16 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean }) {
         href={language.route(`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`)}
         data-active={props.active ? "true" : undefined}
       >
-        <span>{String(props.peer.rank).padStart(2, "0")}</span>
-        <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
-        <strong>{props.peer.model}</strong>
-        <em>{props.peer.author}</em>
+        <span data-slot="model-peer-rank" aria-label={props.active ? `Rank ${props.peer.rank}` : undefined}>
+          <Show when={!props.active}>{String(props.peer.rank).padStart(2, "0")}</Show>
+        </span>
+        <span data-slot="model-peer-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
+        </span>
+        <span data-slot="model-peer-copy">
+          <strong>{props.peer.model}</strong>
+          <em>{props.peer.author}</em>
+        </span>
         <b>{formatTokens(props.peer.tokens)}</b>
       </a>
     </li>
@@ -1517,8 +1519,9 @@ function formatMoney(value: number) {
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
 }
 
-function formatCatalogPrice(value: ModelCatalogCost) {
-  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+function formatCatalogUnitPrice(value: number | undefined) {
+  if (value === undefined) return "-"
+  return `${formatModelPrice(value)} / 1M`
 }
 
 function formatModelPrice(value: number) {
