@@ -1,11 +1,24 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
+import { pathKey } from "@/utils/path-key"
+import { ServerScope } from "@/utils/server-scope"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
+type ServerProjectState = {
+  projects: Record<string, StoredProject[]>
+  lastProject: Record<string, string>
+  recentlyClosed: Record<string, string[]>
+}
 const HEALTH_POLL_INTERVAL_MS = 10_000
+// The store retains more history than is displayed. Consumers filter recently closed entries
+// against the live project list (dropping deleted projects) and then cap the visible count via
+// RECENTLY_CLOSED_DISPLAY_LIMIT. Retaining extra history ensures entries that are temporarily
+// filtered out do not evict still-visible ones from the persisted store.
+const RECENTLY_CLOSED_HISTORY_LIMIT = 16
+export const RECENTLY_CLOSED_DISPLAY_LIMIT = 5
 
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
@@ -20,16 +33,116 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(key: ServerConnection.Key) {
-  if (!key) return ""
-  if (key === "sidecar") return "local"
-  if (isLocalHost(key)) return "local"
-  return key
-}
-
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalServer?: ServerConnection.Key) {
+  if (!canonicalLocalServer || canonicalLocalServer === "local") return value
+  if (!isRecord(value)) return value
+  const projects = isRecord(value.projects) ? value.projects : undefined
+  const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
+  const previousProjects = projects?.[canonicalLocalServer]
+  const previousLastProject = lastProject?.[canonicalLocalServer]
+  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+
+  const next = { ...value }
+  if (projects && Array.isArray(previousProjects)) {
+    const local = Array.isArray(projects.local) ? projects.local : []
+    const worktrees = new Set(
+      local.flatMap((project) => (isRecord(project) && typeof project.worktree === "string" ? [project.worktree] : [])),
+    )
+    const migrated = previousProjects.filter((project) => {
+      if (!isRecord(project) || typeof project.worktree !== "string") return true
+      if (worktrees.has(project.worktree)) return false
+      worktrees.add(project.worktree)
+      return true
+    })
+    const nextProjects: Record<string, unknown> = { ...projects, local: [...local, ...migrated] }
+    delete nextProjects[canonicalLocalServer]
+    next.projects = nextProjects
+  }
+  if (lastProject && typeof previousLastProject === "string") {
+    const nextLastProject = { ...lastProject }
+    if (typeof nextLastProject.local !== "string") nextLastProject.local = previousLastProject
+    delete nextLastProject[canonicalLocalServer]
+    next.lastProject = nextLastProject
+  }
+  return next
+}
+
+export function createServerProjects<T extends ServerProjectState>(input: {
+  scope: Accessor<ServerScope>
+  store: Store<T>
+  setStore: SetStoreFunction<T>
+}) {
+  const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
+  const current = () => input.store.projects[input.scope()] ?? []
+  const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const remove = (directory: string) => {
+    setStore(
+      "projects",
+      input.scope(),
+      current().filter((project) => project.worktree !== directory),
+    )
+  }
+  return {
+    list: current,
+    recentlyClosed: currentClosed,
+    remove,
+    open(directory: string) {
+      const scope = input.scope()
+      const key = pathKey(directory)
+      const closed = currentClosed()
+      if (closed.some((worktree) => pathKey(worktree) === key)) {
+        setStore(
+          "recentlyClosed",
+          scope,
+          closed.filter((worktree) => pathKey(worktree) !== key),
+        )
+      }
+      if (current().some((project) => project.worktree === directory)) return
+      setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+    },
+    // User-initiated close: removes the project and records it in recently closed.
+    // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
+    close(directory: string) {
+      remove(directory)
+      const key = pathKey(directory)
+      const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)].slice(
+        0,
+        RECENTLY_CLOSED_HISTORY_LIMIT,
+      )
+      setStore("recentlyClosed", input.scope(), closed)
+    },
+    expand(directory: string) {
+      const index = current().findIndex((project) => project.worktree === directory)
+      if (index !== -1) setStore("projects", input.scope(), index, "expanded", true)
+    },
+    collapse(directory: string) {
+      const index = current().findIndex((project) => project.worktree === directory)
+      if (index !== -1) setStore("projects", input.scope(), index, "expanded", false)
+    },
+    move(directory: string, toIndex: number) {
+      const fromIndex = current().findIndex((project) => project.worktree === directory)
+      if (fromIndex === -1 || fromIndex === toIndex) return
+      const next = [...current()]
+      const [item] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, item)
+      setStore("projects", input.scope(), next)
+    },
+    last() {
+      return input.store.lastProject[input.scope()]
+    },
+    touch(directory: string) {
+      setStore("lastProject", input.scope(), directory)
+    },
+  }
 }
 
 export function resolveServerList(input: {
@@ -66,7 +179,7 @@ export function resolveServerList(input: {
 }
 
 export namespace ServerConnection {
-  type Base = { displayName?: string }
+  type Base = { displayName?: string; label?: string }
 
   export type HttpBase = {
     url: string
@@ -123,17 +236,40 @@ export namespace ServerConnection {
 
   export type Key = string & { _brand: "Key" }
   export const Key = { make: (v: string) => v as Key }
+
+  export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
+  export const local = (conn?: Any) =>
+    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+}
+
+export function nextServerAfterRemoval(
+  servers: ServerConnection.Any[],
+  removed: ServerConnection.Key,
+  fallback: ServerConnection.Key,
+) {
+  const remaining = servers.filter((server) => ServerConnection.key(server) !== removed)
+  const next = remaining.find((server) => ServerConnection.key(server) === fallback) ?? remaining[0]
+  return next ? ServerConnection.key(next) : fallback
 }
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
+  gate: true,
+  init: (props: {
+    defaultServer: ServerConnection.Key
+    canonicalLocalServer?: ServerConnection.Key
+    servers?: Array<ServerConnection.Any>
+  }) => {
     const [store, setStore, _, ready] = persisted(
-      Persist.global("server", ["server.v3"]),
+      {
+        ...Persist.global("server", ["server.v3"]),
+        migrate: (value) => migrateCanonicalLocalServerState(value, props.canonicalLocalServer),
+      },
       createStore({
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
+        recentlyClosed: {} as Record<string, string[]>,
       }),
     )
 
@@ -168,27 +304,30 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(key: ServerConnection.Key) {
+      const next = nextServerAfterRemoval(allServers(), key, props.defaultServer)
       const list = store.list.filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
-        if (state.active === key) {
-          const next = list[0]
-          setState("active", next ? ServerConnection.Key.make(url(next)) : props.defaultServer)
-        }
+        if (state.active === key) setState("active", next)
       })
     }
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const origin = createMemo(() => projectsKey(state.active))
-    const projectsList = createMemo(() => store.projects[origin()] ?? [])
+    const scope = (key = state.active) => ServerScope.fromServerKey(key, props.canonicalLocalServer)
+    const projects = createServerProjects({ scope, store, setStore })
+    const projectStores = new Map<ServerConnection.Key, ReturnType<typeof createServerProjects>>()
+    const projectsForServer = (key: ServerConnection.Key) => {
+      const existing = projectStores.get(key)
+      if (existing) return existing
+      const next = createServerProjects({ scope: () => scope(key), store, setStore })
+      projectStores.set(key, next)
+      return next
+    }
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
-    const isLocal = createMemo(() => {
-      const c = current()
-      return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
-    })
+    const isLocal = createMemo(() => ServerConnection.local(current()))
 
     return {
       ready: isReady,
@@ -208,60 +347,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       setActive,
       add,
       remove,
+      scope,
       projects: {
-        list: projectsList,
-        open(directory: string) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
-        },
-        close(directory: string) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          setStore(
-            "projects",
-            key,
-            current.filter((x) => x.worktree !== directory),
-          )
-        },
-        expand(directory: string) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", key, index, "expanded", true)
-        },
-        collapse(directory: string) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", key, index, "expanded", false)
-        },
-        move(directory: string, toIndex: number) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          const fromIndex = current.findIndex((x) => x.worktree === directory)
-          if (fromIndex === -1 || fromIndex === toIndex) return
-          const result = [...current]
-          const [item] = result.splice(fromIndex, 1)
-          result.splice(toIndex, 0, item)
-          setStore("projects", key, result)
-        },
-        last() {
-          const key = origin()
-          if (!key) return
-          return store.lastProject[key]
-        },
-        touch(directory: string) {
-          const key = origin()
-          if (!key) return
-          setStore("lastProject", key, directory)
-        },
+        ...projects,
+        forServer: projectsForServer,
       },
     }
   },

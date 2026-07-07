@@ -42,11 +42,12 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "request", type: "string", required: false },
             { name: "client", type: "string", required: false },
             { name: "user_agent", type: "string", required: false },
+            { name: "model", type: "string", required: false },
+            { name: "model_tier", type: "string", required: false },
             { name: "model_variant", type: "string", required: false },
             { name: "source", type: "string", required: false },
             { name: "provider", type: "string", required: false },
             { name: "provider_model", type: "string", required: false },
-            { name: "model", type: "string", required: false },
             { name: "llm_error_code", type: "int", required: false },
             { name: "llm_error_message", type: "string", required: false },
             { name: "error_response", type: "string", required: false },
@@ -56,6 +57,7 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "error_cause2", type: "string", required: false },
             { name: "api_key", type: "string", required: false },
             { name: "workspace", type: "string", required: false },
+            { name: "user_id", type: "string", required: false },
             { name: "is_subscription", type: "boolean", required: false },
             { name: "subscription", type: "string", required: false },
             { name: "response_length", type: "long", required: false },
@@ -84,7 +86,7 @@ const inferenceEventTable = new aws.s3tables.Table(
       },
     },
   },
-  { deleteBeforeReplace: $app.stage !== "production" },
+  { deleteBeforeReplace: $app.stage !== "production", ignoreChanges: ["metadata"] },
 )
 
 export const inferenceEvent = new sst.Linkable("InferenceEvent", {
@@ -165,7 +167,7 @@ export const app = new sst.cloudflare.x.SolidStart("Stats", {
   domain: `stats.${domain}`,
   link: [database, EMAILOCTOPUS_API_KEY],
   environment: {
-    PUBLIC_URL: `https://${domain}/stats`,
+    PUBLIC_URL: `https://${domain}/data`,
   },
 })
 

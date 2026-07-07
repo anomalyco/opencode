@@ -3,23 +3,15 @@ export * as PermissionSaved from "./saved"
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
+import { makeGlobalNode } from "../effect/app-node"
 import { ProjectV2 } from "../project"
-import { withStatics } from "../schema"
-import { Identifier } from "../util/identifier"
 import { PermissionTable } from "./sql"
+import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("PermissionSaved.ID"),
-  withStatics((schema) => ({ create: () => schema.make("psv_" + Identifier.ascending()) })),
-)
+export const ID = PermissionSaved.ID
 export type ID = typeof ID.Type
 
-export const Info = Schema.Struct({
-  id: ID,
-  projectID: ProjectV2.ID,
-  action: Schema.String,
-  resource: Schema.String,
-}).annotate({ identifier: "PermissionSaved.Info" })
+export const Info = PermissionSaved.Info
 export type Info = typeof Info.Type
 
 export const ListInput = Schema.Struct({
@@ -42,7 +34,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PermissionSaved") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
@@ -84,4 +76,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })

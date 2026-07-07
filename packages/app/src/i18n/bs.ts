@@ -307,6 +307,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Pretraži foldere",
   "dialog.directory.empty": "Nema pronađenih foldera",
+  "dialog.directory.action.selectFile": "Odaberi datoteku",
+  "dialog.directory.action.selectFolder": "Odaberi folder",
+  "dialog.directory.root": "Korijen",
+  "dialog.directory.parent": "Nadređeni folder",
+  "dialog.directory.readError": "Nije moguće pročitati ovaj folder",
 
   "dialog.server.title": "Serveri",
   "dialog.server.description": "Promijeni na koji se OpenCode server ova aplikacija povezuje.",
@@ -658,9 +663,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
-  "settings.general.row.showSessionProgressBar.title": "Prikaži traku napretka sesije",
-  "settings.general.row.showSessionProgressBar.description":
-    "Prikaži animiranu traku napretka na vrhu sesije kada agent radi",
   "settings.general.row.wayland.title": "Koristi nativni Wayland",
   "settings.general.row.wayland.description": "Onemogući X11 fallback na Waylandu. Zahtijeva restart.",
   "settings.general.row.wayland.tooltip":

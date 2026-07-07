@@ -311,6 +311,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Klasör ara",
   "dialog.directory.empty": "Klasör bulunamadı",
+  "dialog.directory.action.selectFile": "Dosya seç",
+  "dialog.directory.action.selectFolder": "Klasör seç",
+  "dialog.directory.root": "Kök",
+  "dialog.directory.parent": "Üst klasör",
+  "dialog.directory.readError": "Bu klasör okunamıyor",
 
   "dialog.server.title": "Sunucular",
   "dialog.server.description": "Bu uygulamanın hangi OpenCode sunucusuna bağlanacağını değiştirin.",
@@ -665,10 +670,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
-
-  "settings.general.row.showSessionProgressBar.title": "Oturum ilerleme çubuğunu göster",
-  "settings.general.row.showSessionProgressBar.description":
-    "Ajan çalışırken oturumun üst kısmında animasyonlu ilerleme çubuğunu göster",
 
   "settings.general.row.wayland.title": "Yerel Wayland kullan",
   "settings.general.row.wayland.description":
