@@ -2,7 +2,13 @@ import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, expect, withBenchmarkPage } from "../benchmark"
 import { fixture } from "./session-timeline-stress.fixture"
-import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
+import {
+  createReviewDiffs,
+  installStressSessionTabs,
+  installTimelineSettings,
+  mockStressTimeline,
+  stressSessionHref,
+} from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 type Result = Awaited<ReturnType<typeof measureSessionSwitch>>
@@ -20,8 +26,41 @@ benchmark("benchmarks cold and hot session tab switching", async ({ browser, rep
   report({ results, summary: summarize(results) })
 })
 
-async function trial(page: Page, mode: "cold" | "hot") {
-  await mockStressTimeline(page)
+benchmark(
+  "benchmarks v2 session tab switching with and without the review pane",
+  async ({ browser, report }, testInfo) => {
+    benchmark.setTimeout(360_000)
+    const runs = Number(process.env.SESSION_TAB_SWITCH_RUNS ?? 5)
+    const results = {
+      closed: { cold: [] as Result[], hot: [] as Result[] },
+      open: { cold: [] as Result[], hot: [] as Result[] },
+    }
+    for (const reviewPane of ["closed", "open"] as const) {
+      for (const mode of ["cold", "hot"] as const) {
+        for (let run = 0; run < runs; run++) {
+          results[reviewPane][mode].push(
+            await withBenchmarkPage(
+              browser,
+              `session-tab-switch-v2-${reviewPane}-${mode}-${run}`,
+              (page) => trial(page, mode, { newLayoutDesigns: true, reviewPane }),
+              testInfo,
+            ),
+          )
+        }
+      }
+    }
+    report({ results, summary: summarizeReviewPane(results) }, { runs, reviewDiffs: createReviewDiffs().length })
+  },
+)
+
+async function trial(
+  page: Page,
+  mode: "cold" | "hot",
+  options?: { newLayoutDesigns?: boolean; reviewPane?: "closed" | "open" },
+) {
+  const reviewDiffs = options?.newLayoutDesigns ? createReviewDiffs() : undefined
+  await mockStressTimeline(page, { vcsDiff: reviewDiffs })
+  if (options?.newLayoutDesigns) await installTimelineSettings(page)
   await installStressSessionTabs(page)
   if (mode === "hot") {
     await page.goto(stressSessionHref(fixture.targetID))
@@ -33,6 +72,10 @@ async function trial(page: Page, mode: "cold" | "hot") {
     await expectSessionTitle(page, fixture.expected.sourceTitle)
   }
   await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
+  if (options?.reviewPane === "open") {
+    await openReviewPane(page)
+    await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
+  }
 
   const destinationIDs = fixture.messages[fixture.targetID].map((message) => message.info.id)
   const sourceIDs = fixture.messages[fixture.sourceID].map((message) => message.info.id)
@@ -70,10 +113,32 @@ function summarize(results: Record<"cold" | "hot", Result[]>) {
   )
 }
 
+function summarizeReviewPane(results: Record<"closed" | "open", Record<"cold" | "hot", Result[]>>) {
+  return Object.fromEntries(
+    Object.entries(results).map(([reviewPane, values]) => [
+      reviewPane,
+      summarize(values as Record<"cold" | "hot", Result[]>),
+    ]),
+  )
+}
+
 async function switchSession(page: Page, sessionID: string, title: string) {
   const href = stressSessionHref(sessionID)
   const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
   await expect(tab).toBeVisible()
   await tab.click()
   await expectSessionTitle(page, title)
+}
+
+async function openReviewPane(page: Page) {
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  const panel = page.locator("#review-panel")
+  await expect(panel).toBeVisible()
+  // Text-based readiness works across review implementations; the legacy list mounts
+  // diff viewers lazily while V2 mounts the active preview eagerly.
+  await page.waitForFunction(() => {
+    const panel = document.querySelector<HTMLElement>("#review-panel")
+    const text = panel?.textContent ?? ""
+    return text.includes("generated-000.ts") && text.includes("+3")
+  })
 }

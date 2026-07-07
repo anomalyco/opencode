@@ -6,7 +6,7 @@ import path from "path"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { Git } from "./git"
-import { LayerNode } from "./effect/layer-node"
+import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectories } from "./project/directories"
 import { ProjectSchema } from "./project/schema"
@@ -51,7 +51,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectV2") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -129,12 +129,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provideMerge(ProjectDirectories.defaultLayer),
-)
-export const node = LayerNode.make({
+export const node = makeGlobalNode({
   service: Service,
   layer: layer,
   deps: [FSUtil.node, Git.node, ProjectDirectories.node],

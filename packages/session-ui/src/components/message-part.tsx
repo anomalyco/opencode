@@ -11,6 +11,7 @@ import {
   onCleanup,
   Index,
   type JSX,
+  type ComponentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import stripAnsi from "strip-ansi"
@@ -49,6 +50,9 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/ut
 import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
@@ -58,6 +62,7 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -161,6 +166,7 @@ export interface MessageProps {
   actions?: UserActions
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  useV2Actions?: boolean
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -182,6 +188,47 @@ export interface MessagePartProps {
   onContentRendered?: () => void
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  useV2Actions?: boolean
+}
+
+function MessageActionButton(
+  props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
+    icon: "check" | "copy" | "reset"
+    label: JSX.Element
+    useV2?: boolean
+  },
+) {
+  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
+  return (
+    <Show
+      when={props.useV2}
+      fallback={
+        <Tooltip value={props.label} placement="top" gutter={4}>
+          <IconButton
+            icon={props.icon}
+            size="normal"
+            variant="ghost"
+            disabled={props.disabled}
+            onMouseDown={props.onMouseDown}
+            onClick={props.onClick}
+            aria-label={props["aria-label"]}
+          />
+        </Tooltip>
+      }
+    >
+      <TooltipV2 value={props.label} placement="top" gutter={4}>
+        <IconButtonV2
+          icon={<IconV2 name={icon()} size="small" />}
+          size="normal"
+          variant="ghost-muted"
+          disabled={props.disabled}
+          onMouseDown={props.onMouseDown}
+          onClick={props.onClick}
+          aria-label={props["aria-label"]}
+        />
+      </TooltipV2>
+    </Show>
+  )
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -324,6 +371,44 @@ const agentTones: Record<string, string> = {
   plan: "var(--icon-agent-plan-base)",
 }
 
+const v2AgentTones: Record<string, { color: string; border: string; background: string }> = {
+  build: {
+    color: "var(--v2-agent-build-solid)",
+    border: "var(--v2-agent-build-border)",
+    background: "var(--v2-agent-build-background)",
+  },
+  explore: {
+    color: "var(--v2-agent-explore-solid)",
+    border: "var(--v2-agent-explore-border)",
+    background: "var(--v2-agent-explore-background)",
+  },
+  plan: {
+    color: "var(--v2-agent-plan-solid)",
+    border: "var(--v2-agent-plan-border)",
+    background: "var(--v2-agent-plan-background)",
+  },
+}
+
+const agentThemeColors: Record<string, string> = {
+  primary: "var(--text-interactive-base)",
+  secondary: "var(--text-base)",
+  accent: "var(--icon-info-base)",
+  success: "var(--icon-success-base)",
+  warning: "var(--icon-warning-base)",
+  error: "var(--icon-critical-base)",
+  info: "var(--icon-info-base)",
+}
+
+const v2AgentThemeColors: Record<string, string> = {
+  primary: "var(--v2-text-text-accent)",
+  secondary: "var(--v2-text-text-muted)",
+  accent: "var(--v2-icon-icon-accent)",
+  success: "var(--v2-state-fg-success)",
+  warning: "var(--v2-state-fg-warning)",
+  error: "var(--v2-state-fg-danger)",
+  info: "var(--v2-state-fg-info)",
+}
+
 const agentPalette = [
   "var(--icon-agent-ask-base)",
   "var(--icon-agent-build-base)",
@@ -348,14 +433,29 @@ function tone(name: string) {
 function taskAgent(
   raw: unknown,
   list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string } {
+): { name?: string; color?: string; v2Color?: string; border?: string; background?: string } {
   if (typeof raw !== "string" || !raw) return {}
   const key = raw.toLowerCase()
   const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
+  const v2Tone = item?.color ? undefined : v2AgentTones[key]
+  const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
+  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone?.color ?? color
   return {
     name: item?.name ?? `${raw[0]!.toUpperCase()}${raw.slice(1)}`,
-    color: item?.color ?? agentTones[key] ?? tone(key),
+    color,
+    v2Color,
+    border: v2Tone?.border ?? `color-mix(in srgb, ${v2Color} 48%, transparent)`,
+    background: v2Tone?.background ?? `color-mix(in srgb, ${v2Color} 12%, transparent)`,
   }
+}
+
+function agentColor(value: string | undefined, themeColors: Record<string, string>) {
+  if (!value) return
+  return themeColors[value] ?? value
+}
+
+function newLayout() {
+  return typeof document !== "undefined" && document.body.hasAttribute("data-new-layout")
 }
 
 function webSearchProviderLabel(provider: unknown) {
@@ -640,6 +740,7 @@ export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  useV2Actions?: boolean
   working?: boolean
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
@@ -724,6 +825,7 @@ export function AssistantParts(props: {
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
+                        useV2Actions={props.useV2Actions}
                         defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                       />
                     </Show>
@@ -851,7 +953,12 @@ export function Message(props: MessageProps) {
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
         {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
+          <UserMessageDisplay
+            message={userMessage() as UserMessage}
+            parts={props.parts}
+            actions={props.actions}
+            useV2Actions={props.useV2Actions}
+          />
         )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
@@ -861,6 +968,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
             showReasoningSummaries={props.showReasoningSummaries}
+            useV2Actions={props.useV2Actions}
           />
         )}
       </Match>
@@ -873,6 +981,7 @@ export function AssistantMessageDisplay(props: {
   parts: PartType[]
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  useV2Actions?: boolean
 }) {
   const emptyTools: ToolPart[] = []
   const part = createMemo(() => index(props.parts))
@@ -932,6 +1041,7 @@ export function AssistantMessageDisplay(props: {
                       part={item()!}
                       message={props.message}
                       showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      useV2Actions={props.useV2Actions}
                     />
                   </Show>
                 )
@@ -944,16 +1054,24 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onSizeChange?: () => void }) {
+export function ContextToolGroup(props: {
+  parts: ToolPart[]
+  busy?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onSizeChange?: () => void
+}) {
   const i18n = useI18n()
-  const [open, setOpen] = createSignal(false)
+  const [localOpen, setLocalOpen] = createSignal(false)
+  const open = () => props.open ?? localOpen()
   const pending = createMemo(
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
   const handleOpenChange = (value: boolean) => {
-    setOpen(value)
+    if (props.open === undefined) setLocalOpen(value)
+    props.onOpenChange?.(value)
     props.onSizeChange?.()
   }
 
@@ -1052,7 +1170,12 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onS
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; actions?: UserActions }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  actions?: UserActions
+  useV2Actions?: boolean
+}) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
@@ -1191,38 +1314,30 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               </span>
             </Show>
             <Show when={props.actions?.revert}>
-              <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
-                <IconButton
-                  icon="reset"
-                  size="normal"
-                  variant="ghost"
-                  disabled={!!busy()}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    revert()
-                  }}
-                  aria-label={i18n.t("ui.message.revertMessage")}
-                />
-              </Tooltip>
-            </Show>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
+              <MessageActionButton
+                icon="reset"
+                label={i18n.t("ui.message.revertMessage")}
+                useV2={props.useV2Actions}
+                disabled={!!busy()}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
-                  void handleCopy()
+                  revert()
                 }}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                aria-label={i18n.t("ui.message.revertMessage")}
               />
-            </Tooltip>
+            </Show>
+            <MessageActionButton
+              icon={copied() ? "check" : "copy"}
+              label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+              useV2={props.useV2Actions}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void handleCopy()
+              }}
+              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+            />
           </div>
         </>
       </Show>
@@ -1286,6 +1401,7 @@ export function Part(props: MessagePartProps) {
         onContentRendered={props.onContentRendered}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        useV2Actions={props.useV2Actions}
       />
     </Show>
   )
@@ -1566,20 +1682,14 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              />
-            </Tooltip>
+            <MessageActionButton
+              icon={copied() ? "check" : "copy"}
+              label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              useV2={props.useV2Actions}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={handleCopy}
+              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+            />
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}
@@ -1662,7 +1772,13 @@ ToolRegistry.register({
         trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1686,7 +1802,13 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1713,7 +1835,13 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1808,6 +1936,9 @@ ToolRegistry.register({
     const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
+    const v2Tone = createMemo(() => agent().v2Color)
+    const border = createMemo(() => agent().border)
+    const background = createMemo(() => agent().background)
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
@@ -1839,19 +1970,35 @@ ToolRegistry.register({
       event.preventDefault()
       open()
     }
+    const navigateKey = (event: KeyboardEvent) => {
+      if (!clickable() || href()) return
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      open()
+    }
 
     const trigger = () => (
-      <div data-component="task-tool-card">
+      <div
+        data-component="task-tool-card"
+        style={{
+          "--task-agent-color": v2Tone(),
+          "--task-agent-legacy-color": tone(),
+          "--task-agent-border": border(),
+          "--task-agent-background": background(),
+        }}
+      >
         <div data-slot="basic-tool-tool-info-structured">
           <div data-slot="basic-tool-tool-info-main">
             <Show when={running()}>
               <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                <Spinner />
+                <Show when={newLayout()} fallback={<Spinner />}>
+                  <SessionProgressIndicatorV2
+                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                  />
+                </Show>
               </span>
             </Show>
-            <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
-              {title()}
-            </span>
+            <span data-component="task-tool-title">{title()}</span>
             <Show when={subtitle()}>
               <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
             </Show>
@@ -1871,9 +2018,11 @@ ToolRegistry.register({
         status={props.status}
         trigger={trigger()}
         hideDetails
+        triggerAsLink
         triggerHref={href()}
         clickable={clickable()}
         onTriggerClick={navigate}
+        onTriggerKeyDown={navigateKey}
       />
     )
   },
@@ -1920,22 +2069,24 @@ ToolRegistry.register({
       >
         <div data-component="bash-output">
           <div data-slot="bash-copy">
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="small"
-                variant="secondary"
+            <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
+              <IconButtonV2
+                icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
+                size="normal"
+                variant="ghost-muted"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCopy}
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
-            </Tooltip>
+            </TooltipV2>
           </div>
-          <div data-slot="bash-scroll" data-scrollable>
+          <div
+            data-slot="bash-scroll"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <pre data-slot="bash-pre">
               <code>{text()}</code>
             </pre>

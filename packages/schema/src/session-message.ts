@@ -150,6 +150,10 @@ export const AssistantReasoning = Schema.Struct({
   id: Schema.String,
   text: Schema.String,
   providerMetadata: ProviderMetadata.pipe(optional),
+  time: Schema.Struct({
+    created: DateTimeUtcFromMillis,
+    completed: DateTimeUtcFromMillis.pipe(optional),
+  }).pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Reasoning" })
 
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
