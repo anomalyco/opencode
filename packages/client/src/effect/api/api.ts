@@ -890,8 +890,14 @@ export interface VcsApi<E = never> {
 export type Endpoint25_0Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.location"]>>
 export type DebugLocationOperation<E = never> = () => Effect.Effect<Endpoint25_0Output, E>
 
+type Endpoint25_1Request = Parameters<RawClient["server.debug"]["debug.location.evict"]>[0]
+export type Endpoint25_1Input = { readonly location?: Endpoint25_1Request["query"]["location"] }
+export type Endpoint25_1Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.location.evict"]>>
+export type DebugEvictLocationOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
+
 export interface DebugApi<E = never> {
   readonly location: DebugLocationOperation<E>
+  readonly evictLocation: DebugEvictLocationOperation<E>
 }
 
 export interface AppApi<E = never> {

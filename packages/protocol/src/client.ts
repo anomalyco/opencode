@@ -61,6 +61,7 @@ export const groupNames = {
 } as const
 
 export const endpointNames = {
+  "debug.location.evict": "evictLocation",
   "session.messages": "list",
   "integration.connect.key": "connectKey",
   "integration.connect.oauth": "connectOauth",

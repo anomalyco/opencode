@@ -1069,7 +1069,15 @@ const adaptGroup24 = (raw: RawClient["server.vcs"]) => ({ status: Endpoint24_0(r
 const Endpoint25_0 = (raw: RawClient["server.debug"]) => () =>
   raw["debug.location"]({}).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup25 = (raw: RawClient["server.debug"]) => ({ location: Endpoint25_0(raw) })
+type Endpoint25_1Request = Parameters<RawClient["server.debug"]["debug.location.evict"]>[0]
+type Endpoint25_1Input = { readonly location?: Endpoint25_1Request["query"]["location"] }
+const Endpoint25_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint25_1Input) =>
+  raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+const adaptGroup25 = (raw: RawClient["server.debug"]) => ({
+  location: Endpoint25_0(raw),
+  evictLocation: Endpoint25_1(raw),
+})
 
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),

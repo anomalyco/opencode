@@ -6130,3 +6130,11 @@ export type VcsDiffOutput = {
 }
 
 export type DebugLocationOutput = ReadonlyArray<{ readonly directory: string; readonly workspaceID?: string }>
+
+export type DebugEvictLocationInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type DebugEvictLocationOutput = void

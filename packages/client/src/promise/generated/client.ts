@@ -178,6 +178,8 @@ import type {
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationOutput,
+  DebugEvictLocationInput,
+  DebugEvictLocationOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1491,6 +1493,18 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+      evictLocation: (input?: DebugEvictLocationInput, requestOptions?: RequestOptions) =>
+        request<DebugEvictLocationOutput>(
+          {
+            method: "DELETE",
+            path: `/api/debug/location`,
+            query: { location: input?.["location"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
           },
           requestOptions,
         ),
