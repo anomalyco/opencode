@@ -99,18 +99,47 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+OpenCode includes three built-in agents you can switch between with the `Tab` key.
 
 - **build** - Default, full-access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
   - Denies file edits by default
   - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
+- **review** - Read-only agent that reviews an implementation for correctness, completeness, and quality
+  - Denies file edits, inspects diffs and runs read-only verification
+  - Reports findings by severity instead of making changes
 
 Also included is a **general** subagent for complex searches and multistep tasks.
 This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
+
+### Multi-model workflows
+
+You can chain agents into a planner → worker → reviewer workflow, with each role running on its own model. Add a `workflow` key to your `opencode.json` and give each agent its own model:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "workflow": {}, // enables defaults: planner=plan, worker=build, reviewer=review
+  "agent": {
+    "plan": { "model": "anthropic/claude-opus-4-8" }, // strong model for planning
+    "build": { "model": "opencode/glm-4.7" }, // fast model for implementation
+    "review": { "model": "openai/gpt-5.2-codex" } // independent model for review
+  }
+}
+```
+
+How to use it:
+
+1. Press `Tab` to select **plan** and describe the task. The planner explores and designs without touching your code.
+2. Switch to **build** when the plan is ready (with `OPENCODE_EXPERIMENTAL_PLAN_MODE=true` the planner offers the switch itself). The worker implements the plan on its own model.
+3. When the implementation is done, the worker calls the `review_exit` tool to hand the session to the **reviewer**, which checks the changes against the plan and reports findings by severity.
+
+Every handoff asks for your confirmation first, and the model switches automatically at each stage. Roles can also point at your own custom agents via `"workflow": { "planner": "...", "worker": "...", "reviewer": "..." }`. Without a `workflow` key, sessions behave exactly as before.
+
+Learn more in the [workflows docs](https://opencode.ai/docs/agents#workflows).
 
 ### Documentation
 
