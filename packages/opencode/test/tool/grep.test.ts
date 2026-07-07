@@ -6,10 +6,9 @@ import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
-import { provideInstance, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, testInstanceStoreLayer, TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
@@ -17,12 +16,9 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
-import { Config } from "@/config/config"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
-import { Filesystem } from "@/util/filesystem"
 
-const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+const toolLayer = () =>
   LayerNode.compile(
     LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]),
   )
@@ -42,39 +38,6 @@ const ctx = {
 }
 
 const root = path.join(__dirname, "../..")
-const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
-
-const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
-      return previous
-    }),
-    () => self,
-    (previous) =>
-      Effect.sync(() => {
-        if (previous) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
-        else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      }),
-  )
-
-const git = Effect.fn("GrepToolTest.git")(function* (cwd: string, args: string[]) {
-  return yield* Effect.promise(async () => {
-    const proc = Bun.spawn(["git", ...args], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) throw new Error(stderr.trim() || stdout.trim() || `git ${args.join(" ")} failed`)
-    return stdout.trim()
-  })
-})
 
 describe("tool.grep", () => {
   rooted.live("basic search", () =>
@@ -167,6 +130,30 @@ describe("tool.grep", () => {
       expect(result.metadata.matches).toBe(1)
       expect(result.output).toContain(file)
       expect(result.output).toContain("Line 2: line2")
+    }),
+  )
+
+  it.instance("limits exact file path searches to the requested file", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "target.txt")
+      const other = path.join(test.directory, "other.txt")
+      yield* Effect.promise(() => Bun.write(target, "needle in target"))
+      yield* Effect.promise(() => Bun.write(other, "needle in other"))
+
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute(
+        {
+          pattern: "needle",
+          path: target,
+        },
+        ctx,
+      )
+
+      expect(result.metadata.matches).toBe(1)
+      expect(result.output).toContain(target)
+      expect(result.output).not.toContain(other)
     }),
   )
 
