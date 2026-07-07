@@ -235,6 +235,26 @@ describe("first-class promise values", () => {
     expect(diagnostic.kind).toBe("ToolFailure")
     expect(diagnostic.message).toContain("Lookup refused")
   })
+
+  test("async-function promises remain owned by the execution after the function returns", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const launch = async () => {
+            tools.host.sleepy({ id: 1, ms: 40 })
+            Promise.all([tools.host.sleepy({ id: 2, ms: 40 })])
+            return "returned"
+          }
+          return await launch()
+        `,
+        { trace },
+      ),
+    ).toBe("returned")
+    expect(trace.starts).toEqual([1, 2])
+    expect(trace.completed).toBe(2)
+    expect(trace.interrupted).toBe(0)
+  })
 })
 
 describe("promises at data boundaries", () => {
@@ -495,45 +515,55 @@ describe("Promise.allSettled", () => {
 })
 
 describe("Promise.race", () => {
-  test("first settlement wins and losers are interrupted", async () => {
+  test("first settlement wins and a direct loser completes during final draining", async () => {
     const trace = makeTrace()
     const result = await value(
       `
         const fast = tools.host.sleepy({ id: 1, ms: 10 })
-        const slow = tools.host.sleepy({ id: 2, ms: 5000 })
+        const slow = tools.host.sleepy({ id: 2, ms: 40 })
         return await Promise.race([fast, slow])
       `,
       { trace },
     )
     expect(result).toBe(1)
-    expect(trace.interrupted).toBe(1)
-    expect(trace.completed).toBe(1)
+    expect(trace.completed).toBe(2)
+    expect(trace.interrupted).toBe(0)
   })
 
-  test("awaiting an interrupted loser afterwards is a catchable program failure", async () => {
+  test("a direct loser remains awaitable after the race settles", async () => {
     expect(
       await value(`
       const fast = tools.host.sleepy({ id: 1, ms: 10 })
-      const slow = tools.host.sleepy({ id: 2, ms: 5000 })
+      const slow = tools.host.sleepy({ id: 2, ms: 40 })
       const winner = await Promise.race([fast, slow])
-      try {
-        await slow
-        return "no"
-      } catch (e) {
-        return { winner, caught: e.message }
-      }
+      return { winner, loser: await slow }
     `),
-    ).toEqual({
-      winner: 1,
-      caught: "This tool call was interrupted because another value settled a Promise.race first.",
-    })
+    ).toEqual({ winner: 1, loser: 2 })
+  })
+
+  test("a nested aggregate loser and its members complete during final draining", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const nested = Promise.all([
+            tools.host.sleepy({ id: 1, ms: 40 }),
+            tools.host.sleepy({ id: 2, ms: 40 }),
+          ])
+          return await Promise.race(["immediate", nested])
+        `,
+        { trace },
+      ),
+    ).toBe("immediate")
+    expect(trace.completed).toBe(2)
+    expect(trace.interrupted).toBe(0)
   })
 
   test("a rejection can win the race", async () => {
     expect(
       await value(`
       try {
-        await Promise.race([tools.host.fail({}), tools.host.sleepy({ id: 1, ms: 5000 })])
+        await Promise.race([tools.host.fail({}), tools.host.sleepy({ id: 1, ms: 40 })])
         return "no"
       } catch (e) {
         return e.message
@@ -545,9 +575,10 @@ describe("Promise.race", () => {
   test("a plain value wins over pending promises", async () => {
     const trace = makeTrace()
     expect(
-      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 5000 }), "immediate"])`, { trace }),
+      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 40 }), "immediate"])`, { trace }),
     ).toBe("immediate")
-    expect(trace.interrupted).toBe(1)
+    expect(trace.completed).toBe(1)
+    expect(trace.interrupted).toBe(0)
   })
 
   test("an empty race is a clear error instead of hanging", async () => {
@@ -587,6 +618,7 @@ describe("Promise.resolve / Promise.reject", () => {
     expect(diagnostic.kind).toBe("ExecutionFailure")
     expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
     expect(diagnostic.message).toContain("abandoned")
+    expect(diagnostic.message.split("Unhandled rejection from an un-awaited promise").length - 1).toBe(1)
   })
 })
 

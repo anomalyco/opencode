@@ -62,11 +62,13 @@ path lookup, namespace browsing, deterministic ranking, and pagination.
 
 ### Tool execution
 
-Calling a tool starts its Effect eagerly on a supervised fiber. The returned sandbox promise is run-once and can be
-awaited directly or through `Promise.all`, `Promise.allSettled`, and `Promise.race`. These combinators also return eager,
-run-once sandbox promises, so independent aggregate batches overlap and rejection is observed at the eventual `await`.
-`Promise.resolve` and `Promise.reject` use the same tracked lifecycle. At most eight tool calls execute concurrently.
-Unfinished promises are drained before successful program completion, and an unhandled failure becomes a diagnostic.
+Every sandbox promise starts eagerly on a run-once fiber owned by the whole CodeMode execution, including tool calls,
+async functions, `Promise.all`, `Promise.allSettled`, `Promise.race`, `Promise.resolve`, and `Promise.reject`. Nested
+functions therefore cannot end the lifetime of work they started. Independent aggregate batches overlap, and rejection
+is observed at the eventual `await`. `Promise.race` uses native non-cancelling settlement semantics: its first result
+wins while losers continue. Before normal completion, CodeMode drains all active promises without marking them observed,
+then reports an unobserved rejection as a diagnostic. Timeout or host interruption closes the execution promise scope
+and interrupts its active fibers. At most eight tool calls execute concurrently.
 
 The public execution-policy knobs are `timeoutMs`, `maxToolCalls`, and `maxOutputBytes`. The package supplies no
 defaults because budgets are host policy. The interpreter also enforces fixed internal boundaries for tool-call
@@ -133,7 +135,7 @@ represent accurately rather than guessing semantics.
 | Treat schemas as the model-facing interface. | Signatures drive correct calls; Effect Schema also provides the runtime validation boundary, while JSON Schema supports adapter interoperability. |
 | Keep authority host-owned. | CodeMode can only confine programs to supplied tools. The host chooses those tools, and each tool enforces its own authorization and side-effect policy. |
 | Use progressive catalog disclosure plus search. | Large tool sets should not consume the prompt, but every namespace must remain discoverable and speculative search calls should remain valid. |
-| Start tool promises eagerly and supervise them. | This preserves normal call-time parallelism while giving each call run-once settlement and interruption safety. |
+| Own eager promises for the whole execution. | This preserves normal call-time parallelism and run-once settlement without tying promise lifetime to a transient async function. |
 | Keep files outside the sandbox value space. | Models should compose structured data without routing binary payloads through generated code or context. |
 | Treat `execute` as the model-facing invocation boundary. | Nested calls are implementation details of one orchestration program. Reusing the outer context and bounding only the final result preserves complete intermediate data without inventing durable child-call identities. |
 | Return expected failures as data. | Models need actionable diagnostics without exposing private host causes; host interruption and defects must still propagate correctly. |
