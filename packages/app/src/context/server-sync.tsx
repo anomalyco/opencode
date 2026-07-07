@@ -1,4 +1,11 @@
-import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse } from "@opencode-ai/sdk/v2/client"
+import type {
+  Config,
+  McpResource,
+  OpencodeClient,
+  Path,
+  Project,
+  ProviderAuthResponse,
+} from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
@@ -15,6 +22,7 @@ import {
   loadPathQuery,
   loadProjectsQuery,
   loadProvidersQuery,
+  loadReferencesQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
@@ -56,6 +64,13 @@ export const loadMcpQuery = (scope: ServerScope, directory: string, sdk: Opencod
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
   })
 
+export const loadMcpResourcesQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
+  queryOptions<Record<string, McpResource>>({
+    queryKey: [scope, directory, "mcpResources"] as const,
+    queryFn: () => sdk.experimental.resource.list().then((r) => r.data ?? {}),
+    placeholderData: {},
+  })
+
 export const loadLspQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [scope, directory, "lsp"] as const,
@@ -75,7 +90,9 @@ function makeQueryOptionsApi(
     path: (directory: PathKey | null) =>
       loadPathQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory)),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, sdkFor(directory)),
+    references: (directory: PathKey) => loadReferencesQuery(scope, directory, sdkFor(directory)),
     mcp: (directory: PathKey) => loadMcpQuery(scope, directory, sdkFor(directory)),
+    mcpResources: (directory: PathKey) => loadMcpResourcesQuery(scope, directory, sdkFor(directory)),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory, sdkFor(directory)),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
@@ -396,6 +413,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))
       },
+      loadReferences: () => {
+        void queryClient.fetchQuery(queryOptionsApi.references(key))
+      },
     })
   })
 
@@ -484,6 +504,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           },
           refresh: async () => {
             await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+            await queryClient.refetchQueries(queryOptionsApi.mcpResources(key))
           },
         })
       },

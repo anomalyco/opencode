@@ -1221,7 +1221,11 @@ function Playground() {
     message: { [session().id]: state.messages },
     part: state.parts,
     provider: {
-      all: [{ id: "anthropic", models: { "claude-sonnet-4-20250514": { name: "Claude Sonnet" } } }],
+      all: new Map([
+        ["anthropic", { id: "anthropic", models: { "claude-sonnet-4-20250514": { name: "Claude Sonnet" } } }],
+      ]),
+      connected: ["anthropic"],
+      default: {},
     },
   }))
 

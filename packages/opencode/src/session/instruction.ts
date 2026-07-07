@@ -45,7 +45,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Instruction") {}
 
-export const layer: Layer.Layer<
+const layer: Layer.Layer<
   Service,
   never,
   FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service
@@ -222,14 +222,6 @@ export const layer: Layer.Layer<
 
     return Service.of({ clear, systemPaths, system, find, resolve })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(Global.layer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export function loaded(messages: SessionV1.WithParts[]) {

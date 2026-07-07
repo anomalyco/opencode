@@ -943,18 +943,6 @@ export default function LegacyLayout(props: ParentProps) {
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
-      ...(platform.platform === "desktop" && platform.exportDebugLogs
-        ? [
-            {
-              id: "logs.export",
-              title: "Export logs",
-              category: language.t("command.category.settings"),
-              onSelect: () => {
-                void platform.exportDebugLogs?.()
-              },
-            },
-          ]
-        : []),
       {
         id: "session.previous",
         title: language.t("command.session.previous"),
@@ -1107,9 +1095,9 @@ export default function LegacyLayout(props: ParentProps) {
 
   function connectProvider() {
     const run = ++dialogRun
-    void import("@/components/dialog-select-provider").then((x) => {
+    void import("@/components/dialog-connect-provider").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectProvider />)
+      void dialog.show(() => <x.DialogConnectProvider />)
     })
   }
 
