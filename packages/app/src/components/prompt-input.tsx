@@ -43,6 +43,8 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
+import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
+import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
@@ -1489,14 +1491,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onClose: restoreFocus,
     onUnpaidClick: () => {
       if (props.controls.newLayoutDesigns) {
-        void import("@/components/dialog-select-model-unpaid-v2").then((x) => {
-          dialog.show(() => <x.DialogSelectModelUnpaidV2 model={props.controls.model.selection} />)
-        })
+        dialog.show(() => <DialogSelectModelUnpaidV2 model={props.controls.model.selection} />)
         return
       }
-      void import("@/components/dialog-select-model-unpaid").then((x) => {
-        dialog.show(() => <x.DialogSelectModelUnpaid model={props.controls.model.selection} />)
-      })
+      dialog.show(() => <DialogSelectModelUnpaid model={props.controls.model.selection} />)
     },
   }))
 
@@ -1975,11 +1973,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
                                   style={control()}
                                   onClick={() => {
-                                    void import("@/components/dialog-select-model-unpaid").then((x) => {
-                                      dialog.show(() => (
-                                        <x.DialogSelectModelUnpaid model={props.controls.model.selection} />
-                                      ))
-                                    })
+                                    dialog.show(() => <DialogSelectModelUnpaid model={props.controls.model.selection} />)
                                   }}
                                 >
                                   <Show when={props.controls.model.selection.current()?.provider?.id}>
