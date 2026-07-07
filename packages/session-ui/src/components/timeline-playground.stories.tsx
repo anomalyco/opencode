@@ -1244,10 +1244,7 @@ function Playground() {
 
   const data = createMemo(() => ({
     session: [session()],
-    // Agent list used by the task tool card to resolve names and colors.
-    // "review" tests the config `color` path (theme color name), the built-in
-    // three test `v2AgentTones`, and "writer" (absent) tests the hash fallback.
-    agent: [{ name: "build" }, { name: "plan" }, { name: "explore" }, { name: "review", color: "success" }],
+    agent: [{ name: "build" }, { name: "plan" }, { name: "explore" }, { name: "review" }],
     session_status: {},
     session_diff: {},
     message: { [session().id]: state.messages },
