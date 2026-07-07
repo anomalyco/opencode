@@ -25,8 +25,8 @@ async function handle(
   headless: boolean,
 ) {
   switch (request.method) {
-    case "ui.render":
-      return SimulationActions.render(harness)
+    case "ui.screenshot":
+      return SimulationActions.screenshot(harness)
     case "ui.state": {
       const result = SimulationActions.state(harness)
       SimulationTrace.add("ui.state", { elements: result.elements.length, actions: result.actions.length })

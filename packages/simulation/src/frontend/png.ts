@@ -13,7 +13,7 @@ GlobalFonts.registerFromPath(
 )
 
 export function screenshot(renderer: CliRenderer) {
-  return render({
+  return screenshotFrame({
     cols: renderer.currentRenderBuffer.width,
     rows: renderer.currentRenderBuffer.height,
     cursor: [0, 0],
@@ -21,7 +21,7 @@ export function screenshot(renderer: CliRenderer) {
   })
 }
 
-export function render(frame: CapturedFrame) {
+export function screenshotFrame(frame: CapturedFrame) {
   const canvas = createCanvas(frame.cols * CellWidth, frame.rows * CellHeight)
   const context = canvas.getContext("2d")
   context.fillStyle = "#080808"

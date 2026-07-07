@@ -126,7 +126,7 @@ export function state(harness: Harness) {
   }
 }
 
-export async function render(harness: Harness) {
+export async function screenshot(harness: Harness) {
   await harness.renderOnce()
   const image = SimulationPng.screenshot(harness.renderer)
   const path = join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
@@ -156,7 +156,10 @@ export async function video(frames: CapturedFrame[]) {
   const directory = await mkdtemp(join(tmpdir(), "opencode-drive-recording-"))
   await Promise.all(
     frames.map((frame, index) =>
-      Bun.write(join(directory, `frame-${index.toString().padStart(6, "0")}.png`), SimulationPng.render(frame).data),
+      Bun.write(
+        join(directory, `frame-${index.toString().padStart(6, "0")}.png`),
+        SimulationPng.screenshotFrame(frame).data,
+      ),
     ),
   )
   const path = join(directory, "recording.mp4")

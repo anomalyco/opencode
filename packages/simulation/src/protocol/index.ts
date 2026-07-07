@@ -92,8 +92,8 @@ export namespace Frontend {
   })
   export interface State extends Schema.Schema.Type<typeof State> {}
 
-  export const Render = Schema.String
-  export type Render = Schema.Schema.Type<typeof Render>
+  export const Screenshot = Schema.String
+  export type Screenshot = Schema.Schema.Type<typeof Screenshot>
 
   export const StartRecord = Schema.Struct({ recording: Schema.Literal(true) })
   export interface StartRecord extends Schema.Schema.Type<typeof StartRecord> {}
@@ -109,7 +109,7 @@ export namespace Frontend {
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literals([
-        "ui.render",
+        "ui.screenshot",
         "ui.state",
         "ui.start-record",
         "ui.end-record",
