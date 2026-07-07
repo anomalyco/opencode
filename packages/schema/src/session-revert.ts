@@ -21,6 +21,7 @@ const LegacyFileDiff = Schema.Struct({
   patch: Schema.String,
 })
 
+export interface LegacyRevert extends Schema.Schema.Type<typeof LegacyRevert> {}
 export const LegacyRevert = Schema.Struct({
   messageID: SessionMessage.ID,
   partID: Schema.String.pipe(optional),
@@ -45,7 +46,7 @@ const PersistedLegacy = LegacyRevert.pipe(
   Schema.decodeTo(
     Schema.Struct({ source: Schema.tag("legacy"), revert: Schema.toType(LegacyRevert) }),
     SchemaTransformation.transform({
-      decode: (revert): { readonly source: "legacy"; readonly revert: typeof LegacyRevert.Type } => ({
+      decode: (revert): { readonly source: "legacy"; readonly revert: LegacyRevert } => ({
         source: "legacy",
         revert,
       }),

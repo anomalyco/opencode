@@ -10,15 +10,9 @@ import { ascending } from "../identifier.js"
 import { SessionID } from "../session-id.js"
 import { WorkspaceID } from "../workspace-id.js"
 import { PermissionV1 } from "./permission.js"
+import { FileDiff } from "../file-diff.js"
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
-const LegacyFileDiff = Schema.Struct({
-  file: Schema.String.pipe(optional),
-  patch: Schema.String.pipe(optional),
-  additions: Schema.Finite,
-  deletions: Schema.Finite,
-  status: Schema.Literals(["added", "deleted", "modified"]).pipe(optional),
-})
 
 export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(
   Schema.brand("MessageID"),
@@ -346,7 +340,7 @@ export const User = Schema.Struct({
     Schema.Struct({
       title: Schema.optional(Schema.String),
       body: Schema.optional(Schema.String),
-      diffs: Schema.Array(LegacyFileDiff),
+      diffs: Schema.Array(FileDiff.LegacyInfo),
     }),
   ),
   agent: Schema.String,
@@ -516,7 +510,7 @@ const SessionSummary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optional(Schema.Array(LegacyFileDiff)),
+  diffs: optional(Schema.Array(FileDiff.LegacyInfo)),
 })
 
 const SessionTokens = Schema.Struct({
@@ -650,7 +644,7 @@ export const Diff = ephemeral({
   type: "session.diff",
   schema: {
     sessionID: SessionID,
-    diff: Schema.Array(LegacyFileDiff),
+    diff: Schema.Array(FileDiff.LegacyInfo),
   },
 })
 

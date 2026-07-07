@@ -9,7 +9,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
-import { Info } from "@opencode-ai/schema/file-diff"
+import { LegacyInfo } from "@opencode-ai/schema/file-diff"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -17,7 +17,7 @@ export const Patch = Schema.Struct({
 })
 export type Patch = typeof Patch.Type
 
-export const FileDiff = Info
+export const FileDiff = LegacyInfo
 export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"

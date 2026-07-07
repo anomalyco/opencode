@@ -14,6 +14,7 @@ import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { Instructions } from "../instructions/index"
 import type { Session } from "@opencode-ai/schema/session"
+import type { LegacyRevert } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
@@ -49,7 +50,7 @@ export const SessionTable = sqliteTable(
     tokens_reasoning: integer().notNull().default(0),
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
-    revert: text({ mode: "json" }).$type<Session.Revert>(),
+    revert: text({ mode: "json" }).$type<Session.Revert | LegacyRevert>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{

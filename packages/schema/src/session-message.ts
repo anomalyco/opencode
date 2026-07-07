@@ -383,7 +383,7 @@ export const Persisted = PersistedInfo.pipe(
           })
         return message
       },
-      encode: (message) => ({ source: "current", message }),
+      encode: (message) => ({ source: "current" as const, message }),
     }),
   ),
   Schema.annotate({ identifier: "Session.Message.Persisted" }),

@@ -53,7 +53,13 @@ function connected(id = "evt_connected") {
   return { id, type: "server.connected", data: {} } satisfies RunV2Event
 }
 
-function durable(sessionID: string, seq = 0, version = 1) {
+function durable(sessionID: string, seq?: number): { aggregateID: string; seq: number; version: 1 }
+function durable<const Version extends 1 | 2>(
+  sessionID: string,
+  seq: number,
+  version: Version,
+): { aggregateID: string; seq: number; version: Version }
+function durable(sessionID: string, seq = 0, version: 1 | 2 = 1) {
   return { aggregateID: sessionID, seq, version }
 }
 
@@ -1311,17 +1317,10 @@ describe("V2 mini transport", () => {
           {
             id: "msg_shell",
             type: "shell" as const,
-            shell: {
-              id: "sh_1",
-              status: "exited",
-              command: "ls",
-              cwd: "/tmp",
-              shell: "/bin/sh",
-              file: "/tmp/opencode-shell",
-              exit: 0,
-              metadata: {},
-              time: { started: 0, completed: 1 },
-            },
+            shellID: "sh_1",
+            status: "exited",
+            command: "ls",
+            exit: 0,
             output: { output: "file.txt", cursor: 8, size: 8, truncated: false },
             time: { created: 1, completed: 2 },
           },
@@ -1378,17 +1377,10 @@ describe("V2 mini transport", () => {
           {
             id: "msg_failed_shell",
             type: "shell" as const,
-            shell: {
-              id: "sh_failed",
-              status: "exited",
-              command: "false",
-              cwd: "/tmp",
-              shell: "/bin/sh",
-              file: "/tmp/failed",
-              exit: 7,
-              metadata: {},
-              time: { started: 0, completed: 1 },
-            },
+            shellID: "sh_failed",
+            status: "exited",
+            command: "false",
+            exit: 7,
             output: { output: "failure output", cursor: 14, size: 14, truncated: false },
             time: { created: 1, completed: 2 },
           },
@@ -1722,6 +1714,7 @@ describe("V2 mini transport", () => {
           {
             id: "msg_skill",
             type: "skill" as const,
+            skill: "tigerstyle",
             name: "tigerstyle",
             text: "skill instructions",
             time: { created: 2 },

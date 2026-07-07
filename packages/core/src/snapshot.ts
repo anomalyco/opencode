@@ -255,11 +255,4 @@ function failure(operation: Error["operation"], cause: unknown) {
   })
 }
 
-/** Legacy persisted session diff shape. */
-export type LegacyFileDiff = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
-}
+export type { LegacyInfo as LegacyFileDiff } from "@opencode-ai/schema/file-diff"

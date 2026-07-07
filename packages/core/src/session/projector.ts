@@ -24,7 +24,6 @@ import {
 } from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
-import { Snapshot } from "../snapshot"
 import { Skill } from "@opencode-ai/schema/skill"
 import { PersistedRevert } from "@opencode-ai/schema/session-revert"
 import { Money } from "@opencode-ai/schema/money"
@@ -99,7 +98,8 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
       ? {
           messageID: SessionMessage.ID.make(info.revert.messageID),
           partID: info.revert.partID,
-          snapshot: info.revert.snapshot ? Snapshot.ID.make(info.revert.snapshot) : undefined,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
         }
       : null,
     permission: info.permission ? [...info.permission] : undefined,

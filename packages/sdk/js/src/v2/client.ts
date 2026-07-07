@@ -1,6 +1,15 @@
 export * from "./gen/types.gen.js"
 export type { FileSystemEntry as LocationFileSystemEntry } from "./gen/types.gen.js"
 
+/** @deprecated V1 snapshot compatibility. Use FileDiffInfo for current API responses. */
+export type SnapshotFileDiff = {
+  file?: string
+  patch?: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
+
 import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
