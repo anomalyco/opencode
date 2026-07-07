@@ -2478,6 +2478,36 @@ export type ServerMcpListOutput = {
   }>
 }
 
+export type ServerMcpCatalogInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ServerMcpCatalogOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly resources: ReadonlyArray<{
+      readonly server: string
+      readonly name: string
+      readonly uri: string
+      readonly description?: string
+      readonly mimeType?: string
+    }>
+    readonly templates: ReadonlyArray<{
+      readonly server: string
+      readonly name: string
+      readonly uriTemplate: string
+      readonly description?: string
+      readonly mimeType?: string
+    }>
+  }
+}
+
 export type CredentialUpdateInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]
   readonly location?: {
@@ -5505,6 +5535,14 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "mcp.status.changed"
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: { readonly server: string }
+    }
+  | {
+      readonly id: string
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "mcp.resources.changed"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly server: string }
     }

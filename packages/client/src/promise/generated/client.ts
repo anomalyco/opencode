@@ -87,6 +87,8 @@ import type {
   IntegrationAttemptCancelOutput,
   ServerMcpListInput,
   ServerMcpListOutput,
+  ServerMcpCatalogInput,
+  ServerMcpCatalogOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialRemoveInput,
@@ -885,6 +887,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/mcp`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      catalog: (input?: ServerMcpCatalogInput, requestOptions?: RequestOptions) =>
+        request<ServerMcpCatalogOutput>(
+          {
+            method: "GET",
+            path: `/api/mcp/resource`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],

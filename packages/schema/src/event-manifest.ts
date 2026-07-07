@@ -80,6 +80,7 @@ export const ServerDefinitions = Event.inventory(
   ...InstallationEvent.Definitions,
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
+  McpEvent.ResourcesChanged,
   // Shared transitional: V1 contracts the current TUI still consumes during
   // the migration (permission.asked/replied, question.asked, session.error).
   // Remove when the TUI moves to the current permission/question surfaces.

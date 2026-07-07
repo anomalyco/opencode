@@ -19,4 +19,18 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
         }),
       ),
   )
-  .annotateMerge(OpenApi.annotations({ title: "mcp", description: "MCP server status routes." }))
+  .add(
+    HttpApiEndpoint.get("mcp.resource.catalog", "/api/mcp/resource", {
+      query: LocationQuery,
+      success: Location.response(Mcp.ResourceCatalog),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.mcp.resource.catalog",
+          summary: "List MCP resources",
+          description: "Retrieve resources and resource templates from connected MCP servers.",
+        }),
+      ),
+  )
+  .annotateMerge(OpenApi.annotations({ title: "mcp", description: "MCP server and resource routes." }))

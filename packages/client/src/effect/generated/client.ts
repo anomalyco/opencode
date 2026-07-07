@@ -529,7 +529,12 @@ type Endpoint10_0Input = { readonly location?: Endpoint10_0Request["query"]["loc
 const Endpoint10_0 = (raw: RawClient["server.mcp"]) => (input?: Endpoint10_0Input) =>
   raw["mcp.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup10 = (raw: RawClient["server.mcp"]) => ({ list: Endpoint10_0(raw) })
+type Endpoint10_1Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
+type Endpoint10_1Input = { readonly location?: Endpoint10_1Request["query"]["location"] }
+const Endpoint10_1 = (raw: RawClient["server.mcp"]) => (input?: Endpoint10_1Input) =>
+  raw["mcp.resource.catalog"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+const adaptGroup10 = (raw: RawClient["server.mcp"]) => ({ list: Endpoint10_0(raw), catalog: Endpoint10_1(raw) })
 
 type Endpoint11_0Request = Parameters<RawClient["server.credential"]["credential.update"]>[0]
 type Endpoint11_0Input = {
