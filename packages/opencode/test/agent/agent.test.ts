@@ -749,6 +749,84 @@ it.instance(
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        review: { disable: true },
+      },
+    },
+  },
+)
+
+it.instance("review agent is read-only and denies review_exit by default", () =>
+  Effect.gen(function* () {
+    const review = yield* load((svc) => svc.get("review"))
+    expect(review).toBeDefined()
+    expect(review?.mode).toBe("all")
+    expect(review?.native).toBe(true)
+    expect(evalPerm(review, "edit")).toBe("deny")
+    expect(evalPerm(review, "read")).toBe("allow")
+    expect(evalPerm(review, "review_exit")).toBe("deny")
+    expect(Permission.evaluate("task", "general", review!.permission).action).toBe("deny")
+  }),
+)
+
+it.instance("review_exit is denied everywhere without a workflow config", () =>
+  Effect.gen(function* () {
+    const build = yield* load((svc) => svc.get("build"))
+    expect(evalPerm(build, "review_exit")).toBe("deny")
+  }),
+)
+
+it.instance(
+  "workflow config allows review_exit for the default worker",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      const plan = yield* load((svc) => svc.get("plan"))
+      const review = yield* load((svc) => svc.get("review"))
+      expect(evalPerm(build, "review_exit")).toBe("allow")
+      expect(evalPerm(plan, "review_exit")).toBe("deny")
+      expect(evalPerm(review, "review_exit")).toBe("deny")
+    }),
+  {
+    config: {
+      workflow: {},
+    },
+  },
+)
+
+it.instance(
+  "workflow config maps roles to custom agents",
+  () =>
+    Effect.gen(function* () {
+      const impl = yield* load((svc) => svc.get("impl"))
+      const build = yield* load((svc) => svc.get("build"))
+      expect(evalPerm(impl, "review_exit")).toBe("allow")
+      expect(evalPerm(build, "review_exit")).toBe("deny")
+    }),
+  {
+    config: {
+      workflow: {
+        worker: "impl",
+        reviewer: "checker",
+      },
+      agent: {
+        impl: { description: "Implements plans", mode: "primary" },
+        checker: { description: "Reviews implementations", mode: "primary" },
+      },
+    },
+  },
+)
+
+it.instance(
+  "workflow reviewer pointing at a missing agent grants nothing",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      expect(evalPerm(build, "review_exit")).toBe("deny")
+    }),
+  {
+    config: {
+      workflow: {
+        reviewer: "does_not_exist",
       },
     },
   },

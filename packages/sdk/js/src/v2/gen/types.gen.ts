@@ -1654,6 +1654,12 @@ export type ServerConfig = {
   cors?: Array<string>
 }
 
+export type WorkflowConfig = {
+  planner?: string
+  worker?: string
+  reviewer?: string
+}
+
 export type PermissionActionConfig = "ask" | "allow" | "deny"
 
 export type PermissionObjectConfig = {
@@ -1928,6 +1934,7 @@ export type Config = {
   model?: string
   small_model?: string
   default_agent?: string
+  workflow?: WorkflowConfig
   username?: string
   mode?: {
     build?: AgentConfig
@@ -1939,6 +1946,7 @@ export type Config = {
     build?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
+    review?: AgentConfig
     title?: AgentConfig
     summary?: AgentConfig
     compaction?: AgentConfig

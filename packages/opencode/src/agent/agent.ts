@@ -12,6 +12,7 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_REVIEW from "./prompt/review.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -31,6 +32,7 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { ConfigWorkflowV1 } from "@opencode-ai/core/v1/config/workflow"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -126,6 +128,7 @@ const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
+          review_exit: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
             "*": "allow",
@@ -216,6 +219,28 @@ const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
+          review: {
+            name: "review",
+            description:
+              "Reviews an implementation for correctness, completeness, and quality without modifying code. Give it the requirements or plan to verify against.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                task: {
+                  general: "deny",
+                },
+                edit: {
+                  "*": "deny",
+                },
+              }),
+              user,
+            ),
+            prompt: PROMPT_REVIEW,
+            mode: "all",
+            native: true,
+          },
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -291,6 +316,16 @@ const layer = Layer.effect(
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+        }
+
+        // The review handoff is opt-in: only the configured worker agent may call
+        // review_exit, and only when a workflow with a valid reviewer is configured.
+        const workflow = ConfigWorkflowV1.roles(cfg.workflow)
+        if (workflow.reviewer && agents[workflow.reviewer] && agents[workflow.worker]) {
+          agents[workflow.worker].permission = Permission.merge(
+            agents[workflow.worker].permission,
+            Permission.fromConfig({ review_exit: "allow" }),
+          )
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured

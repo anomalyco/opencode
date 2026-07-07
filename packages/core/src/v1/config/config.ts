@@ -16,6 +16,7 @@ import { ConfigPluginV1 } from "./plugin"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
+import { ConfigWorkflowV1 } from "./workflow"
 
 export type Layout = ConfigLayoutV1.Layout
 
@@ -81,6 +82,10 @@ export const Info = Schema.Struct({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
   }),
+  workflow: Schema.optional(ConfigWorkflowV1.Info).annotate({
+    description:
+      "Map workflow roles (planner, worker, reviewer) to agents so each stage can run on a different model via per-agent 'model' overrides, see https://opencode.ai/docs/agents",
+  }),
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
@@ -97,6 +102,7 @@ export const Info = Schema.Struct({
         build: Schema.optional(ConfigAgentV1.Info),
         general: Schema.optional(ConfigAgentV1.Info),
         explore: Schema.optional(ConfigAgentV1.Info),
+        review: Schema.optional(ConfigAgentV1.Info),
         title: Schema.optional(ConfigAgentV1.Info),
         summary: Schema.optional(ConfigAgentV1.Info),
         compaction: Schema.optional(ConfigAgentV1.Info),

@@ -42,7 +42,7 @@ OpenCode comes with three built-in subagents, **General**, **Explore**, and **Sc
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and three built-in subagents.
+OpenCode comes with two built-in primary agents, three built-in subagents, and a review agent that works as either.
 
 ---
 
@@ -92,6 +92,14 @@ A read-only agent for external docs and dependency research. Use this when you n
 
 ---
 
+### Use review
+
+_Mode_: `all`
+
+A read-only agent that reviews implementations for correctness, completeness, and quality. It cannot modify files. Use it after a change is complete to verify the work against its requirements or plan, or wire it into a [workflow](#workflows) so the worker agent can hand the session off for review.
+
+---
+
 ### Use compaction
 
 _Mode_: `primary`
@@ -136,6 +144,46 @@ Hidden system agent that creates session summaries. It runs automatically and is
    - `session_parent` (default: **Up**) to return to the parent session
 
    This lets you switch between the main conversation and specialized subagent work.
+
+---
+
+## Workflows
+
+You can chain agents into a planner → worker → reviewer workflow, with each role running on its own model. Map the roles to agents with the `workflow` config, and give each agent its own model with the per-agent `model` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "workflow": {
+    "planner": "plan",
+    "worker": "build",
+    "reviewer": "review"
+  },
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-opus-4-8"
+    },
+    "build": {
+      "model": "zai/glm-4.7"
+    },
+    "review": {
+      "model": "openai/gpt-5.2-codex"
+    }
+  }
+}
+```
+
+All roles are optional and default to `plan`, `build`, and `review`. An empty `"workflow": {}` enables the defaults. You can also point a role at a custom agent.
+
+Here's how the chain works:
+
+1. The **planner** explores the codebase and writes a plan. Switch to the worker with **Tab** when the plan is ready — with `OPENCODE_EXPERIMENTAL_PLAN_MODE` enabled the planner offers the switch itself once the plan is complete.
+2. The **worker** implements the plan using its own configured model. When a reviewer is configured, the worker gets a `review_exit` tool and is reminded to call it once the implementation is verified.
+3. The **reviewer** is a read-only agent that inspects the changes, checks them against the plan, and reports findings by severity.
+
+Each handoff asks for your confirmation first, and you can keep working with any agent after a handoff — the workflow guides the session, it doesn't lock it.
+
+The reviewer stage only activates when a `workflow` key is present in your config. Without it, sessions behave exactly as before.
 
 ---
 

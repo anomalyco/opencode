@@ -1,0 +1,13 @@
+Use this tool when you have finished implementing and verifying your changes and the work is ready for review.
+
+This tool will ask the user if they want to hand the session off to the review agent to review the implementation.
+
+Call this tool:
+- After you have completed every item of the approved plan or requested change
+- After you have verified your work (tests, typechecks) where possible
+- When you have nothing left to implement
+
+Do NOT call this tool:
+- While parts of the implementation are still unfinished
+- If verification surfaced failures you have not addressed
+- If the user has indicated they want changes before a review
