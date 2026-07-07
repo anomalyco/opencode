@@ -1,7 +1,7 @@
 export * as SessionProjector from "./projector"
 
 import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { makeGlobalNode } from "../effect/app-node"
@@ -48,11 +48,6 @@ type Usage = {
 
 const ForkBatchSize = 500
 
-const emptyUsage = (): Usage => ({
-  cost: 0,
-  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-})
-
 const forkTitle = (value: string) => {
   const match = value.match(/^(.+) \(fork #(\d+)\)$/)
   if (match) return `${match[1]} (fork #${Number.parseInt(match[2], 10) + 1})`
@@ -65,22 +60,6 @@ function usage(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"] |
   if (value.type !== "step-finish") return undefined
   if (!("cost" in value) || !("tokens" in value)) return undefined
   return { cost: value.cost as Usage["cost"], tokens: value.tokens as Usage["tokens"] }
-}
-
-function addUsage(target: Usage, value: Usage) {
-  target.cost += value.cost
-  target.tokens.input += value.tokens.input
-  target.tokens.output += value.tokens.output
-  target.tokens.reasoning += value.tokens.reasoning
-  target.tokens.cache.read += value.tokens.cache.read
-  target.tokens.cache.write += value.tokens.cache.write
-}
-
-function messageUsage(row: typeof SessionMessageTable.$inferSelect): Usage | undefined {
-  if (row.type !== "assistant") return undefined
-  const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
-  if (message.type !== "assistant" || message.cost === undefined || message.tokens === undefined) return undefined
-  return { cost: message.cost, tokens: message.tokens }
 }
 
 function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInsert {
@@ -150,6 +129,37 @@ function applyUsage(
     .run()
     .pipe(Effect.orDie)
 }
+
+const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function* (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  sessionID: (typeof SessionEvent.Step.Ended.Type)["data"]["sessionID"],
+) {
+  const row = yield* db
+    .select({
+      cost: SessionTable.cost,
+      input: SessionTable.tokens_input,
+      output: SessionTable.tokens_output,
+      reasoning: SessionTable.tokens_reasoning,
+      cacheRead: SessionTable.tokens_cache_read,
+      cacheWrite: SessionTable.tokens_cache_write,
+    })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  if (!row) return
+  yield* events.publish(SessionEvent.UsageUpdated, {
+    sessionID,
+    cost: row.cost,
+    tokens: {
+      input: row.input,
+      output: row.output,
+      reasoning: row.reasoning,
+      cache: { read: row.cacheRead, write: row.cacheWrite },
+    },
+  })
+})
 
 const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
   db: DatabaseService,
@@ -237,7 +247,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .pipe(Effect.orDie)
   }
 
-  const usage = emptyUsage()
   let cursor = -1
   while (copiedSeq !== undefined) {
     const rows = yield* db
@@ -318,26 +327,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         .pipe(Effect.orDie)
     }
 
-    for (const row of rows) {
-      const value = messageUsage(row)
-      if (value) addUsage(usage, value)
-    }
     cursor = rows.at(-1)!.seq
   }
-
-  yield* db
-    .update(SessionTable)
-    .set({
-      cost: usage.cost,
-      tokens_input: usage.tokens.input,
-      tokens_output: usage.tokens.output,
-      tokens_reasoning: usage.tokens.reasoning,
-      tokens_cache_read: usage.tokens.cache.read,
-      tokens_cache_write: usage.tokens.cache.write,
-    })
-    .where(eq(SessionTable.id, event.data.sessionID))
-    .run()
-    .pipe(Effect.orDie)
   if (copiedSeq !== undefined) yield* EventV2.reserveSequence(db, event.data.sessionID, copiedSeq)
 })
 
@@ -775,22 +766,6 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
-        const revertedUsage = (yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(
-            and(
-              eq(SessionMessageTable.session_id, event.data.sessionID),
-              eq(SessionMessageTable.type, "assistant"),
-              gte(SessionMessageTable.seq, boundary.seq),
-            ),
-          )
-          .all()
-          .pipe(Effect.orDie)).reduce((total, row) => {
-          const value = messageUsage(row)
-          if (value) addUsage(total, value)
-          return total
-        }, emptyUsage())
         yield* db
           .delete(SessionMessageTable)
           .where(
@@ -798,7 +773,6 @@ const layer = Layer.effectDiscard(
           )
           .run()
           .pipe(Effect.orDie)
-        yield* applyUsage(db, event.data.sessionID, revertedUsage, -1)
         yield* db
           .delete(SessionInputTable)
           .where(
@@ -817,6 +791,17 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         yield* InstructionCheckpoint.reset(db, event.data.sessionID)
       }),
+    )
+    yield* events.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed]).pipe(
+      Stream.runForEach((event) => {
+        if (
+          event.type === SessionEvent.Step.Failed.type &&
+          (event.data.cost === undefined || event.data.tokens === undefined)
+        )
+          return Effect.void
+        return publishSessionUsage(db, events, event.data.sessionID)
+      }),
+      Effect.forkScoped({ startImmediately: true }),
     )
   }),
 )

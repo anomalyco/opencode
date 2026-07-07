@@ -21,6 +21,7 @@ export type Event =
   | EventSessionModelSelected
   | EventSessionMoved
   | EventSessionRenamed
+  | EventSessionUsageUpdated
   | EventSessionForked
   | EventSessionPromptPromoted
   | EventSessionPromptAdmitted
@@ -893,6 +894,23 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           title: string
+        }
+      }
+    | {
+        id: string
+        type: "session.usage.updated"
+        properties: {
+          sessionID: string
+          cost: number
+          tokens: {
+            input: number
+            output: number
+            reasoning: number
+            cache: {
+              read: number
+              write: number
+            }
+          }
         }
       }
     | {
@@ -3089,6 +3107,7 @@ export type V2Event =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionUsageUpdated
   | SessionForked
   | SessionPromptPromoted
   | SessionPromptAdmitted
@@ -5985,6 +6004,29 @@ export type MessagePartRemoved = {
   }
 }
 
+export type SessionUsageUpdated = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.usage.updated"
+  location?: LocationRef
+  data: {
+    sessionID: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+  }
+}
+
 export type SessionTextDelta = {
   id: string
   created: number
@@ -7037,6 +7079,24 @@ export type EventSessionRenamed = {
   properties: {
     sessionID: string
     title: string
+  }
+}
+
+export type EventSessionUsageUpdated = {
+  id: string
+  type: "session.usage.updated"
+  properties: {
+    sessionID: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
   }
 }
 
@@ -8565,6 +8625,7 @@ export type V2EventV2 =
   | SessionModelSelectedV2
   | SessionMovedV2
   | SessionRenamedV2
+  | SessionUsageUpdatedV2
   | SessionDeletedV2
   | SessionForkedV2
   | SessionPromptPromotedV2
@@ -10043,6 +10104,29 @@ export type MessagePartRemovedV2 = {
     sessionID: string
     messageID: string
     partID: string
+  }
+}
+
+export type SessionUsageUpdatedV2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.usage.updated"
+  location?: LocationRefV2
+  data: {
+    sessionID: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
   }
 }
 

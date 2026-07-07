@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -132,12 +132,12 @@ describe("SessionProjector", () => {
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
       ).toEqual([earlier])
       expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({
-        cost: 0,
-        tokens_input: 0,
-        tokens_output: 0,
-        tokens_reasoning: 0,
-        tokens_cache_read: 0,
-        tokens_cache_write: 0,
+        cost: 1.25,
+        tokens_input: 10,
+        tokens_output: 4,
+        tokens_reasoning: 2,
+        tokens_cache_read: 3,
+        tokens_cache_write: 1,
       })
       // A committed revert resets the context checkpoint so the next turn re-initializes.
       expect(yield* db.select().from(InstructionCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
@@ -567,6 +567,9 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
 
       const service = yield* EventV2.Service
+      const usageUpdated = yield* service
+        .subscribe(SessionEvent.UsageUpdated)
+        .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
@@ -602,6 +605,11 @@ describe("SessionProjector", () => {
         tokens_reasoning: 2,
         tokens_cache_read: 3,
         tokens_cache_write: 1,
+      })
+      expect(Option.getOrThrow(yield* Fiber.join(usageUpdated)).data).toEqual({
+        sessionID,
+        cost: 1.25,
+        tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       })
     }),
   )

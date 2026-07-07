@@ -108,7 +108,7 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
-test("refreshes usage without applying stale session snapshots", async () => {
+test("applies absolute usage events without losing full session updates", async () => {
   const events = createEventStream()
   const sessionID = "ses_usage_refresh"
   let resolveSessions!: (response: Response) => void
@@ -151,16 +151,14 @@ test("refreshes usage without applying stale session snapshots", async () => {
     emitEvent(events, {
       id: "evt_usage_2",
       created: 2,
-      type: "session.step.ended",
-      durable: durable(sessionID, 2),
+      type: "session.usage.updated",
       data: {
         sessionID,
-        assistantMessageID: "msg_usage_2",
-        finish: "stop",
         cost: 0.5,
         tokens: { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } },
       },
     })
+    const initialRefresh = data.session.refresh(sessionID)
     await wait(() => resolveSession.length === 1)
     resolveSessions(
       json({
@@ -191,6 +189,7 @@ test("refreshes usage without applying stale session snapshots", async () => {
         },
       }),
     )
+    await initialRefresh
     await wait(() => data.session.get(sessionID)?.cost === 0.5)
     expect(data.session.get(sessionID)?.tokens).toEqual({
       input: 5,
@@ -203,37 +202,13 @@ test("refreshes usage without applying stale session snapshots", async () => {
     emitEvent(events, {
       id: "evt_usage_3",
       created: 3,
-      type: "session.step.ended",
-      durable: durable(sessionID, 3),
+      type: "session.usage.updated",
       data: {
         sessionID,
-        assistantMessageID: "msg_usage_3",
-        finish: "stop",
-        cost: 0.25,
-        tokens: { input: 3, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+        cost: 1,
+        tokens: { input: 10, output: 4, reasoning: 1, cache: { read: 1, write: 1 } },
       },
     })
-    await wait(() => resolveSession.length === 3)
-    emitEvent(events, {
-      id: "evt_usage_rename",
-      created: 5,
-      type: "session.renamed",
-      durable: durable(sessionID, 5),
-      data: { sessionID, title: "Live title" },
-    })
-    resolveSession[2](
-      json({
-        data: {
-          id: sessionID,
-          projectID: "proj_test",
-          cost: 1,
-          tokens: { input: 10, output: 4, reasoning: 1, cache: { read: 1, write: 1 } },
-          time: { created: 0, updated: 0 },
-          title: "Latest usage",
-          location: { directory },
-        },
-      }),
-    )
     await wait(() => data.session.get(sessionID)?.cost === 1)
     resolveSession[1](
       json({
@@ -251,78 +226,41 @@ test("refreshes usage without applying stale session snapshots", async () => {
     await fullRefresh
     await Bun.sleep(20)
     expect(data.session.get(sessionID)?.cost).toBe(1)
-    expect(data.session.get(sessionID)?.title).toBe("Live title")
+    expect(data.session.get(sessionID)?.title).toBe("Older usage")
 
     emitEvent(events, {
       id: "evt_usage_6",
       created: 6,
-      type: "session.step.ended",
-      durable: durable(sessionID, 6),
+      type: "session.usage.updated",
       data: {
         sessionID,
-        assistantMessageID: "msg_usage_6",
-        finish: "stop",
-        cost: 0.25,
-        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+        cost: 1.25,
+        tokens: { input: 12, output: 5, reasoning: 1, cache: { read: 1, write: 1 } },
       },
     })
     emitEvent(events, {
       id: "evt_usage_7",
       created: 7,
-      type: "session.step.ended",
-      durable: durable(sessionID, 7),
+      type: "session.usage.updated",
       data: {
         sessionID,
-        assistantMessageID: "msg_usage_7",
-        finish: "stop",
-        cost: 0.25,
-        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+        cost: 1.25,
+        tokens: { input: 12, output: 5, reasoning: 1, cache: { read: 1, write: 1 } },
       },
     })
-    await wait(() => resolveSession.length === 5)
-    resolveSession[3](
-      json({
-        data: {
-          id: sessionID,
-          projectID: "proj_test",
-          cost: 1.25,
-          tokens: { input: 12, output: 5, reasoning: 1, cache: { read: 1, write: 1 } },
-          time: { created: 0, updated: 0 },
-          title: "Stale title",
-          location: { directory },
-        },
-      }),
-    )
     await wait(() => data.session.get(sessionID)?.cost === 1.25)
-    expect(data.session.get(sessionID)?.title).toBe("Live title")
-    resolveSession[4](
-      json({
-        data: {
-          id: sessionID,
-          projectID: "proj_test",
-          cost: 1.25,
-          tokens: { input: 12, output: 5, reasoning: 1, cache: { read: 1, write: 1 } },
-          time: { created: 0, updated: 0 },
-          title: "Stale title",
-          location: { directory },
-        },
-      }),
-    )
+    expect(data.session.get(sessionID)?.title).toBe("Older usage")
 
     emitEvent(events, {
       id: "evt_usage_8",
       created: 8,
-      type: "session.step.ended",
-      durable: durable(sessionID, 8),
+      type: "session.usage.updated",
       data: {
         sessionID,
-        assistantMessageID: "msg_usage_8",
-        finish: "stop",
-        cost: 0.25,
-        tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+        cost: 1.5,
+        tokens: { input: 14, output: 6, reasoning: 1, cache: { read: 1, write: 1 } },
       },
     })
-    await wait(() => resolveSession.length === 6)
     emitEvent(events, {
       id: "evt_usage_deleted",
       created: 9,
@@ -330,19 +268,6 @@ test("refreshes usage without applying stale session snapshots", async () => {
       durable: durable(sessionID, 9),
       data: { sessionID },
     })
-    resolveSession[5](
-      json({
-        data: {
-          id: sessionID,
-          projectID: "proj_test",
-          cost: 1.5,
-          tokens: { input: 14, output: 6, reasoning: 1, cache: { read: 1, write: 1 } },
-          time: { created: 0, updated: 0 },
-          title: "Deleted session",
-          location: { directory },
-        },
-      }),
-    )
     await Bun.sleep(20)
     expect(data.session.get(sessionID)).toBeUndefined()
   } finally {
@@ -350,7 +275,7 @@ test("refreshes usage without applying stale session snapshots", async () => {
   }
 })
 
-test("truncates committed revert messages and refreshes usage", async () => {
+test("truncates committed revert messages without changing lifetime usage", async () => {
   const events = createEventStream()
   const sessionID = "ses_revert_usage"
   let cost = 0
@@ -418,6 +343,12 @@ test("truncates committed revert messages and refreshes usage", async () => {
         tokens,
       },
     })
+    emitEvent(events, {
+      id: "evt_revert_boundary_usage",
+      created: 2,
+      type: "session.usage.updated",
+      data: { sessionID, cost, tokens },
+    })
     await wait(() => data.session.get(sessionID)?.cost === 0.5)
 
     emitEvent(events, {
@@ -447,6 +378,12 @@ test("truncates committed revert messages and refreshes usage", async () => {
         tokens: { input: 3, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
       },
     })
+    emitEvent(events, {
+      id: "evt_revert_later_usage",
+      created: 4,
+      type: "session.usage.updated",
+      data: { sessionID, cost, tokens },
+    })
     await wait(() => data.session.get(sessionID)?.cost === 0.75)
     emitEvent(events, {
       id: "evt_revert_staged",
@@ -457,8 +394,6 @@ test("truncates committed revert messages and refreshes usage", async () => {
     })
     await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_later")
 
-    cost = 0.5
-    tokens = { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } }
     emitEvent(events, {
       id: "evt_revert_committed",
       created: 6,
@@ -466,7 +401,8 @@ test("truncates committed revert messages and refreshes usage", async () => {
       durable: durable(sessionID, 6),
       data: { sessionID, to: "msg_revert_later" },
     })
-    await wait(() => data.session.get(sessionID)?.cost === 0.5)
+    await wait(() => data.session.message.ids(sessionID).length === 1)
+    expect(data.session.get(sessionID)?.cost).toBe(0.75)
     expect(data.session.message.ids(sessionID)).toEqual(["msg_revert_boundary"])
     expect(data.session.get(sessionID)?.revert).toBeUndefined()
     expect(data.session.get(sessionID)?.tokens).toEqual(tokens)
@@ -915,6 +851,16 @@ test("tracks session status from active sessions and execution events", async ()
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       },
     })
+    emitEvent(events, {
+      id: "evt_step_usage",
+      created: 0,
+      type: "session.usage.updated",
+      data: {
+        sessionID: "session-live",
+        cost: 0.75,
+        tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
+      },
+    })
     await wait(() => {
       const assistant = data.session.message.get("session-live", "message-live")
       return assistant?.type === "assistant" && assistant.finish === "stop"
@@ -935,6 +881,7 @@ test("tracks session status from active sessions and execution events", async ()
     })
     await wait(() => data.session.status("session-live") === "idle")
 
+    await data.session.refresh("session-failed")
     emitEvent(events, {
       id: "evt_failed_execution_started",
       created: 0,
@@ -965,6 +912,16 @@ test("tracks session status from active sessions and execution events", async ()
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
         error: { type: "provider.content-filter", message: "Provider blocked the response" },
+        cost: 0.25,
+        tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_failed_step_usage",
+      created: 0,
+      type: "session.usage.updated",
+      data: {
+        sessionID: "session-failed",
         cost: 0.25,
         tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
       },

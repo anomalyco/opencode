@@ -298,8 +298,8 @@ describe("SessionV2.create", () => {
       expect(yield* session.context(beforeFirst.id)).toEqual([])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(complete).toMatchObject({
-        cost: 0.75,
-        tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       })
     }),
   )

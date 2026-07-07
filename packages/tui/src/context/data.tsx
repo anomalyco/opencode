@@ -112,6 +112,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const messageIndex = new Map<string, Map<string, number>>()
     const sessionRefreshGeneration = new Map<string, number>()
     const sessionRefreshApplied = new Map<string, number>()
+    const sessionUsage = new Map<string, { generation: number; cost: number; tokens: SessionV2Info["tokens"] }>()
     let connectionGeneration = 0
     let statusChanges: Set<string> | undefined
     let bootstrapping: Promise<void> | undefined
@@ -131,6 +132,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       if ((sessionRefreshApplied.get(sessionID) ?? 0) > generation) return false
       sessionRefreshApplied.set(sessionID, generation)
       return true
+    }
+
+    function updateSessionUsage(sessionID: string, cost: number, tokens: SessionV2Info["tokens"]) {
+      sessionUsage.set(sessionID, { generation: (sessionUsage.get(sessionID)?.generation ?? 0) + 1, cost, tokens })
+      if (!store.session.info[sessionID]) return
+      setStore("session", "info", sessionID, { cost, tokens })
     }
 
     const message = {
@@ -237,6 +244,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removeSession(sessionID: string) {
       sessionRefreshApplied.set(sessionID, nextSessionRefresh(sessionID))
+      sessionUsage.delete(sessionID)
       messageIndex.delete(sessionID)
       setStore(
         "session",
@@ -264,6 +272,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.deleted":
           removeSession(event.data.sessionID)
+          break
+        case "session.usage.updated":
+          updateSessionUsage(event.data.sessionID, event.data.cost, event.data.tokens)
           break
         case "catalog.updated":
           void Promise.all([
@@ -440,9 +451,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             if (event.data.snapshot)
               currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.data.snapshot }
           })
-          void result.session
-            .refreshUsage(event.data.sessionID)
-            .catch((error) => console.error("Failed to refresh session usage", error))
           break
         }
         case "session.step.failed":
@@ -458,10 +466,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               currentAssistant.tokens = event.data.tokens
             }
           })
-          if (event.data.cost !== undefined && event.data.tokens !== undefined)
-            void result.session
-              .refreshUsage(event.data.sessionID)
-              .catch((error) => console.error("Failed to refresh failed session usage", error))
           break
         case "session.text.started":
           message.update(event.data.sessionID, (draft, index) => {
@@ -662,9 +666,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.revert.committed":
           if (store.session.info[event.data.sessionID]) {
             setStore("session", "info", event.data.sessionID, "revert", undefined)
-            void result.session
-              .refreshUsage(event.data.sessionID)
-              .catch((error) => console.error("Failed to refresh session usage after revert", error))
           }
           setStore(
             "session",
@@ -837,17 +838,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
         async refresh(sessionID: string) {
           const generation = nextSessionRefresh(sessionID)
+          const usageGeneration = sessionUsage.get(sessionID)?.generation ?? 0
           const info = mutable(await sdk.api.session.get({ sessionID }))
           if (!applySessionRefresh(sessionID, generation)) return
-          setStore("session", "info", sessionID, info)
-          registerSession(sessionID)
-        },
-        async refreshUsage(sessionID: string) {
-          const generation = nextSessionRefresh(sessionID)
-          const info = mutable(await sdk.api.session.get({ sessionID }))
-          if (!applySessionRefresh(sessionID, generation)) return
-          setStore("session", "info", sessionID, (current) =>
-            current ? { ...current, cost: info.cost, tokens: info.tokens } : info,
+          const usage = sessionUsage.get(sessionID)
+          setStore(
+            "session",
+            "info",
+            sessionID,
+            usage && usage.generation !== usageGeneration ? { ...info, cost: usage.cost, tokens: usage.tokens } : info,
           )
           registerSession(sessionID)
         },
@@ -1032,6 +1031,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     async function bootstrap() {
       if (bootstrapping) return bootstrapping
       const generation = new Map(sessionRefreshApplied)
+      const usageGeneration = new Map(Array.from(sessionUsage, ([id, usage]) => [id, usage.generation]))
       bootstrapping = Promise.allSettled([
         sdk.api.session
           .list({
@@ -1047,7 +1047,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               produce((draft) => {
                 for (const session of response.data) {
                   if ((sessionRefreshApplied.get(session.id) ?? 0) !== (generation.get(session.id) ?? 0)) continue
-                  draft[session.id] = mutable(session)
+                  const usage = sessionUsage.get(session.id)
+                  draft[session.id] = mutable(
+                    usage && usage.generation !== (usageGeneration.get(session.id) ?? 0)
+                      ? { ...session, cost: usage.cost, tokens: usage.tokens }
+                      : session,
+                  )
                 }
               }),
             )

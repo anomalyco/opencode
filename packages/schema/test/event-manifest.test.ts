@@ -143,6 +143,8 @@ describe("public event manifest", () => {
     expect(SessionEvent.DurableDefinitions).toEqual(
       SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
     )
+    expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
+    expect(EventManifest.ServerDefinitions).toContain(SessionEvent.UsageUpdated)
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
   })
 
