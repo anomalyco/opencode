@@ -13,6 +13,9 @@ import { ConfigAgentV1 } from "../../v1/config/agent"
 import { ConfigMigrateV1 } from "../../v1/config/migrate"
 import { Global } from "../../global"
 import { PermissionV2 } from "../../permission"
+import type { LocationMutation } from "../../location-mutation"
+import type { ReadTool } from "../../tool/read"
+import type { EditTool } from "../../tool/edit"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
@@ -21,6 +24,11 @@ const legacySources = [
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 const decodeConfig = Schema.decodeUnknownOption(Config.Info)
+type PathAction =
+  | LocationMutation.ExternalDirectoryAuthorization["action"]
+  | typeof ReadTool.name
+  | typeof EditTool.name
+const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set([
   "model",
   "variant",
@@ -111,10 +119,11 @@ export const Plugin = define({
 function expandPermissions(rules: PermissionV2.Ruleset, home: string): PermissionV2.Ruleset {
   // Expand only resources tools resolve as filesystem paths. Bash resources are raw shell text:
   // rewriting `$HOME/private/**` would miss `$HOME/private/key`, and safe expansion needs shell-aware parsing.
-  const pathActions = new Set(["external_directory", "read", "edit"])
-  return rules.map((rule) =>
-    pathActions.has(rule.action) ? { ...rule, resource: expandHome(rule.resource, home) } : rule,
-  )
+  return rules.map((rule) => (isPathAction(rule.action) ? { ...rule, resource: expandHome(rule.resource, home) } : rule))
+}
+
+function isPathAction(action: string): action is PathAction {
+  return pathActions.some((item) => item === action)
 }
 
 function expandHome(resource: string, home: string) {
