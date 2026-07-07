@@ -185,11 +185,8 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
   private pendingTokens?: OAuthTokens
 
   override async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    if (!this.config.clientId) return this.pendingClientInfo
-    return {
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
-    }
+    if (this.pendingClientInfo && !this.config.clientId) return this.pendingClientInfo
+    return super.clientInformation()
   }
 
   override async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
@@ -197,7 +194,7 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
   }
 
   override async tokens(): Promise<OAuthTokens | undefined> {
-    return this.pendingTokens
+    return this.pendingTokens ?? super.tokens()
   }
 
   override async saveTokens(tokens: OAuthTokens): Promise<void> {
@@ -211,6 +208,9 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
 
   async commit(): Promise<void> {
     if (!this.pendingTokens) return
+    const existing = !this.config.clientId
+      ? await Effect.runPromise(this.auth.getForUrl(this.mcpName, this.serverUrl))
+      : undefined
     await Effect.runPromise(
       this.auth.set(
         this.mcpName,
@@ -229,7 +229,7 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
                   clientIdIssuedAt: this.pendingClientInfo.client_id_issued_at,
                   clientSecretExpiresAt: this.pendingClientInfo.client_secret_expires_at,
                 }
-              : undefined,
+              : existing?.clientInfo,
         },
         this.serverUrl,
       ),
