@@ -10,8 +10,6 @@ import {
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
-  SubscribeRequestSchema,
-  UnsubscribeRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { ConfigMCP } from "@opencode-ai/core/config/mcp"
 import { Config } from "@opencode-ai/core/config"
@@ -30,7 +28,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { location } from "./fixture/location"
 import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
@@ -49,7 +47,7 @@ type ResourceTemplatePage = {
   nextCursor?: string
 }
 
-function resourceServer(input: { resources?: boolean; subscribe?: boolean; listChanged?: boolean } = {}) {
+function resourceServer(input: { resources?: boolean; listChanged?: boolean } = {}) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const state = {
@@ -63,87 +61,45 @@ function resourceServer(input: { resources?: boolean; subscribe?: boolean; listC
         ] as Array<{ uri: string; text: string; mimeType?: string } | { uri: string; blob: string; mimeType?: string }>,
         resourceLists: 0,
         templateLists: 0,
-        resourceListFailures: 0,
-        subscriptionFailures: 0,
-        subscriptions: [] as string[],
-        unsubscriptions: [] as string[],
-        onSubscription: undefined as (() => void | Promise<void>) | undefined,
-        onExpiredRequest: undefined as (() => void | Promise<void>) | undefined,
       }
-      const makeProtocol = async () => {
-        const protocol = new Server(
-          { name: "mcp-resources", version: "1.0.0" },
-          {
-            capabilities: {
-              tools: {},
-              ...(input.resources === false
-                ? {}
-                : { resources: { subscribe: input.subscribe, listChanged: input.listChanged } }),
-            },
+      const protocol = new Server(
+        { name: "mcp-resources", version: "1.0.0" },
+        {
+          capabilities: {
+            tools: {},
+            ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
           },
-        )
-        protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
-        if (input.resources !== false) {
-          protocol.setRequestHandler(ListResourcesRequestSchema, (request) => {
-            state.resourceLists += 1
-            if (state.resourceListFailures > 0) {
-              state.resourceListFailures -= 1
-              throw new Error("resource list failed")
-            }
-            const page = state.resourcePages?.[request.params?.cursor ?? "initial"]
-            return Promise.resolve({ resources: page?.items ?? state.resources, nextCursor: page?.nextCursor })
-          })
-          protocol.setRequestHandler(ListResourceTemplatesRequestSchema, (request) => {
-            state.templateLists += 1
-            const page = state.templatePages?.[request.params?.cursor ?? "initial"]
-            return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
-          })
-          protocol.setRequestHandler(ReadResourceRequestSchema, () => Promise.resolve({ contents: state.contents }))
-          protocol.setRequestHandler(SubscribeRequestSchema, async (request) => {
-            state.subscriptions.push(request.params.uri)
-            if (state.subscriptionFailures > 0) {
-              state.subscriptionFailures -= 1
-              throw new Error("resource subscription failed")
-            }
-            await state.onSubscription?.()
-            return {}
-          })
-          protocol.setRequestHandler(UnsubscribeRequestSchema, (request) => {
-            state.unsubscriptions.push(request.params.uri)
-            return Promise.resolve({})
-          })
-        }
-        const transport = new WebStandardStreamableHTTPServerTransport({
-          sessionIdGenerator: () => crypto.randomUUID(),
-          enableJsonResponse: true,
+        },
+      )
+      protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
+      if (input.resources !== false) {
+        protocol.setRequestHandler(ListResourcesRequestSchema, (request) => {
+          state.resourceLists += 1
+          const page = state.resourcePages?.[request.params?.cursor ?? "initial"]
+          return Promise.resolve({ resources: page?.items ?? state.resources, nextCursor: page?.nextCursor })
         })
-        await protocol.connect(transport)
-        return { protocol, transport }
+        protocol.setRequestHandler(ListResourceTemplatesRequestSchema, (request) => {
+          state.templateLists += 1
+          const page = state.templatePages?.[request.params?.cursor ?? "initial"]
+          return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
+        })
+        protocol.setRequestHandler(ReadResourceRequestSchema, () => Promise.resolve({ contents: state.contents }))
       }
-      let current = await makeProtocol()
-      let expiredRequests = 0
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+        enableJsonResponse: true,
+      })
+      await protocol.connect(transport)
       const http = Bun.serve({
         port: 0,
-        fetch: async (request) => {
-          if (expiredRequests > 0 && request.method === "POST" && request.headers.has("mcp-session-id")) {
-            expiredRequests -= 1
-            await state.onExpiredRequest?.()
-            return new Response("session expired", { status: 404 })
-          }
-          return current.transport.handleRequest(request)
-        },
+        fetch: (request) => transport.handleRequest(request),
       })
       return {
         state,
         url: http.url.toString(),
-        sendResourceListChanged: () => current.protocol.sendResourceListChanged(),
-        sendResourceUpdated: (uri: string) => current.protocol.sendResourceUpdated({ uri }),
-        restart: async (requests = 1) => {
-          current = await makeProtocol()
-          expiredRequests = requests
-        },
+        sendResourceListChanged: () => protocol.sendResourceListChanged(),
         close: async () => {
-          await current.protocol.close().catch(() => {})
+          await protocol.close().catch(() => {})
           await http.stop(true)
         },
       }
@@ -152,10 +108,9 @@ function resourceServer(input: { resources?: boolean; subscribe?: boolean; listC
   )
 }
 
-function resourceMcpLayer(url: string, changed: Deferred.Deferred<void>) {
+function resourceMcpLayer(url: string) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
-  let resourceChanges = 0
   return MCP.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -178,12 +133,12 @@ function resourceMcpLayer(url: string, changed: Deferred.Deferred<void>) {
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(EventV2.Service, {
           subscribe: () => Stream.never,
-          publish: (definition) =>
-            Effect.sync(() => {
-              if (definition.type === "mcp.resources.changed" && ++resourceChanges === 2)
-                Deferred.doneUnsafe(changed, Exit.void)
-              return undefined as never
-            }),
+          publish: (definition, data) =>
+            Effect.succeed({
+              id: EventV2.ID.create(),
+              type: definition.type,
+              data,
+            } as EventV2.Payload<typeof definition>),
         }),
         Layer.mock(Form.Service, {}),
         Layer.mock(Integration.Service, {
@@ -464,7 +419,7 @@ test("applies configured MCP timeouts to resource operations", async () => {
   await expect(read).rejects.toThrow("Request timed out")
 })
 
-test("lists, reads, and invalidates MCP resources", async () => {
+test("lists, reads, and reports MCP resource changes", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -513,286 +468,6 @@ test("lists, reads, and invalidates MCP resources", async () => {
   )
 })
 
-test("shares scoped MCP resource subscriptions", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        const firstScope = yield* Scope.make()
-        const secondScope = yield* Scope.make()
-        const secondUpdate = yield* Deferred.make<void>()
-
-        expect(
-          yield* connection
-            .subscribeResource({ uri: "docs://readme" }, () => {
-              throw new Error("listener failed")
-            })
-            .pipe(Scope.provide(firstScope)),
-        ).toBe(true)
-        expect(
-          yield* connection
-            .subscribeResource({ uri: "docs://readme" }, () => Deferred.doneUnsafe(secondUpdate, Exit.void))
-            .pipe(Scope.provide(secondScope)),
-        ).toBe(true)
-        expect(server.state.subscriptions).toEqual(["docs://readme"])
-
-        yield* Effect.promise(() => server.sendResourceUpdated("docs://readme"))
-        yield* Deferred.await(secondUpdate)
-        yield* Scope.close(firstScope, Exit.void)
-        expect(server.state.unsubscriptions).toEqual([])
-        yield* Scope.close(secondScope, Exit.void)
-        expect(server.state.unsubscriptions).toEqual(["docs://readme"])
-      }),
-    ),
-  )
-})
-
-test("releases MCP resource subscriptions provided a closed scope", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        const closed = yield* Scope.make()
-        yield* Scope.close(closed, Exit.void)
-        expect(
-          yield* connection
-            .subscribeResource({ uri: "docs://readme" }, () => {})
-            .pipe(
-              Scope.provide(closed),
-              Effect.timeoutOrElse({
-                duration: "1 second",
-                orElse: () => Effect.fail(new Error("closed-scope resource subscription deadlocked")),
-              }),
-            ),
-        ).toBe(true)
-        expect(server.state.subscriptions).toEqual(["docs://readme"])
-        expect(server.state.unsubscriptions).toEqual(["docs://readme"])
-      }),
-    ),
-  )
-})
-
-test("recovers an HTTP session while creating an MCP resource subscription", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        yield* Effect.promise(() => server.restart())
-
-        expect(
-          yield* connection
-            .subscribeResource({ uri: "docs://readme" }, () => {})
-            .pipe(
-              Effect.timeoutOrElse({
-                duration: "1 second",
-                orElse: () => Effect.fail(new Error("session recovery deadlocked")),
-              }),
-            ),
-        ).toBe(true)
-        expect(server.state.subscriptions).toEqual(["docs://readme"])
-      }),
-    ),
-  )
-})
-
-test("restores an in-flight MCP resource subscription during HTTP session recovery", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        const expired = yield* Deferred.make<void>()
-        let expiredRequests = 0
-        server.state.onExpiredRequest = () => {
-          expiredRequests += 1
-          if (expiredRequests === 2) Deferred.doneUnsafe(expired, Exit.void)
-          return Effect.runPromise(Deferred.await(expired))
-        }
-        yield* Effect.promise(() => server.restart(2))
-
-        const [subscribed, resources] = yield* Effect.all(
-          [connection.subscribeResource({ uri: "docs://readme" }, () => {}), connection.resources()],
-          { concurrency: "unbounded" },
-        )
-        expect(subscribed).toBe(true)
-        expect(resources).toEqual([])
-        expect(server.state.subscriptions).toEqual(["docs://readme"])
-      }),
-    ),
-  )
-})
-
-test("does not duplicate an MCP resource subscription started during recovery", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        expect(yield* connection.subscribeResource({ uri: "docs://existing" }, () => {})).toBe(true)
-        const restorationStarted = yield* Deferred.make<void>()
-        const allowRestoration = yield* Deferred.make<void>()
-        server.state.onSubscription = () => {
-          Deferred.doneUnsafe(restorationStarted, Exit.void)
-          return Effect.runPromise(Deferred.await(allowRestoration))
-        }
-        yield* Effect.promise(() => server.restart())
-
-        const resources = yield* connection.resources().pipe(Effect.forkScoped)
-        yield* Deferred.await(restorationStarted)
-        const subscription = yield* connection
-          .subscribeResource({ uri: "docs://later" }, () => {})
-          .pipe(Effect.forkScoped)
-        yield* Effect.yieldNow
-        yield* Deferred.succeed(allowRestoration, undefined)
-
-        yield* Fiber.join(resources)
-        expect(yield* Fiber.join(subscription)).toBe(true)
-        expect(server.state.subscriptions).toEqual(["docs://existing", "docs://existing", "docs://later"])
-      }),
-    ),
-  )
-})
-
-test("does not create an interrupted MCP resource subscription during recovery", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        const expired = yield* Deferred.make<void>()
-        const allowExpired = yield* Deferred.make<void>()
-        server.state.onExpiredRequest = () => {
-          Deferred.doneUnsafe(expired, Exit.void)
-          return Effect.runPromise(Deferred.await(allowExpired))
-        }
-        yield* Effect.promise(() => server.restart())
-
-        const subscription = yield* connection
-          .subscribeResource({ uri: "docs://readme" }, () => {})
-          .pipe(Effect.forkScoped)
-        yield* Deferred.await(expired)
-        yield* Fiber.interrupt(subscription)
-        yield* Deferred.succeed(allowExpired, undefined)
-
-        expect(yield* connection.resources()).toEqual([])
-        expect(server.state.subscriptions).toEqual([])
-      }),
-    ),
-  )
-})
-
-test("restores MCP resource state after HTTP session recovery", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true, listChanged: true })
-        server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        const changed = yield* Deferred.make<void>()
-        const subscriptionScope = yield* Scope.make()
-        connection.onResourcesChanged(() => Deferred.doneUnsafe(changed, Exit.void))
-        expect(
-          yield* connection
-            .subscribeResource({ uri: "docs://readme" }, () => {})
-            .pipe(Scope.provide(subscriptionScope)),
-        ).toBe(true)
-
-        yield* Effect.promise(() => server.restart())
-        server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
-        const restorationStarted = yield* Deferred.make<void>()
-        const allowRestoration = yield* Deferred.make<void>()
-        const resourcesLoaded = yield* Deferred.make<void>()
-        server.state.onSubscription = () => {
-          Deferred.doneUnsafe(restorationStarted, Exit.void)
-          return Effect.runPromise(Deferred.await(allowRestoration))
-        }
-        const resources = yield* connection.resources().pipe(
-          Effect.tap(() => Deferred.succeed(resourcesLoaded, undefined)),
-          Effect.forkScoped,
-        )
-        yield* Deferred.await(restorationStarted)
-        expect(yield* Deferred.isDone(resourcesLoaded)).toBe(false)
-        yield* Deferred.succeed(allowRestoration, undefined)
-        expect((yield* Fiber.join(resources)).map((resource) => resource.uri)).toEqual(["docs://guide"])
-        yield* Deferred.await(changed)
-        expect(server.state.subscriptions).toEqual(["docs://readme", "docs://readme"])
-        yield* Scope.close(subscriptionScope, Exit.void)
-      }),
-    ),
-  )
-})
-
-test("skips unsupported MCP resource subscriptions", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer()
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        expect(yield* connection.subscribeResource({ uri: "docs://readme" }, () => {})).toBe(false)
-        expect(server.state.subscriptions).toEqual([])
-      }),
-    ),
-  )
-})
-
-test("closes an MCP connection when subscription restoration fails", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ subscribe: true })
-        const connection = yield* MCPClient.connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-        const closed = yield* Deferred.make<void>()
-        connection.onClose(() => Deferred.doneUnsafe(closed, Exit.void))
-        expect(yield* connection.subscribeResource({ uri: "docs://readme" }, () => {})).toBe(true)
-        yield* Effect.promise(() => server.restart())
-        server.state.subscriptionFailures = 1
-
-        expect(Exit.isFailure(yield* connection.resources().pipe(Effect.exit))).toBe(true)
-        yield* Deferred.await(closed)
-      }),
-    ),
-  )
-})
-
 test("skips MCP resource requests when the capability is absent", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -815,20 +490,26 @@ test("skips MCP resource requests when the capability is absent", async () => {
   )
 })
 
-test("caches and invalidates MCP resource catalogs", async () => {
+test("loads and reads MCP resources", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const server = yield* resourceServer({ listChanged: true, subscribe: true })
+        const server = yield* resourceServer()
         server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
         server.state.templates = [{ name: "File", uriTemplate: "docs://{path}" }]
-        server.state.resourceListFailures = 1
-        const changed = yield* Deferred.make<void>()
 
         yield* Effect.gen(function* () {
           const service = yield* MCP.Service
           expect(yield* service.resourceCatalog()).toEqual({
-            resources: [],
+            resources: [
+              {
+                server: "resources",
+                name: "Readme",
+                uri: "docs://readme",
+                description: undefined,
+                mimeType: undefined,
+              },
+            ],
             templates: [
               {
                 server: "resources",
@@ -839,29 +520,9 @@ test("caches and invalidates MCP resource catalogs", async () => {
               },
             ],
           })
-          expect((yield* service.resourceCatalog()).resources).toEqual([
-            {
-              server: "resources",
-              name: "Readme",
-              uri: "docs://readme",
-              description: undefined,
-              mimeType: undefined,
-            },
-          ])
-          yield* service.resourceCatalog()
-          expect({ resources: server.state.resourceLists, templates: server.state.templateLists }).toEqual({
-            resources: 2,
-            templates: 1,
-          })
 
           server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
-          yield* Effect.promise(server.sendResourceListChanged)
-          yield* Deferred.await(changed)
           expect((yield* service.resourceCatalog()).resources.map((resource) => resource.uri)).toEqual(["docs://guide"])
-          expect({ resources: server.state.resourceLists, templates: server.state.templateLists }).toEqual({
-            resources: 3,
-            templates: 2,
-          })
           expect(yield* service.readResource({ server: "resources", uri: "docs://readme" })).toEqual({
             server: "resources",
             uri: "docs://readme",
@@ -870,27 +531,7 @@ test("caches and invalidates MCP resource catalogs", async () => {
               { type: "blob", uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
             ],
           })
-        }).pipe(Effect.provide(resourceMcpLayer(server.url, changed)))
-      }),
-    ),
-  )
-})
-
-test("reloads an MCP resource catalog when its HTTP session recovers", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ listChanged: true })
-        const changed = yield* Deferred.make<void>()
-
-        yield* Effect.gen(function* () {
-          const service = yield* MCP.Service
-          yield* service.tools()
-          yield* Effect.promise(() => server.restart())
-          server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
-
-          expect((yield* service.resourceCatalog()).resources.map((resource) => resource.uri)).toEqual(["docs://guide"])
-        }).pipe(Effect.provide(resourceMcpLayer(server.url, changed)))
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
       }),
     ),
   )

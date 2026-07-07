@@ -22,13 +22,12 @@ import {
   PromptListChangedNotificationSchema,
   PromptSchema,
   ResourceListChangedNotificationSchema,
-  ResourceUpdatedNotificationSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
   ToolListChangedNotificationSchema,
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Cause, Effect, Exit, Schema, Scope, Semaphore } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "../config/mcp"
 import { InstallationVersion } from "../installation/version"
 
@@ -156,11 +155,6 @@ export interface Connection {
   readonly resourceTemplates: () => Effect.Effect<ResourceTemplateDefinition[], Error>
   /** Reads one resource; returns undefined when the server doesn't advertise resource support. */
   readonly readResource: (input: { readonly uri: string }) => Effect.Effect<ReadResourceResult | undefined, Error>
-  /** Subscribes for the lifetime of the current scope; duplicate local listeners share one server subscription. */
-  readonly subscribeResource: (
-    input: { readonly uri: string },
-    callback: () => void,
-  ) => Effect.Effect<boolean, Error, Scope.Scope>
   /** Invokes a prompt on the server. Interruption aborts the in-flight request. */
   readonly prompt: (input: {
     readonly name: string
@@ -178,7 +172,7 @@ export interface Connection {
   readonly onToolsChanged: (callback: () => void) => void
   /** Registers a callback fired when the server announces its prompt list changed; no-op if unsupported. */
   readonly onPromptsChanged: (callback: () => void) => void
-  /** Registers a callback fired when the server announces its resource catalog changed or its HTTP session recovers. */
+  /** Registers a callback fired when the server announces its resource catalog changed. */
   readonly onResourcesChanged: (callback: () => void) => void
 }
 
@@ -246,7 +240,6 @@ export const connect = Effect.fnUntraced(function* (
     )
     const catalogTimeout = config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT
     const executionTimeout = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
-    const subscriptions = makeResourceSubscriptions(client, transport, server, catalogTimeout)
     return {
       instructions: client.getInstructions()?.trim() || undefined,
       tools: () =>
@@ -377,7 +370,6 @@ export const connect = Effect.fnUntraced(function* (
             ),
           }
         }),
-      subscribeResource: subscriptions.subscribe,
       prompt: (input) =>
         Effect.tryPromise({
           try: (signal) =>
@@ -424,10 +416,7 @@ export const connect = Effect.fnUntraced(function* (
           })),
         ),
       onClose: (callback) => {
-        client.onclose = () => {
-          subscriptions.clear()
-          callback()
-        }
+        client.onclose = callback
       },
       onLog: (callback) => {
         client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => callback(notification.params))
@@ -440,7 +429,10 @@ export const connect = Effect.fnUntraced(function* (
         if (!client.getServerCapabilities()?.prompts?.listChanged) return
         client.setNotificationHandler(PromptListChangedNotificationSchema, async () => callback())
       },
-      onResourcesChanged: subscriptions.onChanged,
+      onResourcesChanged: (callback) => {
+        if (!client.getServerCapabilities()?.resources?.listChanged) return
+        client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => callback())
+      },
     } satisfies Connection
   }
 
@@ -449,116 +441,6 @@ export const connect = Effect.fnUntraced(function* (
   if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
-
-type StartRequest = <T>(operation: () => Promise<T>) => Promise<T>
-
-function makeResourceSubscriptions(client: Client, transport: Transport, server: string, timeout: number) {
-  const subscriptions = new Map<string, Set<() => void>>()
-  const changed = new Set<() => void>()
-  const lock = Semaphore.makeUnsafe(1)
-  const notify = (callbacks: Iterable<() => void>) => {
-    for (const callback of callbacks) {
-      try {
-        callback()
-      } catch {}
-    }
-  }
-  const request = (uri: string, start?: StartRequest) =>
-    Effect.tryPromise({
-      try: (signal) => {
-        const operation = () => client.subscribeResource({ uri }, { signal, timeout })
-        return start ? start(operation) : operation()
-      },
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-    })
-
-  client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
-    notify(subscriptions.get(notification.params.uri) ?? []),
-  )
-  client.setNotificationHandler(ResourceListChangedNotificationSchema, () => notify(changed))
-  if (transport instanceof StreamableHTTPClientTransport)
-    transport.onsessionrecovered = (start) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          notify(changed)
-          if (!client.getServerCapabilities()?.resources?.subscribe) return
-          yield* Effect.forEach(
-            Array.from(subscriptions.keys()),
-            (uri) =>
-              request(uri, start).pipe(
-                Effect.tapError((error) =>
-                  Effect.logWarning("failed to restore MCP resource subscription", {
-                    server,
-                    uri,
-                    error: error.message,
-                  }),
-                ),
-              ),
-            { discard: true },
-          )
-        }),
-      )
-
-  return {
-    subscribe: (input: { readonly uri: string }, callback: () => void) =>
-      Effect.acquireRelease(
-        lock.withPermit(
-          Effect.gen(function* () {
-            if (!client.getServerCapabilities()?.resources?.subscribe) return undefined
-            const current = subscriptions.get(input.uri)
-            if (current) {
-              current.add(callback)
-              return callback
-            }
-            yield* request(input.uri).pipe(
-              Effect.tapError((error) =>
-                Effect.logWarning("failed to subscribe to MCP resource", {
-                  server,
-                  uri: input.uri,
-                  error: error.message,
-                }),
-              ),
-            )
-            subscriptions.set(input.uri, new Set([callback]))
-            return callback
-          }),
-        ),
-        (listener) => {
-          if (!listener) return Effect.void
-          return lock.withPermit(
-            Effect.gen(function* () {
-              const listeners = subscriptions.get(input.uri)
-              if (!listeners) return
-              listeners.delete(listener)
-              if (listeners.size > 0) return
-              subscriptions.delete(input.uri)
-              yield* Effect.tryPromise({
-                try: (signal) => client.unsubscribeResource({ uri: input.uri }, { signal, timeout }),
-                catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-              }).pipe(
-                Effect.tapError((error) =>
-                  Effect.logWarning("failed to unsubscribe from MCP resource", {
-                    server,
-                    uri: input.uri,
-                    error: error.message,
-                  }),
-                ),
-                Effect.ignore,
-              )
-            }),
-          )
-        },
-        { interruptible: true },
-      ).pipe(Effect.map((listener) => listener !== undefined)),
-    onChanged: (callback: () => void) => {
-      changed.add(callback)
-    },
-    clear: () => {
-      subscriptions.clear()
-      changed.clear()
-    },
-  }
-}
 
 // SDK close stops the MCP process, but not child processes it spawned.
 const cleanupStdioDescendants = (transport: Transport) =>

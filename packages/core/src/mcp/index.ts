@@ -116,9 +116,6 @@ type ServerEntry = {
   client?: MCPClient.Connection
   tools?: ReadonlyArray<Tool>
   prompts?: ReadonlyArray<Prompt>
-  resources?: ReadonlyArray<Resource>
-  resourceTemplates?: ReadonlyArray<ResourceTemplate>
-  resourceRevision: number
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
 }
@@ -179,7 +176,6 @@ export const layer = Layer.effect(
           config: { ...server, timeout: { ...timeout, ...server.timeout } },
           status: { status: "pending" },
           startup: Deferred.makeUnsafe<void>(),
-          resourceRevision: 0,
         })
       }
     }
@@ -405,41 +401,6 @@ export const layer = Layer.effect(
         mimeType: def.mimeType,
       })
 
-    const invalidateResources = (entry: ServerEntry) => {
-      entry.resourceRevision += 1
-      entry.resources = undefined
-      entry.resourceTemplates = undefined
-    }
-
-    const loadResources = Effect.fnUntraced(function* (
-      name: ServerName,
-      entry: ServerEntry,
-      connection: MCPClient.Connection,
-    ) {
-      while (true) {
-        const revision = entry.resourceRevision
-        const result = yield* Effect.all(
-          {
-            resources:
-              entry.resources === undefined
-                ? connection.resources().pipe(Effect.catch(() => Effect.succeed(undefined)))
-                : Effect.succeed(undefined),
-            templates:
-              entry.resourceTemplates === undefined
-                ? connection.resourceTemplates().pipe(Effect.catch(() => Effect.succeed(undefined)))
-                : Effect.succeed(undefined),
-          },
-          { concurrency: "unbounded" },
-        )
-        if (entry.client !== connection) return
-        if (entry.resourceRevision !== revision) continue
-        if (result.resources !== undefined) entry.resources = result.resources.map((def) => toResource(name, def))
-        if (result.templates !== undefined)
-          entry.resourceTemplates = result.templates.map((def) => toResourceTemplate(name, def))
-        return
-      }
-    })
-
     const refreshTools = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
       connection.tools().pipe(
         Effect.map((defs) => {
@@ -466,7 +427,6 @@ export const layer = Layer.effect(
         entry.client = undefined
         entry.tools = undefined
         entry.prompts = undefined
-        invalidateResources(entry)
         entry.status = { status: "failed", error: "Connection closed" }
         fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
         fork(events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore))
@@ -487,7 +447,6 @@ export const layer = Layer.effect(
       })
       connection.onResourcesChanged(() => {
         if (entry.client !== connection) return
-        invalidateResources(entry)
         fork(events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore))
       })
     }
@@ -523,7 +482,6 @@ export const layer = Layer.effect(
           Effect.exit,
         )
         if (Exit.isSuccess(result)) {
-          invalidateResources(entry)
           entry.client = result.value.connection
           entry.tools = result.value.tools.map((def) => toTool(name, def))
           entry.prompts = []
@@ -575,7 +533,6 @@ export const layer = Layer.effect(
           entry.client = undefined
           entry.tools = undefined
           entry.prompts = undefined
-          invalidateResources(entry)
           yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
         }
         yield* startServer(name, entry)
@@ -667,19 +624,33 @@ export const layer = Layer.effect(
       }),
       resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
         yield* whenAllReady
-        yield* Effect.forEach(
-          runtime,
-          ([name, entry]) => (entry.client ? loadResources(name, entry, entry.client) : Effect.void),
-          { concurrency: "unbounded", discard: true },
+        const catalogs = yield* Effect.forEach(
+          Array.from(runtime),
+          ([name, entry]) => {
+            if (!entry.client) return Effect.succeed({ resources: [], templates: [] })
+            return Effect.all(
+              {
+                resources: entry.client.resources().pipe(Effect.catch(() => Effect.succeed([]))),
+                templates: entry.client.resourceTemplates().pipe(Effect.catch(() => Effect.succeed([]))),
+              },
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.map((catalog) => ({
+                resources: catalog.resources.map((def) => toResource(name, def)),
+                templates: catalog.templates.map((def) => toResourceTemplate(name, def)),
+              })),
+            )
+          },
+          { concurrency: "unbounded" },
         )
         return ResourceCatalog.make({
-          resources: Array.from(runtime.values())
-            .flatMap((entry) => entry.resources ?? [])
+          resources: catalogs
+            .flatMap((catalog) => catalog.resources)
             .toSorted(
               (a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name) || a.uri.localeCompare(b.uri),
             ),
-          templates: Array.from(runtime.values())
-            .flatMap((entry) => entry.resourceTemplates ?? [])
+          templates: catalogs
+            .flatMap((catalog) => catalog.templates)
             .toSorted(
               (a, b) =>
                 a.server.localeCompare(b.server) ||
