@@ -4,7 +4,7 @@ import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Money } from "@opencode-ai/schema/money"
-import { Context, DateTime, Effect, Equal, Hash, RcMap, Schema, Stream } from "effect"
+import { Context, DateTime, Deferred, Effect, Equal, Hash, RcMap, Schema, Stream } from "effect"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -62,6 +62,42 @@ describe("LocationServiceMap", () => {
           expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
           yield* locations.invalidate(ref)
           expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("does not advertise shell before explorer activation completes", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const started = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "blocked-initial-activation",
+              effect: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))),
+            }),
+          )
+
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(
+            Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+          )
+          yield* Deferred.await(started)
+
+          const tools = yield* Effect.gen(function* () {
+            const agents = yield* AgentV2.Service
+            const registry = yield* ToolRegistry.Service
+            const explorer = yield* agents.select("explore")
+            return yield* toolDefinitions(registry, explorer.info?.permissions)
+          }).pipe(Effect.provide(context), Effect.ensuring(Deferred.succeed(release, undefined)))
+
+          expect(tools.map((tool) => tool.name)).not.toContain("shell")
         }),
       ),
     ),

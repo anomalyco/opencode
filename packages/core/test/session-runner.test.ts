@@ -1071,6 +1071,37 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not advertise unrestricted tools while the selected agent is unavailable", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const registry = yield* ToolRegistry.Service
+      yield* registry.register({
+        shell: Tool.make({
+          description: "Execute a shell command",
+          input: Schema.Struct({ command: Schema.String }),
+          output: Schema.Struct({}),
+          execute: () => Effect.succeed({}),
+        }),
+      })
+      yield* db
+        .update(SessionTable)
+        .set({ agent: "explore" })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Inspect files" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("shell")
+    }),
+  )
+
   it.effect("updates selected-agent skill guidance after an agent switch", () =>
     Effect.gen(function* () {
       const session = yield* setup
