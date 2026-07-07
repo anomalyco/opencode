@@ -581,7 +581,7 @@ export default function LegacyLayout(props: ParentProps) {
     const project = currentProject()
     if (!project) return false
     if (project.vcs !== "git") return false
-    return layout.sidebar.workspaces(project.worktree)()
+    return layout.sidebar.workspaces(project.worktree, !!(project.sandboxes && project.sandboxes.length > 0))()
   })
 
   const visibleSessionDirs = createMemo(() => {
@@ -608,7 +608,7 @@ export default function LegacyLayout(props: ParentProps) {
         (item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
       )
       if (!project) continue
-      if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
+      if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree, !!(project.sandboxes && project.sandboxes.length > 0))()) continue
       setStore("workspaceExpanded", directory, false)
     }
   })
@@ -1005,8 +1005,9 @@ export default function LegacyLayout(props: ParentProps) {
           const project = currentProject()
           if (!project) return
           if (project.vcs !== "git") return
-          const wasEnabled = layout.sidebar.workspaces(project.worktree)()
-          layout.sidebar.toggleWorkspaces(project.worktree)
+          const hasSandboxes = !!(project.sandboxes && project.sandboxes.length > 0)
+          const wasEnabled = layout.sidebar.workspaces(project.worktree, hasSandboxes)()
+          layout.sidebar.toggleWorkspaces(project.worktree, hasSandboxes)
           showToast({
             title: wasEnabled
               ? language.t("toast.workspace.disabled.title")
@@ -1210,7 +1211,8 @@ export default function LegacyLayout(props: ParentProps) {
       return true
     }
 
-    const projectSession = store.lastProjectSession[root]
+    const activeDirs = directory ? [directory] : dirs
+    const projectSession = directory && pathKey(directory) !== pathKey(root) ? undefined : store.lastProjectSession[root]
     if (projectSession?.id) {
       await refreshDirs(projectSession.directory)
       const opened = await openSession(projectSession)
@@ -1219,7 +1221,7 @@ export default function LegacyLayout(props: ParentProps) {
     }
 
     const latest = latestRootSession(
-      dirs.map((item) => serverSync().child(item, { bootstrap: false })[0]),
+      activeDirs.map((item) => serverSync().child(item, { bootstrap: false })[0]),
       Date.now(),
     )
     if (latest && (await openSession(latest))) {
@@ -1228,7 +1230,7 @@ export default function LegacyLayout(props: ParentProps) {
 
     const fetched = latestRootSession(
       await Promise.all(
-        dirs.map(async (item) => ({
+        activeDirs.map(async (item) => ({
           path: { directory: item },
           session: await serverSDK()
             .client.session.list({ directory: item })
@@ -1242,7 +1244,7 @@ export default function LegacyLayout(props: ParentProps) {
       return
     }
 
-    navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    navigateWithSidebarReset(`/${base64Encode(directory ?? root)}/session`)
   }
 
   function navigateToSession(session: Session | undefined) {
@@ -1334,13 +1336,14 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   function toggleProjectWorkspaces(project: LocalProject) {
-    const enabled = layout.sidebar.workspaces(project.worktree)()
+    const hasSandboxes = !!(project.sandboxes && project.sandboxes.length > 0)
+    const enabled = layout.sidebar.workspaces(project.worktree, hasSandboxes)()
     if (enabled) {
-      layout.sidebar.toggleWorkspaces(project.worktree)
+      layout.sidebar.toggleWorkspaces(project.worktree, hasSandboxes)
       return
     }
     if (project.vcs !== "git") return
-    layout.sidebar.toggleWorkspaces(project.worktree)
+    layout.sidebar.toggleWorkspaces(project.worktree, hasSandboxes)
   }
 
   const showEditProjectDialog = (conn: ServerConnection.Any, project: LocalProject) => {
@@ -1904,7 +1907,7 @@ export default function LegacyLayout(props: ParentProps) {
     closeProject,
     showEditProjectDialog: (proj) => showEditProjectDialog(server.current!, proj),
     toggleProjectWorkspaces,
-    workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
+    workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree, !!(project.sandboxes && project.sandboxes.length > 0))(),
     workspaceIds,
     workspaceLabel,
     sessionProps: {
@@ -1953,12 +1956,12 @@ export default function LegacyLayout(props: ParentProps) {
       const item = project()
       if (!item) return false
       if (item.vcs !== "git") return false
-      return layout.sidebar.workspaces(item.worktree)()
+      return layout.sidebar.workspaces(item.worktree, !!(item.sandboxes && item.sandboxes.length > 0))()
     })
     const canToggle = createMemo(() => {
       const item = project()
       if (!item) return false
-      return item.vcs === "git" || layout.sidebar.workspaces(item.worktree)()
+      return item.vcs === "git" || layout.sidebar.workspaces(item.worktree, !!(item.sandboxes && item.sandboxes.length > 0))()
     })
     const homedir = createMemo(() => serverSync().data.path.home)
 

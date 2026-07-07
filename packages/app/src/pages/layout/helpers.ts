@@ -3,6 +3,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { pathKey } from "@/utils/path-key"
 import type { ServerConnection } from "@/context/server"
 import type { HomeProjectSelection } from "@/context/layout"
+import { isDescendant } from "@/context/file/path"
 
 type SessionStore = {
   session?: Session[]
@@ -104,10 +105,15 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
   session: Session,
   projects: T[],
-  byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+  byID?: Map<string, T>,
 ) {
-  const direct = byID.get(session.projectID)
-  if (direct) return direct
+  const matching = projects.filter((p) => p.id === session.projectID)
+  if (matching.length > 0) {
+    if (matching.length === 1) return matching[0]
+    const active = matching.find((p) => isDescendant(p.worktree, session.directory))
+    if (active) return active
+    return matching[0]
+  }
   const directory = pathKey(session.directory)
   return projects.find(
     (project) =>

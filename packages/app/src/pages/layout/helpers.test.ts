@@ -19,7 +19,9 @@ import {
   homeSessionServerStatus,
   latestRootSession,
   toggleHomeProjectSelection,
+  projectForSession,
 } from "./helpers"
+import { isDescendant } from "@/context/file/path"
 import { pathKey } from "@/utils/path-key"
 import { ServerConnection } from "@/context/server"
 
@@ -317,5 +319,25 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("isDescendant checks path containment correctly", () => {
+    expect(isDescendant("/tmp/parent", "/tmp/parent/child")).toBe(true)
+    expect(isDescendant("/tmp/parent", "/tmp/parent")).toBe(true)
+    expect(isDescendant("/tmp/parent", "/tmp/parent-other")).toBe(false)
+    expect(isDescendant("/tmp/parent", "/tmp/other")).toBe(false)
+    expect(isDescendant("C:\\tmp\\parent", "c:/tmp/parent/child")).toBe(true)
+  })
+
+  test("projectForSession resolves to the correct project when multiple share same ID", () => {
+    const list = [
+      { id: "project-1", worktree: "/tmp/production" },
+      { id: "project-1", worktree: "/tmp/dev" },
+    ]
+    const sessProd = session({ id: "s1", projectID: "project-1", directory: "/tmp/production/src" })
+    const sessDev = session({ id: "s2", projectID: "project-1", directory: "/tmp/dev/src" })
+
+    expect(projectForSession(sessProd, list)?.worktree).toBe("/tmp/production")
+    expect(projectForSession(sessDev, list)?.worktree).toBe("/tmp/dev")
   })
 })

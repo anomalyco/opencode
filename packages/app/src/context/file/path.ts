@@ -149,3 +149,14 @@ export function createPathHelpers(scope: () => string) {
     normalizeDir,
   }
 }
+
+export function isDescendant(parent: string, child: string) {
+  const windows = /^[A-Za-z]:/.test(parent) || parent.startsWith("\\\\")
+  const canonParent = (windows ? parent.replace(/\\/g, "/").toLowerCase() : parent.replace(/\\/g, "/")).replace(/\/+$/, "")
+  const canonChild = (windows ? child.replace(/\\/g, "/").toLowerCase() : child.replace(/\\/g, "/")).replace(/\/+$/, "")
+  return (
+    canonChild.startsWith(canonParent) &&
+    (canonChild === canonParent || canonChild[canonParent.length] === "/")
+  )
+}
+

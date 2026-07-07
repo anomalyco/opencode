@@ -58,6 +58,7 @@ import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useCommand } from "@/context/command"
+import { isDescendant } from "@/context/file/path"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
@@ -485,7 +486,7 @@ export function NewHome() {
     const project = projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
-    const directory = project?.worktree ?? session.directory
+    const directory = (project && isDescendant(project.worktree, session.directory)) ? project.worktree : session.directory
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     if (options?.background) {

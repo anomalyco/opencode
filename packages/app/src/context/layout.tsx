@@ -13,7 +13,7 @@ import { pathKey } from "@/utils/path-key"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
-import { createPathHelpers } from "./file/path"
+import { createPathHelpers, isDescendant } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
@@ -452,6 +452,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return base
     }
 
+
+
     const roots = createMemo(() => {
       const map = new Map<string, string>()
       for (const project of serverSync().data.project) {
@@ -656,14 +658,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           setStore("sidebar", "width", width)
         },
-        workspaces(directory: string) {
-          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+        workspaces(directory: string, hasSandboxes?: boolean) {
+          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? (hasSandboxes ?? false)
         },
         setWorkspaces(directory: string, value: boolean) {
           setStore("sidebar", "workspaces", directory, value)
         },
-        toggleWorkspaces(directory: string) {
-          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+        toggleWorkspaces(directory: string, hasSandboxes?: boolean) {
+          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? (hasSandboxes ?? false)
           setStore("sidebar", "workspaces", directory, !current)
         },
       },
