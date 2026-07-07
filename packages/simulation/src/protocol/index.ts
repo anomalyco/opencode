@@ -92,10 +92,8 @@ export namespace Frontend {
   })
   export interface State extends Schema.Schema.Type<typeof State> {}
 
-  export const Render = Schema.Struct({
-    path: Schema.String,
-  })
-  export interface Render extends Schema.Schema.Type<typeof Render> {}
+  export const Render = Schema.String
+  export type Render = Schema.Schema.Type<typeof Render>
 
   export const ActionParams = Schema.Struct({ action: Action })
   export interface ActionParams extends Schema.Schema.Type<typeof ActionParams> {}
