@@ -1,10 +1,9 @@
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLocal } from "@/context/local"
@@ -40,7 +39,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
   }
 
   return (
-    <DialogV2>
+    <DialogV2 containerClass="!h-[min(calc(100vh_-_16px),480px)] !w-[min(calc(100vw_-_16px),560px)]">
       <DialogHeader closeLabel={language.t("common.close")}>
         <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
       </DialogHeader>
@@ -56,15 +55,17 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
             </div>
             <For each={freeModels()}>
               {(item) => (
-                <Tooltip
+                <TooltipV2
                   class="w-full"
                   placement="right-start"
-                  gutter={12}
+                  gutter={6}
+                  openDelay={0}
                   value={
                     <ModelTooltip
                       model={item}
                       latest={item.latest}
                       free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+                      v2
                     />
                   }
                 >
@@ -79,13 +80,13 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                       <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
                     </Show>
                   </button>
-                </Tooltip>
+                </TooltipV2>
               )}
             </For>
           </div>
 
           <div class="flex w-full flex-col p-2.5 pt-0">
-            <div class="flex h-fit w-full flex-none grow-0 flex-col items-start gap-0.5 self-stretch rounded-b-[4px] bg-[#F2F2F2] p-1 shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.1),inset_0_0.5px_0.5px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(0,0,0,0.08)] rounded-t-lg">
+            <div class="flex h-fit w-full flex-none grow-0 flex-col items-start gap-0.5 self-stretch rounded-lg bg-v2-background-bg-layer-02 p-1 shadow-[var(--v2-elevation-switch-off)]">
               <div class="flex h-8 w-full flex-none select-none flex-row items-center gap-2 self-stretch px-2.5 py-1.5">
                 <div class="flex h-5 flex-none flex-row items-center p-0 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
                   {language.t("dialog.model.unpaid.addMore.title")}
@@ -128,10 +129,18 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                       </button>
                     )}
                   </For>
-                  <ButtonV2 variant="ghost-muted" class="mt-1 w-full justify-start" onClick={() => openProviders()}>
-                    <Icon name="dot-grid" size="small" class="text-v2-icon-icon-muted" />
-                    {language.t("dialog.provider.viewAll")}
-                  </ButtonV2>
+                  <button
+                    type="button"
+                    class="flex h-9 w-full flex-row items-center justify-start gap-2 rounded-[6px] px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                    onClick={() => openProviders()}
+                  >
+                    <span class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-muted">
+                      <Icon name="dot-grid" size="small" />
+                    </span>
+                    <span class="min-w-0 truncate text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0]">
+                      {language.t("dialog.provider.viewAll")}
+                    </span>
+                  </button>
                 </div>
             </div>
           </div>
