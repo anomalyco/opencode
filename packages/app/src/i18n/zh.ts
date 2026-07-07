@@ -873,6 +873,7 @@ export const dict = {
   "session.review.noVcs.createGit.action": "创建 Git 仓库",
   "session.todo.progress": "已完成 {{done}} 个任务（共 {{total}} 个）",
   "session.question.progress": "{{current}}/{{total}} 个问题",
+  "session.history.index": "问题索引",
   "session.header.open.finder": "访达",
   "session.header.open.fileExplorer": "文件资源管理器",
   "session.header.open.fileManager": "文件管理器",

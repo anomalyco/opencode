@@ -544,6 +544,7 @@ export function MessageTimeline(props: {
     pendingRename: false,
     pendingShare: false,
   })
+  const [historyMenuOpen, setHistoryMenuOpen] = createSignal(false)
   let titleRef: HTMLInputElement | undefined
 
   const [share, setShare] = createStore({
@@ -551,6 +552,47 @@ export function MessageTimeline(props: {
     dismiss: null as "escape" | "outside" | null,
   })
   let more: HTMLButtonElement | undefined
+
+  const scrollToMessage = (userMessageID: string) => {
+    const tryScroll = () => {
+      const root = listRoot()
+      if (!root) {
+        requestAnimationFrame(tryScroll)
+        return
+      }
+      const element = root.querySelector(`[data-message-id="${CSS.escape(userMessageID)}"]`)
+      if (!element) {
+        requestAnimationFrame(tryScroll)
+        return
+      }
+      const rootRect = root.getBoundingClientRect()
+      const elementRect = element.getBoundingClientRect()
+      const targetScrollTop = Math.max(0, root.scrollTop + elementRect.top - rootRect.top - root.clientHeight / 3)
+      const startScrollTop = root.scrollTop
+      const distance = targetScrollTop - startScrollTop
+      if (Math.abs(distance) < 1) return
+
+      const duration = 600
+      const startTime = performance.now()
+
+      const easeInOutCubic = (t: number) => {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+      }
+
+      const animate = (now: number) => {
+        const elapsed = now - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        root.scrollTop = startScrollTop + distance * easeInOutCubic(progress)
+        if (progress < 1) {
+          requestAnimationFrame(animate)
+        }
+      }
+
+      requestAnimationFrame(animate)
+    }
+
+    requestAnimationFrame(tryScroll)
+  }
 
   const bindListRoot = (root: HTMLDivElement) => {
     if (root === listRoot()) return
@@ -1479,7 +1521,46 @@ export function MessageTimeline(props: {
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}
                     />
-                    <Show when={!parentID()}>
+                    <DropdownMenu
+                      gutter={4}
+                      placement="bottom-end"
+                      open={historyMenuOpen()}
+                      onOpenChange={(open) => {
+                        setHistoryMenuOpen(open)
+                      }}
+                    >
+                      <DropdownMenu.Trigger
+                        as={IconButton}
+                        icon="bullet-list"
+                        variant="ghost"
+                        class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                        aria-label={language.t("session.history.index")}
+                        disabled={props.userMessages.length === 0}
+                      />
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content style={{ "min-width": "240px", "max-height": "360px", overflow: "auto" }}>
+                          <Show when={props.userMessages.length > 0}>
+                            <For each={props.userMessages}>
+                              {(userMessage) => {
+                                const parts = getMsgParts(userMessage.id)
+                                const textPart = parts.find((p) => p.type === "text" && !(p as any).synthetic)
+                                const text = (textPart as any)?.text || ""
+                                const summary = text.trim().slice(0, 60) + (text.trim().length > 60 ? "..." : "")
+                                return (
+                                  <DropdownMenu.Item onSelect={() => {
+                                    scrollToMessage(userMessage.id)
+                                    setHistoryMenuOpen(false)
+                                  }}>
+                                    <DropdownMenu.ItemLabel>{summary}</DropdownMenu.ItemLabel>
+                                  </DropdownMenu.Item>
+                                )
+                              }}
+                            </For>
+                          </Show>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu>
+                <Show when={!parentID()}>
                       <Show
                         when={settings.general.newLayoutDesigns()}
                         fallback={

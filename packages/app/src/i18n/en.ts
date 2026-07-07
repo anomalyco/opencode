@@ -664,6 +664,7 @@ export const dict = {
   "session.todo.expand": "Expand",
   "session.todo.progress": "{{done}} of {{total}} todos completed",
   "session.question.progress": "{{current}} of {{total}} questions",
+  "session.history.index": "Question index",
   "session.question.minimize": "Minimize question",
   "session.question.restore": "Restore question",
   "session.question.pending.one": "{{count}} pending question",
