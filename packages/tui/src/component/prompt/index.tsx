@@ -37,7 +37,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, SessionV2Info, UserMessage } from "@opencode-ai/sdk/v2"
+import type { SessionV2Info, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -57,6 +57,7 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+import { lastAssistantWithUsage } from "../../util/session"
 
 registerOpencodeSpinner()
 
@@ -276,18 +277,20 @@ export function Prompt(props: PromptProps) {
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const session = sync.session.get(props.sessionID)
-    const msg = sync.data.message[props.sessionID] ?? []
-    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    const session = data.session.get(props.sessionID)
+    if (!session) return
+    const last = lastAssistantWithUsage(data.session.message.list(props.sessionID), session.revert?.messageID)
     if (!last) return
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (tokens <= 0) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const model = data.location
+      .model.list(session.location)
+      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = session?.cost ?? 0
+    const cost = session.cost
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
@@ -1624,11 +1627,11 @@ export function Prompt(props: PromptProps) {
                     <text fg={theme.text}>
                       {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
                     </text>
-                    <text fg={theme.text}>
-                      {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
-                    </text>
                   </Match>
                 </Switch>
+                <text fg={theme.text}>
+                  {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
+                </text>
               </Match>
               <Match when={store.mode === "shell"}>
                 <text fg={theme.text}>
