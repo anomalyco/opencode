@@ -28,11 +28,20 @@ function prompted(inputID: string): V2Event {
 }
 
 function settled(outcome: "success" | "interrupted" = "success"): V2Event {
+  if (outcome === "interrupted")
+    return {
+      id: "evt_interrupted",
+      created: 0,
+      type: "session.execution.interrupted",
+      durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+      data: { sessionID: "ses_1", reason: "user" },
+    }
   return {
-    id: "evt_settled",
+    id: "evt_succeeded",
     created: 0,
-    type: "session.execution.settled",
-    data: { sessionID: "ses_1", outcome },
+    type: "session.execution.succeeded",
+    durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+    data: { sessionID: "ses_1" },
   }
 }
 
@@ -58,8 +67,7 @@ async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?:
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.question, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.form, "list").mockImplementation(
-    (request) =>
-      ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
+    (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
   spyOn(sdk.form, "cancel").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.session, "prompt").mockImplementation((request) => {

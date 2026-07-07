@@ -8,7 +8,7 @@ import { onMount } from "solid-js"
 import { ProjectProvider } from "../../../src/context/project"
 import { SDKProvider } from "../../../src/context/sdk"
 import { DataProvider, useData } from "../../../src/context/data"
-import { createSessionRows } from "../../../src/routes/session/rows"
+import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createClient, createEventStream, createFetch, directory, json } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
@@ -175,7 +175,6 @@ test("refreshes usage without applying stale session snapshots", async () => {
             location: { directory },
           },
         ],
-        watermarks: {},
         cursor: {},
       }),
     )
@@ -428,9 +427,9 @@ test("truncates committed revert messages and refreshes usage", async () => {
       created: 5,
       type: "session.revert.staged",
       durable: durable(sessionID, 5),
-      data: { sessionID, revert: { messageID: "msg_revert_boundary" } },
+      data: { sessionID, revert: { messageID: "msg_revert_later" } },
     })
-    await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_boundary")
+    await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_later")
 
     cost = 0.5
     tokens = { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } }
@@ -439,12 +438,70 @@ test("truncates committed revert messages and refreshes usage", async () => {
       created: 6,
       type: "session.revert.committed",
       durable: durable(sessionID, 6),
-      data: { sessionID, messageID: "msg_revert_boundary" },
+      data: { sessionID, to: "msg_revert_later" },
     })
     await wait(() => data.session.get(sessionID)?.cost === 0.5)
     expect(data.session.message.ids(sessionID)).toEqual(["msg_revert_boundary"])
     expect(data.session.get(sessionID)?.revert).toBeUndefined()
     expect(data.session.get(sessionID)?.tokens).toEqual(tokens)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("restores running manual compaction before applying live deltas", async () => {
+  const events = createEventStream()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-compaction/message")
+      return json({
+        data: [
+          {
+            id: "message-compaction",
+            type: "compaction",
+            status: "running",
+            reason: "manual",
+            summary: "Existing ",
+            recent: "",
+            time: { created: 1 },
+          },
+        ],
+        cursor: {},
+      })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.refresh("session-compaction")
+    expect(data.session.compaction("session-compaction")).toBe("Existing ")
+
+    emitEvent(events, {
+      id: "evt_compaction_delta",
+      created: 2,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-compaction", text: "summary" },
+    })
+
+    await wait(() => {
+      const message = data.session.message.get("session-compaction", "message-compaction")
+      return message?.type === "compaction" && message.summary === "Existing summary"
+    })
   } finally {
     app.renderer.destroy()
   }
@@ -461,7 +518,7 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
     }
     if (url.pathname === "/api/session/active") {
       requests.active++
-      if (requests.active === 1) return json({ data: { "session-stale": { type: "running" } }, watermarks: {} })
+      if (requests.active === 1) return json({ data: { "session-stale": { type: "running" } } })
       return new Promise<Response>((resolve) => {
         resolveActive = resolve
       })
@@ -519,19 +576,14 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
 
     await wait(() => requests.active === 2 && data.connection.status() === "connected", 4000)
     emitEvent(events, {
-      id: "evt_step_started_after_reconnect",
+      id: "evt_execution_started_after_reconnect",
       created: 1,
-      type: "session.step.started",
+      type: "session.execution.started",
       durable: durable("session-new"),
-      data: {
-        sessionID: "session-new",
-        assistantMessageID: "message-new",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
-      },
+      data: { sessionID: "session-new" },
     })
     await wait(() => data.session.status("session-new") === "running")
-    resolveActive(json({ data: {}, watermarks: {} }))
+    resolveActive(json({ data: {} }))
 
     await wait(() => data.location.model.list()?.[0]?.id === "model-2", 4000)
     await wait(() => data.session.status("session-stale") === "idle")
@@ -626,6 +678,60 @@ test("completes exploration when a queued prompt is promoted", async () => {
   }
 })
 
+test("removes committed revert messages from local state", async () => {
+  const events = createEventStream()
+  const sessionID = "session-revert"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    for (const [seq, inputID] of ["msg_001", "msg_002", "msg_003"].entries()) {
+      emitEvent(events, {
+        id: EventV2.ID.create(),
+        created: seq,
+        type: "session.prompt.admitted",
+        durable: durable(sessionID, seq),
+        data: { sessionID, inputID, prompt: { text: inputID }, delivery: "steer" },
+      })
+    }
+    await wait(() => data.session.message.ids(sessionID).length === 3)
+
+    emitEvent(events, {
+      id: EventV2.ID.create(),
+      created: 3,
+      type: "session.revert.committed",
+      durable: durable(sessionID, 3),
+      data: { sessionID, to: "msg_002" },
+    })
+
+    await wait(() => data.session.message.ids(sessionID).length === 1)
+    expect(data.session.message.ids(sessionID)).toEqual(["msg_001"])
+    expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
+    expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("connectedOnce is false until first connect and persists across disconnect", async () => {
   const encoder = new TextEncoder()
   let stream: ReadableStreamDefaultController<Uint8Array> | undefined
@@ -692,8 +798,7 @@ test("tracks session status from active sessions and execution events", async ()
   const events = createEventStream()
   let settled = false
   const calls = createFetch((url) => {
-    if (url.pathname === "/api/session/active")
-      return json({ data: { "session-active": { type: "running" } }, watermarks: {} })
+    if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
     if (url.pathname === "/api/session/session-live")
       return json({
         data: {
@@ -710,9 +815,13 @@ test("tracks session status from active sessions and execution events", async ()
       })
   }, events)
   let data!: ReturnType<typeof useData>
+  let rows!: SessionRow[]
+  let manualRows!: SessionRow[]
 
   function Probe() {
     data = useData()
+    rows = createSessionRows(() => "session-retry")
+    manualRows = createSessionRows(() => "session-manual")
     return <box />
   }
 
@@ -735,6 +844,15 @@ test("tracks session status from active sessions and execution events", async ()
 
     settled = true
     emitEvent(events, {
+      id: "evt_execution_started",
+      created: 0,
+      type: "session.execution.started",
+      durable: durable("session-live"),
+      data: { sessionID: "session-live" },
+    })
+    await wait(() => data.session.status("session-live") === "running")
+
+    emitEvent(events, {
       id: "evt_step_started",
       created: 0,
       type: "session.step.started",
@@ -746,8 +864,6 @@ test("tracks session status from active sessions and execution events", async ()
         model: { id: "model", providerID: "provider" },
       },
     })
-    await wait(() => data.session.status("session-live") === "running")
-
     emitEvent(events, {
       id: "evt_step_ended",
       created: 0,
@@ -773,15 +889,22 @@ test("tracks session status from active sessions and execution events", async ()
     })
 
     emitEvent(events, {
-      id: "evt_execution_settled",
+      id: "evt_execution_succeeded",
       created: 0,
-      type: "session.execution.settled",
-      data: {
-        sessionID: "session-live",
-        outcome: "success",
-      },
+      type: "session.execution.succeeded",
+      durable: durable("session-live", 1, 3),
+      data: { sessionID: "session-live" },
     })
     await wait(() => data.session.status("session-live") === "idle")
+
+    emitEvent(events, {
+      id: "evt_failed_execution_started",
+      created: 0,
+      type: "session.execution.started",
+      durable: durable("session-failed"),
+      data: { sessionID: "session-failed" },
+    })
+    await wait(() => data.session.status("session-failed") === "running")
 
     emitEvent(events, {
       id: "evt_failed_step_started",
@@ -795,8 +918,6 @@ test("tracks session status from active sessions and execution events", async ()
         model: { id: "model", providerID: "provider" },
       },
     })
-    await wait(() => data.session.status("session-failed") === "running")
-
     emitEvent(events, {
       id: "evt_step_failed",
       created: 0,
@@ -805,26 +926,189 @@ test("tracks session status from active sessions and execution events", async ()
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
-        error: { type: "unknown", message: "Provider unavailable" },
+        error: { type: "provider.content-filter", message: "Provider blocked the response" },
       },
     })
     await wait(() => {
       const assistant = data.session.message.get("session-failed", "message-failed")
-      return assistant?.type === "assistant" && assistant.finish === "error"
+      return (
+        assistant?.type === "assistant" &&
+        assistant.finish === "error" &&
+        assistant.error?.type === "provider.content-filter"
+      )
     })
     expect(data.session.status("session-failed")).toBe("running")
 
     emitEvent(events, {
-      id: "evt_failed_execution_settled",
+      id: "evt_failed_execution_failed",
       created: 0,
-      type: "session.execution.settled",
+      type: "session.execution.failed",
+      durable: durable("session-failed", 1, 3),
       data: {
         sessionID: "session-failed",
-        outcome: "failure",
-        error: { type: "unknown", message: "Provider unavailable" },
+        error: { type: "provider.content-filter", message: "Provider blocked the response" },
       },
     })
     await wait(() => data.session.status("session-failed") === "idle")
+
+    emitEvent(events, {
+      id: "evt_retry_execution_started",
+      created: 0,
+      type: "session.execution.started",
+      durable: durable("session-retry"),
+      data: { sessionID: "session-retry" },
+    })
+    emitEvent(events, {
+      id: "evt_retry_step_started",
+      created: 0,
+      type: "session.step.started",
+      durable: durable("session-retry", 1, 2),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_retry_scheduled",
+      created: 0,
+      type: "session.retry.scheduled",
+      durable: durable("session-retry", 1, 3),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        attempt: 2,
+        at: 2_000,
+        error: { type: "provider.transport", message: "Disconnected" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-retry", "message-retry")
+      return assistant?.type === "assistant" && assistant.retry?.attempt === 2
+    })
+    await wait(() => rows.some((row) => row.type === "assistant-footer" && row.messageID === "message-retry"))
+    emitEvent(events, {
+      id: "evt_retry_next_step",
+      created: 2_000,
+      type: "session.step.started",
+      durable: durable("session-retry", 1, 4),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-retry", "message-retry")
+      return assistant?.type === "assistant" && assistant.retry === undefined
+    })
+    await wait(() => !rows.some((row) => row.type === "assistant-footer" && row.messageID === "message-retry"))
+    expect(data.session.message.list("session-retry").filter((message) => message.type === "assistant")).toHaveLength(1)
+    emitEvent(events, {
+      id: "evt_retry_scheduled_again",
+      created: 2_000,
+      type: "session.retry.scheduled",
+      durable: durable("session-retry", 1, 5),
+      data: {
+        sessionID: "session-retry",
+        assistantMessageID: "message-retry",
+        attempt: 3,
+        at: 6_000,
+        error: { type: "provider.transport", message: "Disconnected again" },
+      },
+    })
+    await wait(() => {
+      const assistant = data.session.message.get("session-retry", "message-retry")
+      return assistant?.type === "assistant" && assistant.retry?.attempt === 3
+    })
+    emitEvent(events, {
+      id: "evt_retry_interrupted",
+      created: 2_000,
+      type: "session.execution.interrupted",
+      durable: durable("session-retry", 1, 6),
+      data: { sessionID: "session-retry", reason: "shutdown" },
+    })
+    await wait(() => data.session.status("session-retry") === "idle")
+    expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
+
+    emitEvent(events, {
+      id: "evt_compaction_admitted",
+      created: 0,
+      type: "session.compaction.admitted",
+      durable: durable("session-manual", 1),
+      data: { sessionID: "session-manual", inputID: "message-compaction" },
+    })
+    await wait(() => {
+      const message = data.session.message.get("session-manual", "message-compaction")
+      return message?.type === "compaction" && message.status === "queued"
+    })
+    emitEvent(events, {
+      id: "evt_manual_compaction_started",
+      created: 1,
+      type: "session.compaction.started",
+      durable: durable("session-manual", 2),
+      data: { sessionID: "session-manual", reason: "manual" },
+    })
+    emitEvent(events, {
+      id: "evt_manual_compaction_delta",
+      created: 2,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-manual", text: "Streamed summary" },
+    })
+    await wait(() => {
+      const message = data.session.message.get("session-manual", "message-compaction")
+      return message?.type === "compaction" && message.summary === "Streamed summary"
+    })
+    emitEvent(events, {
+      id: "evt_manual_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      durable: durable("session-manual", 3),
+      data: { sessionID: "session-manual", reason: "manual", text: "Streamed summary", recent: "recent" },
+    })
+    await wait(() => {
+      const message = data.session.message.get("session-manual", "message-compaction")
+      return message?.type === "compaction" && message.status === "completed"
+    })
+    expect(manualRows.filter((row) => row.type === "message")).toEqual([
+      { type: "message", messageID: "message-compaction" },
+    ])
+
+    emitEvent(events, {
+      id: "evt_compaction_started",
+      created: 0,
+      type: "session.compaction.started",
+      durable: durable("session-live", 2),
+      data: { sessionID: "session-live", reason: "auto" },
+    })
+    emitEvent(events, {
+      id: "evt_compaction_delta_1",
+      created: 0,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-live", text: "Live " },
+    })
+    emitEvent(events, {
+      id: "evt_compaction_delta_2",
+      created: 0,
+      type: "session.compaction.delta",
+      data: { sessionID: "session-live", text: "summary" },
+    })
+    await wait(() => data.session.compaction("session-live") === "Live summary")
+
+    emitEvent(events, {
+      id: "evt_compaction_ended",
+      created: 0,
+      type: "session.compaction.ended",
+      durable: durable("session-live", 3),
+      data: { sessionID: "session-live", reason: "auto", text: "Live summary", recent: "recent" },
+    })
+    await wait(() => data.session.compaction("session-live") === undefined)
+    expect(data.session.message.get("session-live", "msg_compaction_ended")).toMatchObject({
+      type: "compaction",
+      summary: "Live summary",
+    })
   } finally {
     app.renderer.destroy()
   }
@@ -1331,9 +1615,9 @@ test("settles pending tools when a live failure arrives", async () => {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
-        tool: "bash",
         input: {},
-        provider: { executed: false, metadata: { fake: { call: true } } },
+        executed: false,
+        state: { call: true },
       },
     })
     emitEvent(events, {
@@ -1346,7 +1630,8 @@ test("settles pending tools when a live failure arrives", async () => {
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
         error: { type: "unknown", message: "aborted" },
-        provider: { executed: false, metadata: { fake: { result: true } } },
+        executed: false,
+        resultState: { result: true },
       },
     })
 
@@ -1372,11 +1657,9 @@ test("settles pending tools when a live failure arrives", async () => {
     expect(tool.state.input).toEqual({})
     expect(tool.state.structured).toEqual({})
     expect(tool.state.content).toEqual([])
-    expect(tool.provider).toEqual({
-      executed: false,
-      metadata: { fake: { call: true } },
-      resultMetadata: { fake: { result: true } },
-    })
+    expect(tool.executed).toBe(false)
+    expect(tool.providerState).toEqual({ call: true })
+    expect(tool.providerResultState).toEqual({ result: true })
     expect(sync.session.message.list("session-1").map((message) => message.type)).toEqual([
       "agent-switched",
       "model-switched",
@@ -1392,7 +1675,7 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders admitted prompts immediately with queued marker and clears when promoted", async () => {
+test("renders admitted prompts immediately and tracks them until promoted", async () => {
   const events = createEventStream()
   const sessionID = "session-1"
   const messageID = "msg_user_1"
@@ -1445,10 +1728,12 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
     const admitted = sync.session.message.list(sessionID)?.[0]
-    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello", metadata: { queued: true } })
+    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello" })
+    expect(admitted?.metadata).toBeUndefined()
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
 
     await sync.session.message.refresh(sessionID)
-    expect(sync.session.message.list(sessionID)?.[0]?.metadata?.queued).toBeUndefined()
+    expect(sync.session.message.list(sessionID)?.[0]?.metadata).toBeUndefined()
 
     emitEvent(events, {
       id: "evt_prompted_1",
@@ -1468,7 +1753,8 @@ test("renders admitted prompts immediately with queued marker and clears when pr
     expect(message?.type).toBe("user")
     if (message?.type !== "user") return
     expect(message).toMatchObject({ id: messageID, text: "hello" })
-    expect(message.metadata?.queued).toBeUndefined()
+    expect(message.metadata).toBeUndefined()
+    expect(sync.session.input.list(sessionID)).toEqual([])
     expect(sync.session.message.ids(sessionID)).toEqual([messageID])
     expect(sync.session.message.ids("missing")).toEqual([])
     expect(sync.session.message.get(sessionID, messageID)).toBe(message)
@@ -1479,7 +1765,7 @@ test("renders admitted prompts immediately with queued marker and clears when pr
   }
 })
 
-test("projects live context updates with their message ID", async () => {
+test("projects live instruction updates with their message ID", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -1509,21 +1795,21 @@ test("projects live context updates with their message ID", async () => {
   try {
     await mounted
     emitEvent(events, {
-      id: "evt_context_1",
+      id: "evt_instructions_1",
       created: 0,
-      type: "session.context.updated",
+      type: "session.instructions.updated",
       durable: durable("session-1"),
       data: {
         sessionID: "session-1",
-        text: "Updated context",
+        text: "Updated instructions",
       },
     })
 
     await wait(() => sync.session.message.list("session-1")?.length === 1)
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_context_1")),
+      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_instructions_1")),
       type: "system",
-      text: "Updated context",
+      text: "Updated instructions",
       time: { created: 0 },
     })
   } finally {

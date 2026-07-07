@@ -1,9 +1,14 @@
 import { Shell } from "@opencode-ai/schema/shell"
 import { Location } from "@opencode-ai/schema/location"
+import { NonNegativeInt } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ShellNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
+
+const TimeoutInput = Schema.Struct({
+  timeout: NonNegativeInt,
+})
 
 export const ShellGroup = HttpApiGroup.make("server.shell")
   .add(
@@ -49,6 +54,23 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
           identifier: "v2.shell.get",
           summary: "Get shell command",
           description: "Get one shell command, including its status and exit code once exited.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.patch("shell.timeout", "/api/shell/:id/timeout", {
+      params: { id: Shell.ID },
+      query: LocationQuery,
+      payload: TimeoutInput,
+      success: Location.response(Shell.Info),
+      error: ShellNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.shell.timeout",
+          summary: "Update shell timeout",
+          description: "Replace a running shell command's timeout from now, or clear it with zero.",
         }),
       ),
   )

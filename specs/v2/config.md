@@ -312,12 +312,12 @@ External protocol and server integration configuration.
 
 Keep the opencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as timeout defaults can live under the same subsystem.
 
-MCP timeouts have separate startup and request budgets, expressed in milliseconds. `startup` covers establishing the transport and completing MCP initialization. `request` applies independently to each post-initialization MCP request. A server may override either default without repeating the other.
+MCP timeouts have separate startup, catalog, and execution budgets, expressed in milliseconds. `startup` covers establishing the transport and completing MCP initialization. `catalog` applies independently to discovery requests such as listing tools and prompts. `execution` covers potentially interactive operations such as tool calls and prompt evaluation. A server may override any default without repeating the others.
 
 ```jsonc
 {
   "mcp": {
-    "timeout": { "startup": 30000, "request": 300000 },
+    "timeout": { "startup": 30000, "catalog": 30000, "execution": 43200000 },
     "servers": {
       "github": {
         "type": "local",
@@ -338,7 +338,7 @@ MCP timeouts have separate startup and request budgets, expressed in millisecond
           "redirect_uri": "http://127.0.0.1:19876/mcp/oauth/callback",
         },
         "disabled": false,
-        "timeout": { "request": 600000 },
+        "timeout": { "execution": 600000 },
       },
     },
   },
@@ -380,7 +380,7 @@ Fields that should not be ported by inertia; each needs an explicit justificatio
 | `experimental.openTelemetry`         | Enable AI SDK telemetry spans           | remove   | Do not port; observability is process-level and should use standard OpenTelemetry environment or declarative configuration. |
 | `experimental.primary_tools`         | Restrict tools to primary agents        | remove   | Do not port obsolete gating; agent tool access is configured through permissions.                                           |
 | `experimental.continue_loop_on_deny` | Continue loop after denied tool call    | remove   | Do not port legacy denied-tool loop behavior.                                                                               |
-| `experimental.mcp_timeout`           | MCP request timeout                     | redesign | Move to `mcp.timeout.request` for the default and `mcp.servers.<name>.timeout.request` for per-server overrides.            |
+| `experimental.mcp_timeout`           | MCP request timeout                     | redesign | Migrate to both `mcp.timeout.catalog` and `mcp.timeout.execution`, with corresponding per-server overrides.                 |
 
 ## Review Order
 

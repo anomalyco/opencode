@@ -58,10 +58,24 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
   }
 })
 
-test("app.exit prints the session epilogue after scoped cleanup", async () => {
+test("session lifecycle updates the terminal title and prints the epilogue after cleanup", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  let initialTitle!: () => void
+  const initialTitleSet = new Promise<void>((resolve) => {
+    initialTitle = resolve
+  })
+  let renamedTitle!: () => void
+  const renamedTitleSet = new Promise<void>((resolve) => {
+    renamedTitle = resolve
+  })
+  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
+  setup.renderer.setTerminalTitle = (title) => {
+    if (title === "OC | Demo session") initialTitle()
+    if (title === "OC | Renamed session") renamedTitle()
+    setTitle(title)
+  }
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session")
@@ -100,7 +114,7 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
         client: createClient(calls.fetch),
         api: createApi(calls.fetch),
         config: createTuiResolvedConfig({ plugin_enabled: {} }),
-        args: { continue: true },
+        args: { sessionID: "dummy" },
         pluginHost: {
           async start(input) {
             api = input.api
@@ -112,12 +126,19 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     )
 
     await ready
-    await setup.renderOnce()
-    await setup.renderOnce()
+    await initialTitleSet
+    events.emit({
+      id: "evt_renamed",
+      created: 1,
+      type: "session.renamed",
+      durable: { aggregateID: "dummy", seq: 1, version: 1 },
+      data: { sessionID: "dummy", title: "Renamed session" },
+    })
+    await renamedTitleSet
     api?.keymap.dispatchCommand("app.exit")
     await task
 
-    expect(stdout).toContain("Demo session")
+    expect(stdout).toContain("Renamed session")
     expect(stdout).toContain("opencode -s dummy")
   } finally {
     process.stdout.write = originalWrite

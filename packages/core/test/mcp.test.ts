@@ -71,9 +71,9 @@ const it = testEffect(
 describe("MCP errors", () => {
   test("expose useful messages", () => {
     expect(new MCP.NotFoundError({ server: MCP.ServerName.make("demo") }).message).toBe("MCP server not found: demo")
-    expect(new MCP.ToolCallError({ server: MCP.ServerName.make("demo"), tool: "search", message: "failed" }).message).toBe(
-      "failed",
-    )
+    expect(
+      new MCP.ToolCallError({ server: MCP.ServerName.make("demo"), tool: "search", message: "failed" }).message,
+    ).toBe("failed")
     expect(new MCPClient.NeedsAuthError({ server: "demo" }).message).toBe("MCP server requires authentication: demo")
     expect(new MCPClient.ConnectError({ server: "demo", message: "offline" }).message).toBe("offline")
   })
@@ -177,6 +177,70 @@ test("retains output schemas across paginated MCP discovery", async () => {
   ])
 })
 
+test("applies the configured MCP catalog timeout", async () => {
+  const result = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "catalog-timeout",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-timeout.ts")],
+            environment: { MCP_TIMEOUT_TARGET: "catalog" },
+            timeout: new ConfigMCP.Timeout({ catalog: 10 }),
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.tools()
+      }),
+    ),
+  )
+
+  await expect(result).rejects.toThrow("Request timed out")
+})
+
+test("applies the configured MCP execution timeout", async () => {
+  const result = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "execution-timeout",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-timeout.ts")],
+            timeout: new ConfigMCP.Timeout({ execution: 10 }),
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.callTool({ name: "slow" })
+      }),
+    ),
+  )
+
+  await expect(result).rejects.toThrow("Request timed out")
+})
+
+test("applies the configured MCP execution timeout to prompts", async () => {
+  const result = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect(
+          "prompt-timeout",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-timeout.ts")],
+            timeout: new ConfigMCP.Timeout({ execution: 10 }),
+          }),
+          import.meta.dir,
+        )
+        return yield* connection.prompt({ name: "slow" })
+      }),
+    ),
+  )
+
+  await expect(result).rejects.toThrow("Request timed out")
+})
+
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
@@ -227,20 +291,20 @@ it.effect("waits for permission before calling an MCP tool", () =>
   }),
 )
 
-it.effect("does not call MCP when permission is rejected", () =>
+it.effect("does not call MCP when permission is blocked", () =>
   Effect.gen(function* () {
     calls = 0
     assertion = yield* Deferred.make<PermissionV2.AssertInput>()
-    decision = Effect.fail(new PermissionV2.RejectedError())
+    decision = Effect.fail(new PermissionV2.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }))
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 
     const settlement = yield* settleTool(registry, {
-      sessionID: SessionV2.ID.make("ses_mcp_rejected"),
+      sessionID: SessionV2.ID.make("ses_mcp_blocked"),
       ...toolIdentity,
       call: {
         type: "tool-call",
-        id: "call_mcp_rejected",
+        id: "call_mcp_blocked",
         name: "execute",
         input: { code: "return await tools.demo.search({})" },
       },

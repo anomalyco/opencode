@@ -61,15 +61,16 @@ export const groupNames = {
 } as const
 
 export const endpointNames = {
+  "debug.location.evict": "evictLocation",
   "session.messages": "list",
   "integration.connect.key": "connectKey",
   "integration.connect.oauth": "connectOauth",
   "integration.attempt.status": "attemptStatus",
   "integration.attempt.complete": "attemptComplete",
   "integration.attempt.cancel": "attemptCancel",
-  "session.context.entry.list": "listContextEntries",
-  "session.context.entry.put": "putContextEntry",
-  "session.context.entry.remove": "removeContextEntry",
+  "session.instructions.entry.list": ["instructions", "entry", "list"],
+  "session.instructions.entry.put": ["instructions", "entry", "put"],
+  "session.instructions.entry.remove": ["instructions", "entry", "remove"],
   "session.revert.stage": "revertStage",
   "session.revert.clear": "revertClear",
   "session.revert.commit": "revertCommit",

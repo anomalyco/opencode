@@ -132,6 +132,8 @@ export const TuiThreadCommand = cmd({
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
+      const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
+      const headers = external ? ServerAuth.headers() : undefined
       const url = (await client.call("server", network)).url
 
       try {
@@ -139,6 +141,7 @@ export const TuiThreadCommand = cmd({
           url,
           sessionID: args.session,
           directory: cwd,
+          headers,
         })
       } catch (error) {
         UI.error(errorMessage(error))
@@ -154,10 +157,10 @@ export const TuiThreadCommand = cmd({
         const { Effect } = await import("effect")
         const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
-        await Effect.runPromise(
+         await Effect.runPromise(
           run({
-            client: createOpencodeClient({ baseUrl: url, directory: cwd }),
-            api: OpenCode.make({ baseUrl: url }),
+            client: createOpencodeClient({ baseUrl: url, headers, directory: cwd }),
+            api: OpenCode.make({ baseUrl: url, headers }),
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
               const server = await client.call("snapshot", undefined)

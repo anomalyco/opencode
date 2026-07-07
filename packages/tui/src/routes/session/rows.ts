@@ -27,8 +27,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
+    const inputs = new Set(data.session.input.list(sessionID()))
     const boundary = revertBoundary()
-    const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages)
+    const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages, inputs)
     partitionPending(rows, pendingPermissions())
     return rows
   }
@@ -73,13 +74,25 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(
       () =>
-        data.session.message
-          .list(sessionID())
-          .flatMap((message) =>
-            message.type === "user"
-              ? [{ id: message.id, created: message.time.created, queued: message.metadata?.queued === true }]
+        data.session.message.list(sessionID()).flatMap((message) =>
+          message.type === "user"
+            ? [
+                {
+                  id: message.id,
+                  created: message.time.created,
+                  input: data.session.input.has(sessionID(), message.id),
+                },
+              ]
+            : message.type === "compaction"
+              ? [
+                  {
+                    id: message.id,
+                    created: message.time.created,
+                    input: message.status === "queued" || message.status === "running",
+                  },
+                ]
               : [],
-          ),
+        ),
       () => setRows(reconcile(reduce())),
     ),
   )
@@ -88,9 +101,11 @@ export function createSessionRows(sessionID: Accessor<string>) {
     setRows(
       produce((draft) => {
         if (draft.some((row) => row.type === "message" && row.messageID === messageID)) return
-        const queued = isQueued(messageID)
-        const index = queued ? draft.length : queuedStart(draft)
-        if (!queued) completePrevious(draft, index)
+        const pending = isPending(messageID)
+        const message = data.session.message.get(sessionID(), messageID)
+        const index =
+          message?.type === "compaction" && pending ? queuedStart(draft) : pending ? draft.length : queuedStart(draft)
+        if (!pending) completePrevious(draft, index)
         draft.splice(index, 0, { type: "message", messageID })
       }),
     )
@@ -131,13 +146,22 @@ export function createSessionRows(sessionID: Accessor<string>) {
       }),
     )
 
-  const isQueued = (messageID: string) => {
+  const removeFooter = (messageID: string) =>
+    setRows(
+      produce((draft) => {
+        const index = draft.findIndex((row) => row.type === "assistant-footer" && row.messageID === messageID)
+        if (index !== -1) draft.splice(index, 1)
+      }),
+    )
+
+  const isPending = (messageID: string) => {
     const message = data.session.message.get(sessionID(), messageID)
-    return message?.type === "user" && message.metadata?.queued === true
+    if (message?.type === "user") return data.session.input.has(sessionID(), messageID)
+    return message?.type === "compaction" && (message.status === "queued" || message.status === "running")
   }
 
   const queuedStart = (rows: SessionRow[]) => {
-    const index = rows.findIndex((row) => row.type === "message" && isQueued(row.messageID))
+    const index = rows.findIndex((row) => row.type === "message" && isPending(row.messageID))
     return index === -1 ? rows.length : index
   }
 
@@ -149,7 +173,8 @@ export function createSessionRows(sessionID: Accessor<string>) {
   }
   const subscriptions = [
     data.on("session.prompt.admitted", input),
-    data.on("session.context.updated", message),
+    data.on("session.compaction.admitted", input),
+    data.on("session.instructions.updated", message),
     data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
         appendMessage(event.id.replace(/^evt_/, "msg_"))
@@ -157,26 +182,34 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.shell.started", message),
     data.on("session.agent.selected", message),
     data.on("session.model.selected", message),
-    data.on("session.compaction.ended", message),
+    data.on("session.compaction.ended", (event) => {
+      if (event.data.reason !== "manual") message(event)
+    }),
     data.on("session.text.delta", (event) => {
       if (event.data.sessionID === sessionID())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
+        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
     }),
     data.on("session.text.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.textID })
+        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
     }),
     data.on("session.reasoning.delta", (event) => {
       if (event.data.sessionID === sessionID())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
+        appendPart({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
     }),
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.reasoningID })
+        appendPart({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: event.data.callID }, event.data.name)
+    }),
+    data.on("session.retry.scheduled", (event) => {
+      if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
+    }),
+    data.on("session.step.started", (event) => {
+      if (event.data.sessionID === sessionID()) removeFooter(event.data.assistantMessageID)
     }),
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
@@ -191,21 +224,30 @@ export function createSessionRows(sessionID: Accessor<string>) {
   return rows
 }
 
-export function reduceSessionRows(messages: SessionMessage[]) {
-  return [...messages.filter((message) => !isQueuedMessage(message)), ...messages.filter(isQueuedMessage)].reduce<
-    SessionRow[]
-  >((rows, message) => {
+export function reduceSessionRows(messages: SessionMessage[], inputs = new Set<string>()) {
+  const isInput = (message: SessionMessage) => inputs.has(message.id)
+  const pendingCompactions = messages.filter(
+    (message) => message.type === "compaction" && (message.status === "queued" || message.status === "running"),
+  )
+  const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
+  return [
+    ...messages.filter((message) => !pending.has(message.id)),
+    ...pendingCompactions,
+    ...messages.filter(isInput),
+  ].reduce<SessionRow[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "synthetic" && !message.description?.trim()) return rows
-      if (!isQueuedMessage(message)) completePrevious(rows)
+      if (!pending.has(message.id)) completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
+    const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
+      const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-      append(rows, { messageID: message.id, partID: part.id }, part)
+      append(rows, { messageID: message.id, partID }, part)
     })
-    if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error) {
+    if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error || message.retry) {
       completePrevious(rows)
       rows.push({ type: "assistant-footer", messageID: message.id })
     }
@@ -213,8 +255,13 @@ export function reduceSessionRows(messages: SessionMessage[]) {
   }, [])
 }
 
-function isQueuedMessage(message: SessionMessage) {
-  return message.type === "user" && message.metadata?.queued === true
+export function resolvePart(message: SessionMessageAssistant, partID: string) {
+  const tool = message.content.find((part) => part.type === "tool" && part.id === partID)
+  if (tool) return tool
+  const match = /^(text|reasoning):(\d+)$/.exec(partID)
+  if (!match) return
+  const ordinal = Number(match[2])
+  return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
 function append(rows: SessionRow[], ref: PartRef, part: SessionMessageAssistant["content"][number]) {

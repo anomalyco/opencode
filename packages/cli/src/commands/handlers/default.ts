@@ -54,12 +54,15 @@ export default Runtime.handler(Commands, (input) =>
     // retry the same address; for the managed service discovery re-reads the
     // registration and may start a replacement.
     const serviceOptions = server === undefined && !input.standalone ? yield* ServiceConfig.options() : undefined
-    const discover = serviceOptions
+    // Only startup enforces the CLI version. A reconnect must accept a server
+    // replaced by another client or the two clients will restart it forever.
+    const reconnectOptions = serviceOptions ? { ...serviceOptions, version: undefined } : undefined
+    const discover = reconnectOptions
       ? () =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const found = yield* Service.discover(serviceOptions)
-              return found ?? (yield* Service.start(serviceOptions))
+              const found = yield* Service.discover(reconnectOptions)
+              return found ?? (yield* Service.start(reconnectOptions))
             }).pipe(Effect.provide(NodeFileSystem.layer)),
           )
       : () => Promise.resolve(transport)

@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer } from "effect"
-import { Message, Model } from "@opencode-ai/llm"
-import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
+import { Message } from "@opencode-ai/llm"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -300,7 +299,7 @@ describe("SessionInstructions", () => {
 
   test("toLLMMessages does not forward synthetic metadata to the provider", () => {
     const created = DateTime.makeUnsafe(0)
-    const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
+    const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
     const synthetic = SessionMessage.Synthetic.make({
       id: SessionMessage.ID.make("msg_synthetic"),
       type: "synthetic",

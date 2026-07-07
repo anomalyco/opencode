@@ -6,19 +6,19 @@ test("groups exploration parts across assistant messages until a delimiter", () 
   const messages: SessionMessage[] = [
     { type: "user", id: "user-1", text: "Explore", time: { created: 0 } },
     assistant("assistant-1", [
-      { type: "text", id: "text-1", text: "Looking" },
+      { type: "text", text: "Looking" },
       { type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 2 } },
       { type: "tool", id: "glob-1", name: "glob", state: pending(), time: { created: 3 } },
     ]),
     assistant("assistant-2", [
       { type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 5 } },
-      { type: "text", id: "text-2", text: "Done" },
+      { type: "text", text: "Done" },
     ]),
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
     { type: "message", messageID: "user-1" },
-    { type: "part", ref: { messageID: "assistant-1", partID: "text-1" } },
+    { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
     {
       type: "group",
       kind: "exploration",
@@ -30,7 +30,7 @@ test("groups exploration parts across assistant messages until a delimiter", () 
         { messageID: "assistant-2", partID: "grep-1" },
       ],
     },
-    { type: "part", ref: { messageID: "assistant-2", partID: "text-2" } },
+    { type: "part", ref: { messageID: "assistant-2", partID: "text:0" } },
   ])
 })
 
@@ -62,20 +62,38 @@ test("keeps non-exploration tools as individual part rows", () => {
   ])
 })
 
+test("assigns stable kind ordinals within an assistant message", () => {
+  const messages: SessionMessage[] = [
+    assistant("assistant-1", [
+      { type: "text", text: "First" },
+      { type: "reasoning", text: "Think" },
+      { type: "text", text: "Second" },
+      { type: "reasoning", text: "Check" },
+    ]),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
+    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
+    { type: "part", ref: { messageID: "assistant-1", partID: "text:1" } },
+    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:1" } },
+  ])
+})
+
 test("groups across empty assistant reasoning parts", () => {
   const messages: SessionMessage[] = [
     assistant("assistant-1", [
-      { type: "reasoning", id: "reasoning-1", text: "Looking" },
+      { type: "reasoning", text: "Looking" },
       { type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 2 } },
     ]),
     assistant("assistant-2", [
-      { type: "reasoning", id: "reasoning-2", text: "" },
+      { type: "reasoning", text: "" },
       { type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } },
     ]),
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
-    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning-1" } },
+    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
     {
       type: "group",
       kind: "exploration",
@@ -95,9 +113,7 @@ test("completes exploration groups when another row follows", () => {
   ])
   finished.finish = "stop"
   const messages: SessionMessage[] = [
-    assistant("assistant-1", [
-      { type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } },
-    ]),
+    assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
     { type: "user", id: "user-1", text: "Continue", time: { created: 2 } },
     finished,
   ]
@@ -179,6 +195,45 @@ test("renders synthetic messages with descriptions", () => {
       completed: false,
       refs: [{ messageID: "assistant-2", partID: "grep-1" }],
     },
+  ])
+})
+
+test("renders a footer for a pre-output retry assistant after replay", () => {
+  const message = assistant("assistant-retry", [])
+  message.retry = {
+    attempt: 2,
+    at: 2_000,
+    error: { type: "provider.transport", message: "Disconnected" },
+  }
+
+  expect(reduceSessionRows([message])).toEqual([{ type: "assistant-footer", messageID: "assistant-retry" }])
+})
+
+test("places a pending compaction barrier before every queued user message", () => {
+  const queued = (id: string, text: string, created: number): SessionMessage => ({
+    type: "user",
+    id,
+    text,
+    time: { created },
+  })
+  const messages: SessionMessage[] = [
+    queued("user-before", "Before", 1),
+    {
+      type: "compaction",
+      id: "compaction",
+      status: "queued",
+      reason: "manual",
+      summary: "",
+      recent: "",
+      time: { created: 2 },
+    },
+    queued("user-after", "After", 3),
+  ]
+
+  expect(reduceSessionRows(messages, new Set(["user-before", "user-after"]))).toEqual([
+    { type: "message", messageID: "compaction" },
+    { type: "message", messageID: "user-before" },
+    { type: "message", messageID: "user-after" },
   ])
 })
 

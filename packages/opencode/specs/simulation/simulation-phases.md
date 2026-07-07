@@ -12,11 +12,11 @@ This phase proves the core shape without swapping every foundational layer yet.
 
 Implementation checklist:
 
-- [x] Add `OPENCODE_SIMULATION=1` activation in V1/full-TUI startup.
+- [x] Add `OPENCODE_DRIVE=<name>` activation in V1/full-TUI startup.
 - [x] Add simulation trace service with in-memory append-only records.
 - [x] Add OpenTUI UI state extraction for screen, focus, elements, and generated actions.
 - [x] Add OpenTUI UI action execution for typing, keys, enter, arrows, focus, and click.
-- [x] Add reusable JSON-RPC WebSocket server on `127.0.0.1:40900+`.
+- [x] Add reusable JSON-RPC WebSocket server at the manifest's UI endpoint.
 - [x] Expose `ui.state`, `ui.action`, `ui.render`.
 - [x] Expose `trace.list`, `trace.clear`, `trace.export`.
 - [x] Wire visible V1/full-TUI renderer path through the same action protocol.
@@ -24,8 +24,8 @@ Implementation checklist:
 
 Scope:
 
-- Add `OPENCODE_SIMULATION=1` activation.
-- Start a TUI-owned JSON-RPC WebSocket server on `127.0.0.1:40900+`.
+- Add `OPENCODE_DRIVE=<name>` activation.
+- Start a TUI-owned JSON-RPC WebSocket server at the manifest's UI endpoint.
 - Expose `ui.state`, `ui.action`, `ui.render`.
 - Use the old simulation action model: type text, press keys, press enter, arrows, focus, click.
 - Support fake OpenTUI renderer and visible renderer through the same action protocol.
@@ -34,7 +34,7 @@ Scope:
 
 Done when:
 
-- `OPENCODE_SIMULATION=1 bun run dev` starts the normal app.
+- `OPENCODE_DRIVE=<name> bun run dev` starts the normal app and UI drive server.
 - A local driver can connect to the WebSocket.
 - The driver can inspect current screen/elements/actions.
 - The driver can execute real TUI inputs.
@@ -54,19 +54,19 @@ Goal: make the app safe and controlled by swapping the lowest layers, not app lo
 Implementation checklist:
 
 - [x] Add `packages/simulation/src/backend` as the home for backend simulation layer replacements, exported from `backend/index.ts` as `simulationReplacements`; `@opencode-ai/simulation` is private/non-published and depends on logic/framework packages (`core`, `llm`, `effect`, OpenTUI), while `server` and `tui` consume it.
-- [x] Wire simulation replacements through the server's `makeRoutes` via `Layer.unwrap` + dynamic `import("@opencode-ai/simulation/backend")` gated on `OPENCODE_SIMULATION`, so the simulation module is never loaded eagerly and `makeRoutes` stays synchronous.
+- [x] Wire simulation replacements through the server's `makeRoutes` via `Layer.unwrap` + dynamic `import("@opencode-ai/simulation/backend")` gated on `OPENCODE_SIMULATE`, so the simulation module is never loaded eagerly and `makeRoutes` stays synchronous.
 - [x] Implement in-memory `FileSystem.FileSystem` (`simulation/filesystem.ts`) replacing the `NodeFileSystem` platform node. Backed by a flat path map; implements the operations the app uses (stat, access, chmod, realPath, read/write file, make/read directory, remove, rename, copy, copyFile, temp dirs, read-only open handles); unused operations die with a clear defect; `watch` fails as unsupported.
-- [x] Root the fake filesystem at `OPENCODE_SIMULATION_ROOT` (falling back to `process.cwd()` at layer-build time). The anchor is a real, empty host directory the runner creates and cds into.
+- [x] Root the fake filesystem at `process.cwd()` at layer-build time. The anchor is a real, empty host directory the runner creates and cds into.
 - [x] Deny host filesystem escapes loudly: content/mutation operations outside the root fail with `PermissionDenied` simulation errors. Probe operations (`stat`/`access`/`exists`) report `NotFound` outside the root so walk-up loops (project discovery, `findUp`, `globUp`) terminate naturally.
 - [x] Add `SimulationFSUtil` replacement (`simulation/fs-util.ts`): wraps the real `FSUtil` layer and reroutes `readDirectoryEntries`, `glob`, and `globUp` — which bypass the injected `FileSystem` via node `fs/promises` and the `glob` package — through the simulated filesystem.
 - [x] Fix `LayerNode.hoist` conflict detection to compare node implementations instead of object identity; replacement rewriting produces dependency-rewritten copies of the same node, which previously false-positived as "conflicting implementations".
-- [x] Add snapshot seeding from `OPENCODE_SIMULATION_STATE`: `project/` contents of the snapshot directory are read from the host once at layer-build time and seeded into the in-memory tree joined onto the anchor root.
-- [x] Verify end to end: `opencode serve` boots with `OPENCODE_SIMULATION=1` + `OPENCODE_SIMULATION_ROOT` + path/DB env seams (`OPENCODE_CONFIG_DIR`, `OPENCODE_TEST_HOME`, `OPENCODE_DB=:memory:`); `fs.list`/`fs.read` observe only seeded in-memory files; the anchor directory on the host remains empty after the run.
-- [ ] Create the anchor directory + `chdir` + env seam setup automatically in CLI startup when simulation mode is enabled (currently set manually by the runner; a full run needs `OPENCODE_SIMULATION_ROOT/STATE`, `OPENCODE_CONFIG_DIR`, `OPENCODE_TEST_HOME`, `OPENCODE_DB=:memory:`, and `XDG_*_HOME` pointed into the anchor, plus Bun's `--preload=@opentui/solid/preload` when launched outside `packages/cli`).
+- [x] Add snapshot seeding from `OPENCODE_SIMULATE_STATE`: `files/` contents of the snapshot directory are read from the host once at layer-build time and seeded into the in-memory tree joined onto the anchor root.
+- [x] Verify end to end: `opencode serve` boots with `OPENCODE_SIMULATE=1` + `OPENCODE_SIMULATE_STATE` + path/DB env seams (`OPENCODE_CONFIG_DIR`, `OPENCODE_TEST_HOME`, `OPENCODE_DB=:memory:`); `fs.list`/`fs.read` observe only seeded in-memory files; the anchor directory on the host remains empty after the run.
+- [ ] Create the anchor directory + `chdir` + env seam setup automatically in CLI startup when simulation mode is enabled (currently set manually by the runner; a full run needs `OPENCODE_SIMULATE_STATE`, `OPENCODE_CONFIG_DIR`, `OPENCODE_TEST_HOME`, `OPENCODE_DB=:memory:`, and `XDG_*_HOME` pointed into the anchor, plus Bun's `--preload=@opentui/solid/preload` when launched outside `packages/cli`).
 - [ ] Assert the anchor directory is still empty at the end of the run (KV/log/flock still write through real XDG paths; they are contained in the anchor by the env seams but not yet in-memory).
 - [x] Add simulated network registry (`packages/simulation/src/backend/network.ts`): replaces the `httpClient` platform node, resolves all outbound HTTP against an in-memory route table, denies unknown destinations loudly, and keeps a bounded request log (design: `simulated-network-llm.md`).
 - [x] Add driver-answered LLM as an OpenAI route in the simulated network (`openai.ts` + `llm-exchange.ts`): provider requests open exchanges; the driver streams chunks back which are encoded as real OpenAI Chat SSE (schema-checked against `OpenAIChatEvent`) and consumed by the real protocol pipeline. No enqueue store — the driver is the model.
-- [x] Add backend-hosted simulation control WebSocket (`control.ts`): JSON-RPC on `127.0.0.1:40950+`, started when the simulation module loads. Drivers connect directly (standalone topology — no frontend proxy): `llm.attach` (replays pending exchanges), `llm.chunk`, `llm.finish`, `llm.pending`, `network.log`; `llm.request` notifications push opened exchanges. This is also the headless-simulation interface. Drivers manage two sockets: TUI control (40900+) for UI, backend control (40950+) for LLM/network.
+- [x] Add backend-hosted drive control WebSocket (`control.ts`): JSON-RPC at the named manifest's backend endpoint, started when `OPENCODE_DRIVE` is set. Drivers connect directly (standalone topology — no frontend proxy): `llm.attach` (replays pending exchanges), `llm.chunk`, `llm.finish`, `llm.pending`, `network.log`; `llm.request` notifications push opened exchanges. This is also the headless-simulation interface. Drivers manage the manifest's UI endpoint for UI control and backend endpoint for LLM/network control.
 - [x] Answer `https://models.dev/api.json` with an empty catalog in the simulated network; providers come from seeded config (`opencode.json` in the snapshot defines an openai-compatible provider with a dummy `apiKey`, which passes the catalog availability gate and resolves onto the real openai-chat route).
 - [x] Fix `buildLocationServiceMap` to apply replacements when compiling hoisted global nodes; platform-node replacements (filesystem, httpClient) were silently ignored inside hoisted globals.
 - [x] Verify end to end headless (real route stack in-process + backend control WS: prompt -> `llm.request` -> driver chunks -> assistant message contains driver text; script: `packages/server/script/e2e-sim.ts`) and through the TUI (fake renderer, both sockets: type + submit via TUI WS, answer `llm.request` via backend WS, assistant reply rendered on screen; script: `packages/tui/script/sim-llm-driver.ts`).
@@ -78,7 +78,7 @@ Scope:
 - Wire simulation replacements through `AppNodeBuilder.build(...)` and `AppNodeBuilderV1.build(...)`.
 - Create a real, empty anchor directory (`mkdtemp`) and `process.chdir` into it before any command resolves its working directory; skip creation when the runner already spawned the app inside an anchor.
 - Root the in-memory filesystem at `process.cwd()` (the anchor). No cwd monkey-patching: cwd, `$PWD`, and `path.resolve()` stay truthful.
-- Add snapshot loading from `OPENCODE_SIMULATION_STATE`: read the snapshot directory once at startup and seed the in-memory filesystem (snapshot `project/` paths joined onto the anchor root), config, env, and optional LLM/network state from it.
+- Add snapshot loading from `OPENCODE_SIMULATE_STATE`: read the snapshot directory once at startup and seed the in-memory filesystem (snapshot `files/` paths joined onto the anchor root), config, env, and optional LLM/network state from it.
 - Route config/data/state/cache/temp paths into the simulated space using existing env seams (`OPENCODE_CONFIG_DIR`, `OPENCODE_TEST_HOME`, `OPENCODE_DB=:memory:`), set before `packages/core/src/global.ts` import-time path setup runs.
 - Deny host filesystem escapes loudly (paths outside the anchor root fail with typed simulation errors).
 - Assert the anchor directory on the host is still empty at the end of the run; anything written there means a code path bypassed the simulated filesystem.
@@ -97,7 +97,7 @@ Done when:
 - Unknown network fails with a simulation error.
 - Host filesystem escape fails with a simulation error.
 - The anchor directory on the host is empty after a run.
-- The app boots from a snapshot directory via `OPENCODE_SIMULATION_STATE` and observes the seeded project files, config, and env through normal app paths.
+- The app boots from a snapshot directory via `OPENCODE_SIMULATE_STATE` and observes the seeded project files, config, and env through normal app paths.
 - A driver can seed a project filesystem.
 - A driver can enqueue an LLM script and submit a prompt through the TUI.
 - The real session/tool path consumes the scripted LLM behavior.

@@ -111,19 +111,31 @@ export type LogItem = Payload | EventLog.Synced
 
 export const isSynced = (item: LogItem): item is EventLog.Synced => item.type === "log.synced"
 
+export type SubscribePayload<D extends readonly Definition[]> = D[number] extends infer Item
+  ? Item extends Definition
+    ? Payload<Item>
+    : never
+  : never
+
+export interface Subscribe {
+  /**
+   * Volatile live channel: every event published from now on, nothing before or
+   * across a disconnect. Consumers that need reliability combine it with `log`.
+   */
+  (): Stream.Stream<Payload>
+  <D extends Definition>(definition: D): Stream.Stream<Payload<D>>
+  <const D extends readonly [Definition, ...Definition[]]>(definitions: D): Stream.Stream<SubscribePayload<D>>
+}
+
+const isDefinition = (input: Definition | readonly Definition[]): input is Definition => !Array.isArray(input)
+
 export interface Interface {
   readonly publish: <D extends Definition>(
     definition: D,
     data: Data<D>,
     options?: PublishOptions,
   ) => Effect.Effect<Payload<D>>
-  readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
-  /**
-   * Volatile live channel: every event published from now on, nothing before,
-   * nothing across a disconnect. The only channel that carries non-durable
-   * events; consumers that need reliability combine `changes` with `log`.
-   */
-  readonly live: () => Stream.Stream<Payload>
+  readonly subscribe: Subscribe
   /**
    * Durable, ordered, gap-free per-aggregate log read. `follow: false`
    * completes at the end of the log; `follow: true` replays then transitions
@@ -135,15 +147,9 @@ export interface Interface {
     readonly after?: number
     readonly follow?: boolean
   }) => Stream.Stream<LogItem>
-  /**
-   * Coalescing hint channel: latest committed seq per aggregate, never a
-   * delivery guarantee. Emits `SweepRequired` first on every subscribe and
-   * whenever per-key retention is exceeded. Never fails under backpressure.
-   */
-  readonly changes: () => Stream.Stream<EventLog.Change>
   /** Latest committed seq per aggregate. Aggregates without events are absent. */
   readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, Seq>>
-  /** @deprecated Use `all()` and consume the returned stream. */
+  /** @deprecated Use `subscribe()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
   readonly replay: (
@@ -183,11 +189,6 @@ export const liveBounded = (
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
-  /**
-   * Maximum distinct aggregates buffered per changes subscriber before the
-   * buffer is abandoned and the subscriber is told to sweep.
-   */
-  readonly changesKeyCapacity?: number
   /** Maximum durable rows read per page while replaying or tailing an aggregate log. */
   readonly logReadPageSize?: number
 }
@@ -204,12 +205,6 @@ export const layerWith = (options?: LayerOptions) =>
       const projectors = new Map<string, Subscriber[]>()
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
-      const changesKeyCapacity = options?.changesKeyCapacity ?? 4096
-      const changesSubscribers = new Set<{
-        readonly hints: Map<string, number>
-        sweepRequired: boolean
-        readonly wake: PubSub.PubSub<void>
-      }>()
       const { db } = yield* Database.Service
       const logReadPageSize = options?.logReadPageSize ?? 512
 
@@ -231,9 +226,6 @@ export const layerWith = (options?: LayerOptions) =>
             { discard: true },
           )
           yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
-          yield* Effect.forEach(changesSubscribers, (subscriber) => PubSub.shutdown(subscriber.wake), {
-            discard: true,
-          })
         }),
       )
 
@@ -392,27 +384,6 @@ export const layerWith = (options?: LayerOptions) =>
                     yield* Effect.forEach(
                       pubsub.durable.get(committed.aggregateID) ?? [],
                       (wake) => PubSub.publish(wake, undefined),
-                      { discard: true },
-                    )
-                    yield* Effect.forEach(
-                      changesSubscribers,
-                      (subscriber) =>
-                        Effect.sync(() => {
-                          // Coalesce to the latest seq per aggregate. Overflowing key
-                          // cardinality abandons the buffer instead of dropping hints silently.
-                          if (
-                            subscriber.hints.size >= changesKeyCapacity &&
-                            !subscriber.hints.has(committed.aggregateID)
-                          ) {
-                            subscriber.hints.clear()
-                            subscriber.sweepRequired = true
-                          } else if (!subscriber.sweepRequired) {
-                            subscriber.hints.set(
-                              committed.aggregateID,
-                              Math.max(subscriber.hints.get(committed.aggregateID) ?? -1, committed.seq),
-                            )
-                          }
-                        }).pipe(Effect.andThen(PubSub.publish(subscriber.wake, undefined)), Effect.asVoid),
                       { discard: true },
                     )
                   }
@@ -603,10 +574,19 @@ export const layerWith = (options?: LayerOptions) =>
           ),
         )
 
-      const subscribe = <D extends Definition>(definition: D): Stream.Stream<Payload<D>> =>
-        local(Stream.unwrap(getOrCreate(definition).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))))).pipe(
-          Stream.map((event) => event as Payload<D>),
-        )
+      function subscribe(): Stream.Stream<Payload>
+      function subscribe<D extends Definition>(definition: D): Stream.Stream<Payload<D>>
+      function subscribe<const D extends readonly [Definition, ...Definition[]]>(
+        definitions: D,
+      ): Stream.Stream<SubscribePayload<D>>
+      function subscribe(input?: Definition | readonly Definition[]): Stream.Stream<Payload> {
+        if (input === undefined) return streamLive()
+        if (isDefinition(input)) {
+          return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
+        }
+        const types = new Set(input.map((definition) => definition.type))
+        return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
+      }
 
       const streamLive = (): Stream.Stream<Payload> => local(Stream.fromPubSub(pubsub.live))
 
@@ -723,47 +703,6 @@ export const layerWith = (options?: LayerOptions) =>
           }),
         )
 
-      const changes = (): Stream.Stream<EventLog.Change> =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const wake = yield* PubSub.sliding<void>(1)
-            const subscription = yield* PubSub.subscribe(wake)
-            const subscriber = { hints: new Map<string, number>(), sweepRequired: false, wake }
-            yield* Effect.acquireRelease(
-              Effect.sync(() => changesSubscribers.add(subscriber)),
-              () =>
-                Effect.sync(() => changesSubscribers.delete(subscriber)).pipe(
-                  Effect.andThen(PubSub.shutdown(wake)),
-                  Effect.asVoid,
-                ),
-            )
-            const drain = Effect.sync((): ReadonlyArray<EventLog.Change> => {
-              if (subscriber.sweepRequired) {
-                subscriber.sweepRequired = false
-                subscriber.hints.clear()
-                return [{ type: "log.sweep_required" }]
-              }
-              const hints = Array.from(
-                subscriber.hints,
-                ([aggregateID, seq]): EventLog.Change => ({ type: "log.hint", aggregateID, seq: Seq.make(seq) }),
-              )
-              subscriber.hints.clear()
-              return hints
-            })
-            // Hints missed while unsubscribed were never buffered, so every
-            // (re)subscribe starts from the sweep contract.
-            const initial: EventLog.Change = { type: "log.sweep_required" }
-            return Stream.make(initial).pipe(
-              Stream.concat(
-                Stream.fromSubscription(subscription).pipe(
-                  Stream.mapEffect(() => drain),
-                  Stream.flattenIterable,
-                ),
-              ),
-            )
-          }),
-        )
-
       const sequences = (aggregateIDs: ReadonlyArray<string>): Effect.Effect<ReadonlyMap<string, Seq>> => {
         if (aggregateIDs.length === 0) return Effect.succeed(new Map())
         return db
@@ -796,9 +735,7 @@ export const layerWith = (options?: LayerOptions) =>
       return Service.of({
         publish,
         subscribe,
-        live: streamLive,
         log,
-        changes,
         sequences,
         listen,
         project,

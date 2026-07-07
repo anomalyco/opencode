@@ -32,6 +32,7 @@ type Active = {
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
+  timeout?: (duration: number) => Effect.Effect<void>
 }
 
 /**
@@ -50,6 +51,8 @@ export interface Interface {
   // Resolves once the command reaches a terminal status, returning its final Info. Fails with
   // NotFoundError if the command is unknown or is removed before it terminates.
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
+  // Replaces the running command's timeout from now; zero clears it.
+  readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
@@ -122,6 +125,13 @@ export const layer = Layer.effect(
 
     const wait = Effect.fn("Shell.wait")(function* (id: Shell.ID) {
       return yield* Deferred.await((yield* require(id)).done)
+    })
+
+    const timeout = Effect.fn("Shell.timeout")(function* (id: Shell.ID, duration: number) {
+      const session = yield* require(id)
+      if (session.info.status !== "running" || !session.timeout) return session.info
+      yield* session.timeout(duration)
+      return session.info
     })
 
     const output = Effect.fn("Shell.output")(function* (id: Shell.ID, input?: Shell.OutputInput) {
@@ -265,16 +275,22 @@ export const layer = Layer.effect(
                 if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
               })
 
-            if (input.timeout) {
-              session.timeoutFiber = runFork(
-                Effect.sleep(Duration.millis(input.timeout)).pipe(
-                  Effect.flatMap(() =>
-                    finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
+            session.timeout = (duration) =>
+              Effect.gen(function* () {
+                if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
+                session.timeoutFiber = undefined
+                if (duration === 0 || session.info.status !== "running") return
+                session.timeoutFiber = runFork(
+                  Effect.sleep(Duration.millis(duration)).pipe(
+                    Effect.flatMap(() =>
+                      finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
+                    ),
+                    Effect.catch(() => Effect.void),
                   ),
-                  Effect.catch(() => Effect.void),
-                ),
-              )
-            }
+                )
+              })
+
+            yield* session.timeout(input.timeout)
 
             runFork(
               handle.exitCode.pipe(
@@ -296,7 +312,7 @@ export const layer = Layer.effect(
       return session.info
     })
 
-    return Service.of({ create, list, get, wait, output, remove })
+    return Service.of({ create, list, get, wait, timeout, output, remove })
   }),
 )
 

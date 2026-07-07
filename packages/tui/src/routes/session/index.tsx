@@ -21,8 +21,8 @@ import { useProject } from "../../context/project"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
-import { Spinner } from "../../component/spinner"
-import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
+import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
+import { createSyntaxStyleMemo, generateSubtleSyntax, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -46,6 +46,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
+import { DialogFork } from "./dialog-fork"
 import { Sidebar } from "./sidebar"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
@@ -70,7 +71,7 @@ import { usePluginRuntime } from "../../plugin/runtime"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
-import { createSessionRows, type PartRef, type SessionRow } from "./rows"
+import { createSessionRows, resolvePart, type PartRef, type SessionRow } from "./rows"
 import { switchLabel } from "../../util/model"
 
 addDefaultParsers(parsers.parsers)
@@ -171,6 +172,16 @@ export function Session() {
   })
   onCleanup(() => setEpilogue())
   const messages = sessionMessages
+  const transientCompaction = createMemo(() => {
+    if (
+      messages().some(
+        (message) => message.type === "compaction" && (message.status === "queued" || message.status === "running"),
+      )
+    )
+      return
+    const text = data.session.compaction(route.sessionID)
+    return text === undefined ? undefined : { text }
+  })
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
@@ -370,7 +381,18 @@ export function Session() {
       value: "session.fork",
       category: "Session",
       slash: { name: "fork" },
-      run: () => unavailable("Forking"),
+      run: () => {
+        dialog.replace(() => (
+          <DialogFork
+            sessionID={route.sessionID}
+            onMove={(messageID) => {
+              if (!messageID) return
+              const child = scroll.getChildren().find((child) => child.id === messageID)
+              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            }}
+          />
+        ))
+      },
     },
     {
       title: "Compact session",
@@ -914,6 +936,9 @@ export function Session() {
                     />
                   )}
                 </For>
+                <Show when={transientCompaction()}>
+                  {(compaction) => <CompactionMessage status="running" text={compaction().text} />}
+                </Show>
                 <BackgroundToolHint messages={messages()} />
                 <Show when={session()?.revert?.messageID}>
                   <RevertMessage
@@ -1085,7 +1110,7 @@ function SessionMessageView(props: { message: SessionMessage }) {
         </Show>
       </Match>
       <Match when={props.message.type === "compaction"}>
-        <CompactionMessage />
+        <CompactionMessage message={props.message as Extract<SessionMessage, { type: "compaction" }>} />
       </Match>
     </Switch>
   )
@@ -1096,7 +1121,7 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
   const part = createMemo(() => {
     const item = message()
     if (item?.type !== "assistant") return
-    return item.content.find((part) => part.id === props.partRef.partID)
+    return resolvePart(item, props.partRef.partID)
   })
   return (
     <Show when={part()}>
@@ -1136,7 +1161,7 @@ function SessionGroupView(props: {
     refs.flatMap((ref) => {
       const message = props.message(ref.messageID)
       if (message?.type !== "assistant") return []
-      const part = message.content.find((part) => part.id === ref.partID)
+      const part = resolvePart(message, ref.partID)
       if (part?.type !== "tool") return []
       return [part]
     })
@@ -1216,6 +1241,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
+      <AssistantRetry retry={props.message.retry} />
       <box paddingLeft={3} marginTop={props.message.error && !interrupted() ? 1 : 0}>
         <text>
           <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
@@ -1243,7 +1269,11 @@ function SessionSwitchMessageV2(props: { message: SessionMessage }) {
       return switchLabel(props.message.model, ctx.models(), props.message.previous)
     return ""
   }
-  return <text fg={theme.textMuted}>{text()}</text>
+  return (
+    <box paddingLeft={3}>
+      <text fg={theme.textMuted}>{text()}</text>
+    </box>
+  )
 }
 
 function SessionNoticeMessageV2(props: { message: SessionMessage }) {
@@ -1269,9 +1299,59 @@ function SessionSkillMessage(props: { message: Extract<SessionMessage, { type: "
   )
 }
 
-function CompactionMessage() {
-  const { theme } = useTheme()
-  return <box border={["top"]} title=" Compaction " titleAlignment="center" borderColor={theme.borderActive} />
+function CompactionMessage(props: {
+  message?: Extract<SessionMessage, { type: "compaction" }>
+  status?: "running"
+  text?: string
+}) {
+  const ctx = use()
+  const kv = useKV()
+  const { theme, syntax } = useTheme()
+  const status = () => props.message?.status ?? props.status
+  const text = () => props.message?.summary ?? props.text ?? ""
+  const color = () => (status() === "failed" ? theme.error : status() === "completed" ? theme.success : theme.textMuted)
+  const border = () => (status() === "queued" ? theme.border : color())
+  return (
+    <box>
+      <box flexDirection="row" alignItems="center">
+        <box border={["top"]} borderColor={border()} flexGrow={1} />
+        <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
+          <Switch>
+            <Match when={status() === "running"}>
+              <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯</text>}>
+                <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+              </Show>
+            </Match>
+            <Match when={status() === "completed"}>
+              <text fg={color()}>✓</text>
+            </Match>
+            <Match when={status() === "failed"}>
+              <text fg={color()}>✗</text>
+            </Match>
+            <Match when={status() === "queued"}>
+              <text fg={color()}>◇</text>
+            </Match>
+          </Switch>
+          <text fg={color()}>{status() === "queued" ? "Compaction queued" : "Compaction"}</text>
+        </box>
+        <box border={["top"]} borderColor={border()} flexGrow={1} />
+      </box>
+      <Show when={text().trim()}>
+        <box paddingTop={1} paddingLeft={3}>
+          <markdown
+            syntaxStyle={syntax()}
+            streaming={status() === "running"}
+            internalBlockMode="top-level"
+            content={text().trim()}
+            tableOptions={{ style: "grid" }}
+            conceal={ctx.conceal()}
+            fg={theme.markdownText}
+            bg={theme.background}
+          />
+        </box>
+      </Show>
+    </box>
+  )
 }
 
 function statusLabel(status: "added" | "modified" | "deleted") {
@@ -1384,9 +1464,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
-  const queued = createMemo(() => props.message.metadata?.queued === true)
-  const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const queued = createMemo(
+    () => data.session.status(ctx.sessionID) === "running" && data.session.input.has(ctx.sessionID, props.message.id),
+  )
   const dialog = useDialog()
   const renderer = useRenderer()
 
@@ -1395,7 +1475,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
       <box
         id={props.message.id}
         border={["left"]}
-        borderColor={color()}
+        borderColor={queued() ? theme.border : color()}
         customBorderChars={SplitBorder.customBorderChars}
       >
         <box
@@ -1417,18 +1497,22 @@ function UserMessage(props: { message: SessionMessageUser }) {
         >
           <text fg={theme.text}>{props.message.text}</text>
           <Show when={files().length}>
-            <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+            <box
+              flexDirection="row"
+              paddingBottom={ctx.showTimestamps() ? 1 : 0}
+              paddingTop={1}
+              gap={1}
+              flexWrap="wrap"
+            >
               <For each={files()}>
                 {(file) => {
-                  const directory = file.mime === "application/x-directory"
+                  const label = file.mime === "application/x-directory" ? "dir" : "file"
                   return (
                     <text fg={theme.text}>
-                      <span style={{ bg: theme.secondary, fg: theme.background }}>
-                        {directory ? " Directory " : " File "}
-                      </span>
+                      <span style={{ bg: theme.secondary, fg: theme.background, bold: true }}>{` ${label} `}</span>
                       <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
                         {" "}
-                        {file.name ?? file.uri}{" "}
+                        {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
                       </span>
                     </text>
                   )
@@ -1436,18 +1520,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
               </For>
             </box>
           </Show>
-          <Show
-            when={queued()}
-            fallback={
-              <Show when={ctx.showTimestamps()}>
-                <text fg={theme.textMuted}>
-                  <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
-                </text>
-              </Show>
-            }
-          >
+          <Show when={ctx.showTimestamps()}>
             <text fg={theme.textMuted}>
-              <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+              <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
             </text>
           </Show>
         </box>
@@ -1552,6 +1627,7 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
+      <AssistantRetry retry={props.message.retry} />
       <Switch>
         <Match when={props.last || final() || props.message.error}>
           <box paddingLeft={3}>
@@ -1568,6 +1644,21 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
         </Match>
       </Switch>
     </>
+  )
+}
+
+function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.retry}>
+      {(retry) => (
+        <box paddingLeft={3} marginTop={1}>
+          <text fg={theme.textMuted}>
+            Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
+          </text>
+        </box>
+      )}
+    </Show>
   )
 }
 
@@ -2142,7 +2233,7 @@ function Shell(props: ToolProps) {
         </Show>
         <Show when={shellID()}>
           <text>
-            <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Backgrounded </span>
+            <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Background </span>
           </text>
         </Show>
         <Show when={collapsed().overflow}>
@@ -2287,7 +2378,7 @@ function Subagent(props: ToolProps) {
       {formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General"),
         description() ?? "Subagent",
-        props.metadata.background === true,
+        props.input.background === true || props.metadata.status === "running",
       )}
     </InlineTool>
   )
@@ -2323,6 +2414,7 @@ function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
+// The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
   const ctx = use()
   const { theme } = useTheme()

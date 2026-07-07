@@ -30,7 +30,6 @@ describe("public exports", () => {
 
   test("provider barrels expose user-facing facades", () => {
     expect(OpenAI.model).toBeFunction()
-    expect(OpenAI.provider.model).toBe(OpenAI.model)
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.provider.responsesWebSocket).toBe(OpenAI.responsesWebSocket)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
@@ -50,6 +49,20 @@ describe("public exports", () => {
     expect(
       GitHubCopilot.configure({ baseURL: "https://api.githubcopilot.test", apiKey: "fixture" }).model,
     ).toBeFunction()
+    expect(
+      GitHubCopilot.configure({
+        baseURL: "https://api.githubcopilot.test",
+        apiKey: "fixture",
+        endpoint: "responses",
+      }).model("mai-code-1-flash-picker").route.id,
+    ).toBe("openai-responses")
+    expect(
+      GitHubCopilot.configure({
+        baseURL: "https://api.githubcopilot.test",
+        apiKey: "fixture",
+        endpoint: "chat",
+      }).model("gpt-5").route.id,
+    ).toBe("openai-chat")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

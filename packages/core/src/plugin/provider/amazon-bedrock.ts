@@ -64,15 +64,14 @@ export const AmazonBedrockPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (item.provider.api.type !== "aisdk") continue
-        if (item.provider.api.package !== "@ai-sdk/amazon-bedrock") continue
+        if (!ProviderV2.isAISDK(item.provider.package)) continue
+        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/amazon-bedrock") continue
         evt.provider.update(item.provider.id, (provider) => {
-          if (provider.api.type !== "aisdk") return
-          if (typeof provider.request.body.endpoint !== "string") return
+          if (typeof provider.settings?.endpoint !== "string") return
           // The AI SDK expects a base URL, but users configure Bedrock private/VPC
           // endpoints as `endpoint`; move it into the catalog endpoint URL once.
-          provider.api.url = provider.request.body.endpoint
-          delete provider.request.body.endpoint
+          provider.settings.baseURL = provider.settings.endpoint
+          delete provider.settings.endpoint
         })
       }
     })
@@ -112,12 +111,15 @@ export const AmazonBedrockPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
-        if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle") {
-          evt.language = selectMantleModel(evt.sdk, evt.model.api.id)
+        if (
+          ProviderV2.isAISDK(evt.model.package) &&
+          ProviderV2.packageName(evt.model.package) === "@ai-sdk/amazon-bedrock/mantle"
+        ) {
+          evt.language = selectMantleModel(evt.sdk, evt.model.modelID ?? evt.model.id)
           return
         }
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION
-        evt.language = evt.sdk.languageModel(resolveModelID(evt.model.api.id, region))
+        evt.language = evt.sdk.languageModel(resolveModelID(evt.model.modelID ?? evt.model.id, region))
       }),
     )
   }),

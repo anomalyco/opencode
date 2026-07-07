@@ -31,7 +31,8 @@ import { ConfigMCP } from "../config/mcp"
 import { InstallationVersion } from "../installation/version"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
-const DEFAULT_REQUEST_TIMEOUT = 30_000
+const DEFAULT_CATALOG_TIMEOUT = 30_000
+const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 
 type Transport = StdioClientTransport | StreamableHTTPClientTransport
 
@@ -206,7 +207,8 @@ export const connect = Effect.fnUntraced(function* (
         Effect.ignore,
       ),
     )
-    const requestTimeout = config.timeout?.request ?? DEFAULT_REQUEST_TIMEOUT
+    const catalogTimeout = config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT
+    const executionTimeout = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     return {
       instructions: client.getInstructions()?.trim() || undefined,
       tools: () =>
@@ -218,11 +220,11 @@ export const connect = Effect.fnUntraced(function* (
                 async (cursor) => {
                   const params = cursor === undefined ? undefined : { cursor }
                   try {
-                    return await client.listTools(params, { timeout: requestTimeout })
+                    return await client.listTools(params, { timeout: catalogTimeout })
                   } catch (error) {
                     if (!(error instanceof Error) || !isOutputSchemaError(error)) throw error
                     return client.request({ method: "tools/list", params }, TolerantListToolsResult, {
-                      timeout: requestTimeout,
+                      timeout: catalogTimeout,
                     })
                   }
                 },
@@ -248,7 +250,7 @@ export const connect = Effect.fnUntraced(function* (
                 async (cursor) => {
                   const params = cursor === undefined ? undefined : { cursor }
                   return client.request({ method: "prompts/list", params }, TolerantListPromptsResult, {
-                    timeout: requestTimeout,
+                    timeout: catalogTimeout,
                   })
                 },
                 (result) => result.prompts,
@@ -273,7 +275,7 @@ export const connect = Effect.fnUntraced(function* (
             client.request(
               { method: "prompts/get", params: { name: input.name, arguments: input.args ?? {} } },
               GetPromptResultSchema,
-              { signal },
+              { signal, timeout: executionTimeout },
             ),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(
@@ -287,8 +289,8 @@ export const connect = Effect.fnUntraced(function* (
             client.callTool(
               { name: input.name, arguments: input.args ?? {} },
               CallToolResultSchema,
-              // Keep progress tokens available without imposing a client timeout on tool execution.
-              { signal, resetTimeoutOnProgress: true, onprogress: () => {} },
+              // Keep progress tokens available while enforcing a hard wall-clock execution timeout.
+              { signal, timeout: executionTimeout, onprogress: () => {} },
             ),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(

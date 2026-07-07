@@ -76,8 +76,8 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
-  FormCreatePayload2,
-  FormReply2,
+  FormCreatePayloadV2,
+  FormReply,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -92,7 +92,8 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
-  LocationRef2,
+  InstructionEntryKeyV2,
+  LocationRefV2,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -113,7 +114,7 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
-  ModelRef2,
+  ModelRef,
   MoveSessionDestination,
   OutputFormat,
   Part as Part2,
@@ -130,8 +131,8 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
-  PermissionV2Reply2,
-  PermissionV2Source2,
+  PermissionV2Reply,
+  PermissionV2SourceV2,
   ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
@@ -144,9 +145,9 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
-  PromptAgentAttachment2,
-  PromptInputFileAttachment2,
-  PromptInputV2,
+  PromptAgentAttachment,
+  PromptInput,
+  PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
   ProviderListErrors,
@@ -178,14 +179,13 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
-  QuestionV2Reply2,
+  QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
-  SessionContextEntryKey2,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -278,8 +278,6 @@ import type {
   V2CredentialUpdateResponses,
   V2DebugLocationErrors,
   V2DebugLocationResponses,
-  V2EventChangesErrors,
-  V2EventChangesResponses,
   V2EventSubscribeErrors,
   V2EventSubscribeResponses,
   V2FormRequestListErrors,
@@ -334,6 +332,8 @@ import type {
   V2ProjectCurrentResponses,
   V2ProjectDirectoriesErrors,
   V2ProjectDirectoriesResponses,
+  V2ProjectListErrors,
+  V2ProjectListResponses,
   V2ProviderGetErrors,
   V2ProviderGetResponses,
   V2ProviderListErrors,
@@ -364,12 +364,6 @@ import type {
   V2SessionCommandResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
-  V2SessionContextEntryListErrors,
-  V2SessionContextEntryListResponses,
-  V2SessionContextEntryPutErrors,
-  V2SessionContextEntryPutResponses,
-  V2SessionContextEntryRemoveErrors,
-  V2SessionContextEntryRemoveResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
   V2SessionCreateErrors,
@@ -390,6 +384,12 @@ import type {
   V2SessionFormStateResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
+  V2SessionInstructionsEntryListErrors,
+  V2SessionInstructionsEntryListResponses,
+  V2SessionInstructionsEntryPutErrors,
+  V2SessionInstructionsEntryPutResponses,
+  V2SessionInstructionsEntryRemoveErrors,
+  V2SessionInstructionsEntryRemoveResponses,
   V2SessionInterruptErrors,
   V2SessionInterruptResponses,
   V2SessionListErrors,
@@ -416,6 +416,8 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionRemoveErrors,
+  V2SessionRemoveResponses,
   V2SessionRenameErrors,
   V2SessionRenameResponses,
   V2SessionRevertClearErrors,
@@ -446,6 +448,8 @@ import type {
   V2ShellOutputResponses,
   V2ShellRemoveErrors,
   V2ShellRemoveResponses,
+  V2ShellTimeoutErrors,
+  V2ShellTimeoutResponses,
   V2SkillListErrors,
   V2SkillListResponses,
   V2VcsDiffErrors,
@@ -460,7 +464,7 @@ import type {
   VcsDiffResponses,
   VcsGetErrors,
   VcsGetResponses,
-  VcsMode2,
+  VcsMode,
   VcsStatusErrors,
   VcsStatusResponses,
   WorktreeCreateErrors,
@@ -5262,9 +5266,9 @@ export class Revert extends HeyApiClient {
 
 export class Entry extends HeyApiClient {
   /**
-   * List context entries
+   * List instruction entries
    *
-   * List API-managed context entries attached to the session's system context.
+   * List API-managed instruction entries attached to the session.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
@@ -5274,25 +5278,25 @@ export class Entry extends HeyApiClient {
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).get<
-      V2SessionContextEntryListResponses,
-      V2SessionContextEntryListErrors,
+      V2SessionInstructionsEntryListResponses,
+      V2SessionInstructionsEntryListErrors,
       ThrowOnError
     >({
-      url: "/api/session/{sessionID}/context-entry",
+      url: "/api/session/{sessionID}/instructions/entries",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Remove context entry
+   * Remove instruction entry
    *
-   * Remove one context entry; the removal is announced to the model at the next turn boundary.
+   * Remove one instruction entry; the removal is announced to the model at the next step boundary.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      key: SessionContextEntryKey2
+      key: InstructionEntryKeyV2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5308,25 +5312,25 @@ export class Entry extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).delete<
-      V2SessionContextEntryRemoveResponses,
-      V2SessionContextEntryRemoveErrors,
+      V2SessionInstructionsEntryRemoveResponses,
+      V2SessionInstructionsEntryRemoveErrors,
       ThrowOnError
     >({
-      url: "/api/session/{sessionID}/context-entry/{key}",
+      url: "/api/session/{sessionID}/instructions/entries/{key}",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Put context entry
+   * Put instruction entry
    *
-   * Attach or replace one durable context entry. The value is rendered into the session's system context; changes announce as updates at the next turn boundary.
+   * Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.
    */
   public put<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      key: SessionContextEntryKey2
+      key: InstructionEntryKeyV2
       value?: unknown
     },
     options?: Options<never, ThrowOnError>,
@@ -5344,11 +5348,11 @@ export class Entry extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).put<
-      V2SessionContextEntryPutResponses,
-      V2SessionContextEntryPutErrors,
+      V2SessionInstructionsEntryPutResponses,
+      V2SessionInstructionsEntryPutErrors,
       ThrowOnError
     >({
-      url: "/api/session/{sessionID}/context-entry/{key}",
+      url: "/api/session/{sessionID}/instructions/entries/{key}",
       ...options,
       ...params,
       headers: {
@@ -5360,7 +5364,7 @@ export class Entry extends HeyApiClient {
   }
 }
 
-export class Context extends HeyApiClient {
+export class Instructions extends HeyApiClient {
   private _entry?: Entry
   get entry(): Entry {
     return (this._entry ??= new Entry({ client: this.client }))
@@ -5395,7 +5399,7 @@ export class Form extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      formCreatePayload: FormCreatePayload2
+      formCreatePayloadV2: FormCreatePayloadV2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5405,7 +5409,7 @@ export class Form extends HeyApiClient {
         {
           args: [
             { in: "path", key: "sessionID" },
-            { key: "formCreatePayload", map: "body" },
+            { key: "formCreatePayloadV2", map: "body" },
           ],
         },
       ],
@@ -5493,7 +5497,7 @@ export class Form extends HeyApiClient {
     parameters: {
       sessionID: string
       formID: string
-      formReply: FormReply2
+      formReply: FormReply
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5593,7 +5597,7 @@ export class Permission2 extends HeyApiClient {
       metadata?: {
         [key: string]: unknown
       }
-      source?: PermissionV2Source2
+      source?: PermissionV2SourceV2
       agent?: string | null
     },
     options?: Options<never, ThrowOnError>,
@@ -5674,7 +5678,7 @@ export class Permission2 extends HeyApiClient {
     parameters: {
       sessionID: string
       requestID: string
-      reply?: PermissionV2Reply2
+      reply?: PermissionV2Reply
       message?: string | null
     },
     options?: Options<never, ThrowOnError>,
@@ -5742,7 +5746,7 @@ export class Question2 extends HeyApiClient {
     parameters: {
       sessionID: string
       requestID: string
-      questionV2Reply: QuestionV2Reply2
+      questionV2Reply: QuestionV2Reply
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5863,8 +5867,8 @@ export class Session3 extends HeyApiClient {
     parameters?: {
       id?: string | null
       agent?: string | null
-      model?: ModelRef2 | null
-      location?: LocationRef2 | null
+      model?: ModelRef | null
+      location?: LocationRefV2 | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5896,12 +5900,31 @@ export class Session3 extends HeyApiClient {
   /**
    * List active sessions
    *
-   * Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Watermarks are the durable log positions read alongside the activity snapshot; activity itself is process state, so the pairing is advisory rather than transactional.
+   * Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.
    */
   public active<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<V2SessionActiveResponses, V2SessionActiveErrors, ThrowOnError>({
       url: "/api/session/active",
       ...options,
+    })
+  }
+
+  /**
+   * Delete session
+   *
+   * Delete a session and its child sessions.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).delete<V2SessionRemoveResponses, V2SessionRemoveErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}",
+      ...options,
+      ...params,
     })
   }
 
@@ -6006,7 +6029,7 @@ export class Session3 extends HeyApiClient {
   public switchModel<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
-      model?: ModelRef2
+      model?: ModelRef
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6081,7 +6104,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       sessionID: string
       id?: string | null
-      prompt?: PromptInputV2
+      prompt?: PromptInput
       delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
@@ -6125,9 +6148,9 @@ export class Session3 extends HeyApiClient {
       command?: string
       arguments?: string | null
       agent?: string | null
-      model?: ModelRef2 | null
-      files?: Array<PromptInputFileAttachment2>
-      agents?: Array<PromptAgentAttachment2>
+      model?: ModelRef | null
+      files?: Array<PromptInputFileAttachment>
+      agents?: Array<PromptAgentAttachment>
       delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
@@ -6284,19 +6307,35 @@ export class Session3 extends HeyApiClient {
   /**
    * Compact session
    *
-   * Compact a session conversation.
+   * Queue a durable session compaction request.
    */
   public compact<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
+      id?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<V2SessionCompactResponses, V2SessionCompactErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/compact",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -6341,7 +6380,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Read the session log
    *
-   * Durable, ordered, gap-free read of public session events after an exclusive aggregate sequence. Emits a synced marker once replay reaches the captured watermark, then completes; with follow=true it continues with live events instead. The only event API that promises reliability: attach after a snapshot watermark to compose fetch and stream without a race window.
+   * Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.
    */
   public log<ThrowOnError extends boolean = false>(
     parameters: {
@@ -6364,7 +6403,7 @@ export class Session3 extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).sse.get<V2SessionLogResponses, V2SessionLogErrors, ThrowOnError>({
-      url: "/api/session/{sessionID}/log",
+      url: "/api/experimental/session/{sessionID}/log",
       ...options,
       ...params,
     })
@@ -6479,9 +6518,9 @@ export class Session3 extends HeyApiClient {
     return (this._revert ??= new Revert({ client: this.client }))
   }
 
-  private _context?: Context
-  get context2(): Context {
-    return (this._context ??= new Context({ client: this.client }))
+  private _instructions?: Instructions
+  get instructions(): Instructions {
+    return (this._instructions ??= new Instructions({ client: this.client }))
   }
 
   private _form?: Form
@@ -6559,7 +6598,7 @@ export class Generate extends HeyApiClient {
         workspace?: string | null
       } | null
       prompt?: string
-      model?: ModelRef2 | null
+      model?: ModelRef | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7033,6 +7072,18 @@ export class Credential extends HeyApiClient {
 
 export class Project2 extends HeyApiClient {
   /**
+   * List projects
+   *
+   * List known projects.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2ProjectListResponses, V2ProjectListErrors, ThrowOnError>({
+      url: "/api/project",
+      ...options,
+    })
+  }
+
+  /**
    * Get current project
    *
    * Resolve the project for the requested location.
@@ -7357,23 +7408,11 @@ export class Event2 extends HeyApiClient {
   /**
    * Subscribe to events
    *
-   * Subscribe to native event payloads for the server. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed. Consumers that need reliability should combine the changes feed with durable session log reads.
+   * Subscribe to native event payloads for the server. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.
    */
   public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<V2EventSubscribeResponses, V2EventSubscribeErrors, ThrowOnError>({
       url: "/api/event",
-      ...options,
-    })
-  }
-
-  /**
-   * Subscribe to change hints
-   *
-   * Payload-free hint channel: after an event commits, a subscriber eventually receives a hint for that aggregate with seq at or beyond the event, or a sweep-required marker. Hints coalesce to the latest seq per aggregate under backpressure and the stream never fails from overflow. No consumer may derive correctness from receiving a hint; correctness always comes from durable log reads plus the consumer's own checkpoint. A sweep-required marker is emitted first on every (re)subscribe and whenever hint retention is exceeded: treat every aggregate as potentially dirty and recover via bounded sweep plus log reads.
-   */
-  public changes<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).sse.get<V2EventChangesResponses, V2EventChangesErrors, ThrowOnError>({
-      url: "/api/event/changes",
       ...options,
     })
   }
@@ -7767,6 +7806,46 @@ export class Shell extends HeyApiClient {
   }
 
   /**
+   * Update shell timeout
+   *
+   * Replace a running shell command's timeout from now, or clear it with zero.
+   */
+  public timeout<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      timeout?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "location" },
+            { in: "body", key: "timeout" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<V2ShellTimeoutResponses, V2ShellTimeoutErrors, ThrowOnError>({
+      url: "/api/shell/{id}/timeout",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Read shell output
    *
    * Page through captured combined output by absolute byte cursor.
@@ -8013,7 +8092,7 @@ export class Vcs2 extends HeyApiClient {
         directory?: string | null
         workspace?: string | null
       } | null
-      mode: VcsMode2
+      mode: VcsMode
       context?: string | null
     },
     options?: Options<never, ThrowOnError>,

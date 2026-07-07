@@ -40,9 +40,9 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
     return entries
       .map((entry, index) => {
         const isDeleting = toDelete() === index
-        const lineCount = (entry.input.match(/\n/g)?.length ?? 0) + 1
+        const lineCount = (entry.prompt.text.match(/\n/g)?.length ?? 0) + 1
         return {
-          title: isDeleting ? `Press ${deleteHint()} again to confirm` : getStashPreview(entry.input),
+          title: isDeleting ? `Press ${deleteHint()} again to confirm` : getStashPreview(entry.prompt.text),
           bg: isDeleting ? theme.error : undefined,
           value: index,
           description: getRelativeTime(entry.timestamp),

@@ -30,6 +30,8 @@ type OpenApiDocument = {
 
 const document = (await Bun.file("./openapi.json").json()) as OpenApiDocument
 const v2Document = (await Bun.file("./openapi-v2.json").json()) as OpenApiDocument
+normalizeComponentNames(v2Document)
+deduplicateEquivalentComponent(v2Document, "Shell", "Shell1")
 renameCollidingComponents(document, v2Document)
 document.paths = { ...document.paths, ...v2Document.paths }
 document.components = {
@@ -60,7 +62,7 @@ if (schemas) {
   visit({ ...document, components: { ...document.components, schemas: undefined } })
   for (const name of Object.keys(schemas)) {
     if (
-      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionSettled|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetried|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1$/.test(
+      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+$/.test(
         name,
       ) &&
       !reachable.has(name)
@@ -100,17 +102,28 @@ await createClient({
 const generatedTypesPath = "./src/v2/gen/types.gen.ts"
 const generatedTypes = await Bun.file(generatedTypesPath).text()
 if (
-  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionSettled|SessionContextUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionReasoningStarted|SessionReasoningDelta|SessionReasoningEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetried|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)1 =/.test(
+  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+ =/.test(
     generatedTypes,
   )
 ) {
   throw new Error("Session history generated duplicate Session event variants")
 }
-const logTypesPatched = generatedTypes.replace(
+const sessionErrorTypesPatched = deduplicateEquivalentGeneratedTypes(
+  generatedTypes,
+  "SessionStructuredError",
+  /^SessionStructuredError\d+$/,
+)
+const obsoleteSessionNext = [...sessionErrorTypesPatched.matchAll(/export type (SessionNext\w*) =/g)].map(
+  (match) => match[1],
+)
+if (obsoleteSessionNext.length > 0) {
+  throw new Error(`Obsolete SessionNext generated type noise reintroduced: ${obsoleteSessionNext.join(", ")}`)
+}
+const logTypesPatched = sessionErrorTypesPatched.replace(
   /(export type V2SessionLogData = \{[\s\S]*?query\?: \{\s*after\?: )string/,
   "$1number",
 )
-if (logTypesPatched === generatedTypes) {
+if (logTypesPatched === sessionErrorTypesPatched) {
   throw new Error("Session log numeric query patch did not apply")
 }
 const sessionListTypesPatched = logTypesPatched.replace(
@@ -128,11 +141,20 @@ if (sessionMessagesTypesPatched === sessionListTypesPatched) {
   throw new Error("Session messages numeric query patch did not apply")
 }
 const eventSubscribeTypesPatched = sessionMessagesTypesPatched.replace(
-  /(export type V2EventSubscribeResponses = \{\s*\/\*\*[\s\S]*?\*\/\s*200: )\{\s*id: string \| null;?\s*event: string;?\s*data: V2EventStreamV2;?\s*\};?/,
+  /(export type V2EventSubscribeResponses = \{\s*\/\*\*[\s\S]*?\*\/\s*200: )\{\s*id: string \| null;?\s*event: string;?\s*data: V2EventStream(?:V2)?;?\s*\};?/,
   "$1V2Event",
 )
 if (eventSubscribeTypesPatched === sessionMessagesTypesPatched) {
   throw new Error("Event subscribe response patch did not apply")
+}
+if (/SessionStructuredError\d/.test(eventSubscribeTypesPatched)) {
+  throw new Error("Session structured error generated a name-mangled duplicate")
+}
+if (/\bSessionNext\w*\b/.test(eventSubscribeTypesPatched)) {
+  throw new Error("Obsolete SessionNext generated type noise reintroduced")
+}
+if (/export type Shell\d+V2 =/.test(eventSubscribeTypesPatched)) {
+  throw new Error("Shell generated a name-mangled duplicate")
 }
 await Bun.write(generatedTypesPath, eventSubscribeTypesPatched)
 
@@ -206,6 +228,10 @@ function renameCollidingComponents(target: OpenApiDocument, source: OpenApiDocum
   const renames = new Map<string, string>()
   for (const name of Object.keys(sourceSchemas)) {
     if (!Object.hasOwn(targetSchemas, name)) continue
+    if (JSON.stringify(normalizeSchema(sourceSchemas[name])) === JSON.stringify(normalizeSchema(targetSchemas[name]))) {
+      delete sourceSchemas[name]
+      continue
+    }
     let renamed = `${name}V2`
     let index = 2
     while (Object.hasOwn(targetSchemas, renamed) || Object.hasOwn(sourceSchemas, renamed)) {
@@ -223,6 +249,136 @@ function renameCollidingComponents(target: OpenApiDocument, source: OpenApiDocum
     ),
   }
   source.paths = rewriteRefs(source.paths, renames) as Record<string, unknown> | undefined
+}
+
+function normalizeComponentNames(document: OpenApiDocument) {
+  const schemas = document.components?.schemas
+  if (!schemas) return
+
+  const canonical = new Map(Object.entries(schemas))
+  const renames = new Map<string, string>()
+  for (const name of Object.keys(schemas)) {
+    const next = componentTypeName(name)
+    if (next === name) continue
+    const existing = canonical.get(next)
+    if (existing !== undefined) {
+      if (JSON.stringify(normalizeSchema(schemas[name])) !== JSON.stringify(normalizeSchema(existing))) continue
+      renames.set(name, next)
+      continue
+    }
+    renames.set(name, next)
+    canonical.set(next, schemas[name])
+  }
+  if (renames.size === 0) return
+
+  const renamed = new Set<string>()
+  document.components = {
+    ...document.components,
+    schemas: Object.fromEntries(
+      [
+        ...Object.entries(schemas).filter(([name]) => !renames.has(name)),
+        ...Object.entries(schemas).flatMap(([name, schema]) => {
+          const next = renames.get(name)
+          if (!next || Object.hasOwn(schemas, next) || renamed.has(next)) return []
+          renamed.add(next)
+          return [[next, schema] as const]
+        }),
+      ].map(([name, schema]) => [name, rewriteRefs(schema, renames)]),
+    ),
+  }
+  document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
+}
+
+function componentTypeName(name: string) {
+  if (!name.includes(".")) return name
+  return name
+    .split(".")
+    .filter((part) => !/^\d+$/.test(part))
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join("")
+}
+
+function deduplicateEquivalentComponent(document: OpenApiDocument, canonical: string, duplicate: string) {
+  const schemas = document.components?.schemas
+  if (!schemas?.[canonical] || !schemas[duplicate]) return
+  if (JSON.stringify(normalizeSchema(schemas[canonical])) !== JSON.stringify(normalizeSchema(schemas[duplicate]))) {
+    throw new Error(`${duplicate} no longer has the same wire shape as ${canonical}`)
+  }
+
+  const renames = new Map([[duplicate, canonical]])
+  const rewritten = rewriteRefs(schemas, renames) as Record<string, unknown>
+  delete rewritten[duplicate]
+  document.components = { ...document.components, schemas: rewritten }
+  document.paths = rewriteRefs(document.paths, renames) as Record<string, unknown> | undefined
+}
+
+function deduplicateEquivalentGeneratedTypes(source: string, canonical: string, duplicates: RegExp) {
+  const canonicalType = generatedType(source, canonical)
+  if (!canonicalType) throw new Error(`Generated canonical type missing: ${canonical}`)
+  const names = [...source.matchAll(/export type (\w+) =/g)]
+    .map((match) => match[1])
+    .filter((name): name is string => name !== undefined && duplicates.test(name))
+
+  return names.reduce((patched, name) => {
+    const duplicate = generatedType(patched, name)
+    const currentCanonical = generatedType(patched, canonical)
+    if (!duplicate || !currentCanonical) throw new Error(`Generated type declaration missing while comparing ${name}`)
+    if (normalizeGeneratedType(currentCanonical.shape) !== normalizeGeneratedType(duplicate.shape)) {
+      throw new Error(`${name} no longer has the same generated type shape as ${canonical}`)
+    }
+    return (patched.slice(0, duplicate.start) + patched.slice(duplicate.end)).replaceAll(name, canonical)
+  }, source)
+}
+
+function generatedType(source: string, name: string) {
+  const start = source.indexOf(`export type ${name} =`)
+  if (start === -1) return undefined
+  const next = source.indexOf("\n\nexport type ", start + 1)
+  const shapeEnd = next === -1 ? source.length : next
+  return {
+    start,
+    end: next === -1 ? source.length : next + 2,
+    shape: source.slice(source.indexOf("=", start) + 1, shapeEnd),
+  }
+}
+
+function normalizeGeneratedType(shape: string) {
+  return shape.replaceAll(/\s/g, "")
+}
+
+function normalizeSchema(value: unknown, key?: string): unknown {
+  if (Array.isArray(value)) {
+    const flattened =
+      key === "anyOf"
+        ? value.flatMap((item) =>
+            typeof item === "object" && item !== null && Object.keys(item).length === 1 && "anyOf" in item
+              ? Array.isArray(item.anyOf)
+                ? item.anyOf
+                : [item]
+              : [item],
+          )
+        : value
+    const expanded =
+      key === "anyOf"
+        ? flattened.flatMap((item) => {
+            if (typeof item !== "object" || item === null || !("type" in item) || !("enum" in item)) return [item]
+            if (Object.keys(item).some((property) => property !== "type" && property !== "enum")) return [item]
+            if (!Array.isArray(item.enum)) return [item]
+            return item.enum.map((member) => ({ type: item.type, enum: [member] }))
+          })
+        : flattened
+    const normalized = expanded.map((item) => normalizeSchema(item))
+    if (key !== "anyOf" && key !== "required" && key !== "enum") return normalized
+    return [...new Map(normalized.map((item) => [JSON.stringify(item), item])).values()].sort((a, b) =>
+      JSON.stringify(a).localeCompare(JSON.stringify(b)),
+    )
+  }
+  if (typeof value !== "object" || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([property, child]) => [property, normalizeSchema(child, property)]),
+  )
 }
 
 function rewriteRefs(value: unknown, renames: Map<string, string>): unknown {

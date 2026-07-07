@@ -61,6 +61,12 @@ const GlobalMessage = EventV2.ephemeral({
     text: Schema.String,
   },
 })
+const CountMessage = EventV2.ephemeral({
+  type: "test.count",
+  schema: {
+    count: Schema.Number,
+  },
+})
 
 const VersionedMessage = EventV2.durable({
   type: "test.versioned",
@@ -90,6 +96,26 @@ const it = testEffect(
 const itWithoutLocation = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node])))
 
 describe("EventV2", () => {
+  it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      // @ts-expect-error multi-definition subscriptions require at least one definition
+      events.subscribe([])
+      const fiber = yield* events
+        .subscribe([Message, CountMessage])
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(Message, { text: "hello" })
+      yield* events.publish(CountMessage, { count: 2 })
+
+      const received = Array.from(yield* Fiber.join(fiber)).map((event) =>
+        event.type === "test.message" ? event.data.text : event.data.count,
+      )
+      expect(received).toEqual(["hello", 2])
+    }),
+  )
+
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -151,7 +177,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const typed = yield* events.subscribe(Message).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
-      const wildcard = yield* events.live().pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const wildcard = yield* events.subscribe().pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
       const event = yield* events.publish(Message, { text: "hello" })
 
@@ -232,7 +258,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<string>()
-      const fiber = yield* events.live().pipe(
+      const fiber = yield* events.subscribe().pipe(
         Stream.take(1),
         Stream.runForEach(() => Effect.sync(() => received.push("stream"))),
         Effect.forkScoped,
@@ -686,8 +712,8 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
-      const received = new Array<typeof SessionEvent.ContextUpdated.Type>()
-      yield* events.project(SessionEvent.ContextUpdated, (event) =>
+      const received = new Array<typeof SessionEvent.InstructionsUpdated.Type>()
+      yield* events.project(SessionEvent.InstructionsUpdated, (event) =>
         Effect.sync(() => {
           received.push(event)
         }),
@@ -696,7 +722,7 @@ describe("EventV2", () => {
       yield* events.replay({
         id: EventV2.ID.create(),
         created: DateTime.makeUnsafe(0),
-        type: EventV2.versionedType(SessionEvent.ContextUpdated.type, 1),
+        type: EventV2.versionedType(SessionEvent.InstructionsUpdated.type, 1),
         seq: 0,
         aggregateID,
         data: { sessionID: aggregateID, text: "context" },
@@ -1285,52 +1311,6 @@ describe("EventV2", () => {
           { type: "log.synced", aggregateID, seq: EventV2.Seq.make(0) },
           EventV2.Seq.make(1),
         ])
-      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
-    }),
-  )
-
-  it.effect("changes emits sweep-required on subscribe then coalesced hints per aggregate", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const first = Session.ID.create()
-      const second = Session.ID.create()
-      const pull = yield* Stream.toPull(events.changes())
-
-      expect(Array.from(yield* pull)).toEqual([{ type: "log.sweep_required" }])
-
-      yield* events.publish(DurableMessage, durableData(first, "zero"))
-      yield* events.publish(DurableMessage, durableData(first, "one"))
-      yield* events.publish(DurableMessage, durableData(first, "two"))
-      yield* events.publish(DurableMessage, durableData(second, "zero"))
-
-      expect(Array.from(yield* pull)).toEqual([
-        { type: "log.hint", aggregateID: first, seq: EventV2.Seq.make(2) },
-        { type: "log.hint", aggregateID: second, seq: EventV2.Seq.make(0) },
-      ])
-    }),
-  )
-
-  it.effect("changes abandons the hint buffer for a sweep when key retention is exceeded", () =>
-    Effect.gen(function* () {
-      const eventLayer = EventV2.layerWith({ changesKeyCapacity: 2 }).pipe(
-        Layer.provide(LayerNode.compile(Database.node)),
-      )
-
-      yield* Effect.gen(function* () {
-        const events = yield* EventV2.Service
-        const pull = yield* Stream.toPull(events.changes())
-        expect(Array.from(yield* pull)).toEqual([{ type: "log.sweep_required" }])
-
-        yield* events.publish(DurableMessage, durableData(Session.ID.create(), "a"))
-        yield* events.publish(DurableMessage, durableData(Session.ID.create(), "b"))
-        yield* events.publish(DurableMessage, durableData(Session.ID.create(), "c"))
-
-        expect(Array.from(yield* pull)).toEqual([{ type: "log.sweep_required" }])
-
-        const late = Session.ID.create()
-        yield* events.publish(DurableMessage, durableData(late, "d"))
-
-        expect(Array.from(yield* pull)).toEqual([{ type: "log.hint", aggregateID: late, seq: EventV2.Seq.make(0) }])
       }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
     }),
   )

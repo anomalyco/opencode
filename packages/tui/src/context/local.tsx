@@ -272,7 +272,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return {
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
-            reasoning: info?.variants.length !== 0,
+            reasoning: (info?.variants?.length ?? 0) !== 0,
           }
         }),
         cycle(direction: 1 | -1) {
@@ -373,12 +373,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const v = this.selected()
             if (!v) return undefined
             if (v !== "default" && this.list().includes(v)) return v
-            const m = currentModel()!
-            return (
-              data.location.model
-                .list()
-                ?.find((item) => item.providerID === m.providerID && item.id === m.modelID)?.request.variant ?? "default"
-            )
+            return "default"
           },
           list() {
             const m = currentModel()
@@ -386,7 +381,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const info = data.location.model
               .list()
               ?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
-            return info?.variants.map((variant) => variant.id) ?? []
+            return info?.variants?.map((variant) => variant.id) ?? []
           },
           set(value: string | undefined) {
             const m = currentModel()
@@ -475,7 +470,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       event.on("session.deleted", (evt) => {
-        prune(evt.data.info.id)
+        prune(evt.data.sessionID)
       })
 
       return {

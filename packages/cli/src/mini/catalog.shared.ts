@@ -84,7 +84,7 @@ export function runProviders(providers: CurrentProvider[], models: CurrentModel[
       cost: defaultCost(model),
       limit: model.limit,
       status: model.status,
-      variants: Object.fromEntries(model.variants.map((variant) => [variant.id, {}])),
+      variants: Object.fromEntries((model.variants ?? []).map((variant) => [variant.id, {}])),
     }
     grouped.set(provider.id, provider)
   }
@@ -141,10 +141,7 @@ export async function loadRunCommands(sdk: OpenCodeClient, directory: string): P
     sdk.command.list(location(directory)),
     sdk.skill.list(location(directory)),
   ])
-  return [
-    ...commands.data.map(runCommand),
-    ...skills.data.filter((skill) => skill.slash !== false).map(runSkill),
-  ]
+  return [...commands.data.map(runCommand), ...skills.data.filter((skill) => skill.slash !== false).map(runSkill)]
 }
 
 export async function loadRunReferences(sdk: OpenCodeClient, directory: string): Promise<RunReference[]> {

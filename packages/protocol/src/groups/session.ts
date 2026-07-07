@@ -2,7 +2,7 @@ import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionContextEntry } from "@opencode-ai/schema/session-context-entry"
+import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Event } from "@opencode-ai/schema/event"
@@ -104,12 +104,6 @@ const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
 
-const SessionWatermarks = Schema.Record(Session.ID, Event.Seq).annotate({
-  identifier: "SessionWatermarks",
-  description:
-    "Durable log seq each session's snapshot was computed at. Attach a live log read after the watermark to compose fetch and stream gap-free; apply a snapshot only where its watermark is at or beyond already-applied events. Sessions without durable events are absent.",
-})
-
 const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   Schema.decodeTo(Schema.Boolean, {
     decode: SchemaGetter.transform((value) => value === "true"),
@@ -136,7 +130,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         query: SessionsQuery,
         success: Schema.Struct({
           data: Schema.Array(Session.Info),
-          watermarks: SessionWatermarks,
           cursor: Schema.Struct({
             previous: SessionsCursor.pipe(Schema.optional),
             next: SessionsCursor.pipe(Schema.optional),
@@ -171,13 +164,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     )
     .add(
       HttpApiEndpoint.get("session.active", "/api/session/active", {
-        success: Schema.Struct({ data: Schema.Record(Session.ID, SessionActive), watermarks: SessionWatermarks }),
+        success: Schema.Struct({ data: Schema.Record(Session.ID, SessionActive) }),
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.active",
           summary: "List active sessions",
           description:
-            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Watermarks are the durable log positions read alongside the activity snapshot; activity itself is process state, so the pairing is advisory rather than transactional.",
+            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
         }),
       ),
     )
@@ -193,6 +186,21 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.get",
             summary: "Get session",
             description: "Retrieve a session by ID.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.remove", "/api/session/:sessionID", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.remove",
+            summary: "Delete session",
+            description: "Delete a session and its child sessions.",
           }),
         ),
     )
@@ -271,7 +279,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInput.Admitted }),
-        error: [ConflictError, SessionNotFoundError],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -297,7 +305,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInput.Admitted }),
-        error: [ConflictError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -372,15 +380,16 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
-        success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, SessionBusyError, ServiceUnavailableError, UnknownError],
+        payload: Schema.Struct({ id: SessionMessage.ID.pipe(Schema.optional) }),
+        success: Schema.Struct({ data: SessionInput.Compaction }),
+        error: [ConflictError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.compact",
             summary: "Compact session",
-            description: "Compact a session conversation.",
+            description: "Queue a durable session compaction request.",
           }),
         ),
     )
@@ -451,23 +460,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
-      HttpApiEndpoint.get("session.context.entry.list", "/api/session/:sessionID/context-entry", {
+      HttpApiEndpoint.get("session.instructions.entry.list", "/api/session/:sessionID/instructions/entries", {
         params: { sessionID: Session.ID },
-        success: Schema.Struct({ data: Schema.Array(SessionContextEntry.Info) }),
+        success: Schema.Struct({ data: Schema.Array(InstructionEntry.Info) }),
         error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context.entry.list",
-            summary: "List context entries",
-            description: "List API-managed context entries attached to the session's system context.",
+            identifier: "v2.session.instructions.entry.list",
+            summary: "List instruction entries",
+            description: "List API-managed instruction entries attached to the session.",
           }),
         ),
     )
     .add(
-      HttpApiEndpoint.put("session.context.entry.put", "/api/session/:sessionID/context-entry/:key", {
-        params: { sessionID: Session.ID, key: SessionContextEntry.Key },
+      HttpApiEndpoint.put("session.instructions.entry.put", "/api/session/:sessionID/instructions/entries/:key", {
+        params: { sessionID: Session.ID, key: InstructionEntry.Key },
         payload: Schema.Struct({ value: Schema.Json }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
@@ -475,30 +484,31 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context.entry.put",
-            summary: "Put context entry",
+            identifier: "v2.session.instructions.entry.put",
+            summary: "Put instruction entry",
             description:
-              "Attach or replace one durable context entry. The value is rendered into the session's system context; changes announce as updates at the next turn boundary.",
+              "Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.",
           }),
         ),
     )
     .add(
-      HttpApiEndpoint.delete("session.context.entry.remove", "/api/session/:sessionID/context-entry/:key", {
-        params: { sessionID: Session.ID, key: SessionContextEntry.Key },
+      HttpApiEndpoint.delete("session.instructions.entry.remove", "/api/session/:sessionID/instructions/entries/:key", {
+        params: { sessionID: Session.ID, key: InstructionEntry.Key },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context.entry.remove",
-            summary: "Remove context entry",
-            description: "Remove one context entry; the removal is announced to the model at the next turn boundary.",
+            identifier: "v2.session.instructions.entry.remove",
+            summary: "Remove instruction entry",
+            description:
+              "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
           }),
         ),
     )
     .add(
-      HttpApiEndpoint.get("session.log", "/api/session/:sessionID/log", {
+      HttpApiEndpoint.get("session.log", "/api/experimental/session/:sessionID/log", {
         params: { sessionID: Session.ID },
         query: {
           after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
@@ -515,7 +525,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.log",
             summary: "Read the session log",
             description:
-              "Durable, ordered, gap-free read of public session events after an exclusive aggregate sequence. Emits a synced marker once replay reaches the captured watermark, then completes; with follow=true it continues with live events instead. The only event API that promises reliability: attach after a snapshot watermark to compose fetch and stream without a race window.",
+              "Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.",
           }),
         ),
     )

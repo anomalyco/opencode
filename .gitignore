@@ -13,6 +13,7 @@ tmp
 dist
 ts-dist
 .turbo
+.typecheck-profiles
 **/.serena
 .serena/
 **/.omo

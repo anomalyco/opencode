@@ -276,7 +276,7 @@ const layer = Layer.effect(
         }),
       ),
     )
-    yield* events.subscribe(Event.Updated).pipe(
+    yield* events.subscribe([Event.Updated, SdkPlugins.Updated]).pipe(
       Stream.runForEach(() =>
         reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),

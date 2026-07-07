@@ -94,16 +94,16 @@ describe("ModelsDevPlugin", () => {
       const fast = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4-fast"))
 
       expect(base?.variants).toEqual([])
-      expect(base?.request.body).toEqual({})
+      expect(base?.body).toEqual({})
       expect(fast).toMatchObject({
         id: "gpt-5.4-fast",
+        modelID: "gpt-5.4",
         providerID: "acme",
         name: "GPT-5.4 Fast",
-        api: { id: "gpt-5.4" },
-        request: {
-          headers: { "x-mode": "fast" },
-          body: { service_tier: "priority" },
-        },
+        package: ProviderV2.aisdk("@ai-sdk/openai-compatible"),
+        settings: { baseURL: "https://api.acme.test/v1" },
+        headers: { "x-mode": "fast" },
+        body: { service_tier: "priority" },
         variants: [],
       })
       expect(fast?.cost).toEqual([
@@ -191,7 +191,7 @@ describe("ModelsDevPlugin", () => {
           )
 
           const model = yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-reasoning"))
-          expect(model?.variants.map((variant) => variant.id)).toEqual([
+          expect(model?.variants?.map((variant) => variant.id)).toEqual([
             ModelV2.VariantID.make("low"),
             ModelV2.VariantID.make("high"),
           ])
@@ -202,8 +202,6 @@ describe("ModelsDevPlugin", () => {
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
             },
-            headers: {},
-            body: {},
           })
           expect(model?.variants).toContainEqual({
             id: ModelV2.VariantID.make("high"),
@@ -212,20 +210,16 @@ describe("ModelsDevPlugin", () => {
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
             },
-            headers: {},
-            body: {},
           })
 
           const mode = yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-reasoning-high"))
           expect(mode).toMatchObject({
             id: "gpt-reasoning-high",
             name: "GPT Reasoning High",
-            request: {
-              headers: { "x-mode": "high" },
-              body: { service_tier: "priority" },
-            },
+            headers: { "x-mode": "high" },
+            body: { service_tier: "priority" },
           })
-          expect(mode?.variants.map((variant) => variant.id)).toEqual([
+          expect(mode?.variants?.map((variant) => variant.id)).toEqual([
             ModelV2.VariantID.make("low"),
             ModelV2.VariantID.make("high"),
           ])
@@ -234,22 +228,19 @@ describe("ModelsDevPlugin", () => {
           expect(budgetModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("high"),
             settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
-            headers: {},
-            body: {},
           })
           expect(budgetModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("max"),
             settings: { thinking: { type: "enabled", budgetTokens: 64000 } },
-            headers: {},
-            body: {},
           })
 
-          const anthropicEffortModel = yield* catalog.model.get(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-effort"))
+          const anthropicEffortModel = yield* catalog.model.get(
+            ProviderV2.ID.anthropic,
+            ModelV2.ID.make("claude-effort"),
+          )
           expect(anthropicEffortModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("low"),
             settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
-            headers: {},
-            body: {},
           })
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>

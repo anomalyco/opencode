@@ -20,41 +20,36 @@ function eventData(data: unknown): Sse.Event {
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    return handlers
-      .handle(
-        "event.changes",
-        Effect.fn(() => Effect.succeed(events.changes())),
-      )
-      .handleRaw("event.subscribe", () =>
-        Effect.gen(function* () {
-          const connected = {
-            id: EventV2.ID.create(),
-            type: "server.connected",
-            data: {},
-          }
-          const output = Stream.unwrap(
-            Effect.gen(function* () {
-              // Acquiring the bounded stream installs its listener before readiness is observable.
-              const live = yield* EventV2.liveBounded(events, {
-                capacity: subscriberCapacity,
-                accept: isOpenCodeEvent,
-              })
-              return Stream.make(connected).pipe(Stream.concat(live))
-            }),
-          ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))
-          const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))
-          return HttpServerResponse.stream(
-            output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }), Stream.encodeText),
-            {
-              contentType: "text/event-stream",
-              headers: {
-                "Cache-Control": "no-cache, no-transform",
-                "X-Accel-Buffering": "no",
-                "X-Content-Type-Options": "nosniff",
-              },
+    return handlers.handleRaw("event.subscribe", () =>
+      Effect.gen(function* () {
+        const connected = {
+          id: EventV2.ID.create(),
+          type: "server.connected",
+          data: {},
+        }
+        const output = Stream.unwrap(
+          Effect.gen(function* () {
+            // Acquiring the bounded stream installs its listener before readiness is observable.
+            const live = yield* EventV2.liveBounded(events, {
+              capacity: subscriberCapacity,
+              accept: isOpenCodeEvent,
+            })
+            return Stream.make(connected).pipe(Stream.concat(live))
+          }),
+        ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))
+        const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))
+        return HttpServerResponse.stream(
+          output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }), Stream.encodeText),
+          {
+            contentType: "text/event-stream",
+            headers: {
+              "Cache-Control": "no-cache, no-transform",
+              "X-Accel-Buffering": "no",
+              "X-Content-Type-Options": "nosniff",
             },
-          )
-        }),
-      )
+          },
+        )
+      }),
+    )
   }),
 )

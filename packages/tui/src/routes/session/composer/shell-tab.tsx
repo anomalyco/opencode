@@ -2,12 +2,16 @@ import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-j
 import { createStore } from "solid-js/store"
 import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
+import { useLocation } from "../../../context/location"
+import { useSDK } from "../../../context/sdk"
 import { useTheme, selectedForeground } from "../../../context/theme"
 import { useBindings, useCommandShortcut } from "../../../keymap"
 import { useComposerTab } from "./index"
 
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
+  const location = useLocation()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const fg = selectedForeground(theme)
   const composer = useComposerTab()
@@ -79,7 +83,11 @@ export function ShellTab(props: { sessionID: string }) {
         run() {
           const entry = selectedEntry()
           if (!entry) return
-          void data.shell.remove(entry.id)
+          const ref = location()
+          void sdk.api.shell.remove({
+            id: entry.id,
+            location: ref ? { directory: ref.directory, workspace: ref.workspaceID } : undefined,
+          })
         },
       },
     ],

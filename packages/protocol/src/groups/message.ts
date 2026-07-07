@@ -1,7 +1,5 @@
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { optional } from "@opencode-ai/schema/schema"
-import { Event } from "@opencode-ai/schema/event"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors.js"
@@ -30,10 +28,6 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       query: SessionMessagesQuery,
       success: Schema.Struct({
         data: Schema.Array(SessionMessage.Message),
-        watermark: optional(Event.Seq).annotate({
-          description:
-            "Durable log seq this snapshot was computed at, read before the snapshot. Attach a live log read after the watermark to compose fetch and stream gap-free; events between the watermark and the snapshot read may be redelivered by the tail and are safe to re-apply. Absent when the session has no durable events.",
-        }),
         cursor: Schema.Struct({
           previous: Schema.String.pipe(Schema.optional),
           next: Schema.String.pipe(Schema.optional),

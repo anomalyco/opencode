@@ -9,7 +9,7 @@ import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
-import { Prompt } from "./session/prompt"
+import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
@@ -33,10 +33,10 @@ import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
 import { Snapshot } from "./snapshot"
-import { SessionCompaction } from "./session/compaction"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
+import { Mime } from "./mime"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
@@ -44,6 +44,7 @@ import { CommandV2 } from "./command"
 import { Shell } from "./shell"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
+import { fileURLToPath } from "url"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -94,6 +95,7 @@ type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
 
 type CompactInput = {
+  id?: SessionMessage.ID
   sessionID: SessionSchema.ID
 }
 
@@ -119,6 +121,17 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
+  uri: Schema.String,
+  message: Schema.String,
+}) {}
+export class CompactionConflictError extends Schema.TaggedErrorClass<CompactionConflictError>()(
+  "Session.CompactionConflictError",
+  {
+    sessionID: SessionSchema.ID,
+    inputID: SessionMessage.ID,
+  },
+) {}
 export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
@@ -133,6 +146,8 @@ export type Error =
   | MessageDecodeError
   | OperationUnavailableError
   | PromptConflictError
+  | AttachmentError
+  | CompactionConflictError
   | BusyError
   | SkillNotFoundError
   | CommandV2.NotFoundError
@@ -142,12 +157,11 @@ export type Error =
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
     readonly data: SessionSchema.Info[]
-    /** Per-session durable log watermark, read in the same transaction as the snapshot. Sessions without events are absent. */
-    readonly watermarks: ReadonlyMap<string, EventV2.Seq>
   }>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly fork: (input: ForkInput) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
     limit?: number
@@ -177,8 +191,6 @@ export interface Interface {
     after?: number
     follow?: boolean
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
-  /** Latest durable log seq per session. Sessions without events are absent. */
-  readonly watermarks: (sessionIDs: ReadonlyArray<SessionSchema.ID>) => Effect.Effect<ReadonlyMap<string, EventV2.Seq>>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
@@ -191,7 +203,7 @@ export interface Interface {
     prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | AttachmentError>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -205,7 +217,7 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<
     SessionInput.Admitted,
-    NotFoundError | PromptConflictError | CommandV2.NotFoundError | CommandV2.EvaluationError
+    NotFoundError | PromptConflictError | AttachmentError | CommandV2.NotFoundError | CommandV2.EvaluationError
   >
   readonly shell: (input: {
     id?: EventV2.ID
@@ -220,7 +232,7 @@ export interface Interface {
   }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (
     input: CompactInput,
-  ) => Effect.Effect<void, NotFoundError | BusyError | MessageDecodeError | OperationUnavailableError>
+  ) => Effect.Effect<SessionInput.Compaction, NotFoundError | CompactionConflictError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
@@ -255,6 +267,7 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
@@ -359,6 +372,15 @@ const layer = Layer.effect(
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
       }),
+      remove: Effect.fn("V2Session.remove")(function* (sessionID) {
+        yield* result.get(sessionID)
+        yield* execution.interrupt(sessionID)
+        yield* execution.awaitIdle(sessionID)
+        const children = yield* result.list({ parentID: sessionID })
+        yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        yield* events.publish(SessionEvent.Deleted, { sessionID })
+        yield* events.remove(sessionID)
+      }),
       list: Effect.fn("V2Session.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
@@ -394,21 +416,10 @@ const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        // Watermarks must pair with the snapshot exactly, so both reads share a transaction:
-        // a higher watermark would let an attached tail skip events missing from the snapshot.
-        const snapshot = yield* db
-          .transaction(() =>
-            Effect.gen(function* () {
-              const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-                Effect.orDie,
-              )
-              const watermarks = yield* events.sequences(rows.map((row) => row.id))
-              return { rows, watermarks }
-            }),
-          )
-          .pipe(Effect.orDie)
-        const rows = direction === "previous" ? snapshot.rows.toReversed() : snapshot.rows
-        return { data: rows.map((row) => fromRow(row)), watermarks: snapshot.watermarks }
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+          Effect.orDie,
+        )
+        return { data: (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row)) }
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
@@ -463,9 +474,6 @@ const layer = Layer.effect(
               EventV2.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      watermarks: Effect.fn("V2Session.watermarks")(function* (sessionIDs) {
-        return yield* events.sequences(sessionIDs)
-      }),
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
@@ -474,7 +482,7 @@ const layer = Layer.effect(
             // continues from the reverted boundary rather than stale post-boundary history.
             if (session.revert)
               yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
-            const prompt = resolvePrompt(input.prompt)
+            const prompt = yield* resolvePrompt(input.prompt).pipe(Effect.provideService(FSUtil.Service, fs))
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
@@ -539,9 +547,8 @@ const layer = Layer.effect(
             if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
-              return yield* shell.create({ command: input.command, cwd: session.location.directory })
-            })
-              .pipe(Effect.provide(locations.get(session.location)))
+              return yield* shell.create({ command: input.command, cwd: session.location.directory, timeout: 0 })
+            }).pipe(Effect.provide(locations.get(session.location)))
             yield* events.publish(
               SessionEvent.Shell.Started,
               {
@@ -627,19 +634,20 @@ const layer = Layer.effect(
         })
       }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        // TODO: admit manual compaction as durable pending work, like prompt input, instead of rejecting active sessions.
-        if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
-        const context = yield* store.context(input.sessionID)
-        const compacted = yield* Effect.gen(function* () {
-          const compaction = yield* SessionCompaction.Service
-          return yield* compaction.compactManual({ session, messages: context })
+        yield* result.get(input.sessionID)
+        const inputID = input.id ?? SessionMessage.ID.create()
+        const admitted = yield* SessionInput.admitCompaction(db, events, {
+          id: inputID,
+          sessionID: input.sessionID,
         }).pipe(
-          Effect.provide(locations.get(session.location)),
-          Effect.catch(() => Effect.succeed(false)),
+          Effect.catchDefect((defect) =>
+            defect instanceof SessionInput.LifecycleConflict
+              ? new CompactionConflictError({ sessionID: input.sessionID, inputID })
+              : Effect.die(defect),
+          ),
         )
-        if (!compacted) return yield* new OperationUnavailableError({ operation: "compact" })
-        return undefined
+        yield* execution.wake(input.sessionID)
+        return admitted
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
@@ -732,19 +740,130 @@ function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Inf
   }
 }
 
-const resolvePrompt = (input: PromptInput.Prompt) =>
-  Prompt.make({
-    text: input.text,
-    agents: input.agents,
-    files: input.files?.map((file) => {
-      const dataMime = file.uri.match(/^data:([^;,]+)[;,]/i)?.[1]
-      const target = URL.canParse(file.uri) ? new URL(file.uri).pathname : (file.name ?? file.uri)
-      return {
-        ...file,
-        mime: dataMime ?? (target.endsWith("/") ? "application/x-directory" : FSUtil.mimeType(target)),
+const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (input: PromptInput.Prompt) {
+  const fs = yield* FSUtil.Service
+  const files = input.files
+    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file), { concurrency: 8 })
+    : undefined
+  return Prompt.make({ text: input.text, agents: input.agents, files })
+})
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(function* (
+  fs: FSUtil.Interface,
+  input: PromptInput.FileAttachment,
+) {
+  const resolved = input.uri.startsWith("data:")
+    ? {
+        bytes: yield* decodeDataURL(input.uri),
+        source: { type: "inline" as const },
+        start: undefined,
+        end: undefined,
+        name: undefined,
+        mime: undefined,
       }
-    }),
+    : yield* readFileAttachment(fs, input.uri)
+  if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
+    return yield* new AttachmentError({
+      uri: input.uri,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${input.uri}`,
+    })
+
+  const mime = resolved.mime ?? Mime.detect(resolved.bytes)
+  const content =
+    mime === "text/plain" && resolved.start !== undefined
+      ? Buffer.from(
+          Buffer.from(resolved.bytes)
+            .toString("utf8")
+            .split("\n")
+            .slice(resolved.start - 1, resolved.end)
+            .join("\n"),
+        )
+      : resolved.bytes
+  return FileAttachment.create({
+    data: Base64.make(Buffer.from(content).toString("base64")),
+    mime,
+    source: resolved.source,
+    name: input.name ?? resolved.name,
+    description: input.description,
+    mention: input.mention,
   })
+})
+
+const readFileAttachment = Effect.fn("V2Session.readFileAttachment")(function* (fs: FSUtil.Interface, uri: string) {
+  const url = yield* Effect.try({
+    try: () => new URL(uri),
+    catch: () => new AttachmentError({ uri, message: `Invalid attachment URI: ${uri}` }),
+  })
+  if (url.protocol !== "file:")
+    return yield* new AttachmentError({ uri, message: `Unsupported attachment URI: ${uri}` })
+  const start = positiveInt(url.searchParams.get("start"))
+  const end = positiveInt(url.searchParams.get("end"))
+  const target = yield* Effect.try({
+    try: () => {
+      url.search = ""
+      url.hash = ""
+      return fileURLToPath(url)
+    },
+    catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
+  })
+  const info = yield* fs
+    .stat(target)
+    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
+  if (info.type === "Directory") {
+    const entries = yield* fs
+      .readDirectoryEntries(target)
+      .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
+    return {
+      bytes: Buffer.from(
+        entries
+          .filter((entry) => entry.type === "file" || entry.type === "directory")
+          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
+          .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
+          .join("\n"),
+      ),
+      source: { type: "uri" as const, uri },
+      start: undefined,
+      end: undefined,
+      name: path.basename(target),
+      mime: "application/x-directory",
+    }
+  }
+  if (info.type !== "File") return yield* new AttachmentError({ uri, message: `Attachment is not a file: ${uri}` })
+  if (Number(info.size) > MAX_ATTACHMENT_BYTES)
+    return yield* new AttachmentError({
+      uri,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${uri}`,
+    })
+  const bytes = yield* fs
+    .readFile(target)
+    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
+  return { bytes, source: { type: "uri" as const, uri }, start, end, name: path.basename(target), mime: undefined }
+})
+
+function decodeDataURL(uri: string) {
+  return Effect.try({
+    try: () => {
+      const comma = uri.indexOf(",")
+      if (comma === -1) throw new Error("Invalid data URL")
+      const metadata = uri.slice(5, comma)
+      const payload = uri.slice(comma + 1)
+      if (!metadata.split(";").some((part) => part.toLowerCase() === "base64"))
+        return Buffer.from(decodeURIComponent(payload))
+      const bytes = Buffer.from(payload, "base64")
+      if (bytes.toString("base64") !== payload) throw new Error("Non-canonical base64")
+      return bytes
+    },
+    catch: () => new AttachmentError({ uri, message: "Invalid attachment data URL" }),
+  })
+}
+
+function positiveInt(value: string | null) {
+  if (value === null) return
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
 
 // Mirrors the shell tool's in-memory preview safety limit.
 const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
@@ -761,5 +880,6 @@ export const node = makeGlobalNode({
     SessionStore.node,
     LocationServiceMap.node,
     SessionProjector.node,
+    FSUtil.node,
   ],
 })

@@ -55,7 +55,17 @@ describe("SkillTool", () => {
             PermissionV2.Service.of({
               assert: (input) =>
                 Effect.sync(() => assertions.push(input)).pipe(
-                  Effect.andThen(deny ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+                  Effect.andThen(
+                    deny
+                      ? Effect.fail(
+                          new PermissionV2.BlockedError({
+                            rules: [],
+                            permission: input.action,
+                            resources: input.resources,
+                          }),
+                        )
+                      : Effect.void,
+                  ),
                 ),
               ask: () => Effect.die("unused"),
               reply: () => Effect.die("unused"),

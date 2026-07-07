@@ -13,14 +13,14 @@ import { FSUtil } from "../fs-util"
 import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
-import customizeOpencodeContent from "./skill/customize-opencode.md" with { type: "text" }
+import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
 
-export const CustomizeOpencodeContent = customizeOpencodeContent
+export const OpencodeContent = opencodeContent
 export const ReportContent = reportContent
 
-const CUSTOMIZE_OPENCODE_DESCRIPTION =
-  "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, commands, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+export const OpencodeDescription =
+  "Use this skill for any question about OpenCode itself, including how OpenCode works, using or configuring it, troubleshooting it, developing plugins or integrations, using the OpenCode SDK, clients, server, or API, and contributing to the OpenCode codebase. Also use it for OpenCode agents, commands, skills, tools, permissions, MCP servers, providers, models, themes, keybinds, formatters, the CLI, TUI, desktop app, and web app."
 const REPORT_DESCRIPTION =
   "Use when the user wants to report an opencode issue or bug. Collect standard diagnostics, add user-specific reproduction context, and publish the issue with GitHub CLI."
 
@@ -33,10 +33,10 @@ export const Plugin = define({
         SkillV2.EmbeddedSource.make({
           type: "embedded",
           skill: SkillV2.Info.make({
-            name: "customize-opencode",
-            description: CUSTOMIZE_OPENCODE_DESCRIPTION,
-            location: AbsolutePath.make("/builtin/customize-opencode.md"),
-            content: CustomizeOpencodeContent,
+            name: "opencode",
+            description: OpencodeDescription,
+            location: AbsolutePath.make("/builtin/opencode.md"),
+            content: OpencodeContent,
           }),
         }),
       )

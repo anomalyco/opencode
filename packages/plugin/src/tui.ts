@@ -1,8 +1,6 @@
 import type {
-  AgentPart,
   OpencodeClient,
   V2Event,
-  FilePart,
   LspStatus,
   McpStatus,
   Todo,
@@ -13,9 +11,10 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
-  TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
+import type { PromptInput } from "@opencode-ai/schema"
+import type { Types } from "effect"
 import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
 import type { Binding, Keymap } from "@opentui/keymap"
 import {
@@ -180,22 +179,16 @@ export type TuiDialogSelectProps<Value = unknown> = {
   current?: Value
 }
 
-export type TuiPromptInfo = {
-  input: string
+export type TuiPromptInfo = Types.DeepMutable<PromptInput.Prompt> & {
+  pasted: {
+    text: string
+    source: {
+      start: number
+      end: number
+      text: string
+    }
+  }[]
   mode?: "normal" | "shell"
-  parts: (
-    | Omit<FilePart, "id" | "messageID" | "sessionID">
-    | Omit<AgentPart, "id" | "messageID" | "sessionID">
-    | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
-        source?: {
-          text: {
-            start: number
-            end: number
-            value: string
-          }
-        }
-      })
-  )[]
 }
 
 export type TuiPromptRef = {

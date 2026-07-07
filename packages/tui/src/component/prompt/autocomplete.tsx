@@ -18,7 +18,7 @@ import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
-import type { PromptInfo } from "../../prompt/history"
+import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
@@ -76,7 +76,7 @@ export function Autocomplete(props: {
   value: string
   sessionID?: string
   setPrompt: (input: (prompt: PromptInfo) => void) => void
-  setExtmark: (partIndex: number, extmarkId: number) => void
+  setExtmark: (part: PromptPartRef, extmarkId: number) => void
   anchor: () => BoxRenderable
   input: () => TextareaRenderable
   ref: (ref: AutocompleteRef) => void
@@ -169,7 +169,12 @@ export function Autocomplete(props: {
     setStore("input", "keyboard")
   })
 
-  function insertPart(text: string, part: PromptInfo["parts"][number]) {
+  function insertPart(
+    text: string,
+    part:
+      | { type: "file"; value: NonNullable<PromptInfo["files"]>[number]; path?: string }
+      | { type: "agent"; value: NonNullable<PromptInfo["agents"]>[number] },
+  ) {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
@@ -189,7 +194,7 @@ export function Autocomplete(props: {
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
-    const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
+    const styleId = part.type === "file" ? props.fileStyleId : props.agentStyleId
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
@@ -201,42 +206,40 @@ export function Autocomplete(props: {
 
     props.setPrompt((draft) => {
       if (part.type === "file") {
-        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
+        const files = (draft.files ??= [])
+        const existingIndex = files.findIndex((file) => file.uri === part.value.uri)
         if (existingIndex !== -1) {
-          const existing = draft.parts[existingIndex]
-          if (
-            part.source?.text &&
-            existing &&
-            "source" in existing &&
-            existing.source &&
-            "text" in existing.source &&
-            existing.source.text
-          ) {
-            existing.source.text.start = extmarkStart
-            existing.source.text.end = extmarkEnd
-            existing.source.text.value = virtualText
+          const existing = files[existingIndex]
+          if (existing?.mention) {
+            existing.mention.start = extmarkStart
+            existing.mention.end = extmarkEnd
+            existing.mention.text = virtualText
           }
           return
         }
+        if (part.value.mention) {
+          part.value.mention.start = extmarkStart
+          part.value.mention.end = extmarkEnd
+          part.value.mention.text = virtualText
+        }
+        const index = files.length
+        files.push(part.value)
+        props.setExtmark({ type: "file", index }, extmarkId)
+        return
       }
 
-      if (part.type === "file" && part.source?.text) {
-        part.source.text.start = extmarkStart
-        part.source.text.end = extmarkEnd
-        part.source.text.value = virtualText
-      } else if (part.type === "agent" && part.source) {
-        part.source.start = extmarkStart
-        part.source.end = extmarkEnd
-        part.source.value = virtualText
+      const agents = (draft.agents ??= [])
+      if (part.value.mention) {
+        part.value.mention.start = extmarkStart
+        part.value.mention.end = extmarkEnd
+        part.value.mention.text = virtualText
       }
-      const partIndex = draft.parts.length
-      draft.parts.push(part)
-      props.setExtmark(partIndex, extmarkId)
+      const index = agents.length
+      agents.push(part.value)
+      props.setExtmark({ type: "agent", index }, extmarkId)
     })
 
-    if (part.type === "file" && part.source && part.source.type === "file") {
-      frecency.updateFrecency(part.source.path)
-    }
+    if (part.type === "file" && part.path) frecency.updateFrecency(part.path)
   }
 
   function createFilePart(
@@ -261,17 +264,11 @@ export function Autocomplete(props: {
       filename,
       part: {
         type: "file" as const,
-        mime: item.type === "directory" ? "application/x-directory" : "text/plain",
-        filename,
-        url: urlObj.href,
-        source: {
-          type: "file" as const,
-          text: {
-            start: 0,
-            end: 0,
-            value: "",
-          },
-          path: item.path,
+        path: item.path,
+        value: {
+          uri: urlObj.href,
+          name: filename,
+          mention: { start: 0, end: 0, text: "" },
         },
       },
     }
@@ -375,18 +372,11 @@ export function Autocomplete(props: {
         onSelect: () => {
           insertPart(res.name, {
             type: "file",
-            mime: res.mimeType ?? "text/plain",
-            filename: res.name,
-            url: res.uri,
-            source: {
-              type: "resource",
-              text: {
-                start: 0,
-                end: 0,
-                value: "",
-              },
-              clientName: res.client,
+            value: {
               uri: res.uri,
+              name: res.name,
+              description: res.description,
+              mention: { start: 0, end: 0, text: "" },
             },
           })
         },
@@ -405,11 +395,9 @@ export function Autocomplete(props: {
           onSelect: () => {
             insertPart(agent.id, {
               type: "agent",
-              name: agent.id,
-              source: {
-                start: 0,
-                end: 0,
-                value: "",
+              value: {
+                name: agent.id,
+                mention: { start: 0, end: 0, text: "" },
               },
             })
           },
@@ -427,13 +415,11 @@ export function Autocomplete(props: {
           onSelect: () => {
             insertPart(reference.name, {
               type: "file",
-              mime: "application/x-directory",
-              filename: reference.name,
-              url: pathToFileURL(reference.path).href,
-              source: {
-                type: "file",
-                text: { start: 0, end: 0, value: "" },
-                path: reference.name,
+              path: reference.name,
+              value: {
+                uri: pathToFileURL(reference.path).href,
+                name: reference.name,
+                mention: { start: 0, end: 0, text: "" },
               },
             })
           },
@@ -667,7 +653,7 @@ export function Autocomplete(props: {
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
       props.setPrompt((draft) => {
-        draft.input = props.input().plainText
+        draft.text = props.input().plainText
       })
     }
     setStore("visible", false)

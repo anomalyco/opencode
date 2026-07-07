@@ -1,14 +1,5 @@
-import type {
-  EventSubscribeOutput,
-  OpenCodeClient,
-} from "@opencode-ai/client/promise"
-import type {
-  ReasoningPart,
-  StepFinishPart,
-  StepStartPart,
-  TextPart,
-  ToolPart,
-} from "@opencode-ai/sdk/v2"
+import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
+import type { ReasoningPart, StepFinishPart, StepStartPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { UI } from "./ui"
@@ -169,8 +160,8 @@ export async function runNonInteractivePrompt(input: Input) {
         }
       }
       if (
-        event.type === "session.execution.settled" &&
-        event.data.outcome === "interrupted" &&
+        event.type === "session.execution.interrupted" &&
+        event.data.reason === "user" &&
         (interrupted || permissionRejected || questionRejected || formCancelled)
       ) {
         return
@@ -194,11 +185,12 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.text.started") {
-        starts.set(event.data.textID, { id: partID(event.id), timestamp: time })
+        starts.set("text", { id: partID(event.id), timestamp: time })
         continue
       }
       if (event.type === "session.text.ended") {
-        const started = starts.get(event.data.textID)
+        const started = starts.get("text")
+        starts.delete("text")
         const part: TextPart = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
@@ -212,18 +204,19 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.reasoning.started") {
-        starts.set(event.data.reasoningID, { id: partID(event.id), timestamp: time })
+        starts.set("reasoning", { id: partID(event.id), timestamp: time })
         continue
       }
       if (event.type === "session.reasoning.ended" && input.thinking) {
-        const started = starts.get(event.data.reasoningID)
+        const started = starts.get("reasoning")
+        starts.delete("reasoning")
         const part: ReasoningPart = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "reasoning",
           text: event.data.text,
-          metadata: event.data.providerMetadata,
+          metadata: event.data.state,
           time: { start: started?.timestamp ?? time, end: time },
         }
         if (emit("reasoning", time, { part })) continue
@@ -261,10 +254,10 @@ export async function runNonInteractivePrompt(input: Input) {
           id: current?.id ?? partID(event.id),
           timestamp: current?.timestamp ?? time,
           assistantMessageID: event.data.assistantMessageID,
-          tool: event.data.tool,
+          tool: current?.tool ?? "tool",
           input: event.data.input,
           raw: current?.raw,
-          provider: event.data.provider,
+          provider: { executed: event.data.executed, state: event.data.state },
         })
         continue
       }
@@ -291,7 +284,7 @@ export async function runNonInteractivePrompt(input: Input) {
               outputPaths: event.data.outputPaths,
               result: event.data.result,
               providerCall: current.provider,
-              providerResult: event.data.provider,
+              providerResult: { executed: event.data.executed, state: event.data.resultState },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -318,7 +311,7 @@ export async function runNonInteractivePrompt(input: Input) {
             metadata: {
               result: event.data.result,
               providerCall: current.provider,
-              providerResult: event.data.provider,
+              providerResult: { executed: event.data.executed, state: event.data.resultState },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -353,16 +346,25 @@ export async function runNonInteractivePrompt(input: Input) {
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
-      if (event.type === "session.execution.settled") {
-        if (event.data.outcome === "failure" && !emittedError && !questionRejected && !formCancelled) {
+      if (event.type === "session.execution.failed") {
+        if (!emittedError && !questionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
-          const error = event.data.error ?? { type: "unknown", message: "Session execution failed" }
-          if (!emit("error", time, { error })) UI.error(error.message)
+          if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         }
-        if (event.data.outcome === "interrupted" && interrupted) process.exitCode = 130
         return
       }
+      if (event.type === "session.execution.interrupted") {
+        if (event.data.reason === "user" && interrupted) process.exitCode = 130
+        if (event.data.reason !== "user" && !emittedError) {
+          emittedError = true
+          process.exitCode = 1
+          const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
+          if (!emit("error", time, { error })) UI.error(error.message)
+        }
+        return
+      }
+      if (event.type === "session.execution.succeeded") return
     }
   }
 

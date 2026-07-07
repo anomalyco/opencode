@@ -49,6 +49,7 @@ async function setup() {
       state: {
         session: {
           get: (sessionID: string) => sessions[sessionID],
+          status: () => ({ type: "busy" }),
         },
       },
     }),
@@ -96,46 +97,34 @@ function durable(sessionID: string) {
   return { aggregateID: sessionID, seq: 0, version: 1 }
 }
 
-function stepStarted(id: string, sessionID = "session"): V2Event {
+function executionStarted(id: string, sessionID = "session"): V2Event {
   return {
     id,
     created: 0,
-    type: "session.step.started",
+    type: "session.execution.started",
     durable: durable(sessionID),
-    data: {
-      sessionID,
-      assistantMessageID: `msg_${id}`,
-      agent: "build",
-      model: { id: "model", providerID: "provider" },
-    },
+    data: { sessionID },
   }
 }
 
-function stepEnded(id: string, sessionID = "session", finish = "stop"): V2Event {
+function executionSucceeded(id: string, sessionID = "session"): V2Event {
   return {
     id,
     created: 0,
-    type: "session.step.ended",
+    type: "session.execution.succeeded",
     durable: durable(sessionID),
-    data: {
-      sessionID,
-      assistantMessageID: `msg_${id}`,
-      finish,
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
+    data: { sessionID },
   }
 }
 
-function stepFailed(id: string, sessionID = "session"): V2Event {
+function executionFailed(id: string, sessionID = "session"): V2Event {
   return {
     id,
     created: 0,
-    type: "session.step.failed",
+    type: "session.execution.failed",
     durable: durable(sessionID),
     data: {
       sessionID,
-      assistantMessageID: `msg_${id}`,
       error: { type: "unknown", message: "boom" },
     },
   }
@@ -224,14 +213,20 @@ describe("internal notifications TUI plugin", () => {
     ])
   })
 
-  test("notifies when an active session becomes idle and suppresses no-op idle", async () => {
+  test("notifies for terminal lifecycle events even when attached after execution started", async () => {
     const harness = await setup()
 
-    harness.emit(stepEnded("event-1"))
-    harness.emit(stepStarted("event-2"))
-    harness.emit(stepEnded("event-3"))
+    harness.emit(executionSucceeded("event-1"))
+    harness.emit(executionStarted("event-2"))
+    harness.emit(executionSucceeded("event-3"))
 
     expect(harness.notifications).toEqual([
+      {
+        title: "Demo session",
+        message: "Session done",
+        notification: { when: "blurred" },
+        sound: { name: "done", when: "always" },
+      },
       {
         title: "Demo session",
         message: "Session done",
@@ -250,8 +245,8 @@ describe("internal notifications TUI plugin", () => {
       type: "form.created",
       data: { form: form("form-1", "subagent") },
     })
-    harness.emit(stepStarted("event-2", "subagent"))
-    harness.emit(stepEnded("event-3", "subagent"))
+    harness.emit(executionStarted("event-2", "subagent"))
+    harness.emit(executionSucceeded("event-3", "subagent"))
 
     expect(harness.notifications).toEqual([
       {
@@ -272,14 +267,14 @@ describe("internal notifications TUI plugin", () => {
   test("notifies session errors once and suppresses the following idle done notification", async () => {
     const harness = await setup()
 
-    harness.emit(stepStarted("event-1"))
-    harness.emit(stepFailed("event-2"))
-    harness.emit(stepEnded("event-3"))
+    harness.emit(executionStarted("event-1"))
+    harness.emit(executionFailed("event-2"))
+    harness.emit(executionSucceeded("event-3"))
 
     expect(harness.notifications).toEqual([
       {
         title: "Demo session",
-        message: "Session error",
+        message: "boom",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },
@@ -289,20 +284,21 @@ describe("internal notifications TUI plugin", () => {
   test("special-cases aborts and model response timeouts", async () => {
     const harness = await setup()
 
-    harness.emit(stepStarted("event-1", "abort"))
+    harness.emit(executionStarted("event-1", "abort"))
     harness.emit({
       id: "event-2",
       created: 0,
       type: "session.error",
       data: { sessionID: "abort", error: { name: "MessageAbortedError", data: { message: "Aborted" } } },
     })
-    harness.emit(stepStarted("event-3", "timeout"))
+    harness.emit(executionStarted("event-3", "timeout"))
     harness.emit({
       id: "event-4",
       created: 0,
       type: "session.error",
       data: { sessionID: "timeout", error: { name: "UnknownError", data: { message: "SSE read timed out" } } },
     })
+    harness.emit(executionFailed("event-5", "timeout"))
 
     expect(harness.notifications).toEqual([
       {

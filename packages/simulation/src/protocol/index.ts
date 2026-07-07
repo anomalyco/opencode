@@ -4,9 +4,12 @@ const JsonRpcID = Schema.Union([Schema.String, Schema.Number, Schema.Null])
 type Json = Schema.Schema.Type<typeof Schema.Json>
 
 export namespace JsonRpc {
-  export const Request = Schema.Struct({
+  export const RequestFields = {
     jsonrpc: Schema.Literal("2.0"),
     id: Schema.optional(JsonRpcID),
+  }
+  export const Request = Schema.Struct({
+    ...RequestFields,
     method: Schema.String,
     params: Schema.optional(Schema.Json),
   })
@@ -92,7 +95,16 @@ export namespace Frontend {
 
   export const ActionParams = Schema.Struct({ action: Action })
   export interface ActionParams extends Schema.Schema.Type<typeof ActionParams> {}
-  export const decodeActionParams = Schema.decodeUnknownSync(ActionParams)
+
+  export const Request = Schema.Union([
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.action"), params: ActionParams }),
+    Schema.Struct({
+      ...JsonRpc.RequestFields,
+      method: Schema.Literals(["ui.state", "trace.list", "trace.clear", "trace.export"]),
+    }),
+  ])
+  export type Request = Schema.Schema.Type<typeof Request>
+  export const decodeRequest = Schema.decodeUnknownSync(Request)
 
   export const TraceRecord = Schema.Struct({
     id: Schema.Number,
@@ -127,6 +139,21 @@ export namespace Backend {
   })
   export interface FinishParams extends Schema.Schema.Type<typeof FinishParams> {}
 
+  export const DisconnectParams = Schema.Struct({ id: Schema.String })
+  export interface DisconnectParams extends Schema.Schema.Type<typeof DisconnectParams> {}
+
+  export const Request = Schema.Union([
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.chunk"), params: ChunkParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.finish"), params: FinishParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.disconnect"), params: DisconnectParams }),
+    Schema.Struct({
+      ...JsonRpc.RequestFields,
+      method: Schema.Literals(["llm.attach", "llm.pending", "network.log"]),
+    }),
+  ])
+  export type Request = Schema.Schema.Type<typeof Request>
+  export const decodeRequest = Schema.decodeUnknownSync(Request)
+
   export const OpenedExchange = Schema.Struct({ id: Schema.String, url: Schema.String, body: Schema.Json })
   export interface OpenedExchange extends Schema.Schema.Type<typeof OpenedExchange> {}
 
@@ -138,8 +165,6 @@ export namespace Backend {
   })
   export interface NetworkLogEntry extends Schema.Schema.Type<typeof NetworkLogEntry> {}
 
-  export const decodeChunkParams = Schema.decodeUnknownPromise(ChunkParams)
-  export const decodeFinishParams = Schema.decodeUnknownPromise(FinishParams)
 }
 
 export * as SimulationProtocol from "./index"

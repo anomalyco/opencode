@@ -59,21 +59,27 @@ export type AskResult = typeof AskResult.Type
 
 export const Event = Permission.Event
 
-export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionV2.RejectedError", {}) {}
+export class DeclinedError extends Schema.TaggedErrorClass<DeclinedError>()("PermissionV2.DeclinedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionV2.CorrectedError", {
   feedback: Schema.String,
 }) {}
 
-export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
+export class BlockedError extends Schema.TaggedErrorClass<BlockedError>()("PermissionV2.BlockedError", {
   rules: Permission.Ruleset,
-}) {}
+  permission: Schema.String,
+  resources: Schema.Array(Schema.String),
+}) {
+  override get message() {
+    return `Permission denied: ${this.permission}`
+  }
+}
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("PermissionV2.NotFoundError", {
   requestID: ID,
 }) {}
 
-export type Error = DeniedError | RejectedError | CorrectedError
+export type Error = BlockedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   return (
@@ -105,7 +111,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 interface Pending {
   readonly request: Request
   readonly agent?: AgentV2.ID
-  readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
+  readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
 const layer = Layer.effect(
@@ -119,7 +125,7 @@ const layer = Layer.effect(
     const pending = new Map<ID, Pending>()
 
     yield* Effect.addFinalizer(() =>
-      Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
+      Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
         discard: true,
       }).pipe(
         Effect.ensuring(
@@ -175,7 +181,7 @@ const layer = Layer.effect(
     const create = (request: Request, agent?: AgentV2.ID) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+          const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
           const item = { request, agent, deferred }
           if (pending.has(request.id))
             return yield* Effect.die(new Error(`Duplicate pending permission ID: ${request.id}`))
@@ -199,13 +205,16 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const result = yield* evaluateInput(input)
           if (result.effect === "deny") {
-            return yield* new DeniedError({
+            return yield* new BlockedError({
               rules: relevant(input, result.rules),
+              permission: input.action,
+              resources: input.resources,
             })
           }
           if (result.effect === "allow") return
           const item = yield* create(request(input), input.agent)
           return yield* restore(Deferred.await(item.deferred)).pipe(
+            Effect.catchTag("PermissionV2.DeclinedError", (error) => Effect.die(error)),
             Effect.ensuring(
               Effect.sync(() => {
                 pending.delete(item.request.id)
@@ -230,7 +239,7 @@ const layer = Layer.effect(
           if (input.reply === "reject") {
             yield* Deferred.fail(
               existing.deferred,
-              input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
+              input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
             )
             pending.delete(input.requestID)
             for (const [id, item] of pending) {
@@ -240,7 +249,7 @@ const layer = Layer.effect(
                 requestID: item.request.id,
                 reply: "reject",
               })
-              yield* Deferred.fail(item.deferred, new RejectedError())
+              yield* Deferred.fail(item.deferred, new DeclinedError())
               pending.delete(id)
             }
             return

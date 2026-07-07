@@ -27,6 +27,57 @@ test("session.get returns the decoded Effect projection", async () => {
   expect(DateTime.toEpochMillis(result.time.created)).toBe(1_717_171_717_000)
 })
 
+test("session instructions methods use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string; body?: unknown }> = []
+  const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]
+  const httpClient = HttpClient.make((request) => {
+    requests.push({
+      method: request.method,
+      url: request.url,
+      body: request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined,
+    })
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        request.method === "GET" ? Response.json({ data: instructions }) : new Response(null, { status: 204 }),
+      ),
+    )
+  })
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const listed = yield* client.session.instructions.entry.list({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.instructions.entry.put({
+      sessionID: Session.ID.make("ses_test"),
+      key: "review-notes",
+      value: instructions[0].value,
+    })
+    yield* client.session.instructions.entry.remove({
+      sessionID: Session.ID.make("ses_test"),
+      key: "review-notes",
+    })
+    return listed
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result).toEqual(instructions)
+  expect(requests).toEqual([
+    {
+      method: "GET",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
+      body: undefined,
+    },
+    {
+      method: "PUT",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      body: { value: { text: "Check the diff", priority: 1 } },
+    },
+    {
+      method: "DELETE",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      body: undefined,
+    },
+  ])
+})
+
 test("event.subscribe exposes and decodes the native Effect event stream", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
@@ -89,6 +140,9 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     if (url.includes("/prompt")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(admission)))
     }
+    if (url.endsWith("/compact")) {
+      return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(compactionAdmission)))
+    }
     if (url.includes("/context")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ data: [] })))
     }
@@ -97,10 +151,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     }
     if (url.endsWith("/api/session/active")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          Response.json({ data: { ses_test: { type: "running" } }, watermarks: { ses_test: 3 } }),
-        ),
+        HttpClientResponse.fromWeb(request, Response.json({ data: { ses_test: { type: "running" } } })),
       )
     }
     if (request.method === "POST" && url.endsWith("/api/session")) {
@@ -110,10 +161,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
     }
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
-        request,
-        Response.json({ data: [session.data], watermarks: { ses_test: 3 }, cursor: { next: "next" } }),
-      ),
+      HttpClientResponse.fromWeb(request, Response.json({ data: [session.data], cursor: { next: "next" } })),
     )
   })
   const result = await Effect.gen(function* () {
@@ -148,8 +196,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(DateTime.toEpochMillis(result.page.data[0].time.created)).toBe(1_717_171_717_000)
-  expect(result.active).toEqual({ data: { ses_test: { type: "running" } }, watermarks: { ses_test: 3 } })
-  expect(result.page.watermarks).toEqual({ ses_test: 3 })
+  expect(result.active).toEqual({ ses_test: { type: "running" } })
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
   expect(result.created.id).toBe("ses_test")
@@ -214,6 +261,16 @@ const admission = {
     sessionID: "ses_test",
     prompt: { text: "Hello" },
     delivery: "steer",
+    timeCreated: 1_717_171_717_000,
+  },
+}
+
+const compactionAdmission = {
+  data: {
+    type: "compaction",
+    admittedSeq: 1,
+    id: "msg_compaction",
+    sessionID: "ses_test",
     timeCreated: 1_717_171_717_000,
   },
 }

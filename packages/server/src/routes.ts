@@ -19,7 +19,7 @@ import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Effect, Layer, Option } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
 import { handlers } from "./handlers"
@@ -40,6 +40,7 @@ const applicationServices = LayerNode.group([
   Project.node,
   SessionV2.node,
   PluginRuntime.providerNode,
+  SdkPlugins.node,
   PermissionSaved.node,
   PtyTicket.node,
   Credential.node,
@@ -55,52 +56,61 @@ export function createRoutes(password?: string) {
   )
 }
 
-export function createEmbeddedRoutes(sdkPlugins?: SdkPlugins.Store) {
-  return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }), sdkPlugins)
+export function createEmbeddedRoutes() {
+  return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }))
 }
 
-function makeRoutes<AuthError, AuthServices>(
-  auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
-  sdkPlugins?: SdkPlugins.Store,
-) {
+function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const replacements: LayerNode.Replacements = [
     [SessionExecution.node, SessionExecutionLocal.node],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
-    ...(sdkPlugins ? [[SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)] as const] : []),
   ]
-  // Simulation replacements are loaded via dynamic import so the simulation
-  // module is never eagerly loaded. Layer.unwrap defers both the import and
-  // the app-node build to layer-build time; when simulation is off the branch
-  // is byte-for-byte identical to a plain AppNodeBuilder.build call.
-  const serviceLayer = simulationEnabled()
+  const serviceLayer = simulateEnabled()
     ? Layer.unwrap(
         Effect.gen(function* () {
-          const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
-          return AppNodeBuilder.build(applicationServices, [...replacements, ...simulationReplacements])
+          const { simulationReplacements, startDriveServer } = yield* Effect.promise(
+            () => import("@opencode-ai/simulation/backend"),
+          )
+          if (driveEnabled()) startDriveServer()
+          return AppNodeBuilder.build(applicationServices, [
+            ...replacements,
+            ...(simulateEnabled() ? simulationReplacements : []),
+          ])
         }),
       )
     : AppNodeBuilder.build(applicationServices, replacements)
 
-  return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
-    Layer.provide(handlers.pipe(Layer.provide(serviceLayer))),
-    Layer.provide(formLocationLayer),
-    Layer.provide(sessionLocationLayer),
-    Layer.provide(layer),
-    Layer.provide(authorizationLayer),
-    Layer.provide(schemaErrorLayer),
-    Layer.provide(auth),
-    Layer.provide(serviceLayer),
-    Layer.provide(Observability.layer),
+  return serviceLayer.pipe(
+    Layer.flatMap((context) => {
+      const services = Layer.succeedContext(context)
+      const requestServices = Layer.succeedContext(Context.pick(PermissionSaved.Service, Project.Service)(context))
+      return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
+        Layer.provide(handlers.pipe(Layer.provide(services))),
+        Layer.provide(formLocationLayer),
+        Layer.provide(sessionLocationLayer),
+        Layer.provide(layer),
+        Layer.provide(authorizationLayer),
+        Layer.provide(schemaErrorLayer),
+        Layer.provide(auth),
+        Layer.provide(Observability.layer),
+        HttpRouter.provideRequest(requestServices),
+        Layer.provideMerge(services),
+        Layer.provideMerge(HttpRouter.layer),
+      )
+    }),
   )
 }
 
-function simulationEnabled() {
-  return !!process.env.OPENCODE_SIMULATION
+function simulateEnabled() {
+  return !!process.env.OPENCODE_SIMULATE
+}
+
+function driveEnabled() {
+  return !!process.env.OPENCODE_DRIVE
 }
 
 export const routes = createRoutes()
 
-export const webHandler = () =>
-  HttpRouter.toWebHandler(routes.pipe(Layer.provide(HttpServer.layerServices)))
+export const webHandler = () => HttpRouter.toWebHandler(routes.pipe(Layer.provide(HttpServer.layerServices)))

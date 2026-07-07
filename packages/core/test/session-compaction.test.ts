@@ -19,7 +19,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -52,6 +52,15 @@ const it = testEffect(
   ),
 )
 
+test("compaction prompt preserves detailed work state and relevant files", () => {
+  const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"] })
+
+  expect(prompt).toContain("## Work State\n### Completed")
+  expect(prompt).toContain("### Active")
+  expect(prompt).toContain("### Blocked")
+  expect(prompt).toContain("## Relevant Files")
+})
+
 test("compaction describes tool media without embedding base64", () => {
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
   const serialized = SessionCompaction.serializeToolContent([
@@ -68,11 +77,31 @@ test("compaction describes tool media without embedding base64", () => {
   expect(serialized).not.toContain(base64)
 })
 
+test("compaction prompt requires the checkpoint headings in order", () => {
+  const prompt = SessionCompaction.buildPrompt({ context: ["Conversation history"] })
+  expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
+    "## Objective",
+    "## Important Details",
+    "## Work State",
+    "### Completed",
+    "### Active",
+    "### Blocked",
+    "## Next Move",
+    "## Relevant Files",
+  ])
+  expect(prompt).toContain("one or two brief sentences")
+  expect(prompt).toContain("constraints/preferences, decisions and why")
+  expect(prompt).toContain("immediate concrete action")
+  expect(prompt).toContain("next action if known")
+  expect(prompt).toContain("Keep every section, even when empty.")
+})
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const events = yield* EventV2.Service
     const store = yield* SessionStore.Service
     const sessionID = SessionV2.ID.make("ses_manual_compaction")
     const userMessage = {
@@ -108,7 +137,12 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         ),
       )
 
+    const delta = yield* events
+      .subscribe(SessionEvent.Compaction.Delta)
+      .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+    yield* Effect.yieldNow
     expect(yield* compaction.compactManual({ session, messages: [userMessage] })).toBe(true)
+    expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
 
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")

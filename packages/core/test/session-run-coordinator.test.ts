@@ -104,8 +104,10 @@ describe("SessionRunCoordinator", () => {
       Effect.gen(function* () {
         const failure = new Error("failed")
         const defect = new Error("defect")
+        const settled: Exit.Exit<void, Error>[] = []
         const coordinator = yield* SessionRunCoordinator.make({
           drain: (key: string) => (key === "failure" ? Effect.fail(failure) : Effect.die(defect)),
+          settled: (_key, exit) => Effect.sync(() => void settled.push(exit)),
         })
 
         const failed = yield* coordinator.run("failure").pipe(Effect.exit)
@@ -115,6 +117,25 @@ describe("SessionRunCoordinator", () => {
         const died = yield* coordinator.run("defect").pipe(Effect.exit)
         expect(Exit.isFailure(died) && Cause.hasDies(died.cause)).toBeTrue()
         expect(Array.from(yield* coordinator.active)).toEqual([])
+        expect(settled).toHaveLength(2)
+      }),
+    ),
+  )
+
+  it.effect("preserves settlement hook defects while releasing ownership", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const defect = new Error("terminal publication failed")
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Effect.void,
+          settled: () => Effect.die(defect),
+        })
+
+        const exit = yield* coordinator.run("session").pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true)
+        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(defect)
+        expect(yield* coordinator.active).toEqual(new Set())
       }),
     ),
   )
@@ -209,8 +230,41 @@ describe("SessionRunCoordinator", () => {
   it.effect("does nothing when interrupted while idle", () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const coordinator = yield* SessionRunCoordinator.make({ drain: () => Effect.void })
-        yield* coordinator.interrupt("session")
+        const reasons: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () => Effect.void,
+          settled: (_key, _exit, reason) => Effect.sync(() => void reasons.push(reason)),
+        })
+        yield* coordinator.interrupt("session", "user")
+        yield* coordinator.run("session")
+        expect(reasons).toEqual([undefined])
+      }),
+    ),
+  )
+
+  it.effect("does not attach a late interrupt reason after terminal settlement starts", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const settling = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const reasons: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () => Effect.void,
+          settled: (_key, _exit, reason) =>
+            Deferred.succeed(settling, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.andThen(Effect.sync(() => void reasons.push(reason))),
+            ),
+        })
+
+        const run = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.await(settling)
+        yield* coordinator.interrupt("session", "user")
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(run)
+        yield* coordinator.run("session")
+
+        expect(reasons).toEqual([undefined, undefined])
       }),
     ),
   )
@@ -221,25 +275,28 @@ describe("SessionRunCoordinator", () => {
         const started = yield* Deferred.make<void>()
         const interrupted = yield* Deferred.make<void>()
         let runs = 0
-        const coordinator = yield* SessionRunCoordinator.make({
+        const reasons: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
           drain: () =>
             Effect.sync(() => ++runs).pipe(
               Effect.andThen(Deferred.succeed(started, undefined)),
               Effect.andThen(Effect.never),
               Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
             ),
+          settled: (_key, _exit, reason) => Effect.sync(() => void reasons.push(reason)),
         })
 
         const resumed = yield* coordinator.run("session").pipe(Effect.forkChild)
         yield* Deferred.await(started)
         yield* coordinator.wake("session")
-        yield* coordinator.interrupt("session")
+        yield* coordinator.interrupt("session", "user")
         yield* Deferred.await(interrupted)
 
         const exit = yield* Fiber.await(resumed)
         expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
         expect(Array.from(yield* coordinator.active)).toEqual([])
         expect(runs).toBe(1)
+        expect(reasons).toEqual(["user"])
       }),
     ),
   )
@@ -252,6 +309,7 @@ describe("SessionRunCoordinator", () => {
         const cleanupGate = yield* Deferred.make<void>()
         const secondStarted = yield* Deferred.make<void>()
         let runs = 0
+        let starts = 0
         const coordinator = yield* SessionRunCoordinator.make({
           drain: () =>
             Effect.sync(() => ++runs).pipe(
@@ -266,6 +324,7 @@ describe("SessionRunCoordinator", () => {
                   : Deferred.succeed(secondStarted, undefined),
               ),
             ),
+          started: () => Effect.sync(() => starts++).pipe(Effect.asVoid),
         })
 
         yield* coordinator.wake("session")
@@ -278,6 +337,7 @@ describe("SessionRunCoordinator", () => {
         yield* Deferred.await(secondStarted)
 
         expect(runs).toBe(2)
+        expect(starts).toBe(2)
       }),
     ),
   )
@@ -399,6 +459,7 @@ describe("SessionRunCoordinator", () => {
         const gate = yield* Deferred.make<void>()
         const idle = yield* Deferred.make<void>()
         let drains = 0
+        let starts = 0
         const settled: Exit.Exit<void, never>[] = []
         const coordinator = yield* SessionRunCoordinator.make<string, never>({
           drain: () =>
@@ -410,6 +471,7 @@ describe("SessionRunCoordinator", () => {
               ),
               Effect.asVoid,
             ),
+          started: () => Effect.sync(() => starts++).pipe(Effect.asVoid),
           settled: (_key, exit) =>
             Effect.sync(() => void settled.push(exit)).pipe(
               Effect.andThen(Deferred.succeed(idle, undefined)),
@@ -424,6 +486,7 @@ describe("SessionRunCoordinator", () => {
         yield* Deferred.await(idle)
 
         expect(drains).toBe(2)
+        expect(starts).toBe(1)
         expect(settled).toHaveLength(1)
         expect(Exit.isSuccess(settled[0]!)).toBe(true)
       }),

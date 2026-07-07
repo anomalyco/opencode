@@ -57,7 +57,7 @@ export const Event = { Created, Exited, Deleted, Definitions: inventory(Created,
 export const CreateInput = Schema.Struct({
   command: Schema.String,
   cwd: optional(Schema.String),
-  timeout: optional(NonNegativeInt),
+  timeout: NonNegativeInt,
   metadata: optional(Metadata),
 })
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}

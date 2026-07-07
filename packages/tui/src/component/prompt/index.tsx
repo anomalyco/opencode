@@ -10,7 +10,7 @@ import {
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
-import "opentui-spinner/solid"
+import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
@@ -30,14 +30,14 @@ import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
-import { usePromptHistory, type PromptInfo } from "../../prompt/history"
+import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, SessionV2Info, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, SessionV2Info, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -57,6 +57,8 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+
+registerOpencodeSpinner()
 
 export type PromptProps = {
   sessionID?: string
@@ -311,17 +313,14 @@ export function Prompt(props: PromptProps) {
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
-    extmarkToPartIndex: Map<number, number>
+    extmarkToPart: Map<number, PromptPartRef>
     interrupt: number
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
-    prompt: {
-      input: "",
-      parts: [],
-    },
+    prompt: emptyPrompt(),
     mode: "normal",
-    extmarkToPartIndex: new Map(),
+    extmarkToPart: new Map(),
     interrupt: 0,
   })
 
@@ -398,8 +397,7 @@ export function Prompt(props: PromptProps) {
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
               filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
+              uri: `data:${content.mime};base64,${content.data}`,
             })
             return
           }
@@ -465,14 +463,10 @@ export function Prompt(props: PromptProps) {
           dialog.clear()
 
           // replace summarized text parts with the actual text
-          const text = store.prompt.parts
-            .filter((p) => p.type === "text")
-            .reduce((acc, p) => {
-              if (!p.source) return acc
-              return acc.replace(p.source.text.value, p.text)
-            }, store.prompt.input)
-
-          const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
+          const text = store.prompt.pasted.reduce(
+            (result, part) => result.replace(part.source.text, part.text),
+            store.prompt.text,
+          )
 
           const value = text
           const content = await openEditor({
@@ -488,63 +482,23 @@ export function Prompt(props: PromptProps) {
 
           input.setText(normalized)
 
-          // Update positions for nonTextParts based on their location in new content
-          // Filter out parts whose virtual text was deleted
+          // Update attachment positions and drop virtual text deleted in the editor.
           // this handles a case where the user edits the text in the editor
           // such that the virtual text moves around or is deleted
-          const updatedNonTextParts = nonTextParts
-            .map((part) => {
-              let virtualText = ""
-              if (part.type === "file" && part.source?.text) {
-                virtualText = part.source.text.value
-              } else if (part.type === "agent" && part.source) {
-                virtualText = part.source.value
-              }
-
-              if (!virtualText) return part
-
-              const newStart = normalized.indexOf(virtualText)
-              // if the virtual text is deleted, remove the part
-              if (newStart === -1) return null
-
-              const newEnd = newStart + virtualText.length
-
-              if (part.type === "file" && part.source?.text) {
-                return {
-                  ...part,
-                  source: {
-                    ...part.source,
-                    text: {
-                      ...part.source.text,
-                      start: newStart,
-                      end: newEnd,
-                    },
-                  },
-                }
-              }
-
-              if (part.type === "agent" && part.source) {
-                return {
-                  ...part,
-                  source: {
-                    ...part.source,
-                    start: newStart,
-                    end: newEnd,
-                  },
-                }
-              }
-
-              return part
-            })
-            .filter((part) => part !== null)
+          const moveMention = <Part extends { mention?: { start: number; end: number; text: string } }>(part: Part) => {
+            if (!part.mention?.text) return part
+            const start = normalized.indexOf(part.mention.text)
+            if (start === -1) return
+            return { ...part, mention: { ...part.mention, start, end: start + part.mention.text.length } }
+          }
 
           setStore("prompt", {
-            input: normalized,
-            // keep only the non-text parts because the text parts were
-            // already expanded inline
-            parts: updatedNonTextParts,
+            text: normalized,
+            files: store.prompt.files?.map(moveMention).filter((part) => part !== undefined),
+            agents: store.prompt.agents?.map(moveMention).filter((part) => part !== undefined),
+            pasted: [],
           })
-          restoreExtmarksFromParts(updatedNonTextParts)
+          restoreExtmarksFromPrompt(store.prompt)
           input.cursorOffset = Bun.stringWidth(normalized)
         },
       },
@@ -560,8 +514,8 @@ export function Prompt(props: PromptProps) {
               onSelect={(skill) => {
                 input.setText(`/${skill} `)
                 setStore("prompt", {
-                  input: `/${skill} `,
-                  parts: [],
+                  ...emptyPrompt(),
+                  text: `/${skill} `,
                 })
                 input.gotoBufferEnd()
               }}
@@ -631,19 +585,16 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      input.setText(prompt.input)
+      input.setText(prompt.text)
       setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
+      restoreExtmarksFromPrompt(prompt)
       input.gotoBufferEnd()
     },
     reset() {
       input.clear()
       input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
+      setStore("prompt", emptyPrompt())
+      setStore("extmarkToPart", new Map())
     },
     submit() {
       void submit()
@@ -653,17 +604,17 @@ export function Prompt(props: PromptProps) {
   onMount(() => {
     const saved = stashed
     stashed = undefined
-    if (store.prompt.input) return
-    if (saved && saved.prompt.input) {
-      input.setText(saved.prompt.input)
+    if (store.prompt.text) return
+    if (saved && saved.prompt.text) {
+      input.setText(saved.prompt.text)
       setStore("prompt", saved.prompt)
-      restoreExtmarksFromParts(saved.prompt.parts)
+      restoreExtmarksFromPrompt(saved.prompt)
       input.cursorOffset = saved.cursor
     }
   })
 
   onCleanup(() => {
-    if (store.prompt.input) {
+    if (store.prompt.text) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
     setInputTarget(undefined)
@@ -693,44 +644,40 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
+  function restoreExtmarksFromPrompt(prompt: PromptInfo) {
     input.extmarks.clear()
-    setStore("extmarkToPartIndex", new Map())
+    setStore("extmarkToPart", new Map())
 
-    parts.forEach((part, partIndex) => {
-      let start = 0
-      let end = 0
-      let virtualText = ""
-      let styleId: number | undefined
+    const parts = [
+      ...(prompt.files ?? []).map((part, index) => ({
+        mention: part.mention,
+        ref: { type: "file" as const, index },
+        styleId: fileStyleId,
+      })),
+      ...(prompt.agents ?? []).map((part, index) => ({
+        mention: part.mention,
+        ref: { type: "agent" as const, index },
+        styleId: agentStyleId,
+      })),
+      ...prompt.pasted.map((part, index) => ({
+        mention: part.source,
+        ref: { type: "pasted" as const, index },
+        styleId: pasteStyleId,
+      })),
+    ]
 
-      if (part.type === "file" && part.source?.text) {
-        start = part.source.text.start
-        end = part.source.text.end
-        virtualText = part.source.text.value
-        styleId = fileStyleId
-      } else if (part.type === "agent" && part.source) {
-        start = part.source.start
-        end = part.source.end
-        virtualText = part.source.value
-        styleId = agentStyleId
-      } else if (part.type === "text" && part.source?.text) {
-        start = part.source.text.start
-        end = part.source.text.end
-        virtualText = part.source.text.value
-        styleId = pasteStyleId
-      }
-
-      if (virtualText) {
+    parts.forEach(({ mention, ref, styleId }) => {
+      if (mention?.text) {
         const extmarkId = input.extmarks.create({
-          start,
-          end,
+          start: mention.start,
+          end: mention.end,
           virtual: true,
           styleId,
           typeId: promptPartTypeId,
         })
-        setStore("extmarkToPartIndex", (map: Map<number, number>) => {
+        setStore("extmarkToPart", (map: Map<number, PromptPartRef>) => {
           const newMap = new Map(map)
-          newMap.set(extmarkId, partIndex)
+          newMap.set(extmarkId, ref)
           return newMap
         })
       }
@@ -741,32 +688,47 @@ export function Prompt(props: PromptProps) {
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
     setStore(
       produce((draft) => {
-        const newMap = new Map<number, number>()
-        const newParts: typeof draft.prompt.parts = []
+        const newMap = new Map<number, PromptPartRef>()
+        const files: NonNullable<PromptInfo["files"]> = []
+        const agents: NonNullable<PromptInfo["agents"]> = []
+        const pasted: PromptInfo["pasted"] = []
 
         for (const extmark of allExtmarks) {
-          const partIndex = draft.extmarkToPartIndex.get(extmark.id)
-          if (partIndex !== undefined) {
-            const part = draft.prompt.parts[partIndex]
-            if (part) {
-              if (part.type === "agent" && part.source) {
-                part.source.start = extmark.start
-                part.source.end = extmark.end
-              } else if (part.type === "file" && part.source?.text) {
-                part.source.text.start = extmark.start
-                part.source.text.end = extmark.end
-              } else if (part.type === "text" && part.source?.text) {
-                part.source.text.start = extmark.start
-                part.source.text.end = extmark.end
-              }
-              newMap.set(extmark.id, newParts.length)
-              newParts.push(part)
-            }
+          const ref = draft.extmarkToPart.get(extmark.id)
+          if (!ref) continue
+          if (ref.type === "file") {
+            const part = draft.prompt.files?.[ref.index]
+            if (!part?.mention) continue
+            part.mention.start = extmark.start
+            part.mention.end = extmark.end
+            const index = files.length
+            files.push(part)
+            newMap.set(extmark.id, { type: "file", index })
+            continue
           }
+          if (ref.type === "agent") {
+            const part = draft.prompt.agents?.[ref.index]
+            if (!part?.mention) continue
+            part.mention.start = extmark.start
+            part.mention.end = extmark.end
+            const index = agents.length
+            agents.push(part)
+            newMap.set(extmark.id, { type: "agent", index })
+            continue
+          }
+          const part = draft.prompt.pasted[ref.index]
+          if (!part) continue
+          part.source.start = extmark.start
+          part.source.end = extmark.end
+          const index = pasted.length
+          pasted.push(part)
+          newMap.set(extmark.id, { type: "pasted", index })
         }
 
-        draft.extmarkToPartIndex = newMap
-        draft.prompt.parts = newParts
+        draft.extmarkToPart = newMap
+        draft.prompt.files = files
+        draft.prompt.agents = agents
+        draft.prompt.pasted = pasted
       }),
     )
   }
@@ -777,17 +739,14 @@ export function Prompt(props: PromptProps) {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.input,
+        enabled: !!store.prompt.text,
         run: () => {
-          if (!store.prompt.input) return
-          stash.push({
-            input: store.prompt.input,
-            parts: store.prompt.parts,
-          })
+          if (!store.prompt.text) return
+          stash.push({ prompt: store.prompt })
           input.extmarks.clear()
           input.clear()
-          setStore("prompt", { input: "", parts: [] })
-          setStore("extmarkToPartIndex", new Map())
+          setStore("prompt", emptyPrompt())
+          setStore("extmarkToPart", new Map())
           dialog.clear()
         },
       },
@@ -799,9 +758,9 @@ export function Prompt(props: PromptProps) {
         run: () => {
           const entry = stash.pop()
           if (entry) {
-            input.setText(entry.input)
-            setStore("prompt", { input: entry.input, parts: entry.parts })
-            restoreExtmarksFromParts(entry.parts)
+            input.setText(entry.prompt.text)
+            setStore("prompt", entry.prompt)
+            restoreExtmarksFromPrompt(entry.prompt)
             input.gotoBufferEnd()
           }
           dialog.clear()
@@ -816,9 +775,9 @@ export function Prompt(props: PromptProps) {
           dialog.replace(() => (
             <DialogStash
               onSelect={(entry) => {
-                input.setText(entry.input)
-                setStore("prompt", { input: entry.input, parts: entry.parts })
-                restoreExtmarksFromParts(entry.parts)
+                input.setText(entry.prompt.text)
+                setStore("prompt", entry.prompt)
+                restoreExtmarksFromPrompt(entry.prompt)
                 input.gotoBufferEnd()
               }}
             />
@@ -846,7 +805,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
+      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.text !== "",
       bindings: tuiConfig.keybinds.get("prompt.clear"),
     }
   })
@@ -917,10 +876,10 @@ export function Prompt(props: PromptProps) {
 
             const item = history.move(-1, input.plainText)
             if (!item) return false
-            input.setText(item.input)
+            input.setText(item.text)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
-            restoreExtmarksFromParts(item.parts)
+            restoreExtmarksFromPrompt(item)
             input.cursorOffset = 0
           },
         },
@@ -953,10 +912,10 @@ export function Prompt(props: PromptProps) {
 
             const item = history.move(1, input.plainText)
             if (!item) return false
-            input.setText(item.input)
+            input.setText(item.text)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
-            restoreExtmarksFromParts(item.parts)
+            restoreExtmarksFromPrompt(item)
             input.cursorOffset = input.plainText.length
           },
         },
@@ -970,7 +929,7 @@ export function Prompt(props: PromptProps) {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
-    // clears `store.prompt.input`, then awaits its own `session.create` and
+    // clears `store.prompt.text`, then awaits its own `session.create` and
     // ultimately reads the now-empty store — sending a phantom empty prompt
     // to a freshly created session.
     if (submitting) return false
@@ -988,17 +947,17 @@ export function Prompt(props: PromptProps) {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
-    if (input && !input.isDestroyed && input.plainText !== store.prompt.input) {
-      setStore("prompt", "input", input.plainText)
+    if (input && !input.isDestroyed && input.plainText !== store.prompt.text) {
+      setStore("prompt", "text", input.plainText)
       syncExtmarksWithPromptParts()
     }
     if (props.disabled) return false
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
-    if (!store.prompt.input) return false
+    if (!store.prompt.text) return false
     const agent = local.agent.current()
     if (!agent) return false
-    const trimmed = store.prompt.input.trim()
+    const trimmed = store.prompt.text.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
@@ -1032,7 +991,7 @@ export function Prompt(props: PromptProps) {
       const selectedWorkspace = workspace.selection()
       const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
 
-      const directory = await move.getDirectory(store.prompt.input)
+      const directory = await move.getDirectory(store.prompt.text)
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
       const location = data.location.default()
@@ -1067,17 +1026,15 @@ export function Prompt(props: PromptProps) {
     }
 
     const inputText = expandTrackedPastedText(
-      store.prompt.input,
+      store.prompt.text,
       input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
+        const ref = store.extmarkToPart.get(extmark.id)
+        if (ref?.type !== "pasted") return []
+        const part = store.prompt.pasted[ref.index]
+        if (!part) return []
         return [{ start: extmark.start, end: extmark.end, text: part.text }]
       }),
     )
-
-    // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1127,35 +1084,8 @@ export function Prompt(props: PromptProps) {
           arguments: args,
           agent: agent.id,
           model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
-          files: nonTextParts.flatMap((part) =>
-            part.type === "file"
-              ? [
-                  {
-                    uri: part.url,
-                    name: part.filename,
-                    source: part.source
-                      ? {
-                          start: part.source.text.start,
-                          end: part.source.text.end,
-                          text: part.source.text.value,
-                        }
-                      : undefined,
-                  },
-                ]
-              : [],
-          ),
-          agents: nonTextParts.flatMap((part) =>
-            part.type === "agent"
-              ? [
-                  {
-                    name: part.name,
-                    source: part.source
-                      ? { start: part.source.start, end: part.source.end, text: part.source.value }
-                      : undefined,
-                  },
-                ]
-              : [],
-          ),
+          files: store.prompt.files,
+          agents: store.prompt.agents,
         })
         .catch((error) => {
           toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
@@ -1205,35 +1135,8 @@ export function Prompt(props: PromptProps) {
           sessionID,
           prompt: {
             text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
-            files: nonTextParts.flatMap((part) =>
-              part.type === "file"
-                ? [
-                    {
-                      uri: part.url,
-                      name: part.filename,
-                      source: part.source
-                        ? {
-                            start: part.source.text.start,
-                            end: part.source.text.end,
-                            text: part.source.text.value,
-                          }
-                        : undefined,
-                    },
-                  ]
-                : [],
-            ),
-            agents: nonTextParts.flatMap((part) =>
-              part.type === "agent"
-                ? [
-                    {
-                      name: part.name,
-                      source: part.source
-                        ? { start: part.source.start, end: part.source.end, text: part.source.value }
-                        : undefined,
-                    },
-                  ]
-                : [],
-            ),
+            files: store.prompt.files,
+            agents: store.prompt.agents,
           },
         })
         .then(
@@ -1251,11 +1154,8 @@ export function Prompt(props: PromptProps) {
       mode: currentMode,
     })
     input.extmarks.clear()
-    setStore("prompt", {
-      input: "",
-      parts: [],
-    })
-    setStore("extmarkToPartIndex", new Map())
+    setStore("prompt", emptyPrompt())
+    setStore("extmarkToPart", new Map())
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -1290,19 +1190,12 @@ export function Prompt(props: PromptProps) {
 
     setStore(
       produce((draft) => {
-        const partIndex = draft.prompt.parts.length
-        draft.prompt.parts.push({
-          type: "text" as const,
+        const index = draft.prompt.pasted.length
+        draft.prompt.pasted.push({
           text,
-          source: {
-            text: {
-              start: extmarkStart,
-              end: extmarkEnd,
-              value: virtualText,
-            },
-          },
+          source: { start: extmarkStart, end: extmarkEnd, text: virtualText },
         })
-        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+        draft.extmarkToPart.set(extmarkId, { type: "pasted", index })
       }),
     )
   }
@@ -1322,9 +1215,7 @@ export function Prompt(props: PromptProps) {
       if (attachment?.type === "binary") {
         await pasteAttachment({
           filename,
-          filepath,
-          mime: attachment.mime,
-          content: Buffer.from(attachment.content).toString("base64"),
+          uri: `data:${attachment.mime};base64,${Buffer.from(attachment.content).toString("base64")}`,
         })
         return
       }
@@ -1348,15 +1239,12 @@ export function Prompt(props: PromptProps) {
     }, 0)
   }
 
-  async function pasteAttachment(file: { filename?: string; filepath?: string; content: string; mime: string }) {
+  async function pasteAttachment(file: { filename?: string; uri: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
-    const pdf = file.mime === "application/pdf"
-    const count = store.prompt.parts.filter((x) => {
-      if (x.type !== "file") return false
-      if (pdf) return x.mime === "application/pdf"
-      return x.mime.startsWith("image/")
-    }).length
+    const pdf = file.uri.startsWith("data:application/pdf;")
+    const prefix = pdf ? "data:application/pdf;" : "data:image/"
+    const count = store.prompt.files?.filter((attachment) => attachment.uri.startsWith(prefix)).length ?? 0
     const virtualText = pdf ? `[PDF ${count + 1}]` : `[Image ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
@@ -1371,33 +1259,33 @@ export function Prompt(props: PromptProps) {
       typeId: promptPartTypeId,
     })
 
-    const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
-      type: "file" as const,
-      mime: file.mime,
-      filename: file.filename,
-      url: `data:${file.mime};base64,${file.content}`,
-      source: {
-        type: "file",
-        path: file.filepath ?? file.filename ?? "",
-        text: {
-          start: extmarkStart,
-          end: extmarkEnd,
-          value: virtualText,
-        },
+    const part: NonNullable<PromptInfo["files"]>[number] = {
+      uri: file.uri,
+      name: file.filename,
+      mention: {
+        start: extmarkStart,
+        end: extmarkEnd,
+        text: virtualText,
       },
     }
     setStore(
       produce((draft) => {
-        const partIndex = draft.prompt.parts.length
-        draft.prompt.parts.push(part)
-        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+        const files = (draft.prompt.files ??= [])
+        const index = files.length
+        files.push(part)
+        draft.extmarkToPart.set(extmarkId, { type: "file", index })
       }),
     )
     return
   }
 
   function clearPrompt() {
-    if (store.prompt.input.trim().length >= DRAFT_RETENTION_MIN_CHARS || store.prompt.parts.length > 0) {
+    if (
+      store.prompt.text.trim().length >= DRAFT_RETENTION_MIN_CHARS ||
+      store.prompt.pasted.length > 0 ||
+      (store.prompt.files?.length ?? 0) > 0 ||
+      (store.prompt.agents?.length ?? 0) > 0
+    ) {
       history.append({
         ...store.prompt,
         mode: store.mode,
@@ -1405,11 +1293,8 @@ export function Prompt(props: PromptProps) {
     }
     input.clear()
     input.extmarks.clear()
-    setStore("prompt", {
-      input: "",
-      parts: [],
-    })
-    setStore("extmarkToPartIndex", new Map())
+    setStore("prompt", emptyPrompt())
+    setStore("extmarkToPart", new Map())
   }
 
   const highlight = createMemo(() => {
@@ -1503,7 +1388,7 @@ export function Prompt(props: PromptProps) {
               maxHeight={maxHeight()}
               onContentChange={() => {
                 const value = input.plainText
-                setStore("prompt", "input", value)
+                setStore("prompt", "text", value)
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
@@ -1548,7 +1433,7 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => {
                 input = r
                 Object.assign(r, {
-                  getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.parts),
+                  getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.pasted),
                 })
                 setInputTarget(r)
                 if (promptPartTypeId === 0) {
@@ -1761,14 +1646,14 @@ export function Prompt(props: PromptProps) {
         setPrompt={(cb) => {
           setStore("prompt", produce(cb))
         }}
-        setExtmark={(partIndex, extmarkId) => {
-          setStore("extmarkToPartIndex", (map: Map<number, number>) => {
+        setExtmark={(part, extmarkId) => {
+          setStore("extmarkToPart", (map: Map<number, PromptPartRef>) => {
             const newMap = new Map(map)
-            newMap.set(extmarkId, partIndex)
+            newMap.set(extmarkId, part)
             return newMap
           })
         }}
-        value={store.prompt.input}
+        value={store.prompt.text}
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}

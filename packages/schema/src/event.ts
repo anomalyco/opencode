@@ -14,7 +14,7 @@ export type ID = typeof ID.Type
 
 /**
  * Position in one aggregate's durable log. Values originate from the durable
- * event envelope, synced markers, change hints, and snapshot watermarks;
+ * event envelope and synced markers;
  * `after` cursors accept only values that came from those sources.
  */
 export const Seq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(Schema.brand("Event.Seq"))

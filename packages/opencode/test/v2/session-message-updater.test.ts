@@ -101,7 +101,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         assistantMessageID,
-        textID: "text-1",
+        ordinal: 0,
       },
     } satisfies SessionEvent.Event),
   )
@@ -115,7 +115,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         assistantMessageID,
-        textID: "text-1",
+        ordinal: 0,
         text: "hello assistant",
       },
     } satisfies SessionEvent.Event),
@@ -123,7 +123,7 @@ test.skip("text ended populates assistant text content", () => {
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
-  expect(state.messages[0].content).toEqual([{ type: "text", id: "text-1", text: "hello assistant" }])
+  expect(state.messages[0].content).toEqual([{ type: "text", text: "hello assistant" }])
 })
 
 test.skip("tool completion stores completed timestamp", () => {
@@ -176,9 +176,9 @@ test.skip("tool completion stores completed timestamp", () => {
         sessionID,
         assistantMessageID,
         callID,
-        tool: "bash",
         input: { command: "pwd" },
-        provider: { executed: true, metadata: { fake: { source: "provider" } } },
+        executed: true,
+        state: { source: "provider" },
       },
     } satisfies SessionEvent.Event),
   )
@@ -195,7 +195,8 @@ test.skip("tool completion stores completed timestamp", () => {
         callID,
         structured: {},
         content: [{ type: "text", text: "/tmp" }],
-        provider: { executed: true, metadata: { fake: { status: "done" } } },
+        executed: true,
+        resultState: { status: "done" },
       },
     } satisfies SessionEvent.Event),
   )
@@ -205,7 +206,11 @@ test.skip("tool completion stores completed timestamp", () => {
   expect(state.messages[0].content[0]?.type).toBe("tool")
   if (state.messages[0].content[0]?.type !== "tool") return
   expect(state.messages[0].content[0].time.completed).toEqual(DateTime.makeUnsafe(4))
-  expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { fake: { status: "done" } } })
+  expect(state.messages[0].content[0]).toMatchObject({
+    executed: true,
+    providerState: { source: "provider" },
+    providerResultState: { status: "done" },
+  })
 })
 
 test("compaction events reduce to compaction message only when completed", () => {

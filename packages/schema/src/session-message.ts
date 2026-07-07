@@ -2,14 +2,16 @@ export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { ProviderMetadata, ToolContent } from "./llm.js"
+import { ToolContent } from "./llm.js"
 import { Model } from "./model.js"
 import { FileAttachment, Prompt } from "./prompt.js"
-import { DateTimeUtcFromMillis, RelativePath, statics } from "./schema.js"
+import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { ascending } from "./identifier.js"
 import { Event } from "./event.js"
 import { Shell as ShellSchema } from "./shell.js"
+import { FinishReason } from "./llm.js"
+import { SessionError } from "./session-error.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
@@ -20,17 +22,16 @@ export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
 )
 export type ID = typeof ID.Type
 
-export interface UnknownError extends Schema.Schema.Type<typeof UnknownError> {}
-export const UnknownError = Schema.Struct({
-  type: Schema.Literal("unknown"),
-  message: Schema.String,
-}).annotate({ identifier: "Session.Error.Unknown" })
-
 const Base = {
   id: ID,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
+
+export const ProviderState = Schema.Record(Schema.String, Schema.Unknown).annotate({
+  identifier: "Session.Message.ProviderState",
+})
+export type ProviderState = typeof ProviderState.Type
 
 export interface AgentSelected extends Schema.Schema.Type<typeof AgentSelected> {}
 export const AgentSelected = Schema.Struct({
@@ -123,7 +124,7 @@ export const ToolStateError = Schema.Struct({
   input: Schema.Record(Schema.String, Schema.Unknown),
   content: ToolContent.pipe(Schema.Array),
   structured: Schema.Record(Schema.String, Schema.Unknown),
-  error: UnknownError,
+  error: SessionError.Error,
   result: Schema.Unknown.pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
@@ -137,11 +138,9 @@ export const AssistantTool = Schema.Struct({
   type: Schema.Literal("tool"),
   id: Schema.String,
   name: Schema.String,
-  provider: Schema.Struct({
-    executed: Schema.Boolean,
-    metadata: ProviderMetadata.pipe(optional),
-    resultMetadata: ProviderMetadata.pipe(optional),
-  }).pipe(optional),
+  executed: Schema.Boolean.pipe(optional),
+  providerState: ProviderState.pipe(optional),
+  providerResultState: ProviderState.pipe(optional),
   state: ToolState,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
@@ -154,16 +153,14 @@ export const AssistantTool = Schema.Struct({
 export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> {}
 export const AssistantText = Schema.Struct({
   type: Schema.Literal("text"),
-  id: Schema.String,
   text: Schema.String,
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
 
 export interface AssistantReasoning extends Schema.Schema.Type<typeof AssistantReasoning> {}
 export const AssistantReasoning = Schema.Struct({
   type: Schema.Literal("reasoning"),
-  id: Schema.String,
   text: Schema.String,
-  providerMetadata: ProviderMetadata.pipe(optional),
+  state: ProviderState.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),
@@ -174,6 +171,13 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
   Schema.toTaggedUnion("type"),
 )
 export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool
+
+export interface AssistantRetry extends Schema.Schema.Type<typeof AssistantRetry> {}
+export const AssistantRetry = Schema.Struct({
+  attempt: PositiveInt,
+  at: DateTimeUtcFromMillis,
+  error: SessionError.Error,
+}).annotate({ identifier: "Session.Message.Assistant.Retry" })
 
 export interface Assistant extends Schema.Schema.Type<typeof Assistant> {}
 export const Assistant = Schema.Struct({
@@ -187,7 +191,7 @@ export const Assistant = Schema.Struct({
     end: Schema.String.pipe(optional),
     files: Schema.Array(RelativePath).pipe(optional),
   }).pipe(optional),
-  finish: Schema.String.pipe(optional),
+  finish: FinishReason.pipe(optional),
   cost: Schema.Finite.pipe(optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
@@ -195,7 +199,8 @@ export const Assistant = Schema.Struct({
     reasoning: Schema.Finite,
     cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
   }).pipe(optional),
-  error: UnknownError.pipe(optional),
+  error: SessionError.Error.pipe(optional),
+  retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),
@@ -205,6 +210,7 @@ export const Assistant = Schema.Struct({
 export interface Compaction extends Schema.Schema.Type<typeof Compaction> {}
 export const Compaction = Schema.Struct({
   type: Schema.Literal("compaction"),
+  status: Schema.Literals(["queued", "running", "completed", "failed"]),
   reason: Schema.Literals(["auto", "manual"]),
   summary: Schema.String,
   recent: Schema.String,

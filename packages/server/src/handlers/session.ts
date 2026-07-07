@@ -1,5 +1,5 @@
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionContextEntry } from "@opencode-ai/core/session/context-entry"
+import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -9,6 +9,7 @@ import {
   CommandEvaluationError,
   CommandNotFoundError,
   InvalidCursorError,
+  InvalidRequestError,
   MessageNotFoundError,
   ServiceUnavailableError,
   SessionBusyError,
@@ -44,7 +45,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           const last = sessions.at(-1)
           return {
             data: sessions,
-            watermarks: Object.fromEntries(page.watermarks),
             cursor: {
               previous: first
                 ? SessionsCursor.make({
@@ -89,10 +89,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.active",
         Effect.fn(function* () {
           const active = yield* session.active
-          const watermarks = yield* session.watermarks(Array.from(active))
           return {
             data: Object.fromEntries(Array.from(active, (sessionID) => [sessionID, { type: "running" as const }])),
-            watermarks: Object.fromEntries(watermarks),
           }
         }),
       )
@@ -111,6 +109,22 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.remove",
+        Effect.fn(function* (ctx) {
+          yield* session.remove(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(
@@ -216,6 +230,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     }),
                   ),
                 ),
+                Effect.catchTag("Session.AttachmentError", (error) =>
+                  Effect.fail(new InvalidRequestError({ message: error.message, field: "prompt.files" })),
+                ),
               ),
           }
         }),
@@ -269,6 +286,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                       resource: error.messageID,
                     }),
                   ),
+                ),
+                Effect.catchTag("Session.AttachmentError", (error) =>
+                  Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
                 ),
               ),
           }
@@ -344,44 +364,26 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.compact",
         Effect.fn(function* (ctx) {
-          yield* session.compact({ sessionID: ctx.params.sessionID }).pipe(
-            Effect.catchTag("Session.NotFoundError", (error) =>
-              Effect.fail(
-                new SessionNotFoundError({
-                  sessionID: error.sessionID,
-                  message: `Session not found: ${error.sessionID}`,
-                }),
-              ),
-            ),
-            Effect.catchTag("Session.OperationUnavailableError", (error) =>
-              Effect.fail(
-                new ServiceUnavailableError({
-                  message: `Session ${error.operation} is not available yet`,
-                  service: `session.${error.operation}`,
-                }),
-              ),
-            ),
-            Effect.catchTag(
-              "Session.BusyError",
-              (error) =>
-                new SessionBusyError({
-                  sessionID: error.sessionID,
-                  message: `Session is busy: ${error.sessionID}`,
-                }),
-            ),
-            Effect.catchTag("Session.MessageDecodeError", (error) => {
-              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-              return Effect.logError("failed to decode session message during compaction").pipe(
-                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
-                Effect.andThen(
-                  Effect.fail(
-                    new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref }),
-                  ),
+          return {
+            data: yield* session.compact({ sessionID: ctx.params.sessionID, id: ctx.payload.id }).pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
                 ),
-              )
-            }),
-          )
-          return HttpApiSchema.NoContent.make()
+              ),
+              Effect.catchTag("Session.CompactionConflictError", (error) =>
+                Effect.fail(
+                  new ConflictError({
+                    message: `Compaction input ID conflicts with an existing durable record: ${error.inputID}`,
+                    resource: error.inputID,
+                  }),
+                ),
+              ),
+            ),
+          }
         }),
       )
       .handle(
@@ -544,25 +546,25 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "session.context.entry.list",
+        "session.instructions.entry.list",
         Effect.fn(function* (ctx) {
-          const contextEntries = yield* SessionContextEntry.Service
-          return { data: yield* contextEntries.list(ctx.params.sessionID) }
+          const instructions = yield* InstructionEntry.Service
+          return { data: yield* instructions.list(ctx.params.sessionID) }
         }),
       )
       .handle(
-        "session.context.entry.put",
+        "session.instructions.entry.put",
         Effect.fn(function* (ctx) {
-          const contextEntries = yield* SessionContextEntry.Service
-          yield* contextEntries.put({ sessionID: ctx.params.sessionID, key: ctx.params.key, value: ctx.payload.value })
+          const instructions = yield* InstructionEntry.Service
+          yield* instructions.put({ sessionID: ctx.params.sessionID, key: ctx.params.key, value: ctx.payload.value })
           return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(
-        "session.context.entry.remove",
+        "session.instructions.entry.remove",
         Effect.fn(function* (ctx) {
-          const contextEntries = yield* SessionContextEntry.Service
-          yield* contextEntries.remove({ sessionID: ctx.params.sessionID, key: ctx.params.key })
+          const instructions = yield* InstructionEntry.Service
+          yield* instructions.remove({ sessionID: ctx.params.sessionID, key: ctx.params.key })
           return HttpApiSchema.NoContent.make()
         }),
       )

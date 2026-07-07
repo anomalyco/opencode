@@ -14,14 +14,14 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt } from "@opencode-ai/core/session/prompt"
+import { Prompt } from "@opencode-ai/schema/prompt"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { Shell } from "@opencode-ai/schema/shell"
 import {
-  SessionContextCheckpointTable,
+  InstructionCheckpointTable,
   SessionInputTable,
   SessionMessageTable,
   SessionTable,
@@ -79,23 +79,33 @@ describe("SessionProjector", () => {
         })
         .run()
       const boundary = SessionMessage.ID.make("msg_boundary")
+      const earlier = SessionMessage.ID.make("msg_earlier")
       yield* db
         .insert(SessionMessageTable)
         .values([
-          assistantRow(boundary, 1),
+          assistantRow(earlier, 0),
+          assistantRow(
+            boundary,
+            1,
+            { created },
+            {
+              cost: 0.5,
+              tokens: { input: 4, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
+            },
+          ),
           assistantRow(
             SessionMessage.ID.make("msg_later"),
             2,
             { created },
             {
-              cost: 1.25,
-              tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
+              cost: 0.75,
+              tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
             },
           ),
         ])
         .run()
       yield* db
-        .insert(SessionContextCheckpointTable)
+        .insert(InstructionCheckpointTable)
         .values({ session_id: sessionID, baseline: "baseline", snapshot: {}, baseline_seq: 0 })
         .run()
       const events = yield* EventV2.Service
@@ -116,11 +126,11 @@ describe("SessionProjector", () => {
       })
       yield* events.publish(SessionEvent.RevertEvent.Committed, {
         sessionID,
-        messageID: boundary,
+        to: boundary,
       })
       expect(
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
-      ).toEqual([boundary])
+      ).toEqual([earlier])
       expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({
         cost: 0,
         tokens_input: 0,
@@ -130,7 +140,7 @@ describe("SessionProjector", () => {
         tokens_cache_write: 0,
       })
       // A committed revert resets the context checkpoint so the next turn re-initializes.
-      expect(yield* db.select().from(SessionContextCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
+      expect(yield* db.select().from(InstructionCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
     }),
   )
 
@@ -460,6 +470,73 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("projects retry state and clears it at the next step or execution terminal", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const first = SessionMessage.ID.make("msg_retry_first")
+      const second = SessionMessage.ID.make("msg_retry_second")
+      yield* events.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: first, agent: "build", model })
+      yield* events.publish(SessionEvent.RetryScheduled, {
+        sessionID,
+        assistantMessageID: first,
+        attempt: 2,
+        at: 2_000,
+        error: { type: "provider.transport", message: "Disconnected" },
+      })
+
+      const decode = (row: typeof SessionMessageTable.$inferSelect) =>
+        Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type })
+      const firstRow = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, first))
+        .get()
+        .pipe(Effect.orDie)
+      const projected = firstRow ?? (yield* Effect.die(new Error("Missing retry projection")))
+      expect(decode(projected)).toMatchObject({
+        retry: { attempt: 2, at: DateTime.makeUnsafe(2_000), error: { type: "provider.transport" } },
+      })
+
+      yield* events.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: second, agent: "build", model })
+      yield* events.publish(SessionEvent.RetryScheduled, {
+        sessionID,
+        assistantMessageID: second,
+        attempt: 3,
+        at: 6_000,
+        error: { type: "provider.internal", message: "Unavailable" },
+      })
+      yield* events.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      expect(decode(rows[0])).not.toHaveProperty("retry")
+      expect(decode(rows[1])).not.toHaveProperty("retry")
+    }),
+  )
+
   it.effect("updates only the newest incomplete assistant projection", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
@@ -565,7 +642,7 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Text.Started, {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
-        textID: "text-stale",
+        ordinal: 0,
       })
 
       const rows = yield* db
@@ -584,7 +661,7 @@ describe("SessionProjector", () => {
           type: "assistant",
           agent: "build",
           model,
-          content: [SessionMessage.AssistantText.make({ type: "text", id: "text-stale", text: "" })],
+          content: [SessionMessage.AssistantText.make({ type: "text", text: "" })],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
         SessionMessage.Assistant.make({

@@ -8,6 +8,7 @@ import { Project } from "./project.js"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionID } from "./session-id.js"
+import { SessionMessage } from "./session-message.js"
 import { Revert } from "./revert.js"
 
 export const ID = SessionID
@@ -19,6 +20,10 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
   parentID: ID.pipe(optional),
+  fork: Schema.Struct({
+    sessionID: ID,
+    messageID: SessionMessage.ID.pipe(optional),
+  }).pipe(optional),
   projectID: Project.ID,
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),

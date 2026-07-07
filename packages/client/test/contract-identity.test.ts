@@ -7,7 +7,6 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionInput as CoreSessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt as CorePrompt } from "@opencode-ai/core/session/prompt"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
@@ -22,6 +21,14 @@ import { Api } from "@opencode-ai/server/api"
 import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
 import { ClientApi, endpointNames, groupNames, promiseOmitEndpoints } from "../src/contract"
 
+const Client = await import("../src/effect")
+
+test("effect entrypoint exposes canonical Schema contracts", () => {
+  expect(Client.Agent).toBe(Agent)
+  expect(Client.Model).toBe(Model)
+  expect(Client.Session).toBe(Session)
+})
+
 test("Core and Server reuse the authoritative Schema and Protocol values", () => {
   expect(AgentV2.ID).toBe(Agent.ID)
   expect(CoreLocation.Ref).toBe(Location.Ref)
@@ -32,7 +39,6 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(ProjectV2.Directories).toBe(Project.Directories)
   expect(CoreSessionInput.Admitted).toBe(SessionInput.Admitted)
   expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)
-  expect(CorePrompt).toBe(Prompt)
   expect(Api.groups["server.session"].identifier).toBe("server.session")
   expect(Api.groups["server.project"].identifier).toBe("server.project")
   expect(Object.keys(ClientApi.groups)).toEqual(Object.keys(Api.groups))

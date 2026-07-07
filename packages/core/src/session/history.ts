@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, gt, gte, ne, or } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, ne, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
-import { SessionContextCheckpointTable, SessionMessageTable } from "./sql"
+import { InstructionCheckpointTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -14,7 +14,13 @@ export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService
   return yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
-    .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "compaction"),
+        sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
+      ),
+    )
     .orderBy(desc(SessionMessageTable.seq))
     .limit(1)
     .get()
@@ -70,9 +76,9 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
   const [epoch, compaction] = yield* Effect.all(
     [
       db
-        .select({ baselineSeq: SessionContextCheckpointTable.baseline_seq })
-        .from(SessionContextCheckpointTable)
-        .where(eq(SessionContextCheckpointTable.session_id, sessionID))
+        .select({ baselineSeq: InstructionCheckpointTable.baseline_seq })
+        .from(InstructionCheckpointTable)
+        .where(eq(InstructionCheckpointTable.session_id, sessionID))
         .get()
         .pipe(Effect.orDie),
       latestCompaction(db, sessionID),

@@ -34,6 +34,13 @@
 - Use flat top-level exports plus the package's existing namespace projection pattern, for example `export * as SessionMessage from "./session-message"`.
 - Keep standalone ID modules only when they prevent real cycles or heavy dependency edges. Inline one-off IDs into their owning contract module when no cycle exists.
 
+## Public Re-exports
+
+- Public leaf packages re-export the canonical domain namespaces used by their APIs so consumers install and version one package. Keep the list curated by public API reachability rather than mirroring the Schema root.
+- Re-export directly from `@opencode-ai/schema/<domain>` and preserve the exact canonical values and types. Do not wrap schemas, duplicate definitions, or route exports through another facade package.
+- Internal packages import contracts directly from their canonical Schema owner. Import a Core domain facade only when runtime behavior from that facade is required.
+- Resolve name collisions by retaining the domain namespace and qualifying its members, such as `Session.Info` and `Agent.Info`. Do not introduce aliases such as `SessionSchema`, `AgentSchema`, or `ModelSchema`.
+
 ## Naming
 
 - Exported schema values and namespace objects use `PascalCase`.

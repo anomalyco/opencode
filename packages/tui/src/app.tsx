@@ -1,4 +1,5 @@
 import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
@@ -42,6 +43,7 @@ import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
+import { DialogDebug } from "./component/dialog-debug"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -86,6 +88,8 @@ import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-wi
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
+registerOpencodeSpinner()
+
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
@@ -116,6 +120,7 @@ const appBindingCommands = [
   "provider.connect",
   "console.org.switch",
   "opencode.status",
+  "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
@@ -200,9 +205,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               },
             } satisfies CliRendererConfig
 
-            if (!!process.env.OPENCODE_SIMULATION) {
-              const { Simulation } = await import("@opencode-ai/simulation/frontend")
-              return Simulation.createSimulation(options)
+            if (process.env.OPENCODE_DRIVE) {
+              const { Drive } = await import("@opencode-ai/simulation/frontend")
+              return Drive.create(options)
             }
 
             return createCliRenderer(options)
@@ -302,7 +307,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   >
                                     <TuiConfigProvider config={input.config}>
                                       <PluginRuntimeProvider value={pluginRuntime}>
-                                        <SDKProvider client={input.client} api={input.api} discover={input.discover} reload={input.reload}>
+                                        <SDKProvider
+                                          client={input.client}
+                                          api={input.api}
+                                          discover={input.discover}
+                                          reload={input.reload}
+                                        >
                                           <PermissionProvider>
                                             <ProjectProvider>
                                               <SyncProvider>
@@ -490,7 +500,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }
 
     if (route.data.type === "session") {
-      const session = sync.session.get(route.data.sessionID)
+      const session = data.session.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
         return
@@ -549,13 +559,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           route.navigate({ type: "session", sessionID: match })
           return
         }
-        void sdk.client.session.fork({ sessionID: match }).then((result) => {
-          if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
-            return
-          }
-          toast.show({ message: "Failed to fork session", variant: "error" })
-        })
+        void sdk.api.session
+          .fork({ sessionID: match })
+          .then((result) => route.navigate({ type: "session", sessionID: result.id }))
+          .catch(toast.error)
       })
       .catch(toast.error)
   })
@@ -567,13 +574,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
     forked = true
-    void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
-      if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
-      } else {
-        toast.show({ message: "Failed to fork session", variant: "error" })
-      }
-    })
+    void sdk.api.session
+      .fork({ sessionID: args.sessionID })
+      .then((result) => route.navigate({ type: "session", sessionID: result.id }))
+      .catch(toast.error)
   })
 
   const connected = useConnected()
@@ -822,6 +826,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           ]
         : []),
       {
+        name: "opencode.debug",
+        title: "View debug info",
+        slashName: "debug",
+        run: () => {
+          dialog.replace(() => <DialogDebug />)
+        },
+        category: "System",
+      },
+      {
         name: "theme.switch",
         title: "Switch theme",
         slashName: "themes",
@@ -1020,7 +1033,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     enabled: () => {
       const current = promptRef.current
       if (!current?.focused) return true
-      return current.current.input === ""
+      return current.current.text === ""
     },
     bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
   }))
@@ -1055,7 +1068,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   event.on("session.deleted", (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.data.info.id) {
+    if (route.data.type === "session" && route.data.sessionID === evt.data.sessionID) {
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",

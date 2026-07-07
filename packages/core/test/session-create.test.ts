@@ -16,7 +16,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Prompt } from "@opencode-ai/core/session/prompt"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -192,7 +192,7 @@ describe("SessionV2.create", () => {
       const parent = yield* session.create({ location, title: "Parent" })
       const admitted = yield* session.prompt({
         sessionID: parent.id,
-        prompt: Prompt.make({ text: "First" }),
+        prompt: PromptInput.Prompt.make({ text: "First" }),
         resume: false,
       })
       yield* SessionInput.promoteSteers(db, events, parent.id)
@@ -206,7 +206,8 @@ describe("SessionV2.create", () => {
       const forkContext = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
 
-      expect(forked).toMatchObject({ parentID: parent.id, title: "Parent (fork #1)" })
+      expect(forked).toMatchObject({ title: "Parent (fork #1)", fork: { sessionID: parent.id } })
+      expect(forked.parentID).toBeUndefined()
       expect(forkContext).toMatchObject([
         { type: "user", text: "First" },
         { type: "synthetic", text: "parent note", sessionID: forked.id },
@@ -224,9 +225,9 @@ describe("SessionV2.create", () => {
         promotedSeq: 2,
       })
 
-      yield* session.prompt({ sessionID: parent.id, prompt: Prompt.make({ text: "Parent changed" }), resume: false })
+      yield* session.prompt({ sessionID: parent.id, prompt: PromptInput.Prompt.make({ text: "Parent changed" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, parent.id)
-      yield* session.prompt({ sessionID: forked.id, prompt: Prompt.make({ text: "Child continues" }), resume: false })
+      yield* session.prompt({ sessionID: forked.id, prompt: PromptInput.Prompt.make({ text: "Child continues" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, forked.id)
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -249,13 +250,13 @@ describe("SessionV2.create", () => {
       const parent = yield* session.create({ location })
       const first = yield* session.prompt({
         sessionID: parent.id,
-        prompt: Prompt.make({ text: "First" }),
+        prompt: PromptInput.Prompt.make({ text: "First" }),
         resume: false,
       })
       yield* SessionInput.promoteSteers(db, events, parent.id)
       const second = yield* session.prompt({
         sessionID: parent.id,
-        prompt: Prompt.make({ text: "Second" }),
+        prompt: PromptInput.Prompt.make({ text: "Second" }),
         resume: false,
       })
       yield* SessionInput.promoteSteers(db, events, parent.id)
@@ -264,6 +265,7 @@ describe("SessionV2.create", () => {
 
       const context = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
+      expect(forked.fork).toEqual({ sessionID: parent.id, messageID: second.id })
       expect(context).toMatchObject([{ text: "First" }])
       expect(context[0]?.id).not.toBe(first.id)
       expect(history[0]).toMatchObject({ data: { from: second.id } })
@@ -373,7 +375,7 @@ describe("SessionV2.create", () => {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
-      yield* session.prompt({ sessionID: created.id, prompt: Prompt.make({ text: "Hello" }), resume: false })
+      yield* session.prompt({ sessionID: created.id, prompt: PromptInput.Prompt.make({ text: "Hello" }), resume: false })
       yield* SessionInput.promoteSteers(db, events, created.id)
 
       expect(
@@ -393,7 +395,7 @@ describe("SessionV2.create", () => {
       const created = yield* session.create({ id: SessionV2.ID.make("ses_fresh_target_replay"), location })
       const admitted = yield* session.prompt({
         sessionID: created.id,
-        prompt: Prompt.make({ text: "Replay lifecycle" }),
+        prompt: PromptInput.Prompt.make({ text: "Replay lifecycle" }),
         resume: false,
       })
       yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id)

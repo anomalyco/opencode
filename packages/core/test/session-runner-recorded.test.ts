@@ -19,7 +19,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionTitle } from "@opencode-ai/core/session/title"
-import { Prompt } from "@opencode-ai/core/session/prompt"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
@@ -31,9 +31,9 @@ import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Location } from "@opencode-ai/core/location"
-import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
-import { InstructionContext } from "@opencode-ai/core/instruction-context"
-import { SystemContext } from "@opencode-ai/core/system-context"
+import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
+import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
+import { Instructions } from "@opencode-ai/core/instructions"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
@@ -73,18 +73,18 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(SessionRunnerModel.resolved(model)))
-const systemContext = Layer.mock(SystemContextBuiltIns.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const instructionContext = Layer.mock(InstructionContext.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty) })
+const instructionContext = Layer.mock(InstructionDiscovery.Service, { load: () => Effect.succeed(Instructions.empty) })
+const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
+const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
+const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
   [SessionRunnerModel.node, models],
-  [SystemContextBuiltIns.node, systemContext],
-  [InstructionContext.node, instructionContext],
+  [InstructionBuiltIns.node, systemContext],
+  [InstructionDiscovery.node, instructionContext],
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
   [ReferenceGuidance.node, referenceGuidance],
@@ -119,8 +119,8 @@ const it = testEffect(
       AgentV2.node,
       ToolRegistry.node,
       SessionRunnerModel.node,
-      SystemContextBuiltIns.node,
-      InstructionContext.node,
+      InstructionBuiltIns.node,
+      InstructionDiscovery.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
       Config.node,
@@ -133,8 +133,8 @@ const it = testEffect(
       [PermissionV2.node, permission],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
       [SessionRunnerModel.node, models],
-      [SystemContextBuiltIns.node, systemContext],
-      [InstructionContext.node, instructionContext],
+      [InstructionBuiltIns.node, systemContext],
+      [InstructionDiscovery.node, instructionContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
       [SkillGuidance.node, skillGuidance],
       [ReferenceGuidance.node, referenceGuidance],
@@ -172,7 +172,7 @@ describe("SessionRunnerLLM recorded", () => {
       const session = yield* SessionV2.Service
       const prompt = yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Say hello in one short sentence." }),
+        prompt: PromptInput.Prompt.make({ text: "Say hello in one short sentence." }),
         resume: false,
       })
 

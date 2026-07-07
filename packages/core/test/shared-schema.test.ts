@@ -6,11 +6,11 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
-import { AgentAttachment, FileAttachment, Prompt, Source } from "@opencode-ai/schema/prompt"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Project } from "@opencode-ai/schema/project"
 import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
+import { Prompt } from "@opencode-ai/schema/prompt"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionInput } from "@opencode-ai/schema/session-input"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -47,7 +47,6 @@ test("Core reuses the canonical shared schemas", async () => {
     coreSessionInput,
     coreSessionMessage,
     coreSessionTodo,
-    corePrompt,
     coreSkill,
     coreV2Schema,
     coreSchema,
@@ -69,7 +68,6 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
     import("@opencode-ai/core/session/todo"),
-    import("@opencode-ai/core/session/prompt"),
     import("@opencode-ai/core/skill"),
     import("@opencode-ai/core/v2-schema"),
     import("@opencode-ai/core/schema"),
@@ -105,6 +103,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreIntegration.Ref, Integration.Ref],
     [coreLocation.Ref, Location.Ref],
     [coreLLM.ProviderMetadata, LLM.ProviderMetadata],
+    [coreLLM.FinishReason, LLM.FinishReason],
     [coreLLM.ToolTextContent, LLM.ToolTextContent],
     [coreLLM.ToolFileContent, LLM.ToolFileContent],
     [coreLLM.ToolContent, LLM.ToolContent],
@@ -114,12 +113,8 @@ test("Core reuses the canonical shared schemas", async () => {
     [ModelV2.Family, Model.Family],
     [ModelV2.Capabilities, Model.Capabilities],
     [ModelV2.Cost, Model.Cost],
-    [ModelV2.Api, Model.Api],
     [ModelV2.Info, Model.Info],
     [ProviderV2.ID, Provider.ID],
-    [ProviderV2.AISDK, Provider.AISDK],
-    [ProviderV2.Native, Provider.Native],
-    [ProviderV2.Api, Provider.Api],
     [ProviderV2.Request, Provider.Request],
     [ProviderV2.Info, Provider.Info],
     [corePermission.Effect, Permission.Effect],
@@ -143,7 +138,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionInput.Delivery, SessionInput.Delivery],
     [coreSessionInput.Admitted, SessionInput.Admitted],
     [coreSessionMessage.ID, SessionMessage.ID],
-    [coreSessionMessage.UnknownError, SessionMessage.UnknownError],
+    [coreSessionMessage.AssistantRetry, SessionMessage.AssistantRetry],
     [coreSessionMessage.AgentSelected, SessionMessage.AgentSelected],
     [coreSessionMessage.ModelSelected, SessionMessage.ModelSelected],
     [coreSessionMessage.User, SessionMessage.User],
@@ -164,10 +159,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.Message, SessionMessage.Message],
     [coreSessionTodo.Info, SessionTodo.Info],
     [coreSessionTodo.Event, SessionTodo.Event],
-    [corePrompt.Source, Source],
-    [corePrompt.FileAttachment, FileAttachment],
-    [corePrompt.AgentAttachment, AgentAttachment],
-    [corePrompt.Prompt, Prompt],
     [coreSkill.DirectorySource, Skill.DirectorySource],
     [coreSkill.UrlSource, Skill.UrlSource],
     [coreSkill.EmbeddedSource, Skill.EmbeddedSource],
@@ -193,7 +184,7 @@ test("Core reuses the canonical shared schemas", async () => {
 test("shared record schemas construct and decode plain objects", () => {
   const made = Prompt.make({ text: "hello" })
   const decoded = Schema.decodeUnknownSync(Prompt)({ text: "hello" })
-  const content = Schema.decodeUnknownSync(SessionMessage.AssistantText)({ type: "text", id: "part_1", text: "hi" })
+  const content = Schema.decodeUnknownSync(SessionMessage.AssistantText)({ type: "text", text: "hi" })
 
   expect(Object.getPrototypeOf(made)).toBe(Object.prototype)
   expect(Object.getPrototypeOf(decoded)).toBe(Object.prototype)

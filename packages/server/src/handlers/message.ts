@@ -38,10 +38,6 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
         })
         const order = decoded?.order ?? ctx.query.order ?? "desc"
-        // Read the watermark before the snapshot: an understated watermark only
-        // redelivers already-reflected events, while an overstated one would let
-        // an attached tail skip events missing from the snapshot.
-        const watermark = (yield* session.watermarks([ctx.params.sessionID])).get(ctx.params.sessionID)
         const messages = yield* session
           .messages({
             sessionID: ctx.params.sessionID,
@@ -74,7 +70,6 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
         const last = messages.at(-1)
         return {
           data: messages,
-          watermark,
           cursor: {
             previous: first ? cursor.encode(first, order, "previous") : undefined,
             next: last ? cursor.encode(last, order, "next") : undefined,

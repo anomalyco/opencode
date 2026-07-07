@@ -17,6 +17,12 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
     projectID: ProjectV2.ID.make(row.project_id),
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
+    fork: row.fork_session_id
+      ? {
+          sessionID: SessionSchema.ID.make(row.fork_session_id),
+          messageID: row.fork_message_id ? SessionMessage.ID.make(row.fork_message_id) : undefined,
+        }
+      : undefined,
     agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,
     model: row.model
       ? {

@@ -18,7 +18,11 @@ type PromisifyOperation<Operation> = Operation extends (
   ? (...args: Args) => Promise<Success>
   : Operation extends (...args: infer Args) => Stream.Stream<infer Success, unknown, unknown>
     ? (...args: Args) => AsyncIterable<Success>
-    : Operation
+    : Operation extends (...args: infer _Args) => unknown
+      ? Operation
+      : Operation extends object
+        ? PromisifyApi<Operation>
+        : Operation
 
 type PromisifyApi<Api> = {
   readonly [Name in keyof Api]: PromisifyOperation<Api[Name]>

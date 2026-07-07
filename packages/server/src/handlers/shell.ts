@@ -39,6 +39,20 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         }),
       )
       .handle(
+        "shell.timeout",
+        Effect.fn(function* (ctx) {
+          const shell = yield* Shell.Service
+          return yield* response(
+            shell.timeout(ctx.params.id, ctx.payload.timeout).pipe(
+              Effect.catchTag(
+                "Shell.NotFoundError",
+                () => new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+              ),
+            ),
+          )
+        }),
+      )
+      .handle(
         "shell.output",
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service

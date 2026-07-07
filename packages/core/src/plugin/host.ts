@@ -18,6 +18,7 @@ import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
 import { AbsolutePath, type DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
+import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
 import { ToolHooks } from "../tool/hooks"
 import { WorkspaceV2 } from "../workspace"
@@ -158,7 +159,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
     },
     event: {
-      subscribe: () => events.live().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe: () => events.subscribe().pipe(Stream.filter(EventManifest.isServer)),
     },
     integration: {
       list: () => response(integration.list()),
@@ -298,7 +299,26 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
     },
     tool: {
-      register: (input, options) => tools.register(input, options),
+      transform: (callback) =>
+        Effect.gen(function* () {
+          const registrations: Array<{
+            readonly name: string
+            readonly tool: Tool.AnyTool
+            readonly options?: Tool.RegisterOptions
+          }> = []
+          yield* Effect.sync(() =>
+            callback({
+              add: (name, tool, options) => {
+                registrations.push({ name, tool, ...(options ? { options } : {}) })
+              },
+            }),
+          )
+          yield* Effect.forEach(
+            registrations,
+            (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
+            { discard: true },
+          )
+        }),
       execute: {
         before: (callback) =>
           toolHooks.hook.before((event) => {

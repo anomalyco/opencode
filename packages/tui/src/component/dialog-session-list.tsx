@@ -1,4 +1,4 @@
-import { createMemo, createResource, onMount } from "solid-js"
+import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import path from "path"
 import type { SessionV2Info } from "@opencode-ai/sdk/v2"
 import { useDialog } from "../ui/dialog"
@@ -15,6 +15,7 @@ import { useToast } from "../ui/toast"
 import { useCommandShortcut } from "../keymap"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { Spinner } from "./spinner"
+import { errorMessage } from "../util/error"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -26,8 +27,10 @@ export function DialogSessionList() {
   const local = useLocal()
   const toast = useToast()
   const [search, setSearch] = createDebouncedSignal("", 150)
+  const [toDelete, setToDelete] = createSignal<string>()
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
+  const deleteHint = useCommandShortcut("session.delete")
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return
@@ -78,11 +81,13 @@ export function DialogSessionList() {
       const directory = session.location.directory
       const footer = directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
       const slot = slotByID.get(session.id)
+      const deleting = toDelete() === session.id
       return {
-        title: session.title,
+        title: deleting ? `Press ${deleteHint()} again to confirm` : session.title,
         value: session.id,
         category,
         footer,
+        bg: deleting ? theme.error : undefined,
         gutter:
           data.session.family(session.id).some((id) => data.session.status(id) === "running")
             ? () => <Spinner />
@@ -104,9 +109,6 @@ export function DialogSessionList() {
 
   onMount(() => dialog.setSize("large"))
 
-  const unavailable = (feature: string) =>
-    toast.show({ message: `${feature} is not implemented for V2 sessions yet`, variant: "error", duration: 5000 })
-
   return (
     <DialogSelect
       title="Sessions"
@@ -114,6 +116,7 @@ export function DialogSessionList() {
       skipFilter={true}
       current={currentSessionID()}
       onFilter={setSearch}
+      onMove={() => setToDelete(undefined)}
       onSelect={(option) => {
         route.navigate({ type: "session", sessionID: option.value })
         dialog.clear()
@@ -127,7 +130,22 @@ export function DialogSessionList() {
         {
           command: "session.delete",
           title: "delete",
-          onTrigger: () => unavailable("Deleting"),
+          onTrigger: (option: { value: string }) => {
+            if (toDelete() !== option.value) {
+              setToDelete(option.value)
+              return
+            }
+            void sdk.client.v2.session
+              .remove({ sessionID: option.value }, { throwOnError: true })
+              .catch((error) => {
+                setToDelete(undefined)
+                toast.show({
+                  message: `Failed to delete session: ${errorMessage(error)}`,
+                  variant: "error",
+                  duration: 5000,
+                })
+              })
+          },
         },
         {
           command: "session.rename",

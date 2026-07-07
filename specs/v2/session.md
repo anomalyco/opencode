@@ -21,7 +21,7 @@ sessions.prompt({ id?, sessionID, prompt, delivery?, resume? })
 
 sessions.interrupt(sessionID)
   -> interrupts active execution on this process
-  -> waits for runner cleanup and settlement
+  -> waits for runner cleanup and a terminal lifecycle observation
   -> clears a coalesced follow-up wake already registered with this coordinator
   -> preserves durable inbox rows for a later wake or resume
   -> idle or missing Session is a no-op
@@ -32,7 +32,7 @@ sessions.active()
   -> absence means inactive; activity is not durable across process restarts
 ```
 
-`session_input` is the durable admission inbox. `PromptAdmitted` records and projects accepted input so pending queue state can be replayed, replicated, and observed by clients. Admitted inputs remain outside model-visible Session history until the serialized runner publishes `Prompted`. Its projector atomically writes the visible user message and marks the inbox row promoted in the same event transaction. The V1-to-V2 shadow bridge publishes the same `Prompted` event for already-visible V1 prompts.
+`session_input` is the typed durable admission inbox for prompts and Session control operations. `PromptAdmitted` records accepted user input; `Compaction.Admitted` records one coalesced manual compaction barrier. Admitted prompts remain outside model-visible Session history until the serialized runner publishes `Prompted`. Its projector atomically writes the visible user message and marks the inbox row promoted in the same event transaction. A pending compaction blocks all unpromoted prompts, runs before the Session would otherwise become idle, and releases the backlog only after its durable ended or failed event settles the barrier. The V1-to-V2 shadow bridge publishes the same `Prompted` event for already-visible V1 prompts.
 
 `admittedSeq` is the durable Session event sequence of `PromptAdmitted`. Clients may use the admission event to represent queued input before `Prompted` makes it part of visible conversation history.
 
@@ -47,65 +47,82 @@ SessionExecution.resume(sessionID)
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
 
-The local runner issues one explicit `llm.stream(request)` per step, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, and reloads projected history once before continuation. Promoting any new user input resets the selected agent's configured step allowance; multiple steers promoted at one boundary reset it once. Tool settlement events carry the owning assistant message ID because provider-local call IDs may repeat across steps. Before assembling a provider request, the runner durably fails any local tool still projected as `running` from a previous process with `Tool execution interrupted`; abandoned side effects are never silently replayed.
+The local runner issues one explicit `llm.stream(request)` per step, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every owned tool fiber after provider-stream closure, and reloads projected history once before continuation. For every in-process step, `session.step.started` precedes its tool calls, every local and hosted call settles as `session.tool.success` or `session.tool.failed`, and only then may the runner publish the single terminal `session.step.ended` or `session.step.failed`. Streamed provider-error evidence is retained until this closeout; thrown provider failures and interruption use the same settlement-first ordering. Promoting any new user input resets the selected agent's configured step allowance; multiple steers promoted at one boundary reset it once.
+
+`callID` is unique only within its owning step, not across the Session. Tool events therefore carry `assistantMessageID`, and consumers correlate a call through the step that owns that assistant message rather than inventing a synthetic composite key. Before assembling a provider request, the runner's cross-drain `failInterruptedTools` recovery durably fails any tool still projected as pending or running from a previous process with `Tool execution interrupted`. This orphan-recovery sweep is the explicit nesting exception: it occurs in a later drain, but attributes every settlement to the original `assistantMessageID`; abandoned side effects are never silently replayed.
+
+`session.execution.started.1` and exactly one of `session.execution.succeeded.1`, `session.execution.failed.1`, or `session.execution.interrupted.1` observe one process-local coordinator busy period, including coalesced drains and joined resumes. These durable rows are history, not a durable execution identity: replay must never infer current liveness, recovery, grouping, or resumability from an unmatched start. A drain has no durable identity or transcript boundary. `/api/session/active` is the authority for current process-local liveness, and is empty after restart. User interruption records `reason: "user"`; owner-scope interruption defaults to `"shutdown"`; `"superseded"` is reserved for explicit replacement.
+
+Core retries only typed rate-limit, provider-internal, and transport failures before durable assistant text, reasoning, tool-call, tool-output, or tool-execution evidence. The initial call plus at most four retries use two-second exponential backoff, raised when a provider's `retryAfterMs` is larger. Every retry attempt remains a distinct step and consumes the selected agent's step allowance, while all pre-output attempts reuse one assistant message ID so retry state never creates empty transcript messages. Repeated `session.step.started.1` facts reopen that assistant projection idempotently. `session.retry.scheduled.1` is committed before each delay with the upcoming one-based attempt and absolute epoch-millisecond time, then projects onto `Assistant.retry`. The next `session.step.started.1` or terminal failure/interruption clears it. A scheduled retry surviving a crash is historical UI state only and never triggers recovery.
+
+A normalized `step-finish` with `content-filter` publishes `session.step.failed.1` with `provider.content-filter`, never `session.step.ended.1`. Any partial streamed content remains visible; a contentless filtered response still has a failed assistant projection.
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 
-## Context Epochs
+## Instruction Checkpoints
 
-V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch stores one immutable provider-cache baseline and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
+V2 Sessions persist the exact privileged instructions shown to the model. `InstructionCheckpoint` stores one immutable instruction baseline, its baseline event sequence, and a model-hidden `Instructions.Applied` record used to compare independently observed instruction sources. Instructions are only one part of Model Context: the runner separately assembles agent or provider system text, Session History, tool definitions, and step-local additions for each request.
 
-The first complete observation initializes the epoch before any pending prompt becomes model-visible. If initial context is temporarily unavailable, execution stops while the prompt remains pending and retryable. On later steps, the runner promotes eligible input first, then reconciles current sources at the safe boundary. Changed context becomes one durable chronological System message, and its event commit advances the epoch snapshot atomically.
+The runner has no instruction registry. `loadInstructions` explicitly loads these producers concurrently and combines them in this fixed order:
 
-```text
-Client            Runner                         System Context Registry       Context Epoch Store       Session History         LLM
-   │                 │                                      │                           │                       │                 │
-   ├─ Admit prompt ─────────────────────────────────────────────────────────────────────────────────────────────▶                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Observe initial context ────────────▶                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ◀─ Complete baseline or unavailable ───┤                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Initialize missing epoch ───────────────────────────────────────▶                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Promote eligible input ─────────────────────────────────────────────────────────────────▶                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Reconcile at safe boundary ─────────▶                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ◀─ Unchanged or chronological update ──┤                           │                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Advance snapshot atomically with update ────────────────────────▶                       │                 │
-   │                 │                                      │                           │                       │                 │
-   │                 ├─ Baseline + chronological history ─────────────────────────────────────────────────────────────────────────▶
-```
+1. Instruction built-ins, currently environment facts and the host-local date.
+2. `InstructionDiscovery`, observing ambient `AGENTS.md` files.
+3. Selected-agent available-skill guidance.
+4. Reference guidance.
+5. Selected-agent MCP guidance.
+6. API-managed `InstructionEntry` values for the Session.
 
-Agent and model selection are step-scoped. A switch admitted after the current safe step boundary applies to the next step without restarting the current step or replacing the baseline. Agent-specific skill guidance remains a Context Source, so changed guidance is admitted as a chronological System message. A completed compaction causes the next physical attempt to render a fresh baseline directly from current complete context. A Session move clears the epoch so the destination Location initializes a complete baseline on its next run.
+`Instructions.combine(...)` preserves that caller order and rejects duplicate namespaced source keys. Each source owns its typed observation, JSON codec, and pure baseline, update, and optional removal renderers.
+
+The first complete observation initializes `InstructionCheckpoint` before any pending prompt becomes model-visible. If an initial source is temporarily unavailable, execution stops while the prompt remains pending and retryable. Every later step attempt also prepares instructions before input promotion. Changed instructions publish one durable chronological System message through `session.instructions.updated`, and that event commit advances `Instructions.Applied` atomically.
 
 ```text
-Session                            Epoch
-   │                                 │
-   ├─ initialize complete baseline ──▶
-   │                                 │
-   │                                 ├─────────────────────────────────╮
-   │                                 │ reconcile chronological update  │
-   │                                 ◀─────────────────────────────────╯
-   │                                 │
-   ├─ completed compaction ──────────▶
-   │                                 ├─ render fresh baseline
-   │                                 │
-   ├─ clear after Location move ─────▶
+Client            Runner                 Explicit producers       InstructionCheckpoint      Inbox / History       LLM
+   │                 │                            │                          │                       │               │
+   ├─ Admit prompt ────────────────────────────────────────────────────────────────────────────────▶               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Load instructions ───────▶                          │                       │               │
+   │                 │                            │                          │                       │               │
+   │                 ◀─ Combined sources ─────────┤                          │                       │               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Initialize or reconcile ────────────────────────────▶                       │               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Publish update + advance Applied atomically ───────────────────────────────▶               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ Promote eligible input ────────────────────────────────────────────────────▶               │
+   │                 │                            │                          │                       │               │
+   │                 ├─ System text + instruction baseline + history + tools ──────────────────────────────────────▶
 ```
 
-Ambient project discovery canonicalizes and contains traversal within the project root and honors `OPENCODE_DISABLE_PROJECT_CONFIG`. An unavailable observation preserves the previously admitted value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation message.
+Agent and model selection are step-scoped. The runner selects the agent before loading agent-specific guidance; a switch admitted after the current boundary applies to the next step without restarting the current one. Changed guidance is admitted through `session.instructions.updated` while preserving the baseline. Model selection affects Model Context assembly but is not an instruction source and does not itself replace the instruction baseline.
 
-Current Context Epoch follow-ups:
+A completed compaction causes the next physical attempt to rebaseline from current instructions. Temporarily unavailable sources are restated from the model's last applied belief where possible. A Session move resets `InstructionCheckpoint` so the destination Location initializes a complete baseline on its next run. Committed revert also resets the checkpoint.
 
-- Add configured, remote, and nested instruction sources with explicit precedence and removal semantics.
+```text
+Session                      InstructionCheckpoint
+   │                                   │
+   ├─ initialize complete baseline ────▶
+   │                                   │
+   │                                   ├──────────────────────────────╮
+   │                                   │ reconcile instruction update │
+   │                                   ◀──────────────────────────────╯
+   │                                   │
+   ├─ completed compaction ────────────▶ rebaseline
+   │                                   │
+   ├─ move or committed revert ────────▶ reset
+```
+
+`InstructionDiscovery` observes ambient instructions as one ordered aggregate source. Ambient discovery canonicalizes traversal within the project root, reads global and upward-project `AGENTS.md` files, and honors `OPENCODE_DISABLE_PROJECT_CONFIG` for project files.
+
+An unavailable observation preserves the previously applied value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation message.
+
+Current instruction follow-ups:
+
+- Add configured and remote instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash continuation recovery for promoted or provider-dispatched work.
-- Add explicit manual compaction on top of automatic request-budget compaction.
 - Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
-- Consider watcher-backed per-file caching only if measurements show direct safe-boundary observation is too expensive.
-- Expose plugin-defined Context Sources only after plugin reload and scoped cleanup semantics are designed.
+- Consider watcher-backed per-file caching only if measurements show direct step-boundary observation is too expensive.
+- Design any plugin-defined instruction contribution as an explicit runner composition boundary; do not reintroduce a registry implicitly.
 - Add clustered Session execution ownership and stale-runtime fencing.
 
 ## Automatic Compaction
@@ -114,25 +131,31 @@ Before each step, the runner estimates the complete model-visible request and co
 
 Compaction keeps the full transcript durable while replacing its active model representation with one hidden checkpoint containing a structured rolling summary and token-bounded serialized recent context. Provider-native assistant, reasoning, and tool messages never survive across the boundary, avoiding signature and encrypted-reasoning failures when the earlier prefix changes.
 
-`session.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.compaction.ended.1` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next physical attempt, the runner observes that completed compaction and directly renders a fresh Context Epoch baseline. A failed or interrupted attempt therefore leaves the previous history boundary active.
+The rolling summary is a continuation checkpoint with this complete heading order: `Objective`, `Important Details`, `Work State`, and `Next Move`. `Work State` records completed, active, and blocked work, while `Next Move` records the immediate and following actions. Every heading remains present even when its value is `(none)`.
+
+`session.compaction.admitted.1` durably records a manual request and projects its queued transcript row. `session.compaction.started.1` identifies the attempt and transforms that row into a running divider. Compaction deltas are live-only progress rendered beneath it. `session.compaction.ended.1` durably stores the final summary and serialized recent context, completes the same row, and settles the manual barrier. `session.compaction.failed.1` settles an unsuccessful manual barrier without changing the previous history boundary. On the next physical attempt, the runner observes a completed compaction and directly renders a fresh instruction baseline through `InstructionCheckpoint`.
+
+Assistant text and reasoning follow a strict `started` / live-only `delta` / durable full-value `ended` lifecycle. A publisher permits at most one open fragment of each kind in a step and fails on a second start before the matching end. Provider block IDs remain internal to LLM adapters; each fragment event carries a Session-assigned kind-specific ordinal, matching the ordinal derived from projected content. UI identity is therefore the assistant message ID plus content kind and ordinal. Tool calls retain step-scoped `callID` because settlements and provider replay correlate through it.
+
+Provider continuation state is opaque and un-nested at the Session boundary. The publisher selects only the active model provider's entry from LLM provider metadata. Same-model replay re-nests that state under the current provider; model switches and failed assistant steps continue to suppress provider-native continuation state.
 
 Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending step.
 
 When a provider rejects a request as context overflow before durable assistant output or tool execution, the runner attempts one overflow-triggered compaction even when the local estimate did not predict pressure. A completed checkpoint rebuilds the same logical step with one remaining physical attempt. A second overflow, unavailable compaction, or overflow after durable output becomes the ordinary terminal failure; recovery never loops or replays partial side effects. Deterministic old tool-result pruning remains a separate follow-up.
 
-## V1 Runtime Context Parity
+## V1 Model Context Parity
 
-This is the canonical checklist for model-visible runtime context still needed before the V2 runner replaces V1. Keep each behavior in its owning boundary rather than treating all model-visible text as a durable Context Source. Update this table in the PR that changes a status.
+This is the canonical checklist for Model Context still needed before the V2 runner replaces V1. Keep each behavior in its owning boundary rather than treating all model-visible text as durable Instructions. Update this table in the PR that changes a status.
 
 Status: `complete` is usable in the native V2 path, `partial` covers only part of V1 behavior, and `missing` has no native V2 equivalent.
 
 | Boundary                   | Behavior                                                                 | Status   | Remaining V2 work                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Durable Context Source     | Environment facts and host-local date                                    | partial  | Add selected provider/model identity without making model selection a stale Location-wide value.                                       |
-| Durable Context Source     | Global and upward project instructions                                   | partial  | Decide whether V2 also discovers legacy `CLAUDE.md` and deprecated `CONTEXT.md`.                                                       |
-| Durable Context Source     | Configured local/glob and remote URL instructions                        | missing  | Add independent sources with explicit precedence, unavailable, and removal semantics.                                                  |
-| Durable Context Source     | Nearby nested instructions discovered after successful reads             | missing  | Persist discoveries and admit them at the next safe step boundary.                                                                     |
-| Durable Context Source     | Selected-agent available skill guidance and skill-body loading           | partial  | Guidance and body exposure are permission-filtered; remove globally denied skill definitions during request-time tool materialization. |
+| Durable Instruction Source | Environment facts and host-local date                                    | partial  | Keep selected provider/model identity in step request assembly rather than a stale Location-wide instruction value.                    |
+| Durable Instruction Source | Global and upward project instructions                                   | partial  | Decide whether V2 also discovers legacy `CLAUDE.md` and deprecated `CONTEXT.md`.                                                       |
+| Durable Instruction Source | Configured local/glob and remote URL instructions                        | missing  | Add independent sources with explicit precedence, unavailable, and removal semantics.                                                  |
+| Durable Instruction Source | Nearby nested instructions discovered after successful reads             | missing  | Persist discoveries and admit them at the next safe step boundary.                                                                     |
+| Durable Instruction Source | Selected-agent available skill guidance and skill-body loading           | partial  | Guidance and body exposure are permission-filtered; remove globally denied skill definitions during request-time tool materialization. |
 | Step request assembly      | Placement, selected model, chronological history, and canonical lowering | complete | None.                                                                                                                                  |
 | Step request assembly      | Selected agent, agent prompt, and effective permissions                  | partial  | V2 uses selected-agent permissions for skill guidance and tool authorization; still apply the agent system prompt and request policy.  |
 | Step request assembly      | Provider/model-specific base instructions                                | complete | Native V2 selects the provider-family baseline unless the effective agent overrides it.                                                |
@@ -150,7 +173,7 @@ Status: `complete` is usable in the native V2 path, `partial` covers only part o
 | Prompt/reference expansion | Configured-reference expansion                                           | missing  | Resolve aliases and emit durable model-visible reference context or failures.                                                          |
 | Prompt/reference expansion | Native synthetic expansion replay                                        | partial  | V2 replays synthetic messages but only the V1 compatibility path creates them.                                                         |
 
-Provider timeout, retry, and watchdog policy is intentionally deferred. The runner does not impose a universal provider-stream inactivity or absolute timeout. A future slice should design configurable policy around provider behavior, durable failure reporting, and local drain-chain release rather than hardcoding one default for every provider.
+Provider timeout and watchdog policy is intentionally deferred. Retry tuning beyond the narrow safe policy above remains separate work; the runner does not impose a universal provider-stream inactivity or absolute timeout.
 
 Inbox delivery is explicit:
 
@@ -164,7 +187,7 @@ Execution has two entry points:
 
 Post-crash continuation recovery is intentionally deferred. A wake does not infer that ambiguous provider work is safe to retry after an input has already been promoted. Explicit `run` may deliberately continue from durable projected history. A future recovery slice should model provider-dispatch ambiguity, required continuation, queued-input promotion, retry policy, and visible recovery status together. It must not assume an enclosing durable execution identity that the Session model does not otherwise need.
 
-A process-global `SessionRunCoordinator` serializes execution for each local Session while allowing different Sessions to run concurrently. Resumes join active execution, overlapping wakes coalesce into one follow-up, and interruption stops current process-local execution without deleting durable inbox work. The runner enters the Session's current Location when execution starts and fences each new step against that Location.
+A process-global `SessionRunCoordinator` serializes execution for each local Session while allowing different Sessions to run concurrently. Resumes join active execution, overlapping wakes coalesce into one follow-up, and interruption stops current process-local execution without deleting durable inbox work. The runner enters the Session's current Location when execution starts and fences each new step against that Location. Its durable lifecycle events are historical observations only; they do not replace the coordinator's process-local active registry.
 
 The coordinator's active registry is also the source for `sessions.active()`. It represents only foreground Session drains owned by the current process; background subagents and tasks do not add parent Sessions to this registry. The snapshot is runtime state and is empty after a process restart.
 
@@ -181,6 +204,10 @@ The first `sessions.log(...)` contract is durable-only during both replay and li
 `sessions.history({ sessionID, after?, limit? })` is the finite counterpart for request/response consumers. `after` is an exclusive aggregate sequence, and omission starts before sequence zero. The response is `{ data, hasMore }`; callers derive the next `after` from the final event's durable sequence when `hasMore` is true. Public durable Session events are selected before pagination, which permits gaps from private or historical aggregate events while preserving strictly increasing unique sequences. The log has a moving head, so events committed between pages may appear on the next page.
 
 The finite endpoint is `GET /api/session/:sessionID/history`, uses the normal Session Location and authorization middleware, defaults to 50 events, and accepts at most 100. It returns only events in the public durable Session schema. The existing `sessions.log()` replay-and-tail stream is unchanged except for its explicit `log.synced` replay marker.
+
+`sessions.history({ sessionID, after?, limit? })` is the finite counterpart for request/response consumers. `after` is an exclusive aggregate sequence, and omission starts before sequence zero. The response is `{ data, hasMore }`; callers derive the next `after` from the final event's durable sequence when `hasMore` is true. Public durable Session events are selected before pagination, which permits gaps from private or historical aggregate events while preserving strictly increasing unique sequences. The log has a moving head, so events committed between pages may appear on the next page.
+
+The finite endpoint is `GET /api/session/:sessionID/history`, uses the normal Session Location and authorization middleware, defaults to 50 events, and accepts at most 100. It returns only events in the public durable Session schema. The existing `sessions.events()` replay-and-tail stream is unchanged.
 
 Durable event tail wakeups are advisory and edge-triggered. Each active tail owns one sliding-capacity-1 dirty signal for its aggregate and re-queries SQLite after a wake. Repeated commits coalesce while the tail is busy because durable rows, not in-memory notifications, preserve every event and sequence. Subscribe and register the dirty signal before historical replay, then remove it when the tail closes, so replay handoff cannot miss a commit and inactive aggregates retain no wake state.
 

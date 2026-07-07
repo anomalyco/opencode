@@ -1,26 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { expandTrackedPastedText, stripPromptPartIDs } from "../../src/prompt/part"
+import { expandTrackedPastedText } from "../../src/prompt/part"
 
 describe("prompt part", () => {
-  test("strips persisted IDs from reused parts", () => {
-    expect(
-      stripPromptPartIDs({
-        id: "prt_old",
-        sessionID: "ses_old",
-        messageID: "msg_old",
-        type: "file" as const,
-        mime: "image/png",
-        filename: "tiny.png",
-        url: "data:image/png;base64,abc",
-      }),
-    ).toEqual({
-      type: "file",
-      mime: "image/png",
-      filename: "tiny.png",
-      url: "data:image/png;base64,abc",
-    })
-  })
-
   test("preserves wide characters around pasted text", () => {
     const marker = "[Pasted ~3 lines]"
     const prefix = "你好你好\n"

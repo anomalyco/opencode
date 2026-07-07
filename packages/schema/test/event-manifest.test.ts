@@ -17,6 +17,8 @@ import { IdeEvent } from "../src/ide-event.js"
 import { McpEvent } from "../src/mcp-event.js"
 import { Plugin } from "../src/plugin.js"
 import { SessionEvent } from "../src/session-event.js"
+import { SessionID } from "../src/session-id.js"
+import { SessionMessage } from "../src/session-message.js"
 import { SessionTodo } from "../src/session-todo.js"
 import { SessionV1 } from "../src/session-v1.js"
 import { WorkspaceEvent } from "../src/workspace-event.js"
@@ -44,11 +46,12 @@ describe("public event manifest", () => {
       SessionV1.Event.Error,
     ])
     expect(Array.from(EventManifest.Latest.keys())).toEqual(
-      EventManifest.Definitions.map((definition) => definition.type),
+      Array.from(new Set(EventManifest.Definitions.map((definition) => definition.type))),
     )
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Latest.get("plugin.updated")).toBe(Plugin.Event.Updated)
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
+    expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
@@ -93,6 +96,7 @@ describe("public event manifest", () => {
         "session.created.1",
         "session.updated.1",
         "session.deleted.1",
+        "session.deleted.2",
         "message.updated.1",
         "message.removed.1",
         "message.part.updated.1",
@@ -104,7 +108,11 @@ describe("public event manifest", () => {
         "session.forked.1",
         "session.prompt.promoted.1",
         "session.prompt.admitted.1",
-        "session.context.updated.1",
+        "session.execution.started.1",
+        "session.execution.succeeded.1",
+        "session.execution.failed.1",
+        "session.execution.interrupted.1",
+        "session.instructions.updated.1",
         "session.synthetic.1",
         "session.skill.activated.1",
         "session.shell.started.1",
@@ -122,9 +130,11 @@ describe("public event manifest", () => {
         "session.tool.failed.1",
         "session.reasoning.started.1",
         "session.reasoning.ended.1",
-        "session.retried.1",
+        "session.retry.scheduled.1",
+        "session.compaction.admitted.1",
         "session.compaction.started.1",
         "session.compaction.ended.1",
+        "session.compaction.failed.1",
         "session.revert.staged.1",
         "session.revert.cleared.1",
         "session.revert.committed.1",
@@ -134,5 +144,41 @@ describe("public event manifest", () => {
       SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
     )
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
+  })
+
+  test("keeps simplified session fragment and tool payloads on durable version 1", () => {
+    const sessionID = SessionID.make("ses_test")
+    const assistantMessageID = SessionMessage.ID.make("msg_test")
+    const text = SessionEvent.Text.Started.data.make({ sessionID, assistantMessageID, ordinal: 0 })
+    const reasoning = SessionEvent.Reasoning.Ended.data.make({
+      sessionID,
+      assistantMessageID,
+      ordinal: 0,
+      text: "thought",
+      state: { signature: "sig" },
+    })
+    const tool = SessionEvent.Tool.Called.data.make({
+      sessionID,
+      assistantMessageID,
+      callID: "call_test",
+      input: {},
+      executed: true,
+      state: { itemId: "item_test" },
+    })
+
+    expect(text).not.toHaveProperty("textID")
+    expect(reasoning).not.toHaveProperty("reasoningID")
+    expect(reasoning).not.toHaveProperty("providerMetadata")
+    expect(tool).not.toHaveProperty("tool")
+    expect(tool).not.toHaveProperty("provider")
+    expect(SessionEvent.Text.Started.durable?.version).toBe(1)
+    expect(SessionEvent.Tool.Called.durable?.version).toBe(1)
+  })
+
+  test("keeps current session deletion minimal", () => {
+    const sessionID = SessionID.make("ses_test")
+
+    expect(SessionEvent.Deleted.data.make({ sessionID })).toEqual({ sessionID })
+    expect(SessionEvent.Deleted.durable?.version).toBe(2)
   })
 })

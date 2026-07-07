@@ -59,25 +59,28 @@ export const GoogleVertexPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (item.provider.api.type !== "aisdk") continue
+        if (!ProviderV2.isAISDK(item.provider.package)) continue
         if (
-          item.provider.api.package !== "@ai-sdk/google-vertex" &&
+          ProviderV2.packageName(item.provider.package) !== "@ai-sdk/google-vertex" &&
           !(
             item.provider.id === ProviderV2.ID.googleVertex &&
-            item.provider.api.package.includes("@ai-sdk/openai-compatible")
+            ProviderV2.packageName(item.provider.package)?.includes("@ai-sdk/openai-compatible")
           )
         )
           continue
-        const project = resolveProject(item.provider.request.body)
-        const location = String(resolveLocation(item.provider.request.body))
+        const project = resolveProject(item.provider.settings ?? {})
+        const location = String(resolveLocation(item.provider.settings ?? {}))
         evt.provider.update(item.provider.id, (provider) => {
-          if (project) provider.request.body.project = project
-          provider.request.body.location = location
-          if (provider.api.type === "aisdk" && provider.api.url) {
-            provider.api.url = replaceVertexVars(provider.api.url, project, location)
-          }
-          if (provider.api.type === "aisdk" && provider.api.package.includes("@ai-sdk/openai-compatible")) {
-            provider.request.body.fetch = authFetch(provider.request.body.fetch)
+          provider.settings = {
+            ...provider.settings,
+            ...(project ? { project } : {}),
+            location,
+            ...(typeof provider.settings?.baseURL === "string"
+              ? { baseURL: replaceVertexVars(provider.settings.baseURL, project, location) }
+              : {}),
+            ...(ProviderV2.packageName(provider.package)?.includes("@ai-sdk/openai-compatible")
+              ? { fetch: authFetch(provider.settings?.fetch) }
+              : {}),
           }
         })
       }
@@ -104,7 +107,7 @@ export const GoogleVertexPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.googleVertex) return
-        evt.language = evt.sdk.languageModel(String(evt.model.api.id).trim())
+        evt.language = evt.sdk.languageModel(String(evt.model.modelID ?? evt.model.id).trim())
       }),
     )
   }),
@@ -115,21 +118,20 @@ export const GoogleVertexAnthropicPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (item.provider.api.type !== "aisdk") continue
-        if (item.provider.api.package !== "@ai-sdk/google-vertex/anthropic") continue
+        if (!ProviderV2.isAISDK(item.provider.package)) continue
+        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/google-vertex/anthropic") continue
         const project =
-          item.provider.request.body.project ??
+          item.provider.settings?.project ??
           process.env.GOOGLE_CLOUD_PROJECT ??
           process.env.GCP_PROJECT ??
           process.env.GCLOUD_PROJECT
         const location =
-          item.provider.request.body.location ??
+          item.provider.settings?.location ??
           process.env.GOOGLE_CLOUD_LOCATION ??
           process.env.VERTEX_LOCATION ??
           "global"
         evt.provider.update(item.provider.id, (provider) => {
-          if (project) provider.request.body.project = project
-          provider.request.body.location = location
+          provider.settings = { ...provider.settings, ...(project ? { project } : {}), location }
         })
       }
     })
@@ -162,7 +164,7 @@ export const GoogleVertexAnthropicPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("google-vertex-anthropic")) return
-        evt.language = evt.sdk.languageModel(String(evt.model.api.id).trim())
+        evt.language = evt.sdk.languageModel(String(evt.model.modelID ?? evt.model.id).trim())
       }),
     )
   }),

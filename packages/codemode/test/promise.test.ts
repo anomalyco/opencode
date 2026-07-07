@@ -48,6 +48,14 @@ const failingTool = Tool.make({
   run: () => Effect.fail(toolError("Lookup refused")),
 })
 
+const completedTool = (trace: Trace) =>
+  Tool.make({
+    description: "Return the number of completed sleepy calls",
+    input: Schema.Struct({}),
+    output: Schema.Number,
+    run: () => Effect.succeed(trace.completed),
+  })
+
 const run = (
   code: string,
   options: { trace?: Trace; limits?: CodeMode.ExecutionLimits } = {},
@@ -55,7 +63,7 @@ const run = (
   const trace = options.trace ?? makeTrace()
   return Effect.runPromise(
     CodeMode.execute({
-      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool } },
+      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool, completed: completedTool(trace) } },
       code,
       ...(options.limits ? { limits: options.limits } : {}),
     }),
@@ -75,6 +83,42 @@ const error = async (code: string, options: { trace?: Trace; limits?: CodeMode.E
 }
 
 describe("first-class promise values", () => {
+  test("async functions return promises with isolated concurrent invocations", async () => {
+    expect(
+      await value(`
+        const load = async (id) => {
+          const result = await tools.host.sleepy({ id, ms: 20 })
+          return [id, result]
+        }
+        const first = load(1)
+        const second = load(2)
+        return [first instanceof Promise, second instanceof Promise, await Promise.all([first, second])]
+      `),
+    ).toEqual([
+      true,
+      true,
+      [
+        [1, 1],
+        [2, 2],
+      ],
+    ])
+  })
+
+  test("async function errors reject instead of throwing at the call site", async () => {
+    expect(
+      await value(`
+        const fail = async () => { throw new Error("boom") }
+        const promise = fail()
+        try {
+          await promise
+          return "no"
+        } catch (error) {
+          return error.message
+        }
+      `),
+    ).toBe("boom")
+  })
+
   test("an un-awaited tool call starts eagerly, in call order, before any await", async () => {
     const trace = makeTrace()
     const result = await value(
@@ -163,9 +207,33 @@ describe("first-class promise values", () => {
       return "done"
     `)
     expect(diagnostic.kind).toBe("ToolFailure")
-    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited tool call")
+    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
     expect(diagnostic.message).toContain("Lookup refused")
-    expect(diagnostic.suggestions?.join(" ")).toContain("await tools.ns.tool(...)")
+    expect(diagnostic.suggestions?.join(" ")).toContain("Await promises")
+  })
+
+  test("a never-awaited failing async function surfaces as an unhandled promise rejection", async () => {
+    const diagnostic = await error(`
+      const fail = async () => { throw new Error("boom") }
+      fail()
+      return "done"
+    `)
+    expect(diagnostic.kind).toBe("ExecutionFailure")
+    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
+    expect(diagnostic.message).toContain("boom")
+  })
+
+  test("drains promises started by an async function after an await", async () => {
+    const diagnostic = await error(`
+      const run = async () => {
+        await tools.host.sleepy({ id: 1 })
+        tools.host.fail({})
+      }
+      run()
+      return "done"
+    `)
+    expect(diagnostic.kind).toBe("ToolFailure")
+    expect(diagnostic.message).toContain("Lookup refused")
   })
 })
 
@@ -232,6 +300,19 @@ describe("Promise.all over arbitrary arrays", () => {
     expect(trace.maxActive).toBeGreaterThan(1)
   })
 
+  test("runs async map callbacks concurrently", async () => {
+    const trace = makeTrace()
+    const result = await value(
+      `
+        const ids = [1, 2, 3, 4]
+        return await Promise.all(ids.map(async (id) => await tools.host.sleepy({ id, ms: 40 })))
+      `,
+      { trace },
+    )
+    expect(result).toEqual([1, 2, 3, 4])
+    expect(trace.maxActive).toBeGreaterThan(1)
+  })
+
   test("caps live tool-call concurrency at the fixed internal constant (8)", async () => {
     const trace = makeTrace()
     const result = await value(
@@ -263,6 +344,28 @@ describe("Promise.all over arbitrary arrays", () => {
       }
     `),
     ).toBe("Lookup refused")
+  })
+
+  test("rejects before an earlier slow promise fulfills", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          try {
+            await Promise.all([
+              tools.host.sleepy({ id: 1, ms: 100 }),
+              tools.host.fail({}),
+            ])
+            return -1
+          } catch {
+            return await tools.host.completed({})
+          }
+        `,
+        { trace },
+      ),
+    ).toBe(0)
+    expect(trace.completed).toBe(1)
+    expect(trace.interrupted).toBe(0)
   })
 
   test("a non-collection argument is a clear error", async () => {

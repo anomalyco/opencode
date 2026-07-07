@@ -24,6 +24,8 @@ through legacy `SessionPrompt.loop(...)`:
   and issues one explicit `llm.stream(request)` step at a time
 - durable V2 projections record text, reasoning, provider failures, tool calls,
   tool results, and assistant output
+- owned local tool fibers and unresolved hosted calls settle before their step's
+  single terminal event; cross-drain orphan recovery retains original assistant attribution
 - a scoped `ToolRegistry` advertises definitions and the first permission-checked
   `read` built-in
 - local continuation reloads projected history, and promoting new user input resets the selected agent's configured step allowance
@@ -37,9 +39,6 @@ a FIFO until the Session would otherwise become idle and then promote one at a t
 
 Next reviewed slices:
 
-- preserve eager structured local-tool settlement: durably record each complete
-  call, start its child execution immediately, await every settlement after the
-  step closes, then reload projected history once
 - revisit per-step tool-call limits, output truncation, and operational
   backpressure before broadening exposure; eager local execution is deliberately
   unbounded in the current local slice while SQLite publication stays serialized
@@ -55,7 +54,7 @@ Next reviewed slices:
 
 ### Deferred durable continuation recovery
 
-Do not infer that ambiguous provider work is safe to retry from an advisory wake.
+Do not infer that ambiguous provider work is safe to retry from an advisory wake, an unmatched historical `session.execution.started` event, or a surviving `session.retry.scheduled` projection.
 The first inbox-driven runner intentionally omits outer physical-attempt markers
 until they have a concrete consumer and a complete recovery policy.
 

@@ -1,5 +1,5 @@
-import type { AgentV2Info } from "@opencode-ai/sdk/v2/types"
 import type { AgentApi } from "@opencode-ai/client/effect/api"
+import type { AgentV2Info } from "@opencode-ai/sdk/v2/types"
 import type { Effect } from "effect"
 import type { TransformHook } from "./registration.js"
 

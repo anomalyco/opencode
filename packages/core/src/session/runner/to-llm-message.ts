@@ -4,22 +4,69 @@ import {
   ToolOutput,
   ToolResultPart,
   type ContentPart,
-  type Model,
   type ProviderMetadata,
 } from "@opencode-ai/llm"
 import { Option, Schema } from "effect"
+import type { ModelV2 } from "../../model"
 import { SessionMessage } from "../message"
-import type { FileAttachment } from "../prompt"
+import type { FileAttachment } from "@opencode-ai/schema/prompt"
+
+const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   mediaType: file.mime,
-  data: file.uri,
+  data: file.data,
   filename: file.name,
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
+const textAttachment = (file: FileAttachment) =>
+  Message.make({
+    role: "user",
+    content: [
+      `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
+      file.description === undefined ? undefined : `Description: ${file.description}`,
+      "",
+      Buffer.from(file.data, "base64").toString("utf8"),
+    ]
+      .filter((line): line is string => line !== undefined)
+      .join("\n"),
+    metadata: {
+      attachment: {
+        source: file.source,
+        name: file.name,
+        description: file.description,
+      },
+    },
+  })
+
+const directoryAttachment = (file: FileAttachment) =>
+  Message.make({
+    role: "user",
+    content: [
+      `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
+      file.description === undefined ? undefined : `Description: ${file.description}`,
+      file.data.length === 0 ? undefined : "",
+      file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
+    ]
+      .filter((line): line is string => line !== undefined)
+      .join("\n"),
+    metadata: {
+      attachment: {
+        source: file.source,
+        name: file.name,
+        description: file.description,
+      },
+    },
+  })
+
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+const providerMetadata = (
+  provider: string,
+  state: Record<string, unknown> | undefined,
+): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
 const toolInput = (tool: SessionMessage.AssistantTool) =>
   tool.state.status === "pending"
@@ -31,7 +78,7 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     id: tool.id,
     name: tool.name,
     input: toolInput(tool),
-    providerExecuted: tool.provider?.executed,
+    providerExecuted: tool.executed,
     providerMetadata,
   })
 
@@ -40,14 +87,14 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     // TODO: Materialize remote and managed URIs before provider-history lowering.
     // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
     const result =
-      tool.provider?.executed === true && tool.state.result !== undefined
+      tool.executed === true && tool.state.result !== undefined
         ? tool.state.result
         : ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content })
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
       result,
-      providerExecuted: tool.provider?.executed,
+      providerExecuted: tool.executed,
       providerMetadata,
     })
   }
@@ -56,39 +103,44 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
       id: tool.id,
       name: tool.name,
       result:
-        tool.provider?.executed === true && tool.state.result !== undefined
+        tool.executed === true && tool.state.result !== undefined
           ? tool.state.result
           : { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
       resultType: "error",
-      providerExecuted: tool.provider?.executed,
+      providerExecuted: tool.executed,
       providerMetadata,
     })
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: Model) => {
+const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
   const sameModel =
-    String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
+    String(message.model.providerID) === String(model.providerID) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
-      return sameModel
+      return reuseProviderMetadata
         ? [
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
+              providerMetadata: providerMetadata(model.providerID, item.state),
             },
           ]
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
-    const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
-    if (item.provider?.executed !== true) return [call]
+    const call = toolCall(
+      item,
+      reuseProviderMetadata ? providerMetadata(model.providerID, item.providerState) : undefined,
+    )
+    if (item.executed !== true) return [call]
     const result = toolResult(
       item,
-      reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
+      reuseProviderMetadata
+        ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
+        : undefined,
     )
     return result ? [call, result] : [call]
   })
@@ -98,9 +150,14 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
   const results = message.content
-    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
+    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
-      toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
+      toolResult(
+        item,
+        reuseProviderMetadata
+          ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
+          : undefined,
+      ),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
@@ -111,17 +168,23 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
+function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
       return []
     case "user":
+      const files = message.files ?? []
       return [
+        ...files.filter((file) => file.mime === "text/plain").map(textAttachment),
+        ...files.filter((file) => file.mime === "application/x-directory").map(directoryAttachment),
         Message.make({
           id: message.id,
           role: "user",
-          content: [{ type: "text", text: message.text }, ...(message.files ?? []).map(media)],
+          content: [
+            { type: "text", text: message.text },
+            ...files.filter((file) => imageMimes.has(file.mime)).map(media),
+          ],
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),
@@ -146,6 +209,7 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
     case "assistant":
       return assistant(message, model)
     case "compaction":
+      if (message.status !== "completed") return []
       return [
         Message.make({
           id: message.id,
@@ -168,5 +232,5 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
+export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: ModelV2.Ref) =>
   messages.flatMap((message) => toLLMMessage(message, model))

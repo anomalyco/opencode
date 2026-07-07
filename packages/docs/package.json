@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/docs",
+  "private": true,
+  "scripts": {
+    "dev": "bun --bun mint dev --no-open --port 3333",
+    "validate": "bun --bun mint validate",
+    "broken-links": "bun --bun mint broken-links"
+  },
+  "devDependencies": {
+    "mint": "4.2.666"
+  }
+}

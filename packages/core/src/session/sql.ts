@@ -1,8 +1,9 @@
 import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
-import type { Prompt } from "./prompt"
+import type { Prompt } from "@opencode-ai/schema/prompt"
 import type { SessionInput } from "./input"
 import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"
@@ -11,8 +12,7 @@ import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
-import type { SystemContext } from "../system-context/index"
-import { AgentV2 } from "../agent"
+import type { Instructions } from "../instructions/index"
 import type { Revert } from "@opencode-ai/schema/revert"
 import type { Schema } from "effect"
 
@@ -30,6 +30,8 @@ export const SessionTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceV2.ID>(),
     parent_id: text().$type<SessionSchema.ID>(),
+    fork_session_id: text().$type<SessionSchema.ID>(),
+    fork_message_id: text().$type<SessionMessage.ID>(),
     slug: text().notNull(),
     directory: directoryColumn().notNull(),
     path: pathColumn(),
@@ -146,8 +148,9 @@ export const SessionInputTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    prompt: text({ mode: "json" }).notNull().$type<Prompt>(),
-    delivery: text().$type<SessionInput.Delivery>().notNull(),
+    type: text().$type<SessionInput.Entry["type"]>().notNull(),
+    prompt: text({ mode: "json" }).$type<Prompt>(),
+    delivery: text().$type<SessionInput.Delivery>(),
     admitted_seq: integer().notNull(),
     promoted_seq: integer(),
     time_created: integer()
@@ -155,19 +158,23 @@ export const SessionInputTable = sqliteTable(
       .$default(() => Date.now()),
   },
   (table) => [
-    index("session_input_session_pending_delivery_seq_idx").on(
+    index("session_input_session_pending_type_delivery_seq_idx").on(
       table.session_id,
       table.promoted_seq,
+      table.type,
       table.delivery,
       table.admitted_seq,
     ),
+    uniqueIndex("session_input_session_pending_compaction_idx")
+      .on(table.session_id)
+      .where(sql`${table.type} = 'compaction' and ${table.promoted_seq} is null`),
     uniqueIndex("session_input_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
     uniqueIndex("session_input_session_promoted_seq_idx").on(table.session_id, table.promoted_seq),
   ],
 )
 
-export const SessionContextEntryTable = sqliteTable(
-  "session_context_entry",
+export const InstructionEntryTable = sqliteTable(
+  "instruction_entry",
   {
     session_id: text()
       .$type<SessionSchema.ID>()
@@ -180,12 +187,12 @@ export const SessionContextEntryTable = sqliteTable(
   (table) => [primaryKey({ columns: [table.session_id, table.key] })],
 )
 
-export const SessionContextCheckpointTable = sqliteTable("session_context_epoch", {
+export const InstructionCheckpointTable = sqliteTable("instruction_checkpoint", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),
   baseline: text().notNull(),
-  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Applied>(),
+  snapshot: text({ mode: "json" }).notNull().$type<Instructions.Applied>(),
   baseline_seq: integer().notNull(),
 })

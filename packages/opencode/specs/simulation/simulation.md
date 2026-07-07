@@ -11,7 +11,7 @@ The first milestone is an interactive exploration and model-based testing enviro
 This is not intended to be a custom simulated app or a separate `simulate` command. The normal app should run, with simulation enabled by one required flag:
 
 ```sh
-OPENCODE_SIMULATION=1 bun run dev
+OPENCODE_SIMULATE=1 bun run dev
 ```
 
 ## Non-Goals
@@ -21,7 +21,7 @@ OPENCODE_SIMULATION=1 bun run dev
 - Do not build shrinking in the first milestone.
 - Do not make generated randomized runs part of CI yet.
 - Do not build differential testing in the first milestone.
-- Do not expose simulation controls when `OPENCODE_SIMULATION` is not set.
+- Do not expose drive controls when `OPENCODE_DRIVE` is not set.
 
 ## Design Principles
 
@@ -37,12 +37,12 @@ OPENCODE_SIMULATION=1 bun run dev
 
 ## Activation
 
-`OPENCODE_SIMULATION=1` is the only required flag.
+`OPENCODE_SIMULATE=1` swaps the backend's foundational layers for simulated implementations. `OPENCODE_DRIVE=<name>` independently starts the frontend and backend control WebSockets using the exact endpoints from the named opencode-drive registry manifest. `OPENCODE_DRIVE=1` starts an unnamed instance at `ws://127.0.0.1:40900` for the UI and `ws://127.0.0.1:40950` for the backend.
 
 Initial state is provided through an optional snapshot directory:
 
 ```sh
-OPENCODE_SIMULATION=1 OPENCODE_SIMULATION_STATE=/path/to/snapshot bun run dev
+OPENCODE_SIMULATE=1 OPENCODE_DRIVE=demo OPENCODE_SIMULATE_STATE=/path/to/snapshot bun run dev
 ```
 
 Optional flags can be added later, but should stay minimal. Reasonable optional parameters later include renderer mode, trace output path, seed, or port override.
@@ -54,15 +54,15 @@ When enabled:
 - The app creates and changes into a real, empty anchor directory (see Filesystem).
 - The app reads the snapshot directory, if provided, and seeds all simulated state from it.
 - The app builds with simulation layer replacements.
-- The TUI process starts a loopback WebSocket control server.
+- The TUI and backend processes start loopback WebSocket control servers when `OPENCODE_DRIVE` is set.
 - Simulation-gated backend control routes become available only to the frontend/control path.
 - In-memory trace recording starts automatically.
 
 Path seams reuse existing environment variables where they already exist: `OPENCODE_CONFIG_DIR` for global config, `OPENCODE_TEST_HOME` for home, and `OPENCODE_DB=:memory:` for the database. Simulation mode should set these before foundational modules load rather than inventing parallel mechanisms.
 
-## Control Server
+## Control Servers
 
-The external control surface lives in the TUI/frontend process, not the backend API server.
+The UI control surface lives in the TUI/frontend process. A separate backend control surface handles simulated LLM and network operations.
 
 This is important because the frontend has direct access to the renderer, screen state, focus state, interactable elements, and user input APIs. The backend remains the normal backend, with only simulation-gated control routes used internally by the frontend when needed.
 
@@ -70,9 +70,10 @@ Protocol:
 
 - JSON-RPC 2.0 over WebSocket.
 - Loopback only.
-- Start at `127.0.0.1:40900`.
-- If occupied, scan upward and report the actual URL.
-- External drivers connect only to this frontend WebSocket.
+- `OPENCODE_DRIVE` names a manifest in the opencode-drive registry, or is `1` for the unnamed default endpoints.
+- The manifest supplies exact loopback `ui` and `backend` WebSocket endpoints.
+- Startup fails rather than scanning when either manifest endpoint is unavailable.
+- External drivers connect to both WebSockets when they need UI and backend controls.
 
 The app should not send JSON-RPC requests back to the driver in the first milestone. The driver sends requests; the app responds and emits notifications/events as useful.
 
@@ -129,7 +130,7 @@ Both fake OpenTUI renderer and visible terminal renderer should share this proto
 
 The backend server should be exactly the normal backend server.
 
-Simulation-only backend routes may exist, but only when `OPENCODE_SIMULATION=1`. They are private implementation details for the frontend simulation server to proxy commands like filesystem seeding, LLM scripting, network registration, and snapshots.
+Simulation-only backend routes may exist, but only when `OPENCODE_SIMULATE=1`. They are private implementation details for commands like filesystem seeding, LLM scripting, network registration, and snapshots.
 
 External drivers should not use backend simulation routes directly.
 
@@ -197,13 +198,13 @@ The anchor may be created by the app itself at activation, or by an external run
 
 ## Initial State Snapshot
 
-`OPENCODE_SIMULATION_STATE` points at a directory containing one complete initial state. On startup the app slurps this directory once and constructs all simulated state from it. The snapshot is never written back to; it is a pure input.
+`OPENCODE_SIMULATE_STATE` points at a directory containing one complete initial state. On startup the app slurps this directory once and constructs all simulated state from it. The snapshot is never written back to; it is a pure input.
 
 Proposed layout:
 
 ```text
 snapshot/
-  project/...          # workspace files, seeded into the in-memory FS under the anchor root
+  files/...            # workspace files, seeded into the in-memory FS under the anchor root
   config/opencode.json # global config; the directory backs OPENCODE_CONFIG_DIR
   env.json             # extra environment values to apply
   llm/...              # scripted LLM behavior to pre-enqueue (optional)
@@ -212,8 +213,8 @@ snapshot/
 
 Rules:
 
-- Paths inside `project/` are snapshot-relative. The loader joins them onto the anchor root, so absolute virtual paths look like real host paths under the anchor.
-- Anything the config references (skills, instructions, reference paths) must exist inside `project/`. A snapshot that references missing files is invalid.
+- Paths inside `files/` are snapshot-relative. The loader joins them onto the anchor root, so absolute virtual paths look like real host paths under the anchor.
+- Anything the config references (skills, instructions, reference paths) must exist inside `files/`. A snapshot that references missing files is invalid.
 - The snapshot directory format is the contract between external state generators and the app. Generators (such as the opencode-probe project) produce snapshot directories plus a derived expected model; the app consumes only the snapshot.
 - Seeding through the control server (`backend.filesystem.seed` and friends) remains available for incremental changes during a run; the snapshot covers initial state.
 
@@ -443,8 +444,8 @@ More advanced model/refinement, metamorphic, and differential properties are fut
 
 The first major demo should show this system as a real environment for exploring the app in controlled states:
 
-1. Start opencode normally with `OPENCODE_SIMULATION=1`.
-2. TUI starts and exposes the simulation WebSocket on `127.0.0.1:40900+`.
+1. Start opencode normally with `OPENCODE_SIMULATE=1` and `OPENCODE_DRIVE=<name>`.
+2. TUI and backend start their drive WebSockets at the named manifest endpoints.
 3. External runner connects.
 4. Runner provides a snapshot directory (or seeds the in-memory project filesystem through the control server).
 5. Runner generates and enables plugin-provided config state.
@@ -459,10 +460,11 @@ The first major demo should show this system as a real environment for exploring
 
 ## Done-When Checklist
 
-- `OPENCODE_SIMULATION=1` starts the normal app with simulation wiring.
+- `OPENCODE_SIMULATE=1` starts the normal app with simulation wiring.
+- `OPENCODE_DRIVE=<name>` starts both drive WebSockets at the manifest endpoints.
 - Simulation code is isolated under a dedicated simulation/testing area.
 - App changes outside simulation are limited to activation hooks, builder replacements, TUI startup, and gated backend routes.
-- TUI exposes JSON-RPC WebSocket on `127.0.0.1:40900+`.
+- TUI and backend expose JSON-RPC WebSockets at the manifest endpoints.
 - Driver can call `ui.state`.
 - Driver can execute generated UI actions.
 - Fake and visible renderer paths use the same action protocol.

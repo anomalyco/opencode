@@ -27,8 +27,8 @@ function sessionErrorMessage(error: SessionError) {
 }
 
 const tui: TuiPlugin = async (api) => {
-  const active = new Set<string>()
   const errored = new Set<string>()
+  const terminal = new Set<string>()
   const forms = new Set<string>()
   const questions = new Set<string>()
   const permissions = new Set<string>()
@@ -73,14 +73,13 @@ const tui: TuiPlugin = async (api) => {
   })
 
   const started = (sessionID: string) => {
-    active.add(sessionID)
     errored.delete(sessionID)
+    terminal.delete(sessionID)
   }
 
   const ended = (sessionID: string) => {
-    if (!active.has(sessionID)) return
-    active.delete(sessionID)
-
+    if (terminal.has(sessionID)) return
+    terminal.add(sessionID)
     if (errored.has(sessionID)) {
       errored.delete(sessionID)
       return
@@ -90,28 +89,25 @@ const tui: TuiPlugin = async (api) => {
     notify(api, sessionID, "Session done", session?.parentID ? "subagent_done" : "done")
   }
 
-  api.event.on("session.prompt.promoted", (event) => started(event.data.sessionID))
-  api.event.on("session.shell.started", (event) => started(event.data.sessionID))
-  api.event.on("session.step.started", (event) => started(event.data.sessionID))
-  api.event.on("session.retried", (event) => started(event.data.sessionID))
-  api.event.on("session.compaction.started", (event) => started(event.data.sessionID))
-  api.event.on("session.shell.ended", (event) => ended(event.data.sessionID))
-  api.event.on("session.step.ended", (event) => {
-    if (event.data.finish === "tool-calls") return
-    ended(event.data.sessionID)
-  })
-  api.event.on("session.step.failed", (event) => {
+  api.event.on("session.execution.started", (event) => started(event.data.sessionID))
+  api.event.on("session.execution.succeeded", (event) => ended(event.data.sessionID))
+  api.event.on("session.execution.interrupted", (event) => ended(event.data.sessionID))
+  api.event.on("session.execution.failed", (event) => {
     const sessionID = event.data.sessionID
-    if (!active.has(sessionID)) return
+    if (errored.has(sessionID)) {
+      ended(sessionID)
+      return
+    }
     errored.add(sessionID)
-    notify(api, sessionID, "Session error", "error")
+    notify(api, sessionID, event.data.error.message, "error")
     ended(sessionID)
   })
 
   api.event.on("session.error", (event) => {
     const sessionID = event.data.sessionID
     if (!sessionID) return
-    if (!active.has(sessionID)) return
+    if (api.state.session.status(sessionID)?.type !== "busy") return
+    if (errored.has(sessionID)) return
     errored.add(sessionID)
     notify(api, sessionID, sessionErrorMessage(event.data.error), "error")
   })

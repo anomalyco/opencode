@@ -13,6 +13,8 @@ import type {
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
+  SessionRemoveInput,
+  SessionRemoveOutput,
   SessionForkInput,
   SessionForkOutput,
   SessionSwitchAgentInput,
@@ -43,12 +45,12 @@ import type {
   SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
-  SessionListContextEntriesInput,
-  SessionListContextEntriesOutput,
-  SessionPutContextEntryInput,
-  SessionPutContextEntryOutput,
-  SessionRemoveContextEntryInput,
-  SessionRemoveContextEntryOutput,
+  SessionInstructionsEntryListInput,
+  SessionInstructionsEntryListOutput,
+  SessionInstructionsEntryPutInput,
+  SessionInstructionsEntryPutOutput,
+  SessionInstructionsEntryRemoveInput,
+  SessionInstructionsEntryRemoveOutput,
   SessionLogInput,
   SessionLogOutput,
   SessionInterruptInput,
@@ -133,7 +135,6 @@ import type {
   SkillListInput,
   SkillListOutput,
   EventSubscribeOutput,
-  EventChangesOutput,
   PtyListInput,
   PtyListOutput,
   PtyCreateInput,
@@ -150,6 +151,8 @@ import type {
   ShellCreateOutput,
   ShellGetInput,
   ShellGetOutput,
+  ShellTimeoutInput,
+  ShellTimeoutOutput,
   ShellOutputInput,
   ShellOutputOutput,
   ShellRemoveInput,
@@ -175,6 +178,8 @@ import type {
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationOutput,
+  DebugEvictLocationInput,
+  DebugEvictLocationOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -402,7 +407,7 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
       active: (requestOptions?: RequestOptions) =>
-        request<SessionActiveOutput>(
+        request<{ readonly data: SessionActiveOutput }>(
           {
             method: "GET",
             path: `/api/session/active`,
@@ -411,7 +416,7 @@ export function make(options: ClientOptions) {
             empty: false,
           },
           requestOptions,
-        ),
+        ).then((value) => value.data),
       get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionGetOutput }>(
           {
@@ -423,6 +428,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      remove: (input: SessionRemoveInput, requestOptions?: RequestOptions) =>
+        request<SessionRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
       fork: (input: SessionForkInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionForkOutput }>(
           {
@@ -478,7 +494,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
             body: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
             successStatus: 200,
-            declaredStatuses: [409, 404, 400, 401],
+            declaredStatuses: [409, 400, 404, 401],
             empty: false,
           },
           requestOptions,
@@ -500,7 +516,7 @@ export function make(options: ClientOptions) {
               resume: input["resume"],
             },
             successStatus: 200,
-            declaredStatuses: [409, 404, 500, 400, 401],
+            declaredStatuses: [409, 400, 404, 500, 401],
             empty: false,
           },
           requestOptions,
@@ -542,16 +558,17 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
       compact: (input: SessionCompactInput, requestOptions?: RequestOptions) =>
-        request<SessionCompactOutput>(
+        request<{ readonly data: SessionCompactOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
-            successStatus: 204,
-            declaredStatuses: [404, 409, 503, 500, 400, 401],
-            empty: true,
+            body: { id: input["id"] },
+            successStatus: 200,
+            declaredStatuses: [409, 404, 400, 401],
+            empty: false,
           },
           requestOptions,
-        ),
+        ).then((value) => value.data),
       wait: (input: SessionWaitInput, requestOptions?: RequestOptions) =>
         request<SessionWaitOutput>(
           {
@@ -608,45 +625,49 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      listContextEntries: (input: SessionListContextEntriesInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionListContextEntriesOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry`,
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      putContextEntry: (input: SessionPutContextEntryInput, requestOptions?: RequestOptions) =>
-        request<SessionPutContextEntryOutput>(
-          {
-            method: "PUT",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry/${encodeURIComponent(input.key)}`,
-            body: { value: input["value"] },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      removeContextEntry: (input: SessionRemoveContextEntryInput, requestOptions?: RequestOptions) =>
-        request<SessionRemoveContextEntryOutput>(
-          {
-            method: "DELETE",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-entry/${encodeURIComponent(input.key)}`,
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
+      instructions: {
+        entry: {
+          list: (input: SessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: SessionInstructionsEntryListOutput }>(
+              {
+                method: "GET",
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries`,
+                successStatus: 200,
+                declaredStatuses: [404, 400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          put: (input: SessionInstructionsEntryPutInput, requestOptions?: RequestOptions) =>
+            request<SessionInstructionsEntryPutOutput>(
+              {
+                method: "PUT",
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                body: { value: input["value"] },
+                successStatus: 204,
+                declaredStatuses: [404, 400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+          remove: (input: SessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions) =>
+            request<SessionInstructionsEntryRemoveOutput>(
+              {
+                method: "DELETE",
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                successStatus: 204,
+                declaredStatuses: [404, 400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
+      },
       log: (input: SessionLogInput, requestOptions?: RequestOptions): AsyncIterable<SessionLogOutput> =>
         sse<SessionLogOutput>(
           {
             method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/log`,
+            path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/log`,
             query: { after: input["after"], follow: input["follow"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
@@ -1183,11 +1204,6 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
-      changes: (requestOptions?: RequestOptions): AsyncIterable<EventChangesOutput> =>
-        sse<EventChangesOutput>(
-          { method: "GET", path: `/api/event/changes`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
-          requestOptions,
-        ),
     },
     pty: {
       list: (input?: PtyListInput, requestOptions?: RequestOptions) =>
@@ -1296,6 +1312,19 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/shell/${encodeURIComponent(input.id)}`,
             query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      timeout: (input: ShellTimeoutInput, requestOptions?: RequestOptions) =>
+        request<ShellTimeoutOutput>(
+          {
+            method: "PATCH",
+            path: `/api/shell/${encodeURIComponent(input.id)}/timeout`,
+            query: { location: input["location"] },
+            body: { timeout: input["timeout"] },
             successStatus: 200,
             declaredStatuses: [404, 401, 400],
             empty: false,
@@ -1464,6 +1493,18 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+      evictLocation: (input?: DebugEvictLocationInput, requestOptions?: RequestOptions) =>
+        request<DebugEvictLocationOutput>(
+          {
+            method: "DELETE",
+            path: `/api/debug/location`,
+            query: { location: input?.["location"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
           },
           requestOptions,
         ),

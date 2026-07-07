@@ -1,17 +1,17 @@
 export * as ToolHooks from "./hooks"
 
 import { makeLocationNode } from "../effect/app-node"
-import { AgentV2 } from "../agent"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "../session/message"
-import { SessionSchema } from "../session/schema"
 import { State } from "../state"
 import { Context, Effect, Layer, Scope } from "effect"
 import type { ToolOutput, ToolResultValue } from "@opencode-ai/llm"
 
 export interface BeforeEvent {
   readonly tool: string
-  readonly sessionID: SessionSchema.ID
-  readonly agent: AgentV2.ID
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly toolCallID: string
   input: unknown
@@ -19,8 +19,8 @@ export interface BeforeEvent {
 
 export interface AfterEvent {
   readonly tool: string
-  readonly sessionID: SessionSchema.ID
-  readonly agent: AgentV2.ID
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly toolCallID: string
   readonly input: unknown
@@ -80,8 +80,14 @@ const layer = Layer.effect(
 
     return Service.of({
       hook: {
-        before: register(() => beforeHooks, (next) => (beforeHooks = next)),
-        after: register(() => afterHooks, (next) => (afterHooks = next)),
+        before: register(
+          () => beforeHooks,
+          (next) => (beforeHooks = next),
+        ),
+        after: register(
+          () => afterHooks,
+          (next) => (afterHooks = next),
+        ),
       },
       runBefore: (event) => run(beforeHooks, event),
       runAfter: (event) => run(afterHooks, event),

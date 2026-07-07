@@ -126,6 +126,26 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`instruction_checkpoint\` (
+          \`session_id\` text PRIMARY KEY,
+          \`baseline\` text NOT NULL,
+          \`snapshot\` text NOT NULL,
+          \`baseline_seq\` integer NOT NULL,
+          CONSTRAINT \`fk_instruction_checkpoint_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`instruction_entry\` (
+          \`session_id\` text NOT NULL,
+          \`key\` text NOT NULL,
+          \`value\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`instruction_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
+          CONSTRAINT \`fk_instruction_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
@@ -147,31 +167,12 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_context_epoch\` (
-          \`session_id\` text PRIMARY KEY,
-          \`baseline\` text NOT NULL,
-          \`snapshot\` text NOT NULL,
-          \`baseline_seq\` integer NOT NULL,
-          CONSTRAINT \`fk_session_context_epoch_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`session_context_entry\` (
-          \`session_id\` text NOT NULL,
-          \`key\` text NOT NULL,
-          \`value\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`session_context_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
-          CONSTRAINT \`fk_session_context_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`session_input\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
-          \`prompt\` text NOT NULL,
-          \`delivery\` text NOT NULL,
+          \`type\` text NOT NULL,
+          \`prompt\` text,
+          \`delivery\` text,
           \`admitted_seq\` integer NOT NULL,
           \`promoted_seq\` integer,
           \`time_created\` integer NOT NULL,
@@ -196,6 +197,8 @@ export default {
           \`project_id\` text NOT NULL,
           \`workspace_id\` text,
           \`parent_id\` text,
+          \`fork_session_id\` text,
+          \`fork_message_id\` text,
           \`slug\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`path\` text,
@@ -259,7 +262,10 @@ export default {
       yield* tx.run(`CREATE INDEX \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
       yield* tx.run(`CREATE INDEX \`part_session_idx\` ON \`part\` (\`session_id\`);`)
       yield* tx.run(
-        `CREATE INDEX \`session_input_session_pending_delivery_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`,\`delivery\`,\`admitted_seq\`);`,
+        `CREATE INDEX \`session_input_session_pending_type_delivery_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`,\`type\`,\`delivery\`,\`admitted_seq\`);`,
+      )
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`session_input_session_pending_compaction_idx\` ON \`session_input\` (\`session_id\`) WHERE "session_input"."type" = 'compaction' and "session_input"."promoted_seq" is null;`,
       )
       yield* tx.run(
         `CREATE UNIQUE INDEX \`session_input_session_admitted_seq_idx\` ON \`session_input\` (\`session_id\`,\`admitted_seq\`);`,

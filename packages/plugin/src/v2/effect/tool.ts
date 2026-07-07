@@ -249,10 +249,11 @@ export interface RegisterOptions {
   readonly deferred?: boolean
 }
 
+export interface ToolDraft {
+  add(name: string, tool: AnyTool, options?: RegisterOptions): void
+}
+
 export interface ToolDomain {
-  readonly register: (
-    tools: Readonly<Record<string, AnyTool>>,
-    options?: RegisterOptions,
-  ) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  readonly transform: (callback: (draft: ToolDraft) => void) => Effect.Effect<void, RegistrationError, Scope.Scope>
   readonly execute: Hooks<{ before: ToolExecuteBeforeEvent; after: ToolExecuteAfterEvent }>
 }

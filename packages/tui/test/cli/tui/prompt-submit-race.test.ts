@@ -5,9 +5,9 @@ import { describe, expect, test } from "bun:test"
 //
 // Before the fix, two concurrent `submit()` calls (e.g. a double-pressed
 // Enter, or the input's native onSubmit racing another dispatch) each
-// passed the `if (!store.prompt.input) return false` guard, each
+// passed the `if (!store.prompt.text) return false` guard, each
 // `await sdk.client.session.create(...)`, and each only captured
-// `inputText = store.prompt.input` AFTER that await. The first invocation
+// `inputText = store.prompt.text` AFTER that await. The first invocation
 // finished, sent the prompt, and cleared the store; the second invocation,
 // now past its await, read the cleared store and sent an empty prompt to a
 // second freshly-created session - leaving an orphaned session with the

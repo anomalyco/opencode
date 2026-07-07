@@ -23,7 +23,17 @@ const permission = Layer.succeed(
   PermissionV2.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
-        Effect.andThen(deny ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+        Effect.andThen(
+          deny
+            ? Effect.fail(
+                new PermissionV2.BlockedError({
+                  rules: [],
+                  permission: input.action,
+                  resources: input.resources,
+                }),
+              )
+            : Effect.void,
+        ),
       ),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -82,7 +92,13 @@ describe("QuestionTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-question-denied", name: "question", input: { questions: [] } },
         }),
-      ).toEqual({ result: { type: "error", value: "Permission denied: question" } })
+      ).toEqual({
+        result: { type: "error", value: "Permission denied: question" },
+        error: {
+          type: "permission.rejected",
+          message: "Permission denied: question",
+        },
+      })
       expect(capturedInput()).toBeUndefined()
       deny = false
     }),

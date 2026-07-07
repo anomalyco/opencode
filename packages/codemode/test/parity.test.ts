@@ -264,6 +264,46 @@ describe("Error values and instanceof", () => {
 })
 
 describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
+  test("sort and reverse mutate and return the receiver", async () => {
+    expect(
+      await value(`
+        const sorted = [3, 1, 2]
+        const sortResult = sorted.sort((a, b) => a - b)
+        const reversed = [1, 2, 3]
+        const reverseResult = reversed.reverse()
+        return { sorted, sameSort: sorted === sortResult, reversed, sameReverse: reversed === reverseResult }
+      `),
+    ).toEqual({ sorted: [1, 2, 3], sameSort: true, reversed: [3, 2, 1], sameReverse: true })
+  })
+
+  test("array callbacks receive the receiver and observe later mutations", async () => {
+    expect(
+      await value(`
+        const values = [1, 2, 3]
+        const seen = values.map((value, index, receiver) => {
+          if (index === 0) values[1] = 9
+          return [value, receiver === values]
+        })
+        return seen
+      `),
+    ).toEqual([
+      [1, true],
+      [9, true],
+      [3, true],
+    ])
+    expect(
+      await value(`
+        const values = [1, 2, 3]
+        const seen = []
+        values.forEach((value, index) => {
+          seen.push(value)
+          if (index === 0) values.pop()
+        })
+        return seen
+      `),
+    ).toEqual([1, 2])
+  })
+
   test("splice removes in place and returns the removed elements", async () => {
     expect(await value(`const a = [1,2,3,4]; const removed = a.splice(1, 2); return { removed, a }`)).toEqual({
       removed: [2, 3],
@@ -421,5 +461,88 @@ describe("H5: builtin coercion functions work as array callbacks", () => {
   test("a non-callable callback is still rejected", async () => {
     const err = await error(`return [1,2,3].map(42)`)
     expect(err.message).toContain("callback")
+  })
+})
+
+describe("for...of assignment destructuring", () => {
+  test("assigns entry pairs into predeclared variables", async () => {
+    expect(
+      await value(`
+      let key
+      let item
+      const out = []
+      for ([key, item] of Object.entries({ a: 1, b: 2 })) out.push(key + item)
+      return { key, item, out }
+    `),
+    ).toEqual({ key: "b", item: 2, out: ["a1", "b2"] })
+  })
+
+  test("assigns object patterns and defaults", async () => {
+    expect(
+      await value(`
+      let id
+      let label
+      const labels = []
+      for ({ id, label = "unknown" } of [{ id: 1 }, { id: 2, label: "two" }]) labels.push(label)
+      return { id, label, labels }
+    `),
+    ).toEqual({ id: 2, label: "two", labels: ["unknown", "two"] })
+  })
+})
+
+describe("sequence expressions", () => {
+  test("evaluate left to right and return the final value", async () => {
+    expect(await value(`let x = 0; const result = (x += 1, x *= 3, x + 2); return { x, result }`)).toEqual({
+      x: 3,
+      result: 5,
+    })
+  })
+
+  test("support comma-separated for-loop updates", async () => {
+    expect(
+      await value(`
+      const pairs = []
+      for (let left = 0, right = 3; left < right; left++, right--) pairs.push([left, right])
+      return pairs
+    `),
+    ).toEqual([
+      [0, 3],
+      [1, 2],
+    ])
+  })
+})
+
+describe("destructuring assignment", () => {
+  test("assigns object and array patterns to existing bindings", async () => {
+    expect(
+      await value(`
+        let a = 0
+        let b = 0
+        ;({ a } = { a: 2 })
+        ;[a, b] = [3, 4]
+        return [a, b]
+      `),
+    ).toEqual([3, 4])
+  })
+
+  test("supports defaults, nesting, rest, and member targets", async () => {
+    expect(
+      await value(`
+        let first = 0
+        let fallback = 0
+        let rest = {}
+        const target = {}
+        ;[first, fallback = 2, ...target.tail] = [1]
+        ;({ nested: { value: target.value }, kept: target.kept = 3, ...rest } = {
+          nested: { value: 4 },
+          extra: 5,
+        })
+        return { first, fallback, target, rest }
+      `),
+    ).toEqual({ first: 1, fallback: 2, target: { tail: [], value: 4, kept: 3 }, rest: { extra: 5 } })
+  })
+
+  test("returns the assigned value", async () => {
+    expect(await value(`let a = 0; const result = ([a] = [7]); return [a, result]`)).toEqual([7, [7]])
   })
 })

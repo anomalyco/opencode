@@ -42,5 +42,6 @@ export { SessionInput } from "@opencode-ai/schema/session-input"
 export { SessionMessage } from "@opencode-ai/schema/session-message"
 export { Skill } from "@opencode-ai/schema/skill"
 export { Prompt } from "@opencode-ai/schema/prompt"
+export { PromptInput } from "@opencode-ai/schema/prompt-input"
 export type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 export type OpenCodeClient = Effect.Success<ReturnType<typeof import("./generated/client").make>>

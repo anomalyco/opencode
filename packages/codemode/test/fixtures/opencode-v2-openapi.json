@@ -2350,12 +2350,12 @@
         "summary": "Get session context"
       }
     },
-    "/api/session/{sessionID}/context-entry": {
+    "/api/session/{sessionID}/instructions/entries": {
       "get": {
         "tags": [
           "sessions"
         ],
-        "operationId": "v2.session.context.entry.list",
+        "operationId": "v2.session.instructions.entry.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -2383,7 +2383,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/SessionContextEntry.Info"
+                        "$ref": "#/components/schemas/InstructionEntry.Info"
                       }
                     }
                   },
@@ -2433,16 +2433,16 @@
             }
           }
         },
-        "description": "List API-managed context entries attached to the session's system context.",
-        "summary": "List context entries"
+        "description": "List API-managed instruction entries attached to the session.",
+        "summary": "List instruction entries"
       }
     },
-    "/api/session/{sessionID}/context-entry/{key}": {
+    "/api/session/{sessionID}/instructions/entries/{key}": {
       "put": {
         "tags": [
           "sessions"
         ],
-        "operationId": "v2.session.context.entry.put",
+        "operationId": "v2.session.instructions.entry.put",
         "parameters": [
           {
             "name": "sessionID",
@@ -2461,7 +2461,7 @@
             "name": "key",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/SessionContextEntry.Key"
+              "$ref": "#/components/schemas/InstructionEntry.Key"
             },
             "required": true
           }
@@ -2509,8 +2509,8 @@
             }
           }
         },
-        "description": "Attach or replace one durable context entry. The value is rendered into the session's system context; changes announce as updates at the next turn boundary.",
-        "summary": "Put context entry",
+        "description": "Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.",
+        "summary": "Put instruction entry",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2533,7 +2533,7 @@
         "tags": [
           "sessions"
         ],
-        "operationId": "v2.session.context.entry.remove",
+        "operationId": "v2.session.instructions.entry.remove",
         "parameters": [
           {
             "name": "sessionID",
@@ -2552,7 +2552,7 @@
             "name": "key",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/SessionContextEntry.Key"
+              "$ref": "#/components/schemas/InstructionEntry.Key"
             },
             "required": true
           }
@@ -2600,8 +2600,8 @@
             }
           }
         },
-        "description": "Remove one context entry; the removal is announced to the model at the next turn boundary.",
-        "summary": "Remove context entry"
+        "description": "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
+        "summary": "Remove instruction entry"
       }
     },
     "/api/session/{sessionID}/log": {
@@ -11692,7 +11692,7 @@
           }
         ]
       },
-      "SessionContextEntry.Key": {
+      "InstructionEntry.Key": {
         "type": "string",
         "allOf": [
           {
@@ -11701,11 +11701,11 @@
           }
         ]
       },
-      "SessionContextEntry.Info": {
+      "InstructionEntry.Info": {
         "type": "object",
         "properties": {
           "key": {
-            "$ref": "#/components/schemas/SessionContextEntry.Key"
+            "$ref": "#/components/schemas/InstructionEntry.Key"
           },
           "value": {}
         },
@@ -12385,7 +12385,7 @@
         ],
         "additionalProperties": false
       },
-      "session.next.context.updated": {
+      "session.next.instructions.updated": {
         "type": "object",
         "properties": {
           "id": {
@@ -12402,7 +12402,7 @@
           "type": {
             "type": "string",
             "enum": [
-              "session.next.context.updated"
+              "session.next.instructions.updated"
             ]
           },
           "durable": {
@@ -14917,7 +14917,7 @@
             "$ref": "#/components/schemas/session.next.prompt.admitted"
           },
           {
-            "$ref": "#/components/schemas/session.next.context.updated"
+            "$ref": "#/components/schemas/session.next.instructions.updated"
           },
           {
             "$ref": "#/components/schemas/session.next.synthetic"
@@ -26060,7 +26060,7 @@
             "$ref": "#/components/schemas/session.next.execution.settled"
           },
           {
-            "$ref": "#/components/schemas/session.next.context.updated"
+            "$ref": "#/components/schemas/session.next.instructions.updated"
           },
           {
             "$ref": "#/components/schemas/session.next.synthetic"

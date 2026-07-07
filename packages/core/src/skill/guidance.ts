@@ -5,7 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { SkillV2 } from "../skill"
-import { SystemContext } from "../system-context/index"
+import { Instructions } from "../instructions/index"
 
 const Summary = Schema.Struct({
   name: Schema.String,
@@ -31,7 +31,7 @@ const render = (skills: ReadonlyArray<Summary>) =>
   ].join("\n")
 
 const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
-  const diff = SystemContext.diffByKey(
+  const diff = Instructions.diffByKey(
     previous,
     current,
     (skill) => skill.name,
@@ -56,7 +56,7 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
 }
 
 export interface Interface {
-  readonly load: (agent: AgentV2.Selection) => Effect.Effect<SystemContext.SystemContext>
+  readonly load: (agent: AgentV2.Selection) => Effect.Effect<Instructions.Instructions>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
@@ -69,10 +69,10 @@ const layer = Layer.effect(
     return Service.of({
       load: Effect.fn("SkillGuidance.load")(function* (selection) {
         const agent = selection.info
-        if (!agent) return SystemContext.empty
+        if (!agent) return Instructions.empty
         const permitted = SkillV2.available(yield* skills.list(), agent)
         if (permitted.length === 0 && PermissionV2.evaluate("skill", "*", agent.permissions).effect === "deny")
-          return SystemContext.empty
+          return Instructions.empty
         const available = permitted
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
@@ -80,8 +80,8 @@ const layer = Layer.effect(
               : [{ name: skill.name, description: skill.description }],
           )
           .toSorted((a, b) => a.name.localeCompare(b.name))
-        return SystemContext.make({
-          key: SystemContext.Key.make("core/skill-guidance"),
+        return Instructions.make({
+          key: Instructions.Key.make("core/skill-guidance"),
           codec: Schema.toCodecJson(Schema.Array(Summary)),
           load: Effect.succeed(available),
           baseline: render,

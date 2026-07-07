@@ -1,12 +1,8 @@
-import type {
-  EventSubscribeOutput,
-  OpenCodeClient,
-} from "@opencode-ai/client/promise"
+import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import type {
   PermissionRequest,
   QuestionRequest,
   SessionMessage,
-  SessionMessageAssistant,
   SessionMessageAssistantTool,
 } from "@opencode-ai/sdk/v2"
 import { Event } from "@opencode-ai/schema/event"
@@ -101,6 +97,7 @@ type ToolState = {
   input: Record<string, unknown>
   started: number
   running: boolean
+  providerState?: Record<string, unknown>
 }
 
 type State = {
@@ -183,14 +180,14 @@ function wait(delay: number, signal: AbortSignal) {
 }
 
 async function prepareFile(file: RunFilePart) {
-  if (file.mime !== "text/plain") return { attachment: { uri: file.url, mime: file.mime, name: file.filename } }
+  if (file.mime !== "text/plain") return { attachment: { uri: file.url, name: file.filename } }
   const content = file.url.startsWith("data:")
     ? Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64").toString("utf8")
     : await Bun.file(new URL(file.url)).text()
   return { text: `<file name="${file.filename}">\n${content}\n</file>` }
 }
 
-function promptFileSource(part: PromptFilePart) {
+function promptFileMention(part: PromptFilePart) {
   if (!part.source?.text) return
   return {
     start: part.source.text.start,
@@ -206,7 +203,7 @@ function promptFiles(next: SessionTurnInput) {
           {
             uri: part.url,
             name: part.filename,
-            source: promptFileSource(part),
+            mention: promptFileMention(part),
           },
         ]
       : [],
@@ -219,7 +216,7 @@ function promptAgents(next: SessionTurnInput) {
       ? [
           {
             name: part.name,
-            source: part.source
+            mention: part.source
               ? { start: part.source.start, end: part.source.end, text: part.source.value }
               : undefined,
           },
@@ -264,8 +261,7 @@ function shellTerminal(
       : shell.status === "exited"
         ? `Shell exited with code ${shell.exit ?? "unknown"}`
         : `Shell ${shell.status}`
-  if (!error)
-    return [shellCommit(callID, command, { text, phase: "progress", toolState: "completed" })]
+  if (!error) return [shellCommit(callID, command, { text, phase: "progress", toolState: "completed" })]
   return [
     ...(text ? [shellCommit(callID, command, { text, phase: "progress", toolState: "running" })] : []),
     shellCommit(callID, command, { text: error, phase: "final", toolState: "error", toolError: error }),
@@ -310,9 +306,7 @@ async function resolveSelectedModel(input: StreamInput, next: Pick<SessionTurnIn
     .then((response) => response.model)
   if (session) return { ...session, variant: next.variant }
 
-  const fallback = await input.sdk.model
-    .default(undefined, { signal: next.signal })
-    .then((response) => response.data)
+  const fallback = await input.sdk.model.default(undefined, { signal: next.signal }).then((response) => response.data)
   if (!fallback) return
   return { providerID: fallback.providerID, id: fallback.id, variant: next.variant }
 }
@@ -393,11 +387,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const part = legacyTool({
       sessionID: input.sessionID,
       messageID,
-      callID: item.id,
-      name: item.name,
-      state: item.state,
-      time: item.time,
-      provider: item.provider,
+      tool: item,
     })
     if (item.state.status === "pending") return
     if (item.state.status === "running") {
@@ -408,6 +398,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         input: item.state.input,
         started: item.time.ran ?? item.time.created,
         running: true,
+        providerState: item.providerState,
       })
       write([toolCommit(part, "start")], { phase: "running", status: `running ${item.name}` })
       return
@@ -479,9 +470,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     if (message.type !== "assistant") return
     state.messageIDs.add(message.id)
+    let textOrdinal = 0
+    let reasoningOrdinal = 0
     for (const item of message.content) {
       if (item.type === "text") {
-        const key = streamPartKey(message.id, item.id)
+        const id = `text:${textOrdinal++}`
+        const key = streamPartKey(message.id, id)
         const sent = state.text.get(key)?.length ?? 0
         state.text.set(key, item.text)
         if (render) state.projectedText.set(key, item.text)
@@ -493,13 +487,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               text: item.text.slice(sent),
               phase: "progress",
               messageID: message.id,
-              partID: item.id,
+              partID: id,
             },
           ])
         continue
       }
       if (item.type === "reasoning") {
-        const key = streamPartKey(message.id, item.id)
+        const id = `reasoning:${reasoningOrdinal++}`
+        const key = streamPartKey(message.id, id)
         const sent = state.reasoning.get(key)?.length ?? 0
         state.reasoning.set(key, item.text)
         if (render) state.projectedReasoning.set(key, item.text)
@@ -511,7 +506,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               text: sent === 0 ? `Thinking: ${item.text}` : item.text.slice(sent),
               phase: "progress",
               messageID: message.id,
-              partID: item.id,
+              partID: id,
             },
           ])
         continue
@@ -544,8 +539,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.permissions = permissions.map(permission)
     state.questions = questions.map(question)
     syncBlockers()
-    await subagents.hydrate({ messages: [...projected], active: active.data })
-    const running = input.sessionID in active.data
+    await subagents.hydrate({ messages: [...projected], active })
+    const running = input.sessionID in active
     write([], { phase: running ? "running" : "idle", status: running ? "assistant responding" : "" })
     if (!running && state.wait && (state.wait.promoted || state.wait.interrupted)) {
       const current = state.wait
@@ -626,8 +621,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (owned) wait.resolve()
       return
     }
+    if (event.type === "session.text.started") {
+      return
+    }
     if (event.type === "session.text.delta") {
-      const key = streamPartKey(event.data.assistantMessageID, event.data.textID)
+      const id = `text:${event.data.ordinal}`
+      const key = streamPartKey(event.data.assistantMessageID, id)
       const projected = state.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
@@ -643,13 +642,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           text: event.data.delta,
           phase: "progress",
           messageID: event.data.assistantMessageID,
-          partID: event.data.textID,
+          partID: id,
         },
       ])
       return
     }
     if (event.type === "session.text.ended") {
-      const key = streamPartKey(event.data.assistantMessageID, event.data.textID)
+      const id = `text:${event.data.ordinal}`
+      const key = streamPartKey(event.data.assistantMessageID, id)
       const previous = state.text.get(key) ?? ""
       if (event.data.text.length > previous.length)
         write([
@@ -659,15 +659,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             text: event.data.text.slice(previous.length),
             phase: "progress",
             messageID: event.data.assistantMessageID,
-            partID: event.data.textID,
+            partID: id,
           },
         ])
       state.text.set(key, event.data.text)
       state.projectedText.delete(key)
       return
     }
+    if (event.type === "session.reasoning.started") {
+      return
+    }
     if (event.type === "session.reasoning.delta") {
-      const key = streamPartKey(event.data.assistantMessageID, event.data.reasoningID)
+      const id = `reasoning:${event.data.ordinal}`
+      const key = streamPartKey(event.data.assistantMessageID, id)
       const projected = state.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
@@ -684,13 +688,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             text: previous ? event.data.delta : `Thinking: ${event.data.delta}`,
             phase: "progress",
             messageID: event.data.assistantMessageID,
-            partID: event.data.reasoningID,
+            partID: id,
           },
         ])
       return
     }
     if (event.type === "session.reasoning.ended") {
-      const key = streamPartKey(event.data.assistantMessageID, event.data.reasoningID)
+      const id = `reasoning:${event.data.ordinal}`
+      const key = streamPartKey(event.data.assistantMessageID, id)
       const previous = state.reasoning.get(key) ?? ""
       if (input.thinking && event.data.text.length > previous.length)
         write([
@@ -700,7 +705,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             text: previous ? event.data.text.slice(previous.length) : `Thinking: ${event.data.text}`,
             phase: "progress",
             messageID: event.data.assistantMessageID,
-            partID: event.data.reasoningID,
+            partID: id,
           },
         ])
       state.reasoning.set(key, event.data.text)
@@ -723,8 +728,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const item = structuredClone({
         type: "tool",
         id: event.data.callID,
-        name: event.data.tool,
-        provider: event.data.provider,
+        name: current?.name ?? "tool",
+        executed: event.data.executed,
+        providerState: event.data.state,
         state: { status: "running", input: event.data.input, structured: {}, content: [] },
         time: { created: current?.started ?? event.created, ran: event.created },
       }) as SessionMessageAssistantTool
@@ -739,7 +745,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         type: "tool",
         id: event.data.callID,
         name: current?.name ?? "tool",
-        provider: event.data.provider,
+        executed: event.data.executed,
+        providerState: current?.providerState,
+        providerResultState: event.data.resultState,
         state: failed
           ? {
               status: "error",
@@ -791,7 +799,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         event.data.tokens.cache.write
       const usage = total > 0 ? total.toLocaleString() : ""
       write([], {
-        phase: event.data.finish === "tool-calls" ? "running" : "idle",
         usage: event.data.cost ? `${usage} · ${money.format(event.data.cost)}` : usage,
       })
       return
@@ -802,21 +809,33 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       write([{ kind: "error", source: "system", text: errorMessage(event.data.error), phase: "start" }])
       return
     }
-    if (event.type === "session.execution.settled") {
+    if (event.type === "session.execution.started") {
+      write([], { phase: "running" })
+      return
+    }
+    if (
+      event.type === "session.execution.succeeded" ||
+      event.type === "session.execution.failed" ||
+      event.type === "session.execution.interrupted"
+    ) {
       write([], { phase: "idle", status: "" })
       const current = state.wait
       if (!current || (!current.promoted && !current.interrupted)) return
       state.wait = undefined
-      if (current.interrupted) {
+      if (current.interrupted && event.type === "session.execution.interrupted" && event.data.reason === "user") {
         current.resolve()
         return
       }
-      if (event.data.outcome === "failure") {
+      if (event.type === "session.execution.failed") {
         if (current.failureRendered) {
           current.resolve()
           return
         }
-        current.reject(new Error(event.data.error ? errorMessage(event.data.error) : "Session execution failed"))
+        current.reject(new Error(errorMessage(event.data.error)))
+        return
+      }
+      if (event.type === "session.execution.interrupted") {
+        current.reject(new Error(`Session interrupted: ${event.data.reason}`))
         return
       }
       current.resolve()
@@ -1014,18 +1033,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
 
       if (next.agent) {
-        await input.sdk.session.switchAgent(
-          { sessionID: input.sessionID, agent: next.agent },
-          { signal: next.signal },
-        )
+        await input.sdk.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
       }
       const selected = await resolveSelectedModel(input, next)
       if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
       if (selected)
-        await input.sdk.session.switchModel(
-          { sessionID: input.sessionID, model: selected },
-          { signal: next.signal },
-        )
+        await input.sdk.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
       const prepared = await Promise.all((next.includeFiles ? next.files : []).map(prepareFile))
       const attachments = [

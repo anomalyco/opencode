@@ -4,11 +4,10 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
-import type { PromptInfo } from "./history"
+import { parsePromptInfo, type PromptInfo } from "./history"
 
 export type StashEntry = {
-  input: string
-  parts: PromptInfo["parts"]
+  prompt: PromptInfo
   timestamp: number
 }
 
@@ -20,7 +19,12 @@ export function parsePromptStash(text: string) {
     .filter(Boolean)
     .map((line) => {
       try {
-        return JSON.parse(line) as StashEntry
+        const value = JSON.parse(line) as unknown
+        if (!value || typeof value !== "object") return
+        const entry = value as Record<string, unknown>
+        const prompt = parsePromptInfo(entry.prompt)
+        if (!prompt || typeof entry.timestamp !== "number") return
+        return { prompt, timestamp: entry.timestamp }
       } catch {
         return undefined
       }

@@ -35,54 +35,60 @@ export function outputText(content: ReadonlyArray<{ type: string; text?: string 
 export function legacyTool(input: {
   sessionID: string
   messageID: string
-  callID: string
-  name: string
-  state: SessionMessageAssistantTool["state"]
-  time: SessionMessageAssistantTool["time"]
-  provider?: SessionMessageAssistantTool["provider"]
+  tool: SessionMessageAssistantTool
 }): ToolPart {
+  const tool = input.tool
+  const providerCall =
+    tool.executed === undefined && tool.providerState === undefined
+      ? undefined
+      : { executed: tool.executed, state: tool.providerState }
+  const providerResult =
+    tool.executed === undefined && tool.providerResultState === undefined
+      ? undefined
+      : { executed: tool.executed, state: tool.providerResultState }
   const base = {
-    id: `prt_${input.callID}`,
+    id: `prt_${tool.id}`,
     sessionID: input.sessionID,
     messageID: input.messageID,
     type: "tool" as const,
-    callID: input.callID,
-    tool: input.name,
+    callID: tool.id,
+    tool: tool.name,
   }
-  if (input.state.status === "pending") {
+  if (tool.state.status === "pending") {
     return {
       ...base,
-      state: { status: "pending", input: {}, raw: input.state.input },
+      state: { status: "pending", input: {}, raw: tool.state.input },
     }
   }
-  if (input.state.status === "running") {
+  if (tool.state.status === "running") {
     return {
       ...base,
       state: {
         status: "running",
-        input: input.state.input,
-        title: input.name,
-        metadata: { structured: input.state.structured, content: input.state.content, providerCall: input.provider },
-        time: { start: input.time.ran ?? input.time.created },
+        input: tool.state.input,
+        title: tool.name,
+        metadata: { structured: tool.state.structured, content: tool.state.content, providerCall },
+        time: { start: tool.time.ran ?? tool.time.created },
       },
     }
   }
-  if (input.state.status === "completed") {
+  if (tool.state.status === "completed") {
     return {
       ...base,
       state: {
         status: "completed",
-        input: input.state.input,
-        output: outputText(input.state.content),
-        title: input.name,
+        input: tool.state.input,
+        output: outputText(tool.state.content),
+        title: tool.name,
         metadata: {
-          structured: input.state.structured,
-          content: input.state.content,
-          outputPaths: input.state.outputPaths,
-          result: input.state.result,
-          providerCall: input.provider,
+          structured: tool.state.structured,
+          content: tool.state.content,
+          outputPaths: tool.state.outputPaths,
+          result: tool.state.result,
+          providerCall,
+          providerResult,
         },
-        time: { start: input.time.ran ?? input.time.created, end: input.time.completed ?? input.time.created },
+        time: { start: tool.time.ran ?? tool.time.created, end: tool.time.completed ?? tool.time.created },
       },
     }
   }
@@ -90,15 +96,16 @@ export function legacyTool(input: {
     ...base,
     state: {
       status: "error",
-      input: input.state.input,
-      error: input.state.error.message,
+      input: tool.state.input,
+      error: tool.state.error.message,
       metadata: {
-        structured: input.state.structured,
-        content: input.state.content,
-        result: input.state.result,
-        providerCall: input.provider,
+        structured: tool.state.structured,
+        content: tool.state.content,
+        result: tool.state.result,
+        providerCall,
+        providerResult,
       },
-      time: { start: input.time.ran ?? input.time.created, end: input.time.completed ?? input.time.created },
+      time: { start: tool.time.ran ?? tool.time.created, end: tool.time.completed ?? tool.time.created },
     },
   }
 }
@@ -138,6 +145,7 @@ type ToolTrack = {
   name: string
   input: Record<string, unknown>
   started: number
+  providerState?: Record<string, unknown>
 }
 
 type ChildState = {
@@ -225,6 +233,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   const hydrationOverflow = new Set<string>()
   const hydrations = new Map<string, Promise<void>>()
   let selected: string | undefined
+  const fragmentKey = (messageID: string, partID: string) => `${messageID}\u0000${partID}`
 
   const ensureChild = (sessionID: string): ChildState => {
     const existing = children.get(sessionID)
@@ -305,11 +314,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     const part = legacyTool({
       sessionID: child.sessionID,
       messageID,
-      callID: item.id,
-      name: item.name,
-      state: item.state,
-      time: item.time,
-      provider: item.provider,
+      tool: item,
     })
     if (item.state.status === "pending") return
     child.callIDs.add(item.id)
@@ -339,31 +344,37 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       }
       if (message.type !== "assistant") continue
       child.messageIDs.add(message.id)
+      let textOrdinal = 0
+      let reasoningOrdinal = 0
       for (const item of message.content) {
         if (item.type === "text") {
-          child.text.set(item.id, item.text)
-          child.projectedText.set(item.id, item.text)
-          setFrame(child, `text:${item.id}`, {
+          const id = `text:${textOrdinal++}`
+          const key = fragmentKey(message.id, id)
+          child.text.set(key, item.text)
+          child.projectedText.set(key, item.text)
+          setFrame(child, key, {
             kind: "assistant",
             source: "assistant",
             text: item.text,
             phase: "progress",
             messageID: message.id,
-            partID: item.id,
+            partID: id,
           })
           continue
         }
         if (item.type === "reasoning") {
-          child.reasoning.set(item.id, item.text)
-          child.projectedReasoning.set(item.id, item.text)
+          const id = `reasoning:${reasoningOrdinal++}`
+          const key = fragmentKey(message.id, id)
+          child.reasoning.set(key, item.text)
+          child.projectedReasoning.set(key, item.text)
           if (input.thinking)
-            setFrame(child, `reasoning:${item.id}`, {
+            setFrame(child, key, {
               kind: "reasoning",
               source: "reasoning",
               text: `Thinking: ${item.text}`,
               phase: "progress",
               messageID: message.id,
-              partID: item.id,
+              partID: id,
             })
           continue
         }
@@ -467,74 +478,88 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       input.emit()
       return
     }
+    if (event.type === "session.text.started") {
+      return
+    }
     if (event.type === "session.text.delta") {
-      const projected = child.projectedText.get(event.data.textID)
+      const id = `text:${event.data.ordinal}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      const projected = child.projectedText.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
-        child.projectedText.set(event.data.textID, projected.slice(covered + event.data.delta.length))
+        child.projectedText.set(key, projected.slice(covered + event.data.delta.length))
         return
       }
-      const next = (child.text.get(event.data.textID) ?? "") + event.data.delta
-      child.text.set(event.data.textID, next)
-      setFrame(child, `text:${event.data.textID}`, {
+      const next = (child.text.get(key) ?? "") + event.data.delta
+      child.text.set(key, next)
+      setFrame(child, key, {
         kind: "assistant",
         source: "assistant",
         text: next,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.textID,
+        partID: id,
       })
       touch(child, event.created)
       notifyDetail(child)
       return
     }
     if (event.type === "session.text.ended") {
-      child.text.set(event.data.textID, event.data.text)
-      child.projectedText.delete(event.data.textID)
-      setFrame(child, `text:${event.data.textID}`, {
+      const id = `text:${event.data.ordinal}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      child.text.set(key, event.data.text)
+      child.projectedText.delete(key)
+      setFrame(child, key, {
         kind: "assistant",
         source: "assistant",
         text: event.data.text,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.textID,
+        partID: id,
       })
       touch(child, event.created)
       notifyDetail(child)
       return
     }
+    if (event.type === "session.reasoning.started") {
+      return
+    }
     if (event.type === "session.reasoning.delta") {
-      const projected = child.projectedReasoning.get(event.data.reasoningID)
+      const id = `reasoning:${event.data.ordinal}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      const projected = child.projectedReasoning.get(key)
       const covered = projected?.indexOf(event.data.delta) ?? -1
       if (projected && covered >= 0) {
-        child.projectedReasoning.set(event.data.reasoningID, projected.slice(covered + event.data.delta.length))
+        child.projectedReasoning.set(key, projected.slice(covered + event.data.delta.length))
         return
       }
-      const next = (child.reasoning.get(event.data.reasoningID) ?? "") + event.data.delta
-      child.reasoning.set(event.data.reasoningID, next)
+      const next = (child.reasoning.get(key) ?? "") + event.data.delta
+      child.reasoning.set(key, next)
       if (!input.thinking) return
-      setFrame(child, `reasoning:${event.data.reasoningID}`, {
+      setFrame(child, key, {
         kind: "reasoning",
         source: "reasoning",
         text: `Thinking: ${next}`,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.reasoningID,
+        partID: id,
       })
       notifyDetail(child)
       return
     }
     if (event.type === "session.reasoning.ended") {
-      child.reasoning.set(event.data.reasoningID, event.data.text)
-      child.projectedReasoning.delete(event.data.reasoningID)
+      const id = `reasoning:${event.data.ordinal}`
+      const key = fragmentKey(event.data.assistantMessageID, id)
+      child.reasoning.set(key, event.data.text)
+      child.projectedReasoning.delete(key)
       if (!input.thinking) return
-      setFrame(child, `reasoning:${event.data.reasoningID}`, {
+      setFrame(child, key, {
         kind: "reasoning",
         source: "reasoning",
         text: `Thinking: ${event.data.text}`,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: event.data.reasoningID,
+        partID: id,
       })
       notifyDetail(child)
       return
@@ -548,17 +573,19 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       if (child.finishedTools.has(event.data.callID)) return
       const current = child.tools.get(event.data.callID)
       child.tools.set(event.data.callID, {
-        name: event.data.tool,
+        name: current?.name ?? "tool",
         input: event.data.input,
         started: current?.started ?? event.created,
+        providerState: event.data.state,
       })
       childTool(
         child,
         structuredClone({
           type: "tool",
           id: event.data.callID,
-          name: event.data.tool,
-          provider: event.data.provider,
+          name: current?.name ?? "tool",
+          executed: event.data.executed,
+          providerState: event.data.state,
           state: { status: "running", input: event.data.input, structured: {}, content: [] },
           time: { created: current?.started ?? event.created, ran: event.created },
         }) as SessionMessageAssistantTool,
@@ -578,7 +605,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           type: "tool",
           id: event.data.callID,
           name: current?.name ?? "tool",
-          provider: event.data.provider,
+          executed: event.data.executed,
+          providerState: current?.providerState,
+          providerResultState: event.data.resultState,
           state: failed
             ? {
                 status: "error",
@@ -608,6 +637,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
+    if (event.type === "session.step.ended") return
     if (event.type === "session.step.failed") {
       setFrame(child, `error:step:${event.data.assistantMessageID}`, {
         kind: "error",
@@ -620,9 +650,23 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       notifyDetail(child)
       return
     }
-    if (event.type === "session.execution.settled") {
+    if (event.type === "session.execution.started") {
+      child.status = "running"
+      touch(child, event.created)
+      input.emit()
+      return
+    }
+    if (
+      event.type === "session.execution.succeeded" ||
+      event.type === "session.execution.failed" ||
+      event.type === "session.execution.interrupted"
+    ) {
       child.status =
-        event.data.outcome === "success" ? "completed" : event.data.outcome === "interrupted" ? "cancelled" : "error"
+        event.type === "session.execution.succeeded"
+          ? "completed"
+          : event.type === "session.execution.interrupted"
+            ? "cancelled"
+            : "error"
       touch(child, event.created)
       input.emit()
     }
@@ -644,8 +688,12 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
 
   return {
     main(event) {
+      if (event.type === "session.tool.input.started") {
+        if (event.data.name === "subagent") pendingCalls.set(event.data.callID, {})
+        return
+      }
       if (event.type === "session.tool.called") {
-        if (event.data.tool === "subagent") pendingCalls.set(event.data.callID, event.data.input)
+        if (pendingCalls.has(event.data.callID)) pendingCalls.set(event.data.callID, event.data.input)
         return
       }
       if (event.type === "session.tool.failed") {

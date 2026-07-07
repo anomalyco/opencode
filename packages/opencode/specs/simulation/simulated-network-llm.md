@@ -65,7 +65,7 @@ Exchange = { id, body, queue: Queue<Item | Error | Done>, deferred lifecycle }
 
 ### 4. Backend control WebSocket (simulation-gated)
 
-Started when the simulation module loads (lazy import, `OPENCODE_SIMULATION` only): a loopback JSON-RPC 2.0 WebSocket on `127.0.0.1:40950+`, hosted by the backend process. Drivers connect to it directly — the standalone topology has exactly one backend per TUI, so there is no proxying through the frontend. This socket is also the headless-simulation interface: it works with no TUI at all.
+Started when `OPENCODE_DRIVE` names a registry manifest: a loopback JSON-RPC 2.0 WebSocket at that manifest's exact backend endpoint, hosted by the backend process. Drivers connect to it directly — the standalone topology has exactly one backend per TUI, so there is no proxying through the frontend. This socket is also the headless-simulation interface: it works with no TUI at all.
 
 Server -> driver notification (after `llm.attach`; pending exchanges are replayed on attach so late-attaching drivers miss nothing):
 
@@ -101,8 +101,8 @@ Failure injection (`llm.fail`: HTTP status instead of SSE) is specced but not ye
 
 A driver manages two loopback WebSocket connections:
 
-- TUI control server (`127.0.0.1:40900+`) — UI state, actions, render, trace.
-- Backend control server (`127.0.0.1:40950+`) — LLM exchanges, network log.
+- TUI control server (manifest `endpoints.ui`) — UI state, actions, render, trace.
+- Backend control server (manifest `endpoints.backend`) — LLM exchanges, network log.
 
 Both speak the same JSON-RPC shape. Headless drivers use only the backend socket plus the normal HTTP API. Multiple drivers are out of scope; last attach wins.
 
@@ -117,7 +117,7 @@ The driver-facing model must be selectable in the TUI. Simulation seeds config (
 ## End-to-end flow
 
 ```
-driver                TUI sim server (40900+)     backend + control WS (40950+)
+driver                TUI drive server             backend + drive WS
   |                            |                          |
   |-- ui.action (submit) ----->|                          |
   |                            |-- (normal app HTTP) ---->|  session runner starts

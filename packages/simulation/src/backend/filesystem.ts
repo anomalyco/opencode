@@ -328,31 +328,31 @@ export function make(options: Options): FileSystem.FileSystem {
  * Lazily constructed layer so the root defaults to `process.cwd()` at
  * layer-build time (the simulation anchor directory), not at import time.
  *
- * When `OPENCODE_SIMULATION_STATE` points at a snapshot directory, its
- * `project/` contents are read from the host once at build time and seeded
+ * When `OPENCODE_SIMULATE_STATE` points at a snapshot directory, its
+ * `files/` contents are read from the host once at build time and seeded
  * into the in-memory tree, joined onto the anchor root.
  */
 export const layer = (options?: Partial<Options>) =>
   Layer.sync(FileSystem.FileSystem)(() =>
     make({
       root: options?.root ?? process.cwd(),
-      files: { ...loadSnapshotFiles(process.env.OPENCODE_SIMULATION_STATE), ...options?.files },
+      files: { ...loadSnapshotFiles(process.env.OPENCODE_SIMULATE_STATE), ...options?.files },
     }),
   )
 
 function loadSnapshotFiles(stateDirectory: string | undefined) {
   if (!stateDirectory) return {}
-  const project = path.join(stateDirectory, "project")
-  if (!nodeFs.existsSync(project)) return {}
+  const snapshot = path.join(stateDirectory, "files")
+  if (!nodeFs.existsSync(snapshot)) return {}
   const files: Record<string, Uint8Array> = {}
   const walk = (dir: string) => {
     for (const entry of nodeFs.readdirSync(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name)
       if (entry.isDirectory()) walk(file)
-      if (entry.isFile()) files[path.relative(project, file)] = new Uint8Array(nodeFs.readFileSync(file))
+      if (entry.isFile()) files[path.relative(snapshot, file)] = new Uint8Array(nodeFs.readFileSync(file))
     }
   }
-  walk(project)
+  walk(snapshot)
   return files
 }
 

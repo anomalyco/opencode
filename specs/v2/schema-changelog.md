@@ -1,5 +1,40 @@
 # V2 Schema Changelog
 
+## 2026-07-05: Rename Session Context Contracts To Instructions
+
+- Rename the System Context algebra to `Instructions`, API-managed `SessionContextEntry` records to `InstructionEntry`, and the session-owned context checkpoint to `InstructionCheckpoint`.
+- Rename the tables `session_context_entry` and `session_context_epoch` to `instruction_entry` and `instruction_checkpoint`.
+- Rename the durable update event from `session.context.updated` to `session.instructions.updated`; the migration rewrites existing durable event types in place.
+- Rename the API-managed entry routes from `/api/session/:sessionID/context-entry` to `/api/session/:sessionID/instructions/entries` and their operation identifiers from `session.context.entry.*` to `session.instructions.entry.*`, keeping bare `session.instructions.*` free for the composed instruction surface.
+
+Compatibility:
+
+- The V2 contracts remain experimental. The renamed tables, event, endpoints, schemas, and generated client names are intentionally breaking changes for beta consumers.
+- Existing changelog entries retain the names that were accurate when those changes occurred.
+- Behavior is unchanged: this is a vocabulary and contract rename only.
+
+## 2026-07-04: Canonicalize Generated Shell Type Name
+
+- Collapse the legacy JavaScript SDK generator's equivalent `Shell1V2` component into the canonical `ShellV2` contract.
+
+Compatibility:
+
+- The Shell wire shape is unchanged. Generated event and endpoint types now consistently reference `ShellV2`.
+
+## 2026-07-03: Add Execution Lifecycle, Retry, And Structured Session Errors
+
+- Replace live-only `session.execution.settled` and unused `session.retried` with durable v1 `session.execution.started`, `session.execution.succeeded`, `session.execution.failed`, `session.execution.interrupted`, and `session.retry.scheduled` events.
+- Add an open `SessionError` wire envelope with dot-cased type values and the browser-safe `FinishReason` contract.
+- Project retry state onto the current assistant and classify content-filter finishes as failed steps.
+- Reuse one projected assistant across pre-output retry steps; each provider call remains a distinct step and consumes agent allowance.
+
+Compatibility:
+
+- Experimental V2 event, sequence, input, and message-projection rows are reset. Durable event contracts restart at v1.
+- `SessionError.type` remains an open string so new error classifications do not require event-version or database migrations. Unknown fields are ignored by older decoders; richer public details require a separate compatibility design.
+- Execution lifecycle events are historical observations of one process-local coordinator busy period. Unmatched starts never establish current liveness or recovery work; `/api/session/active` remains the current-process liveness authority.
+- Scheduled retries are historical UI state after a crash and never trigger provider recovery.
+
 ## 2026-07-03: Require Durable Envelope On Durable Events
 
 - Make the wire `durable` envelope required on durable event definitions.
@@ -939,3 +974,17 @@ Compatibility:
 Compatibility:
 
 - V2 durable events and projections are experimental and are reset by `20260703190000_reset_v2_shell_event_payloads`; existing V2 event rows, event sequences, projected session messages, and admitted inputs are wiped.
+
+## 2026-07-03: Simplify Assistant Fragments And Provider State
+
+- Remove provider block IDs from current Session text and reasoning event payloads and projected content. A Session assistant step allows at most one open fragment of each kind; events carry a Session-assigned kind-specific ordinal so live updates and hydrated projections share the stable `(assistantMessageID, kind, ordinal)` reference. Tool correlation continues to use `callID`.
+- Replace nested `providerMetadata` with opaque, provider-un-nested `state` at the Session boundary. Reasoning uses `state`; tool calls use `state`, settlements use `resultState`, and projected tools expose `providerState` and `providerResultState`. Replay re-nests state under the selected provider only for the same successful model.
+- Flatten `executed` on tool events and projected tools, and remove the redundant tool name from `session.tool.called` because `session.tool.input.started` owns it.
+- Rename `session.revert.committed.messageID` to `to`, paired with `session.forked.from`.
+- Publish live-only `session.compaction.delta` events for accepted summary chunks while `session.compaction.ended.1` remains the durable full summary.
+- OpenAI Responses closes output text on `response.output_text.done` or its message `response.output_item.done` boundary. Provider documentation and recorded stream shapes show sequential output items, not valid overlapping text or reasoning blocks of the same kind.
+
+Compatibility:
+
+- All changed durable definitions remain version 1. `20260703200000_reset_v2_session_events` performs the single reset for this Session event contract update, wiping experimental V2 events, sequences, projected messages, and admitted inputs.
+- Promise, Effect, and legacy JavaScript SDK surfaces are regenerated from the simplified schemas.

@@ -30,7 +30,8 @@ async function pull(skills: unknown[], files: Record<string, string> = {}, fixtu
       fetch(request) {
         state.requests.push(request.url)
         const pathname = new URL(request.url).pathname
-        const body = pathname === "/catalog/index.json" ? JSON.stringify({ skills: state.skills }) : state.files[pathname]
+        const body =
+          pathname === "/catalog/index.json" ? JSON.stringify({ skills: state.skills }) : state.files[pathname]
         return new Response(body ?? "Not Found", { status: body === undefined ? 404 : 200 })
       },
     })
@@ -119,10 +120,9 @@ describe("SkillDiscovery.pull", () => {
   })
 
   test("refreshes cached files when the version changes", async () => {
-    const first = await pull(
-      [{ name: "deploy", version: "1", files: ["SKILL.md"] }],
-      { "/catalog/deploy/SKILL.md": "# Old" },
-    )
+    const first = await pull([{ name: "deploy", version: "1", files: ["SKILL.md"] }], {
+      "/catalog/deploy/SKILL.md": "# Old",
+    })
     try {
       const second = await pull(
         [{ name: "deploy", version: "2", files: ["SKILL.md"] }],
@@ -144,13 +144,10 @@ describe("SkillDiscovery.pull", () => {
   })
 
   test("publishes complete updates and removes stale files", async () => {
-    const first = await pull(
-      [{ name: "deploy", version: "1", files: ["SKILL.md", "old.md"] }],
-      {
-        "/catalog/deploy/SKILL.md": "# Old",
-        "/catalog/deploy/old.md": "old reference",
-      },
-    )
+    const first = await pull([{ name: "deploy", version: "1", files: ["SKILL.md", "old.md"] }], {
+      "/catalog/deploy/SKILL.md": "# Old",
+      "/catalog/deploy/old.md": "old reference",
+    })
     try {
       const root = first.directories[0]
 

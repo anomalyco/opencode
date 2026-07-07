@@ -27,9 +27,7 @@ const capture = () => {
         return event
       }),
     subscribe: () => Stream.empty,
-    live: () => Stream.empty,
     log: () => Stream.empty,
-    changes: () => Stream.empty,
     sequences: () => Effect.succeed(new Map()),
     listen: () => Effect.succeed(Effect.void),
     project: () => Effect.void,
@@ -47,6 +45,7 @@ const capture = () => {
         id: ModelV2.ID.make("model"),
         providerID: ProviderV2.ID.make("provider"),
       },
+      provider: "openai",
     }),
   }
 }
@@ -90,12 +89,25 @@ test("local tool success serializes media base64 once and reconstructs from stru
   })
 })
 
-test("provider-executed success retains its compatibility result", async () => {
+test("provider-executed success retains its raw provider result", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
   const success = published.find((event) => event.type === "session.tool.success.1")
   expect(success?.data).toHaveProperty("result")
+})
+
+test("provider state uses the route provider instead of the catalog provider", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { openai: { itemId: "reasoning" } } }),
+    ),
+  )
+
+  expect(published.find((event) => event.type === "session.reasoning.started.1")?.data).toMatchObject({
+    state: { itemId: "reasoning" },
+  })
 })
 
 test("binary failure emits no success event", async () => {
@@ -114,7 +126,7 @@ test("binary failure emits no success event", async () => {
   expect(published.some((event) => event.type === "session.tool.failed.1")).toBe(true)
 })
 
-test("old success event data containing result still decodes", () => {
+test("success event data can carry a provider-executed result", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,
     assistantMessageID: SessionMessage.ID.create(),
@@ -122,7 +134,7 @@ test("old success event data containing result still decodes", () => {
     structured: { type: "media", mime: "image/png" },
     content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
     result: { type: "content", value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }] },
-    provider: { executed: false },
+    executed: true,
   })
   expect(decoded.result).toMatchObject({ type: "content" })
 })
@@ -134,4 +146,41 @@ test("step finish records settlement without publishing step ended", async () =>
 
   expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+})
+
+test("content-filter finish retains failure evidence until step closeout", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "content-filter" })))
+
+  expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
+  await Effect.runPromise(publisher.publishStepFailure())
+  expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
+  expect(published.at(-1)?.data).toMatchObject({
+    error: { type: "provider.content-filter", message: "Provider blocked the response" },
+  })
+  expect(publisher.stepSettlement()).toBeUndefined()
+})
+
+test("content-filter finish preserves partial streamed text and never ends the step successfully", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Partial" }),
+        LLMEvent.stepFinish({ index: 0, reason: "content-filter" }),
+      ],
+      (event) => publisher.publish(event),
+      { discard: true },
+    ),
+  )
+  await Effect.runPromise(publisher.publishStepFailure())
+
+  expect(published.some((event) => event.type === "session.step.ended.1")).toBe(false)
+  expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({ text: "Partial" })
+  expect(published.find((event) => event.type === "session.step.failed.1")?.data).toMatchObject({
+    error: { type: "provider.content-filter" },
+  })
 })
