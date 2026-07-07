@@ -110,6 +110,25 @@ test("provider state uses the route provider instead of the catalog provider", a
   })
 })
 
+test("reasoning state from an empty delta is retained at reasoning end", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningStart({ id: "reasoning" })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.reasoningDelta({
+        id: "reasoning",
+        text: "",
+        providerMetadata: { openai: { signature: "signed" } },
+      }),
+    ),
+  )
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningEnd({ id: "reasoning" })))
+
+  expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
+    state: { signature: "signed" },
+  })
+})
+
 test("binary failure emits no success event", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
