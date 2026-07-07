@@ -1,7 +1,6 @@
 import { Effect } from "effect"
 import { SimulationProtocol } from "../protocol"
 import { SimulationLLMExchange } from "./llm-exchange"
-import { SimulationNetwork } from "./network"
 
 /**
  * Backend-hosted simulation control WebSocket.
@@ -19,7 +18,6 @@ import { SimulationNetwork } from "./network"
  * - `llm.finish`  { id, reason? } finish an exchange
  * - `llm.disconnect` { id } abruptly terminate an exchange without a finish
  * - `llm.pending`                 list open exchanges
- * - `network.log`                 simulated network request log
  */
 
 type ControlSocket = Bun.ServerWebSocket<{ unsubscribe?: () => void }>
@@ -58,8 +56,6 @@ async function handle(socket: ControlSocket, request: SimulationProtocol.Backend
     }
     case "llm.pending":
       return { exchanges: SimulationLLMExchange.pending() }
-    case "network.log":
-      return { entries: SimulationNetwork.log() }
   }
 }
 

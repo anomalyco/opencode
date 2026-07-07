@@ -164,7 +164,7 @@ export namespace Backend {
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.disconnect"), params: DisconnectParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
-      method: Schema.Literals(["llm.attach", "llm.pending", "network.log"]),
+      method: Schema.Literals(["llm.attach", "llm.pending"]),
     }),
   ])
   export type Request = Schema.Schema.Type<typeof Request>
