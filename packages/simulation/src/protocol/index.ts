@@ -88,7 +88,6 @@ export namespace Frontend {
       editor: Schema.Boolean,
     }),
     elements: Schema.Array(Element),
-    actions: Schema.Array(Action),
   })
   export interface State extends Schema.Schema.Type<typeof State> {}
 

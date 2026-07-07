@@ -95,28 +95,6 @@ export function elements(renderer: CliRenderer): Element[] {
     .filter((element) => element.focusable || element.clickable || element.editor)
 }
 
-export function actions(renderer: CliRenderer, options: { text?: string } = {}): Action[] {
-  const items = elements(renderer)
-  return [
-    ...(renderer.currentFocusedEditor
-      ? ([{ type: "ui.type", text: options.text ?? "hello" }, { type: "ui.enter" }] satisfies Action[])
-      : []),
-    ...items
-      .filter((item) => item.focusable && !item.focused)
-      .map((item) => ({ type: "ui.focus" as const, target: item.num })),
-    ...items
-      .filter((item) => item.clickable)
-      .map((item) => ({
-        type: "ui.click" as const,
-        target: item.num,
-        x: Math.floor(item.x + item.width / 2),
-        y: Math.floor(item.y + item.height / 2),
-      })),
-    { type: "ui.arrow", direction: "down" },
-    { type: "ui.arrow", direction: "up" },
-  ]
-}
-
 export function state(harness: Harness) {
   return {
     focused: {
@@ -124,7 +102,6 @@ export function state(harness: Harness) {
       editor: Boolean(harness.renderer.currentFocusedEditor),
     },
     elements: elements(harness.renderer),
-    actions: actions(harness.renderer),
   }
 }
 

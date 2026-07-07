@@ -29,7 +29,7 @@ async function handle(
       return SimulationActions.screenshot(harness)
     case "ui.state": {
       const result = SimulationActions.state(harness)
-      SimulationTrace.add("ui.state", { elements: result.elements.length, actions: result.actions.length })
+      SimulationTrace.add("ui.state", { elements: result.elements.length })
       return result
     }
     case "ui.start-record": {
