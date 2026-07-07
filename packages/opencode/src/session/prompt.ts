@@ -56,21 +56,21 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import {
+  MAX_MCP_RESOURCE_BLOB_BYTES,
+  decodeMcpResourceTextBlob,
+  formatMcpResourceBytes,
+  isSupportedMcpResourceAttachmentMime,
+  isTextMcpResourceMime,
+  mcpResourceBase64Size,
+  normalizeMcpResourceMime,
+} from "./mcp-resource-content"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 const decodeMessageInfo = Schema.decodeUnknownExit(SessionV1.Info)
 const decodeMessagePart = Schema.decodeUnknownExit(SessionV1.Part)
-const MAX_MCP_RESOURCE_BLOB_BYTES = 10 * 1024 * 1024
-const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
-  "application/pdf",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-])
-
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
 
 IMPORTANT:
@@ -80,18 +80,6 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
-
-function mcpResourceBase64Size(value: string) {
-  const trimmed = value.replace(/\s/g, "")
-  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
-  return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding)
-}
-
-function formatMcpResourceBytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
-  return `${Math.ceil(value / (1024 * 1024))} MB`
-}
 
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
@@ -728,10 +716,32 @@ const layer = Layer.effect(
                     text: c.text,
                   })
                 } else if ("blob" in c && typeof c.blob === "string" && c.blob) {
-                  const mime = "mimeType" in c && typeof c.mimeType === "string" ? c.mimeType : part.mime
+                  const mime = normalizeMcpResourceMime(
+                    "mimeType" in c && typeof c.mimeType === "string" ? c.mimeType : part.mime,
+                  )
                   const filename = "uri" in c && typeof c.uri === "string" ? c.uri : part.filename
                   const size = mcpResourceBase64Size(c.blob)
-                  if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+                  if (isTextMcpResourceMime(mime)) {
+                    if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
+                      pieces.push({
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: `[Binary MCP resource omitted: ${filename ?? uri} (${mime}, ${formatMcpResourceBytes(size)}) exceeds ${formatMcpResourceBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+                      })
+                      continue
+                    }
+                    pieces.push({
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: decodeMcpResourceTextBlob(c.blob),
+                    })
+                    continue
+                  }
+                  if (!isSupportedMcpResourceAttachmentMime(mime)) {
                     pieces.push({
                       messageID: info.id,
                       sessionID: input.sessionID,

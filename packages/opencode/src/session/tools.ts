@@ -23,21 +23,21 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import {
+  MAX_MCP_RESOURCE_BLOB_BYTES,
+  decodeMcpResourceTextBlob,
+  formatMcpResourceBytes as formatBytes,
+  isSupportedMcpResourceAttachmentMime,
+  isTextMcpResourceMime,
+  mcpResourceBase64Size as base64Size,
+  normalizeMcpResourceMime,
+} from "./mcp-resource-content"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
   listTemplates: "list_mcp_resource_templates",
   read: "read_mcp_resource",
 } as const
-const MAX_MCP_RESOURCE_BLOB_BYTES = 10 * 1024 * 1024
-const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
-  "application/pdf",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-])
-
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
@@ -437,9 +437,21 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               const { resource } = contentItem
               if (resource.text) textParts.push(resource.text)
               if (resource.blob) {
-                const mime = resource.mimeType ?? "application/octet-stream"
+                const mime = normalizeMcpResourceMime(resource.mimeType)
                 const size = base64Size(resource.blob)
-                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+                if (isTextMcpResourceMime(mime)) {
+                  if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
+                    textParts.push(
+                      `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+                    )
+                    continue
+                  }
+                  textParts.push(
+                    `Resource: ${resource.uri}\nMIME: ${mime}\n${decodeMcpResourceTextBlob(resource.blob)}`,
+                  )
+                  continue
+                }
+                if (!isSupportedMcpResourceAttachmentMime(mime)) {
                   textParts.push(
                     `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
                   )
@@ -530,21 +542,31 @@ function formatMcpResourceTemplate(template: Record<string, unknown> & { client:
   return { ...result, server: template.client }
 }
 
-function formatMcpResourceContent(server: string, uri: string, content: { contents: unknown }) {
+export function formatMcpResourceContent(server: string, uri: string, content: { contents: unknown }) {
   const items = (Array.isArray(content.contents) ? content.contents : [content.contents]).filter(isRecord)
   const text: string[] = []
   const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
 
   for (const item of items) {
     const itemUri = typeof item.uri === "string" ? item.uri : uri
-    const mime = typeof item.mimeType === "string" ? item.mimeType : "application/octet-stream"
+    const mime = normalizeMcpResourceMime(typeof item.mimeType === "string" ? item.mimeType : undefined)
     if (typeof item.text === "string") {
       text.push(`Resource: ${itemUri}\nMIME: ${mime}\n${item.text}`)
       continue
     }
     if (typeof item.blob === "string") {
       const size = base64Size(item.blob)
-      if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+      if (isTextMcpResourceMime(mime)) {
+        if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
+          text.push(
+            `[Binary MCP resource omitted: ${itemUri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+          )
+          continue
+        }
+        text.push(`Resource: ${itemUri}\nMIME: ${mime}\n${decodeMcpResourceTextBlob(item.blob)}`)
+        continue
+      }
+      if (!isSupportedMcpResourceAttachmentMime(mime)) {
         text.push(
           `[Binary MCP resource omitted: ${itemUri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
         )
@@ -573,18 +595,6 @@ function formatMcpResourceContent(server: string, uri: string, content: { conten
     attachments,
     text: text.join("\n\n") || `MCP resource ${uri} from ${server} returned no contents.`,
   }
-}
-
-function base64Size(value: string) {
-  const trimmed = value.replace(/\s/g, "")
-  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
-  return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding)
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
-  return `${Math.ceil(value / (1024 * 1024))} MB`
 }
 
 export * as SessionTools from "./tools"
