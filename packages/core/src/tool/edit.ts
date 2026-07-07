@@ -6,7 +6,7 @@
  */
 export * as EditTool from "./edit"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { ToolFailure } from "@opencode-ai/llm"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -87,7 +87,7 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
 
 export const Plugin = {
   id: "opencode.tool.edit",
-  effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("EditTool.Plugin")(function* (ctx: Plugin.Context) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service

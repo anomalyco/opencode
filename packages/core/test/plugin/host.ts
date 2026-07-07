@@ -1,4 +1,4 @@
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -8,9 +8,9 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 
-type Overrides = Partial<Omit<PluginContext, "options">>
+type Overrides = Partial<Omit<Plugin.Context, "options">>
 
-export function host(overrides: Overrides = {}): PluginContext {
+export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     options: {},
     agent: overrides.agent ?? {
@@ -90,7 +90,7 @@ export function host(overrides: Overrides = {}): PluginContext {
   }
 }
 
-export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
+export function agentHost(agent: AgentV2.Interface): Plugin.Context["agent"] {
   return {
     list: () => Effect.die("unused agent.list"),
     reload: agent.reload,
@@ -115,7 +115,7 @@ export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"] {
+export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog"] {
   return {
     provider: {
       list: () => Effect.die("unused catalog.provider.list"),
@@ -187,7 +187,7 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"
   }
 }
 
-export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
+export function integrationHost(integration: Integration.Interface): Plugin.Context["integration"] {
   return {
     list: () => Effect.die("unused integration.list"),
     get: () => Effect.die("unused integration.get"),

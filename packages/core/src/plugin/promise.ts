@@ -1,11 +1,12 @@
 export * as PluginPromise from "./promise"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
-import type { Plugin, PluginContext } from "@opencode-ai/plugin/v2/promise"
+import { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Scope, Stream } from "effect"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
+type PromisePlugin = import("@opencode-ai/plugin/v2/plugin").Plugin
+type PromisePluginContext = import("@opencode-ai/plugin/v2/plugin").Context
 
 /**
  * Adapts a Promise plugin into an Effect plugin so the existing Effect-only
@@ -16,8 +17,8 @@ type Registration = { readonly dispose: () => Promise<void> }
  * preserves boot-time batching, so Promise-plugin transforms still coalesce
  * into one reload per domain.
  */
-export function fromPromise(plugin: Plugin) {
-  return define({
+export function fromPromise(plugin: PromisePlugin) {
+  return Plugin.define({
     id: plugin.id,
     effect: (host) =>
       Effect.gen(function* () {
@@ -43,7 +44,7 @@ export function fromPromise(plugin: Plugin) {
               }),
             )
 
-        const context2: PluginContext = {
+        const context2: PromisePluginContext = {
           options: host.options,
           agent: {
             list: (input) => run(host.agent.list(input)),
@@ -112,7 +113,9 @@ export function fromPromise(plugin: Plugin) {
             interrupt: (input) => run(host.session.interrupt(input)),
             request: {
               before: (callback) =>
-                register(host.session.request.before((event) => Effect.promise(() => Promise.resolve(callback(event))))),
+                register(
+                  host.session.request.before((event) => Effect.promise(() => Promise.resolve(callback(event)))),
+                ),
             },
           },
         }

@@ -75,7 +75,8 @@ export const AmazonBedrockPlugin = define({
         })
       }
     })
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (!["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"].includes(evt.package)) return
         const options = { ...evt.options }
@@ -108,7 +109,8 @@ export const AmazonBedrockPlugin = define({
         evt.sdk = mod.createAmazonBedrock(options)
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
         if (

@@ -7,7 +7,8 @@ export const DynamicProviderPlugin = define({
   id: "opencode.provider.dynamic",
   effect: Effect.fn(function* (ctx) {
     const npm = yield* Npm.Service
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.sdk) return
 

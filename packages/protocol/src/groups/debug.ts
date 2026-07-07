@@ -9,7 +9,7 @@ export const DebugGroup = HttpApiGroup.make("server.debug")
       success: Schema.Array(Location.Ref),
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.debug.location",
+        identifier: "v2.debug.location.list",
         summary: "List loaded locations",
         description: "List locations currently loaded by the server.",
       }),

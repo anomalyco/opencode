@@ -1,6 +1,6 @@
 export * as WebFetchTool from "./webfetch"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -114,7 +114,7 @@ const convert = (content: string, contentType: string, format: Format) => {
 
 export const Plugin = {
   id: "opencode.tool.webfetch",
-  effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: Plugin.Context) {
     const http = yield* HttpClient.HttpClient
     const permission = yield* PermissionV2.Service
 

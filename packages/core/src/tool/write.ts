@@ -6,7 +6,7 @@
  */
 export * as WriteTool from "./write"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
@@ -44,7 +44,7 @@ export const toModelOutput = (output: Output) =>
 
 export const Plugin = {
   id: "opencode.tool.write",
-  effect: Effect.fn("WriteTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Plugin.Context) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const permission = yield* PermissionV2.Service

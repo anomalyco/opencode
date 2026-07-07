@@ -1,7 +1,7 @@
 import { isAbsolute, join } from "node:path"
-import { Effect, FileSystem, PlatformError, Schema, SchemaAST, SchemaRepresentation } from "effect"
+import { Context, Effect, FileSystem, PlatformError, Schema, SchemaAST, SchemaRepresentation } from "effect"
 import { HttpMethod, type HttpRouter } from "effect/unstable/http"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { format } from "prettier"
 
 export type InputField = {
@@ -34,8 +34,6 @@ export type Output = {
 export type Contract = {
   readonly groups: ReadonlyArray<Group>
 }
-
-export type EndpointName = string | readonly [string, ...Array<string>]
 
 export class GenerationError extends Schema.TaggedErrorClass<GenerationError>()("GenerationError", {
   reason: Schema.String,
@@ -89,7 +87,6 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
   api: HttpApi.HttpApi<Id, Groups>,
   options?: {
     readonly groupNames?: Readonly<Record<string, string>>
-    readonly endpointNames?: Readonly<Record<string, EndpointName>>
     readonly omitEndpoints?: ReadonlySet<string>
   },
 ): Contract {
@@ -151,8 +148,11 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Any>(
         for (const [path, schema] of schemaPaths) assertPortable(schema, path, portable)
       }
 
-      const clientPath = normalizeClientPath(
-        options?.endpointNames?.[endpoint.name] ?? clientEndpointName(endpoint.name),
+      const clientPath = clientEndpointPath(
+        group.identifier,
+        Context.getOrElse(endpoint.annotations, OpenApi.Identifier, () =>
+          group.topLevel ? endpoint.name : `${group.identifier}.${endpoint.name}`,
+        ),
       )
       endpoints.push({
         group: groupName,
@@ -699,20 +699,16 @@ function clientOperationKey(group: Group, endpoint: Endpoint) {
   return [group.identifier, ...endpoint.clientPath].join(".")
 }
 
-function clientEndpointName(name: string) {
-  return name.slice(name.lastIndexOf(".") + 1)
-}
-
-function normalizeClientPath(path: EndpointName) {
-  const result = typeof path === "string" ? [path] : [...path]
+function clientEndpointPath(group: string, name: string) {
+  const parts = name.split(".")
+  if (parts[0] === "v2") parts.shift()
+  const index = parts.lastIndexOf(group.slice(group.lastIndexOf(".") + 1))
+  const result = index < 0 ? parts : parts.slice(index + 1)
   if (result.length === 0 || result.some((part) => part.length === 0)) {
     throw new GenerationError({ reason: "Client endpoint path must contain non-empty names" })
   }
   if (result.some((part) => part === "__proto__")) {
     throw new GenerationError({ reason: "Client endpoint path cannot contain __proto__" })
-  }
-  if (typeof path !== "string" && result.some((part) => part.includes("."))) {
-    throw new GenerationError({ reason: "Nested client endpoint path segments cannot contain dots" })
   }
   return result as [string, ...Array<string>]
 }

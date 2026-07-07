@@ -2508,13 +2508,13 @@ export type ServerMcpListOutput = {
   }>
 }
 
-export type ServerMcpCatalogInput = {
+export type ServerMcpResourceCatalogInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ServerMcpCatalogOutput = {
+export type ServerMcpResourceCatalogOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -2585,13 +2585,13 @@ export type ProjectDirectoriesInput = {
 
 export type ProjectDirectoriesOutput = ReadonlyArray<{ readonly directory: string; readonly strategy?: string }>
 
-export type FormListRequestsInput = {
+export type FormRequestListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type FormListRequestsOutput = {
+export type FormRequestListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -3659,13 +3659,13 @@ export type FormCancelInput = {
 
 export type FormCancelOutput = void
 
-export type PermissionListRequestsInput = {
+export type PermissionRequestListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type PermissionListRequestsOutput = {
+export type PermissionRequestListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -3682,9 +3682,9 @@ export type PermissionListRequestsOutput = {
   }>
 }
 
-export type PermissionListSavedInput = { readonly projectID?: { readonly projectID?: string | undefined }["projectID"] }
+export type PermissionSavedListInput = { readonly projectID?: { readonly projectID?: string | undefined }["projectID"] }
 
-export type PermissionListSavedOutput = {
+export type PermissionSavedListOutput = {
   readonly data: ReadonlyArray<{
     readonly id: string
     readonly projectID: string
@@ -3693,9 +3693,9 @@ export type PermissionListSavedOutput = {
   }>
 }["data"]
 
-export type PermissionRemoveSavedInput = { readonly id: { readonly id: string }["id"] }
+export type PermissionSavedRemoveInput = { readonly id: { readonly id: string }["id"] }
 
-export type PermissionRemoveSavedOutput = void
+export type PermissionSavedRemoveOutput = void
 
 export type PermissionCreateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -6049,13 +6049,13 @@ export type ShellRemoveInput = {
 
 export type ShellRemoveOutput = void
 
-export type QuestionListRequestsInput = {
+export type QuestionRequestListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type QuestionListRequestsOutput = {
+export type QuestionRequestListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
@@ -6221,12 +6221,12 @@ export type VcsDiffOutput = {
   }>
 }
 
-export type DebugLocationOutput = ReadonlyArray<{ readonly directory: string; readonly workspaceID?: string }>
+export type DebugLocationListOutput = ReadonlyArray<{ readonly directory: string; readonly workspaceID?: string }>
 
-export type DebugEvictLocationInput = {
+export type DebugLocationEvictInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type DebugEvictLocationOutput = void
+export type DebugLocationEvictOutput = void

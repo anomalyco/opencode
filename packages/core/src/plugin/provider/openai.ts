@@ -210,14 +210,16 @@ export const OpenAIPlugin = define({
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh().pipe(Effect.forkScoped)
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/openai") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai"))
         evt.sdk = mod.createOpenAI(evt.options)
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.openai) return
         evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)

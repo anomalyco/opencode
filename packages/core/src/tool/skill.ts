@@ -1,6 +1,6 @@
 export * as SkillTool from "./skill"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
@@ -54,7 +54,7 @@ const unableToLoad = (name: string, error?: unknown) =>
 
 export const Plugin = {
   id: "opencode.tool.skill",
-  effect: Effect.fn("SkillTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("SkillTool.Plugin")(function* (ctx: Plugin.Context) {
     const fs = yield* FSUtil.Service
     const skills = yield* SkillV2.Service
     const permission = yield* PermissionV2.Service

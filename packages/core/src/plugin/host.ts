@@ -1,6 +1,6 @@
 export * as PluginHost from "./host"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
@@ -45,7 +45,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       workspaceID: location.workspaceID,
       project: location.project,
     })
-  const locationRef = (input?: Parameters<PluginContext["agent"]["list"]>[0]) =>
+  const locationRef = (input?: Parameters<Plugin.Context["agent"]["list"]>[0]) =>
     input?.location === undefined
       ? undefined
       : Location.Ref.make({
@@ -380,5 +380,5 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         before: requestHooks.before,
       },
     },
-  } satisfies PluginContext
+  } satisfies Plugin.Context
 })

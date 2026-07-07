@@ -96,6 +96,7 @@ export type Event =
   | EventTuiToastShow2
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
+  | EventMcpResourcesChanged
   | EventMcpStatusChanged
   | EventCommandExecuted
   | EventFileEdited
@@ -1633,6 +1634,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "mcp.resources.changed"
+        properties: {
+          server: string
+        }
+      }
+    | {
+        id: string
         type: "mcp.status.changed"
         properties: {
           server: string
@@ -3019,6 +3027,14 @@ export type ProviderNotFoundError = {
   message: string
 }
 
+export type McpResource2 = {
+  server: string
+  name: string
+  uri: string
+  description?: string
+  mimeType?: string
+}
+
 export type FormNotFoundError = {
   _tag: "FormNotFoundError"
   id: string
@@ -3182,6 +3198,7 @@ export type V2Event =
   | TuiToastShow
   | TuiSessionSelect
   | McpToolsChanged
+  | McpResourcesChanged
   | McpStatusChanged
   | CommandExecuted
   | FileEdited
@@ -5751,6 +5768,19 @@ export type McpServer = {
   integrationID?: string
 }
 
+export type McpResourceTemplate = {
+  server: string
+  name: string
+  uriTemplate: string
+  description?: string
+  mimeType?: string
+}
+
+export type McpResourceCatalog = {
+  resources: Array<McpResource2>
+  templates: Array<McpResourceTemplate>
+}
+
 export type ProjectCurrent = {
   id: string
   directory: string
@@ -6674,6 +6704,19 @@ export type McpToolsChanged = {
     [key: string]: unknown
   }
   type: "mcp.tools.changed"
+  location?: LocationRef
+  data: {
+    server: string
+  }
+}
+
+export type McpResourcesChanged = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "mcp.resources.changed"
   location?: LocationRef
   data: {
     server: string
@@ -7860,6 +7903,14 @@ export type EventMcpToolsChanged = {
   }
 }
 
+export type EventMcpResourcesChanged = {
+  id: string
+  type: "mcp.resources.changed"
+  properties: {
+    server: string
+  }
+}
+
 export type EventMcpStatusChanged = {
   id: string
   type: "mcp.status.changed"
@@ -8698,6 +8749,7 @@ export type V2EventV2 =
   | InstallationUpdateAvailableV2
   | VcsBranchUpdatedV2
   | McpStatusChangedV2
+  | McpResourcesChangedV2
   | PermissionAskedV2
   | PermissionRepliedV2
   | QuestionAskedV2
@@ -9797,6 +9849,19 @@ export type EventLogSyncedV2 = {
   seq?: number
 }
 
+export type McpResourceV2 = {
+  server: string
+  name: string
+  uri: string
+  description?: string
+  mimeType?: string
+}
+
+export type McpResourceCatalogV2 = {
+  resources: Array<McpResourceV2>
+  templates: Array<McpResourceTemplate>
+}
+
 export type ProjectTimeV2 = {
   created: number
   updated: number
@@ -10743,6 +10808,19 @@ export type McpStatusChangedV2 = {
     [key: string]: unknown
   }
   type: "mcp.status.changed"
+  location?: LocationRefV2
+  data: {
+    server: string
+  }
+}
+
+export type McpResourcesChangedV2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "mcp.resources.changed"
   location?: LocationRefV2
   data: {
     server: string
@@ -15505,6 +15583,46 @@ export type V2SessionRenameResponses = {
 
 export type V2SessionRenameResponse = V2SessionRenameResponses[keyof V2SessionRenameResponses]
 
+export type V2SessionMoveData = {
+  body: {
+    destination: {
+      directory: string
+    }
+    moveChanges?: boolean | null
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/move"
+}
+
+export type V2SessionMoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError1 | InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionMoveError = V2SessionMoveErrors[keyof V2SessionMoveErrors]
+
+export type V2SessionMoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionMoveResponse = V2SessionMoveResponses[keyof V2SessionMoveResponses]
+
 export type V2SessionPromptData = {
   body: {
     id?: string | null
@@ -15652,6 +15770,7 @@ export type V2SessionSyntheticData = {
     metadata?: {
       [key: string]: unknown
     }
+    resume?: boolean | null
   }
   path: {
     sessionID: string
@@ -16244,7 +16363,7 @@ export type V2SessionMessageResponses = {
 
 export type V2SessionMessageResponse = V2SessionMessageResponses[keyof V2SessionMessageResponses]
 
-export type V2SessionMessagesData = {
+export type V2MessageListData = {
   body?: never
   path: {
     sessionID: string
@@ -16263,7 +16382,7 @@ export type V2SessionMessagesData = {
   url: "/api/session/{sessionID}/message"
 }
 
-export type V2SessionMessagesErrors = {
+export type V2MessageListErrors = {
   /**
    * InvalidCursorError | InvalidRequestError
    */
@@ -16282,16 +16401,16 @@ export type V2SessionMessagesErrors = {
   500: UnknownErrorV2
 }
 
-export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]
+export type V2MessageListError = V2MessageListErrors[keyof V2MessageListErrors]
 
-export type V2SessionMessagesResponses = {
+export type V2MessageListResponses = {
   /**
    * SessionMessagesResponse
    */
   200: SessionMessagesResponseV2
 }
 
-export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+export type V2MessageListResponse = V2MessageListResponses[keyof V2MessageListResponses]
 
 export type V2ModelListData = {
   body?: never
@@ -16818,6 +16937,43 @@ export type V2McpListResponses = {
 }
 
 export type V2McpListResponse = V2McpListResponses[keyof V2McpListResponses]
+
+export type V2McpResourceCatalogData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/mcp/resource"
+}
+
+export type V2McpResourceCatalogErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2McpResourceCatalogError = V2McpResourceCatalogErrors[keyof V2McpResourceCatalogErrors]
+
+export type V2McpResourceCatalogResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfoV2
+    data: McpResourceCatalogV2
+  }
+}
+
+export type V2McpResourceCatalogResponse = V2McpResourceCatalogResponses[keyof V2McpResourceCatalogResponses]
 
 export type V2CredentialRemoveData = {
   body?: never
@@ -18717,14 +18873,14 @@ export type V2DebugLocationEvictResponses = {
 
 export type V2DebugLocationEvictResponse = V2DebugLocationEvictResponses[keyof V2DebugLocationEvictResponses]
 
-export type V2DebugLocationData = {
+export type V2DebugLocationListData = {
   body?: never
   path?: never
   query?: never
   url: "/api/debug/location"
 }
 
-export type V2DebugLocationErrors = {
+export type V2DebugLocationListErrors = {
   /**
    * InvalidRequestError
    */
@@ -18735,16 +18891,16 @@ export type V2DebugLocationErrors = {
   401: UnauthorizedError
 }
 
-export type V2DebugLocationError = V2DebugLocationErrors[keyof V2DebugLocationErrors]
+export type V2DebugLocationListError = V2DebugLocationListErrors[keyof V2DebugLocationListErrors]
 
-export type V2DebugLocationResponses = {
+export type V2DebugLocationListResponses = {
   /**
    * Success
    */
   200: Array<LocationRefV2>
 }
 
-export type V2DebugLocationResponse = V2DebugLocationResponses[keyof V2DebugLocationResponses]
+export type V2DebugLocationListResponse = V2DebugLocationListResponses[keyof V2DebugLocationListResponses]
 
 export type PtyConnectData = {
   body?: never

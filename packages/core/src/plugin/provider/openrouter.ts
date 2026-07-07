@@ -23,7 +23,8 @@ export const OpenRouterPlugin = define({
         }
       }
     })
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@openrouter/ai-sdk-provider") return
         const mod = yield* Effect.promise(() => import("@openrouter/ai-sdk-provider"))

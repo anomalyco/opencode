@@ -2,7 +2,7 @@ export * as ShellTool from "./shell"
 
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Schema, Scope } from "effect"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
@@ -99,7 +99,7 @@ const externalCommandDirectories = Effect.fn("ShellTool.externalCommandDirectori
 
 export const Plugin = {
   id: "opencode.tool.shell",
-  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Plugin.Context) {
     const runtime = yield* PluginRuntime.Service
     const scope = yield* Scope.Scope
     const fsUtil = yield* FSUtil.Service

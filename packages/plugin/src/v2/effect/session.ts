@@ -15,7 +15,10 @@ export interface SessionRequestBeforeEvent {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
-export interface SessionHooks
-  extends Pick<SessionApi<unknown>, "create" | "get" | "prompt" | "command" | "interrupt"> {
-  readonly request: Hooks<{ before: SessionRequestBeforeEvent }>
+export interface SessionHooks {
+  readonly request: SessionRequestBeforeEvent
+}
+
+export interface SessionDomain extends SessionApi<unknown> {
+  readonly hook: Hooks<SessionHooks>
 }

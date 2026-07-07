@@ -176,7 +176,7 @@ Both use the same low-level scoped registration registry, but consumers invoke t
 
 ```ts
 ctx.tool.transform(...) // replayed to build effective tool registry state
-ctx.tool.hook(...)      // invoked at a live tool operation boundary
+ctx.tool.hook(...)     // invoked at a live tool operation boundary
 ```
 
 The shared low-level machinery owns registration order, scope cleanup, disposal, and snapshots. Each domain owns when its transforms or runtime hooks execute.

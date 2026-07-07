@@ -253,7 +253,12 @@ export interface ToolDraft {
   add(name: string, tool: AnyTool, options?: RegisterOptions): void
 }
 
+export interface ToolHooks {
+  readonly "execute.before": ToolExecuteBeforeEvent
+  readonly "execute.after": ToolExecuteAfterEvent
+}
+
 export interface ToolDomain {
   readonly transform: (callback: (draft: ToolDraft) => void) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  readonly execute: Hooks<{ before: ToolExecuteBeforeEvent; after: ToolExecuteAfterEvent }>
+  readonly hook: Hooks<ToolHooks>
 }

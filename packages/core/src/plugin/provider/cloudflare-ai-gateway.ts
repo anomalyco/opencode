@@ -6,7 +6,8 @@ import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "ai-gateway-provider") return
         if (evt.options.baseURL) return

@@ -5,14 +5,16 @@ import { ProviderV2 } from "../../provider"
 export const XAIPlugin = define({
   id: "opencode.provider.xai",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/xai") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/xai"))
         evt.sdk = mod.createXai(evt.options)
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("xai")) return
         evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
