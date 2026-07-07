@@ -286,6 +286,13 @@ describe("session.message-v2.toModelMessage", () => {
             url: "https://example.com/dir",
           },
           {
+            ...basePart(messageID, "p-octet"),
+            type: "file",
+            mime: "application/octet-stream",
+            filename: "blob.bin",
+            url: "https://example.com/blob.bin",
+          },
+          {
             ...basePart(messageID, "p6"),
             type: "compaction",
             auto: true,
@@ -311,6 +318,10 @@ describe("session.message-v2.toModelMessage", () => {
             mediaType: "image/png",
             filename: "img.png",
             data: "https://example.com/img.png",
+          },
+          {
+            type: "text",
+            text: "[Attached application/octet-stream: blob.bin]",
           },
           { type: "text", text: "What did we do so far?" },
           { type: "text", text: "The following tool was executed by the user" },
