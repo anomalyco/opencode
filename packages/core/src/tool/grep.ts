@@ -1,6 +1,6 @@
 export * as GrepTool from "./grep"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import path from "path"
@@ -50,7 +50,7 @@ export const toModelOutput = (output: ModelOutput) => {
 /** Grep leaf that defaults its filesystem root to the active Location. */
 export const Plugin = {
   id: "opencode.tool.grep",
-  effect: Effect.fn("GrepTool.Plugin")(function* (ctx: Plugin.Context) {
+  effect: Effect.fn("GrepTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service

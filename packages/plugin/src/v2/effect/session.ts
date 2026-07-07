@@ -19,6 +19,7 @@ export interface SessionHooks {
   readonly request: SessionRequestBeforeEvent
 }
 
-export interface SessionDomain extends SessionApi<unknown> {
+export interface SessionDomain
+  extends Pick<SessionApi<unknown>, "create" | "get" | "prompt" | "command" | "interrupt"> {
   readonly hook: Hooks<SessionHooks>
 }

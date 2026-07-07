@@ -1,29 +1,15 @@
 export * as PluginHooks from "./hooks"
 
-import type { AgentHooks } from "@opencode-ai/plugin/v2/effect/agent"
 import type { AISDKHooks } from "@opencode-ai/plugin/v2/effect/aisdk"
-import type { CatalogHooks } from "@opencode-ai/plugin/v2/effect/catalog"
-import type { CommandHooks } from "@opencode-ai/plugin/v2/effect/command"
-import type { EventHooks } from "@opencode-ai/plugin/v2/effect/event"
-import type { IntegrationHooks } from "@opencode-ai/plugin/v2/effect/integration"
-import type { ReferenceHooks } from "@opencode-ai/plugin/v2/effect/reference"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
-import type { SkillHooks } from "@opencode-ai/plugin/v2/effect/skill"
 import type { ToolHooks } from "@opencode-ai/plugin/v2/effect/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { State } from "../state"
 
 export interface Domains {
-  readonly agent: AgentHooks
   readonly aisdk: AISDKHooks
-  readonly catalog: CatalogHooks
-  readonly command: CommandHooks
-  readonly event: EventHooks
-  readonly integration: IntegrationHooks
-  readonly reference: ReferenceHooks
   readonly session: SessionHooks
-  readonly skill: SkillHooks
   readonly tool: ToolHooks
 }
 
@@ -50,11 +36,7 @@ const layer = Layer.effect(
     const callbacks = new Map<string, Function[]>()
     const key = (domain: keyof Domains, name: PropertyKey) => `${domain}.${String(name)}`
 
-    const register: Interface["register"] = Effect.fn("PluginHooks.register")(function* (
-      domain,
-      name,
-      callback,
-    ) {
+    const register: Interface["register"] = Effect.fn("PluginHooks.register")(function* (domain, name, callback) {
       const scope = yield* Scope.Scope
       const id = key(domain, name)
       let active = true

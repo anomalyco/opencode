@@ -166,25 +166,29 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     integration: {
       list: () => response(integration.list()),
       get: (input) => response(integration.get(Integration.ID.make(input.integrationID))),
-      connectKey: (input) =>
-        integration.connection.key({
-          integrationID: Integration.ID.make(input.integrationID),
-          key: input.key,
-          label: input.label,
-        }),
-      connectOauth: (input) =>
-        response(
-          integration.connection.oauth({
+      connect: {
+        key: (input) =>
+          integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
-            methodID: Integration.MethodID.make(input.methodID),
-            inputs: input.inputs,
+            key: input.key,
             label: input.label,
           }),
-        ),
-      attemptStatus: (input) => response(integration.attempt.status(Integration.AttemptID.make(input.attemptID))),
-      attemptComplete: (input) =>
-        integration.attempt.complete({ attemptID: Integration.AttemptID.make(input.attemptID), code: input.code }),
-      attemptCancel: (input) => integration.attempt.cancel(Integration.AttemptID.make(input.attemptID)),
+        oauth: (input) =>
+          response(
+            integration.connection.oauth({
+              integrationID: Integration.ID.make(input.integrationID),
+              methodID: Integration.MethodID.make(input.methodID),
+              inputs: input.inputs,
+              label: input.label,
+            }),
+          ),
+      },
+      attempt: {
+        status: (input) => response(integration.attempt.status(Integration.AttemptID.make(input.attemptID))),
+        complete: (input) =>
+          integration.attempt.complete({ attemptID: Integration.AttemptID.make(input.attemptID), code: input.code }),
+        cancel: (input) => integration.attempt.cancel(Integration.AttemptID.make(input.attemptID)),
+      },
       reload: integration.reload,
       connection: {
         active: (id) => integration.connection.active(Integration.ID.make(id)),
@@ -319,11 +323,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             registrations,
             (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
             { discard: true },
-          )
+          ).pipe(Effect.orDie)
+          return { dispose: Effect.void }
         }),
-      execute: {
-        before: (callback) =>
-          toolHooks.hook.before((event) => {
+      hook: (name, callback) => {
+        if (name === "execute.before") {
+          return toolHooks.hook.before((event) => {
             const output = {
               tool: event.tool,
               sessionID: event.sessionID,
@@ -332,35 +337,33 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               toolCallID: event.toolCallID,
               input: event.input,
             }
-            const result = callback(output)
-            return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
+            return Reflect.apply(callback, undefined, [output]).pipe(
               Effect.tap(() => Effect.sync(() => (event.input = output.input))),
             )
-          }),
-        after: (callback) =>
-          toolHooks.hook.after((event) => {
-            const output = {
-              tool: event.tool,
-              sessionID: event.sessionID,
-              agent: event.agent,
-              assistantMessageID: event.assistantMessageID,
-              toolCallID: event.toolCallID,
-              input: event.input,
-              result: event.result,
-              output: event.output,
-              outputPaths: event.outputPaths,
-            }
-            const result = callback(output)
-            return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  event.result = output.result
-                  event.output = output.output
-                  event.outputPaths = output.outputPaths
-                }),
-              ),
-            )
-          }),
+          })
+        }
+        return toolHooks.hook.after((event) => {
+          const output = {
+            tool: event.tool,
+            sessionID: event.sessionID,
+            agent: event.agent,
+            assistantMessageID: event.assistantMessageID,
+            toolCallID: event.toolCallID,
+            input: event.input,
+            result: event.result,
+            output: event.output,
+            outputPaths: event.outputPaths,
+          }
+          return Reflect.apply(callback, undefined, [output]).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                event.result = output.result
+                event.output = output.output
+                event.outputPaths = output.outputPaths
+              }),
+            ),
+          )
+        })
       },
     },
     session: {

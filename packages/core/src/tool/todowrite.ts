@@ -1,6 +1,6 @@
 export * as TodoWriteTool from "./todowrite"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { PermissionV2 } from "../permission"
@@ -22,7 +22,7 @@ export const toModelOutput = (output: Output) => JSON.stringify(output.todos, nu
 
 export const Plugin = {
   id: "opencode.tool.todowrite",
-  effect: Effect.fn("TodoWriteTool.Plugin")(function* (ctx: Plugin.Context) {
+  effect: Effect.fn("TodoWriteTool.Plugin")(function* (ctx: PluginContext) {
     const todos = yield* SessionTodo.Service
     const permission = yield* PermissionV2.Service
 

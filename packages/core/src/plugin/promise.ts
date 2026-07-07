@@ -78,11 +78,15 @@ export function fromPromise(plugin: PromisePlugin) {
           integration: {
             list: (input) => run(host.integration.list(input)),
             get: (input) => run(host.integration.get(input)),
-            connectKey: (input) => run(host.integration.connectKey(input)),
-            connectOauth: (input) => run(host.integration.connectOauth(input)),
-            attemptStatus: (input) => run(host.integration.attemptStatus(input)),
-            attemptComplete: (input) => run(host.integration.attemptComplete(input)),
-            attemptCancel: (input) => run(host.integration.attemptCancel(input)),
+            connect: {
+              key: (input) => run(host.integration.connect.key(input)),
+              oauth: (input) => run(host.integration.connect.oauth(input)),
+            },
+            attempt: {
+              status: (input) => run(host.integration.attempt.status(input)),
+              complete: (input) => run(host.integration.attempt.complete(input)),
+              cancel: (input) => run(host.integration.attempt.cancel(input)),
+            },
             transform: transform(host.integration),
             reload: () => run(host.integration.reload()),
             connection: {
@@ -103,18 +107,19 @@ export function fromPromise(plugin: PromisePlugin) {
             transform: transform(host.skill),
             reload: () => run(host.skill.reload()),
           },
+          tool: {
+            transform: transform(host.tool),
+            hook: (name, callback) =>
+              register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
           session: {
             create: (input) => run(host.session.create(input)),
             get: (input) => run(host.session.get(input)),
             prompt: (input) => run(host.session.prompt(input)),
             command: (input) => run(host.session.command(input)),
             interrupt: (input) => run(host.session.interrupt(input)),
-            request: {
-              before: (callback) =>
-                register(
-                  host.session.request.before((event) => Effect.promise(() => Promise.resolve(callback(event)))),
-                ),
-            },
+            hook: (name, callback) =>
+              register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
           },
         }
 

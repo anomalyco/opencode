@@ -1,6 +1,6 @@
 export * as QuestionTool from "./question"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { Form } from "../form"
@@ -51,7 +51,7 @@ export const toModelOutput = (
 
 export const Plugin = {
   id: "opencode.tool.question",
-  effect: Effect.fn("QuestionTool.Plugin")(function* (ctx: Plugin.Context) {
+  effect: Effect.fn("QuestionTool.Plugin")(function* (ctx: PluginContext) {
     const forms = yield* Form.Service
     const permission = yield* PermissionV2.Service
 

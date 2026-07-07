@@ -1,6 +1,6 @@
 export * as ApplyPatchTool from "./apply-patch"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/llm"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -56,7 +56,7 @@ type Prepared =
 
 export const Plugin = {
   id: "opencode.tool.apply-patch",
-  effect: Effect.fn("ApplyPatchTool.Plugin")(function* (ctx: Plugin.Context) {
+  effect: Effect.fn("ApplyPatchTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service

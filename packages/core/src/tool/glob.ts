@@ -1,7 +1,7 @@
 export * as GlobTool from "./glob"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { FileSystem } from "../filesystem"
@@ -36,7 +36,7 @@ export const toModelOutput = (output: ModelOutput) => {
 /** Glob leaf that defaults its filesystem root to the active Location. */
 export const Plugin = {
   id: "opencode.tool.glob",
-  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: Plugin.Context) {
+  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service

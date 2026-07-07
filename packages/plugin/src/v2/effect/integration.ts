@@ -11,7 +11,7 @@ import type {
 } from "@opencode-ai/sdk/v2/types"
 import type { IntegrationApi } from "@opencode-ai/client/effect/api"
 import type { Effect, Scope } from "effect"
-import type { Hooks, Transform } from "./registration.js"
+import type { Transform } from "./registration.js"
 
 export type IntegrationOAuthAuthorization = {
   readonly url: string
@@ -56,10 +56,7 @@ export interface IntegrationDraft {
   }
 }
 
-export interface IntegrationHooks {}
-
 export interface IntegrationDomain extends IntegrationApi<unknown> {
-  readonly hook: Hooks<IntegrationHooks>
   readonly transform: Transform<IntegrationDraft>
   readonly reload: () => Effect.Effect<void>
   readonly connection: {
