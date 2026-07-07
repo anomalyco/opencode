@@ -236,7 +236,12 @@ export const RunCommand = effectCmd({
       .option("interactive", {
         alias: ["i"],
         type: "boolean",
-        describe: "run in direct interactive split-footer mode",
+        // The `--mini` flag (and the bare `opencode --mini` entry point) is the
+        // only path that actually enables interactive split-footer mode — see
+        // `const interactive = args.mini` below. `--interactive`/`-i` is parsed
+        // but its value is never read, so advertising it in `--help` is
+        // misleading. Hide it until it is either wired up or removed. (#35623)
+        hidden: true,
         default: false,
       })
       .option("auto", {
