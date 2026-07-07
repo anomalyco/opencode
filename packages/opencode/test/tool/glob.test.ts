@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
@@ -127,6 +128,46 @@ describe("tool.glob", () => {
         const err = Cause.squash(exit.cause)
         expect(err instanceof Error ? err.message : String(err)).toContain("glob path must be a directory")
       }
+    }),
+  )
+
+  it.instance("checks glob permission rules against matched files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "src", "secret.txt")
+      yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(file, "secret"))
+
+      const ruleset = Permission.fromConfig({
+        glob: {
+          "**": "allow",
+          "**/secret.txt": "deny",
+        },
+      })
+      const next: Tool.Context = {
+        ...ctx,
+        ask: (req) =>
+          Effect.sync(() => {
+            const denied = req.patterns.some(
+              (pattern) => Permission.evaluate(req.permission, pattern, ruleset).action === "deny",
+            )
+            if (denied) throw new PermissionV1.DeniedError({ ruleset })
+          }),
+      }
+
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      const exit = yield* glob
+        .execute(
+          {
+            pattern: "**/*.txt",
+            path: test.directory,
+          },
+          next,
+        )
+        .pipe(Effect.exit)
+
+      expect(exit._tag).toBe("Failure")
     }),
   )
 })

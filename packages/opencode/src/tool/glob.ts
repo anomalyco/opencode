@@ -49,6 +49,19 @@ export const GlobTool = Tool.define(
           const limit = 100
           const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
           const truncated = files.length === limit
+          if (files.length > 0) {
+            yield* ctx.ask({
+              permission: "glob",
+              patterns: Array.from(
+                new Set(files.map((file) => path.relative(ins.worktree, path.resolve(search, file.path)))),
+              ),
+              always: ["*"],
+              metadata: {
+                pattern: params.pattern,
+                path: params.path,
+              },
+            })
+          }
 
           const output = []
           if (files.length === 0) output.push("No files found")
