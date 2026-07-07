@@ -1387,6 +1387,8 @@ export const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              // Final answers should settle immediately; the next user turn will compact before running if needed.
+              if (finished) return "break" as const
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
