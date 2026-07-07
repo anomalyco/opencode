@@ -246,7 +246,7 @@ function editPart(id: string) {
 function patchPart(id: string) {
   return toolPart(
     id,
-    "apply_patch",
+    "patch",
     "completed",
     { files: ["src/a.ts", "src/b.ts"] },
     {

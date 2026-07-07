@@ -89,16 +89,16 @@ describe("ToolRegistry", () => {
         read: make(),
         edit: make("edit"),
         write: make("edit"),
-        apply_patch: make("edit"),
+        patch: make("edit"),
       })
       const names = (model: ToolRegistry.MaterializeInput["model"]) =>
         service
           .materialize({ model })
           .pipe(Effect.map((materialized) => materialized.definitions.map((tool) => tool.name)))
 
-      expect(yield* names({ id: "gpt-5", provider: "openai" })).toEqual(["read", "apply_patch"])
-      expect(yield* names({ id: "gpt-4o", provider: "opencode" })).toEqual(["read", "apply_patch"])
-      expect(yield* names({ id: "computer-use-preview", provider: "openai" })).toEqual(["read", "apply_patch"])
+      expect(yield* names({ id: "gpt-5", provider: "openai" })).toEqual(["read", "patch"])
+      expect(yield* names({ id: "gpt-4o", provider: "opencode" })).toEqual(["read", "patch"])
+      expect(yield* names({ id: "computer-use-preview", provider: "openai" })).toEqual(["read", "patch"])
       expect(yield* names({ id: "claude-sonnet-4", provider: "anthropic" })).toEqual(["read", "edit", "write"])
     }),
   )

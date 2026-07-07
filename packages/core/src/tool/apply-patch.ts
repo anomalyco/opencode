@@ -12,7 +12,7 @@ import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 
-export const name = "apply_patch"
+export const name = "patch"
 
 export const Input = Schema.Struct({
   patchText: Schema.String.annotate({
@@ -91,11 +91,11 @@ export const Plugin = {
                   if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.try({
                     try: () => Patch.parse(input.patchText),
-                    catch: (cause) => new ToolFailure({ message: `apply_patch verification failed: ${String(cause)}` }),
+                    catch: (cause) => new ToolFailure({ message: `patch verification failed: ${String(cause)}` }),
                   })
                   if (hunks.length === 0) return yield* new ToolFailure({ message: "patch rejected: empty patch" })
                   const move = hunks.find((hunk) => hunk.type === "update" && hunk.movePath !== undefined)
-                  if (move) return yield* new ToolFailure({ message: "apply_patch moves are not supported yet" })
+                  if (move) return yield* new ToolFailure({ message: "patch moves are not supported yet" })
 
                   const targets: Array<{ readonly hunk: Patch.Hunk; readonly target: LocationMutation.Target }> = []
                   for (const hunk of hunks)

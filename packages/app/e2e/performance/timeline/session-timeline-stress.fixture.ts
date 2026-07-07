@@ -131,7 +131,7 @@ function toolPart(
 ): MessagePart {
   const metadata =
     metadataOverride ??
-    (tool === "apply_patch"
+    (tool === "patch"
       ? { files: [patchFile(index, "update"), patchFile(index + 1, index % 2 === 0 ? "add" : "delete")] }
       : tool === "edit" || tool === "write"
         ? {
@@ -219,7 +219,7 @@ function turn(index: number): Message[] {
       ? [toolPart(index, 7, "write", { filePath: `src/generated/write-${index}.ts`, content: code(index, 28) }, 560)]
       : []),
     ...(index % 8 === 0
-      ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
+      ? [toolPart(index, 8, "patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
       : []),
     ...(index % 7 === 0
       ? [toolPart(index, 4, "bash", { command: "bun typecheck", description: "Verify generated output" }, 620)]

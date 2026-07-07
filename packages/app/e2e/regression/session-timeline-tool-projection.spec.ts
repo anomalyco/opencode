@@ -8,7 +8,7 @@ import {
 } from "../performance/timeline-stability/fixture"
 
 test("renders every tool error outcome without leaking hidden tools", async ({ page }) => {
-  const ordinary = ["bash", "edit", "write", "apply_patch", "webfetch", "websearch", "task", "skill", "mcp_probe"]
+  const ordinary = ["bash", "edit", "write", "patch", "webfetch", "websearch", "task", "skill", "mcp_probe"]
   const parts = ordinary.map((tool, index) =>
     toolPart(`prt_error_${index}`, tool, "error", errorInput(tool), { error: `${tool} failed visibly` }),
   )
@@ -90,7 +90,7 @@ function questionInput() {
 function errorInput(tool: string) {
   if (tool === "bash") return { command: "exit 1" }
   if (["edit", "write"].includes(tool)) return { filePath: "src/error.ts", content: "" }
-  if (tool === "apply_patch") return { files: ["src/error.ts"] }
+  if (tool === "patch") return { files: ["src/error.ts"] }
   if (tool === "webfetch") return { url: "https://example.com" }
   if (tool === "websearch") return { query: "failure" }
   if (tool === "task") return { description: "Fail task", subagent_type: "explore" }

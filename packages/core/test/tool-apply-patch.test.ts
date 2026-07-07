@@ -26,7 +26,7 @@ const applyPatchToolNode = makeLocationNode({
   deps: [ToolRegistry.toolsNode, LocationMutation.node, FileMutation.node, FSUtil.node, PermissionV2.node],
 })
 
-const sessionID = SessionV2.ID.make("ses_apply_patch_tool_test")
+const sessionID = SessionV2.ID.make("ses_patch_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
 let denyAction: string | undefined
 let failRemoveTarget: string | undefined
@@ -132,10 +132,10 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
 const call = (patchText: string, id = "call-apply-patch") => ({
   sessionID,
   ...toolIdentity,
-  call: { type: "tool-call" as const, id, name: "apply_patch", input: { patchText } },
+  call: { type: "tool-call" as const, id, name: "patch", input: { patchText } },
 })
 
-// apply_patch is only materialized for OpenAI/GPT models.
+// patch is only materialized for OpenAI/GPT models.
 const model = { id: "gpt-5", provider: "openai" }
 
 const exists = (target: string) =>
@@ -162,7 +162,7 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect((yield* toolDefinitions(registry, undefined, model)).map((tool) => tool.name)).toEqual([
-                  "apply_patch",
+                  "patch",
                 ])
                 const settled = yield* settleTool(
                   registry,
@@ -241,7 +241,7 @@ describe("ApplyPatchTool", () => {
                     ),
                     model,
                   ),
-                ).toEqual({ type: "error", value: "apply_patch moves are not supported yet" })
+                ).toEqual({ type: "error", value: "patch moves are not supported yet" })
                 expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
                 expect(assertions).toEqual([])
               }),

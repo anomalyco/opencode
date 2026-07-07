@@ -119,7 +119,7 @@ type ToolName =
   | "bash"
   | "write"
   | "edit"
-  | "apply_patch"
+  | "patch"
   | "batch"
   | "task"
   | "todowrite"
@@ -1094,7 +1094,7 @@ const TOOL_RULES = {
     },
     permission: permEdit,
   },
-  apply_patch: {
+  patch: {
     view: {
       output: false,
       final: true,

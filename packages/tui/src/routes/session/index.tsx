@@ -1901,7 +1901,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
         <Match when={display() === "execute"}>
           <Execute {...toolprops} />
         </Match>
-        <Match when={display() === "apply_patch"}>
+        <Match when={display() === "patch"}>
           <ApplyPatch {...toolprops} />
         </Match>
         <Match when={display() === "todowrite"}>
@@ -2730,7 +2730,7 @@ const toolDisplays = new Set([
   "edit",
   "subagent",
   "execute",
-  "apply_patch",
+  "patch",
   "todowrite",
   "question",
   "skill",
@@ -2739,7 +2739,7 @@ const toolDisplays = new Set([
 export function toolDisplay(tool: string) {
   // Legacy transcripts recorded the shell tool as "bash" and the subagent tool as "task"; render
   // them with the renamed views.
-  const normalized = tool === "bash" ? "shell" : tool === "task" ? "subagent" : tool
+  const normalized = tool === "bash" ? "shell" : tool === "task" ? "subagent" : tool === "apply_patch" ? "patch" : tool
   return toolDisplays.has(normalized) ? normalized : "generic"
 }
 

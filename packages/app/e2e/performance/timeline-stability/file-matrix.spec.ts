@@ -20,7 +20,7 @@ const profiles = [
   { name: "edit", tool: "edit", input: { filePath: "src/edit.ts" } },
   {
     name: "multi patch",
-    tool: "apply_patch",
+    tool: "patch",
     input: { files: ["src/a.ts", "src/b.ts", "src/old.ts", "src/moved.ts"] },
   },
 ] as const

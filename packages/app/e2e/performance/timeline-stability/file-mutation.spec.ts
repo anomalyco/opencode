@@ -25,7 +25,7 @@ test("adds patch files incrementally without resetting outer expansion", async (
       userMessage(),
       assistantMessage(
         [
-          toolPart(patchID, "apply_patch", "running", { files: [first.filePath] }, { metadata: { files: [first] } }),
+          toolPart(patchID, "patch", "running", { files: [first.filePath] }, { metadata: { files: [first] } }),
           textPart(followingID, "Following incremental patch"),
         ],
         { completed: false },
@@ -49,7 +49,7 @@ test("adds patch files incrementally without resetting outer expansion", async (
     partUpdated(
       toolPart(
         patchID,
-        "apply_patch",
+        "patch",
         "running",
         { files: [first.filePath, second.filePath] },
         { metadata: { files: [first, second] } },
@@ -61,7 +61,7 @@ test("adds patch files incrementally without resetting outer expansion", async (
     partUpdated(
       toolPart(
         patchID,
-        "apply_patch",
+        "patch",
         "completed",
         { files: [first.filePath, second.filePath, third.filePath] },
         { metadata: { files: [first, second, third] } },

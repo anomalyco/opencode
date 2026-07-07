@@ -1245,7 +1245,7 @@ export function MessageTimeline(props: {
       const value = row()
       if (value._tag !== "AssistantPart" || value.group.type !== "part") return false
       const part = getMsgPart(value.group.ref.messageID, value.group.ref.partID)
-      return part?.type === "tool" && ["edit", "write", "apply_patch"].includes(part.tool)
+      return part?.type === "tool" && ["edit", "write", "patch", "apply_patch"].includes(part.tool)
     }
     const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
     let contentMeasureFrame: number | undefined

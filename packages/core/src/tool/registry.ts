@@ -191,10 +191,10 @@ const registryLayer = Layer.effect(
           const registration = entries.at(-1)?.registration
           if (registration) registrations.set(name, registration)
         }
-        // OpenAI/GPT models use apply_patch; every other model uses edit and write.
+        // OpenAI/GPT models use patch; every other model uses edit and write.
         const usePatch = input.model.provider.toLowerCase() === "openai" || input.model.id.toLowerCase().includes("gpt")
         for (const [name, registration] of registrations) {
-          const wrongEditTool = name === "apply_patch" ? !usePatch : (name === "edit" || name === "write") && usePatch
+          const wrongEditTool = name === "patch" ? !usePatch : (name === "edit" || name === "write") && usePatch
           if (
             wrongEditTool ||
             (registration.deferred && !Flag.CODEMODE_ENABLED) ||

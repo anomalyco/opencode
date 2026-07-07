@@ -1521,6 +1521,52 @@ test("adds and dismisses permission requests from live events", async () => {
   }
 })
 
+test("reconciles all pending permission requests when the event stream reconnects", async () => {
+  const events = createEventStream()
+  let requests = [
+    { id: "per_old", sessionID: "ses_old", action: "read", resources: ["old.txt"] },
+    { id: "per_keep", sessionID: "ses_keep", action: "shell", resources: ["bun test"] },
+  ]
+  let calls = 0
+  const fetch = createFetch((url) => {
+    if (url.pathname !== "/api/permission/request") return
+    calls++
+    return json({ location: { directory, project: { id: "proj_test", directory } }, data: requests })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(fetch.fetch)} api={createApi(fetch.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.session.permission.list("ses_old")?.[0]?.id === "per_old")
+    expect(data.session.permission.list("ses_keep")?.[0]?.id).toBe("per_keep")
+
+    requests = [{ id: "per_new", sessionID: "ses_new", action: "edit", resources: ["new.txt"] }]
+    events.disconnect()
+
+    await wait(() => calls === 2 && data.session.permission.list("ses_new")?.[0]?.id === "per_new")
+    expect(data.session.permission.list("ses_old")).toBeUndefined()
+    expect(data.session.permission.list("ses_keep")).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("adds, dismisses, and refreshes form requests", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
@@ -1586,6 +1632,52 @@ test("adds, dismisses, and refreshes form requests", async () => {
 
     await data.session.form.refresh("ses_1")
     expect(data.session.form.list("ses_1")?.map((form) => form.id)).toEqual(["frm_remote"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("reconciles all pending form requests when the event stream reconnects", async () => {
+  const events = createEventStream()
+  let requests = [
+    { id: "frm_old", sessionID: "ses_old", mode: "form" as const, fields: [] },
+    { id: "frm_keep", sessionID: "ses_keep", mode: "url" as const, url: "https://example.com" },
+  ]
+  let calls = 0
+  const fetch = createFetch((url) => {
+    if (url.pathname !== "/api/form/request") return
+    calls++
+    return json({ location: { directory, project: { id: "proj_test", directory } }, data: requests })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(fetch.fetch)} api={createApi(fetch.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.session.form.list("ses_old")?.[0]?.id === "frm_old")
+    expect(data.session.form.list("ses_keep")?.[0]?.id).toBe("frm_keep")
+
+    requests = [{ id: "frm_new", sessionID: "ses_new", mode: "form" as const, fields: [] }]
+    events.disconnect()
+
+    await wait(() => calls === 2 && data.session.form.list("ses_new")?.[0]?.id === "frm_new")
+    expect(data.session.form.list("ses_old")).toBeUndefined()
+    expect(data.session.form.list("ses_keep")).toBeUndefined()
   } finally {
     app.renderer.destroy()
   }
