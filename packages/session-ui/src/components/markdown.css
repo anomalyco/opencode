@@ -121,6 +121,19 @@
     margin: 0;
   }
 
+  li:has(> input[type="checkbox"]),
+  li:has(> p > input[type="checkbox"]) {
+    list-style-type: none;
+  }
+
+  li:has(> input[type="checkbox"]),
+  li > p:has(> input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: -20px;
+  }
+
   li > p + p {
     display: block;
     margin-top: 0.5rem;
