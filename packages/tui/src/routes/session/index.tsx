@@ -437,7 +437,7 @@ export function Session() {
             dialog.clear()
             return
           }
-          const error = await sdk.api.session.revertStage({ sessionID: route.sessionID, messageID: target }).then(
+          const error = await sdk.api.session.revert.stage({ sessionID: route.sessionID, messageID: target }).then(
             () => undefined,
             (error) => error,
           )
@@ -454,7 +454,7 @@ export function Session() {
       slash: { name: "redo" },
       run: () => {
         void (async () => {
-          const error = await sdk.api.session.revertClear({ sessionID: route.sessionID }).then(
+          const error = await sdk.api.session.revert.clear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )
@@ -1383,7 +1383,7 @@ function RevertMessage(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         void (async () => {
-          const error = await sdk.api.session.revertClear({ sessionID: route.sessionID }).then(
+          const error = await sdk.api.session.revert.clear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )
