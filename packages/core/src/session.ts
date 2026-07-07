@@ -19,6 +19,7 @@ import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
 import { SessionV1 } from "./v1/session"
+import { Money } from "@opencode-ai/schema/money"
 import { InstallationVersion } from "./installation/version"
 import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
@@ -325,7 +326,7 @@ const layer = Layer.effect(
                 variant: input.model.variant,
               }
             : undefined,
-          cost: 0,
+          cost: Money.USD.make(0),
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },
         })

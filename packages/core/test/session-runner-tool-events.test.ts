@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLMEvent } from "@opencode-ai/llm"
+import { Money } from "@opencode-ai/schema/money"
 import { EventV2 } from "@opencode-ai/core/event"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -175,7 +176,7 @@ test("content-filter finish retains failure evidence until step closeout", async
   if (!settlement) throw new Error("Expected content-filter settlement")
   await Effect.runPromise(
     publisher.publishStepFailure({
-      cost: 1.25,
+      cost: Money.USD.make(1.25),
       tokens: settlement.tokens,
     }),
   )

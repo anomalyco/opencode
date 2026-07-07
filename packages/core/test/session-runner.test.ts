@@ -30,6 +30,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
+import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
@@ -121,8 +122,23 @@ test("calculates step cost using the matching context tier", () => {
   expect(
     SessionRunnerLLM.calculateCost(
       [
-        { input: 1, output: 2, cache: { read: 0.1, write: 0.5 } },
-        { tier: { type: "context", size: 100 }, input: 3, output: 4, cache: { read: 0.2, write: 0.6 } },
+        {
+          input: Money.USDPerMillionTokens.make(1),
+          output: Money.USDPerMillionTokens.make(2),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.1),
+            write: Money.USDPerMillionTokens.make(0.5),
+          },
+        },
+        {
+          tier: { type: "context", size: 100 },
+          input: Money.USDPerMillionTokens.make(3),
+          output: Money.USDPerMillionTokens.make(4),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.2),
+            write: Money.USDPerMillionTokens.make(0.6),
+          },
+        },
       ],
       { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
     ),
@@ -132,10 +148,20 @@ test("calculates step cost using the matching context tier", () => {
 test("does not apply an ineligible tier without base pricing", () => {
   expect(
     SessionRunnerLLM.calculateCost(
-      [{ tier: { type: "context", size: 100 }, input: 3, output: 4, cache: { read: 0.2, write: 0.6 } }],
+      [
+        {
+          tier: { type: "context", size: 100 },
+          input: Money.USDPerMillionTokens.make(3),
+          output: Money.USDPerMillionTokens.make(4),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.2),
+            write: Money.USDPerMillionTokens.make(0.6),
+          },
+        },
+      ],
       { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 0 } },
     ),
-  ).toBe(0)
+  ).toBe(Money.USD.make(0))
 })
 
 const authorizations: Tool.Context[] = []

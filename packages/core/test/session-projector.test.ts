@@ -16,6 +16,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/schema/prompt"
+import { Money } from "@opencode-ai/schema/money"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -323,7 +324,7 @@ describe("SessionProjector", () => {
             1,
             { created },
             {
-              cost: 0.5,
+              cost: Money.USD.make(0.5),
               tokens: { input: 4, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
             },
           ),
@@ -332,7 +333,7 @@ describe("SessionProjector", () => {
             2,
             { created },
             {
-              cost: 0.75,
+              cost: Money.USD.make(0.75),
               tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
             },
           ),
@@ -366,7 +367,7 @@ describe("SessionProjector", () => {
         (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
       ).toEqual([earlier])
       expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({
-        cost: 1.25,
+        cost: Money.USD.make(1.25),
         tokens_input: 10,
         tokens_output: 4,
         tokens_reasoning: 2,
@@ -809,7 +810,7 @@ describe("SessionProjector", () => {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
         finish: "stop",
-        cost: 1.25,
+        cost: Money.USD.make(1.25),
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       })
 
@@ -827,7 +828,7 @@ describe("SessionProjector", () => {
       expect(messages[1]).toMatchObject({
         type: "assistant",
         finish: "stop",
-        cost: 1.25,
+        cost: Money.USD.make(1.25),
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
         time: { completed: DateTime.makeUnsafe(0) },
       })
@@ -843,7 +844,7 @@ describe("SessionProjector", () => {
       })
       expect(Option.getOrThrow(yield* Fiber.join(usageUpdated)).data).toEqual({
         sessionID,
-        cost: 1.25,
+        cost: Money.USD.make(1.25),
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       })
     }),

@@ -10,6 +10,7 @@ import { SessionSchema } from "./schema"
 import { SessionTable } from "./sql"
 import { SessionMessage } from "./message"
 import { PersistedRevert } from "@opencode-ai/schema/session-revert"
+import { Money } from "@opencode-ai/schema/money"
 
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
@@ -33,7 +34,7 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
           variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
         }
       : undefined,
-    cost: row.cost,
+    cost: Money.USD.make(row.cost),
     tokens: {
       input: row.tokens_input,
       output: row.tokens_output,

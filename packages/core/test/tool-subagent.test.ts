@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Schema } from "effect"
+import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
@@ -70,7 +71,7 @@ const executionNode = makeGlobalNode({
           sessionID,
           assistantMessageID,
           finish: "stop",
-          cost: 0,
+          cost: Money.USD.make(0),
           tokens,
         })
       })

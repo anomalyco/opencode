@@ -1,4 +1,5 @@
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { Money } from "@opencode-ai/schema/money"
 import type { ModelInfo } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 import { EventV2 } from "../event"
@@ -13,11 +14,11 @@ function released(date: string) {
 
 function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
   const base = {
-    input: input?.input ?? 0,
-    output: input?.output ?? 0,
+    input: input?.input ?? Money.USDPerMillionTokens.make(0),
+    output: input?.output ?? Money.USDPerMillionTokens.make(0),
     cache: {
-      read: input?.cache_read ?? 0,
-      write: input?.cache_write ?? 0,
+      read: input?.cache_read ?? Money.USDPerMillionTokens.make(0),
+      write: input?.cache_write ?? Money.USDPerMillionTokens.make(0),
     },
   }
   return [
@@ -27,8 +28,8 @@ function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
       input: item.input,
       output: item.output,
       cache: {
-        read: item.cache_read ?? 0,
-        write: item.cache_write ?? 0,
+        read: item.cache_read ?? Money.USDPerMillionTokens.make(0),
+        write: item.cache_write ?? Money.USDPerMillionTokens.make(0),
       },
     })) ?? []),
     ...(input?.context_over_200k
@@ -41,8 +42,8 @@ function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
             input: input.context_over_200k.input,
             output: input.context_over_200k.output,
             cache: {
-              read: input.context_over_200k.cache_read ?? 0,
-              write: input.context_over_200k.cache_write ?? 0,
+              read: input.context_over_200k.cache_read ?? Money.USDPerMillionTokens.make(0),
+              write: input.context_over_200k.cache_write ?? Money.USDPerMillionTokens.make(0),
             },
           },
         ]
@@ -67,7 +68,20 @@ function mergeCost(base: ModelInfo["cost"], override: ModelsDev.Model["cost"] | 
     const current = tiers.get(tierKey(item))
     tiers.set(tierKey(item), current ? merge(current, item) : item)
   }
-  return [merge(baseDefault ?? { input: 0, output: 0, cache: { read: 0, write: 0 } }, nextDefault), ...tiers.values()]
+  return [
+    merge(
+      baseDefault ?? {
+        input: Money.USDPerMillionTokens.make(0),
+        output: Money.USDPerMillionTokens.make(0),
+        cache: {
+          read: Money.USDPerMillionTokens.make(0),
+          write: Money.USDPerMillionTokens.make(0),
+        },
+      },
+      nextDefault,
+    ),
+    ...tiers.values(),
+  ]
 }
 
 const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]

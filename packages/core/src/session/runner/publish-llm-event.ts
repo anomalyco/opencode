@@ -6,6 +6,7 @@ import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { Money } from "@opencode-ai/schema/money"
 import { AgentV2 } from "../../agent"
 import { Snapshot } from "../../snapshot"
 
@@ -219,7 +220,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   })
 
   const publishStepFailure = Effect.fnUntraced(function* (usage?: {
-    readonly cost: number
+    readonly cost: Money.USD
     readonly tokens: ReturnType<typeof tokens>
   }) {
     if (stepFailed || stepFailure === undefined) return

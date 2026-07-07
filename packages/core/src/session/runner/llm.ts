@@ -11,6 +11,7 @@ import {
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { Money } from "@opencode-ai/schema/money"
 import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
@@ -65,13 +66,13 @@ export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
     .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
     .toSorted((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
   const cost = tier ?? costs.find((cost) => cost.tier === undefined)
-  if (!cost) return 0
-  return (
+  if (!cost) return Money.USD.make(0)
+  return Money.USD.make(
     (tokens.input * cost.input +
       (tokens.output + tokens.reasoning) * cost.output +
       tokens.cache.read * cost.cache.read +
       tokens.cache.write * cost.cache.write) /
-    1_000_000
+      1_000_000,
   )
 }
 

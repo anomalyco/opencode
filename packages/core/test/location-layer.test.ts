@@ -3,6 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
+import { Money } from "@opencode-ai/schema/money"
 import { Context, DateTime, Effect, Equal, Hash, RcMap, Schema, Stream } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -354,7 +355,7 @@ describe("LocationServiceMap", () => {
                   id: ModelV2.ID.make("chat"),
                   providerID: ProviderV2.ID.make("unavailable"),
                 },
-                cost: 0,
+                cost: Money.USD.make(0),
                 tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
@@ -403,7 +404,7 @@ describe("LocationServiceMap", () => {
                   providerID: ProviderV2.ID.make("aliased"),
                   variant: ModelV2.VariantID.make("high"),
                 },
-                cost: 0,
+                cost: Money.USD.make(0),
                 tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,

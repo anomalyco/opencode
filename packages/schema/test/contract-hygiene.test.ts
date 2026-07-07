@@ -22,6 +22,18 @@ import { SessionTodo } from "../src/session-todo.js"
 import { optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
+  test("keeps absolute costs distinct from model rates", () => {
+    const usd = Money.USD.make(1)
+    const rate = Money.USDPerMillionTokens.make(1)
+    // @ts-expect-error Model rates are not absolute costs.
+    const invalidUSD: Money.USD = rate
+    // @ts-expect-error Absolute costs are not model rates.
+    const invalidRate: Money.USDPerMillionTokens = usd
+
+    expect(invalidUSD).toBe(Money.USD.make(1))
+    expect(invalidRate).toBe(Money.USDPerMillionTokens.make(1))
+  })
+
   test("optional properties preserve transformations and omit undefined while encoding", () => {
     const Value = Schema.Struct({ value: optional(Schema.FiniteFromString) })
     expect(Schema.decodeUnknownSync(Value)({ value: "1" })).toEqual({ value: 1 })

@@ -10,6 +10,7 @@ import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { ConfigProviderV1 } from "../../v1/config/provider"
+import { Money } from "@opencode-ai/schema/money"
 import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options"
 import { ConfigV1 } from "../../v1/config/config"
 
@@ -220,20 +221,23 @@ function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined)
 
 function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cost"]>) {
   const base = {
-    input: input.input,
-    output: input.output,
-    cache: { read: input.cache_read ?? 0, write: input.cache_write ?? 0 },
+    input: Money.USDPerMillionTokens.make(input.input),
+    output: Money.USDPerMillionTokens.make(input.output),
+    cache: {
+      read: Money.USDPerMillionTokens.make(input.cache_read ?? 0),
+      write: Money.USDPerMillionTokens.make(input.cache_write ?? 0),
+    },
   }
   if (!input.context_over_200k) return [base]
   return [
     base,
     {
       tier: { type: "context" as const, size: 200_000 },
-      input: input.context_over_200k.input,
-      output: input.context_over_200k.output,
+      input: Money.USDPerMillionTokens.make(input.context_over_200k.input),
+      output: Money.USDPerMillionTokens.make(input.context_over_200k.output),
       cache: {
-        read: input.context_over_200k.cache_read ?? 0,
-        write: input.context_over_200k.cache_write ?? 0,
+        read: Money.USDPerMillionTokens.make(input.context_over_200k.cache_read ?? 0),
+        write: Money.USDPerMillionTokens.make(input.context_over_200k.cache_write ?? 0),
       },
     },
   ]

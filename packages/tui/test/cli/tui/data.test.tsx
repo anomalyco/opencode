@@ -519,7 +519,11 @@ test("restores running manual compaction before applying live deltas", async () 
 
   try {
     await data.session.message.refresh("session-compaction")
-    expect(data.session.compaction("session-compaction")).toBe("Existing ")
+    expect(data.session.message.get("session-compaction", "message-compaction")).toMatchObject({
+      type: "compaction",
+      status: "running",
+      summary: "Existing ",
+    })
 
     emitEvent(events, {
       id: "evt_compaction_delta",
@@ -1160,7 +1164,10 @@ test("tracks session status from active sessions and execution events", async ()
       durable: durable("session-live", 4),
       data: { sessionID: "session-live", text: "summary" },
     })
-    await wait(() => data.session.compaction("session-live") === "Live summary")
+    await wait(() => {
+      const message = data.session.message.get("session-live", "msg_compaction_started")
+      return message?.type === "compaction" && message.status === "running" && message.summary === "Live summary"
+    })
 
     emitEvent(events, {
       id: "evt_compaction_ended",
@@ -1169,7 +1176,10 @@ test("tracks session status from active sessions and execution events", async ()
       durable: durable("session-live", 5),
       data: { sessionID: "session-live", reason: "auto", text: "Live summary", recent: "recent" },
     })
-    await wait(() => data.session.compaction("session-live") === undefined)
+    await wait(() => {
+      const message = data.session.message.get("session-live", "msg_compaction_started")
+      return message?.type === "compaction" && message.status === "completed"
+    })
     expect(data.session.message.get("session-live", "msg_compaction_started")).toMatchObject({
       type: "compaction",
       status: "completed",

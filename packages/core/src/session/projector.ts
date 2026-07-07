@@ -27,18 +27,11 @@ import { Slug } from "../util/slug"
 import { Snapshot } from "../snapshot"
 import { Skill } from "@opencode-ai/schema/skill"
 import { PersistedRevert } from "@opencode-ai/schema/session-revert"
+import { Money } from "@opencode-ai/schema/money"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
 type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
-type SkillActivatedData =
-  | (typeof SessionEvent.Skill.Activated.Type)["data"]
-  | (typeof SessionEvent.Skill.ActivatedV1.Type)["data"]
-
-const skillIdentity = (data: SkillActivatedData) => ({
-  skill: "id" in data ? data.id : Skill.ID.make(data.name),
-  name: Skill.Name.make(data.name),
-})
 type CompactionFailedData =
   | (typeof SessionEvent.Compaction.Failed.Type)["data"]
   | (typeof SessionEvent.Compaction.FailedV1.Type)["data"]
@@ -172,7 +165,7 @@ const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function*
   if (!row) return
   yield* events.publish(SessionEvent.UsageUpdated, {
     sessionID,
-    cost: row.cost,
+    cost: Money.USD.make(row.cost),
     tokens: {
       input: row.input,
       output: row.output,
@@ -700,13 +693,17 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.InstructionsUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Skill.Activated, (event) =>
-      insertMessage(db, event, {
-        id: SessionMessage.ID.fromEvent(event.id),
-        type: "skill",
-        ...skillIdentity(event.data),
-        text: event.data.text,
-        metadata: event.metadata,
-        time: { created: event.created },
+      Effect.gen(function* () {
+        const identity = Skill.normalizeIdentity(event.data)
+        yield* insertMessage(db, event, {
+          id: SessionMessage.ID.fromEvent(event.id),
+          type: "skill",
+          skill: identity.id,
+          name: identity.name,
+          text: event.data.text,
+          metadata: event.metadata,
+          time: { created: event.created },
+        })
       }),
     )
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))

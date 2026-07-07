@@ -54,8 +54,6 @@ type Data = {
     // session ID in that family, including the key itself once its info arrives.
     family: Record<string, string[]>
     status: Record<string, DataSessionStatus>
-    compaction: Partial<Record<string, string>>
-    compactionReason: Partial<Record<string, "auto" | "manual">>
     message: Record<string, SessionMessageInfo[]>
     input: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
@@ -92,8 +90,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         info: {},
         family: {},
         status: {},
-        compaction: {},
-        compactionReason: {},
         message: {},
         input: {},
         permission: {},
@@ -249,7 +245,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         produce((draft) => {
           delete draft.info[sessionID]
           delete draft.status[sessionID]
-          delete draft.compaction[sessionID]
           delete draft.message[sessionID]
           delete draft.input[sessionID]
           delete draft.permission[sessionID]
@@ -633,8 +628,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.compaction.admitted":
           break
         case "session.compaction.started":
-          setStore("session", "compaction", event.data.sessionID, "")
-          setStore("session", "compactionReason", event.data.sessionID, event.data.reason)
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: event.data.inputID ?? messageIDFromEvent(event.id),
@@ -651,10 +644,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.execution.failed":
         case "session.execution.interrupted":
           setSessionStatus(event.data.sessionID, "idle")
-          if (store.session.compaction[event.data.sessionID] !== undefined)
-            setStore("session", "compaction", event.data.sessionID, undefined)
-          if (store.session.compactionReason[event.data.sessionID] !== undefined)
-            setStore("session", "compactionReason", event.data.sessionID, undefined)
           message.update(event.data.sessionID, (draft) => {
             const currentAssistant = message.activeAssistant(draft)
             if (currentAssistant) currentAssistant.retry = undefined
@@ -685,15 +674,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.delta":
-          setStore("session", "compaction", event.data.sessionID, (text) => (text ?? "") + event.data.text)
           message.update(event.data.sessionID, (draft) => {
             const current = message.compaction(draft)
             if (current?.status === "running") current.summary += event.data.text
           })
           break
         case "session.compaction.ended":
-          setStore("session", "compaction", event.data.sessionID, undefined)
-          setStore("session", "compactionReason", event.data.sessionID, undefined)
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
@@ -722,8 +708,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.failed":
-          setStore("session", "compaction", event.data.sessionID, undefined)
-          setStore("session", "compactionReason", event.data.sessionID, undefined)
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
@@ -861,9 +845,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.input[sessionID]?.includes(inputID) ?? false
           },
         },
-        compaction(sessionID: string) {
-          return store.session.compaction[sessionID]
-        },
         async refresh(sessionID: string) {
           const generation = nextSessionRefresh(sessionID)
           const usageGeneration = sessionUsage.get(sessionID)?.generation ?? 0
@@ -908,14 +889,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             ].toSorted((a, b) => a.time.created - b.time.created)
             messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
             setStore("session", "message", sessionID, messages)
-            const running = messages.find((message) => message.type === "compaction" && message.status === "running")
-            setStore("session", "compaction", sessionID, running?.type === "compaction" ? running.summary : undefined)
-            setStore(
-              "session",
-              "compactionReason",
-              sessionID,
-              running?.type === "compaction" ? running.reason : undefined,
-            )
           },
         },
         permission: {

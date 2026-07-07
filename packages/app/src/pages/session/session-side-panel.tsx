@@ -35,12 +35,7 @@ import {
 } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-
-type RenderDiff = (FileDiffInfo & { file: string }) | VcsFileDiff
-
-function renderDiff(value: FileDiffInfo | VcsFileDiff): value is RenderDiff {
-  return typeof value.file === "string"
-}
+import { filterRenderableDiff } from "@/pages/session/v2/review-diff-kinds"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -88,7 +83,7 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
-  const diffs = createMemo(() => props.diffs().filter(renderDiff))
+  const diffs = createMemo(() => props.diffs().filter(filterRenderableDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {

@@ -13,7 +13,7 @@ export const name = "skill"
 const FILE_LIMIT = 10
 
 export const Input = Schema.Struct({
-  name: SkillV2.ID.annotate({ description: "The ID of the skill from the available skills list" }),
+  id: SkillV2.ID.annotate({ description: "The ID of the skill from the available skills list" }),
 })
 
 export const Output = Schema.Struct({
@@ -70,8 +70,8 @@ export const Plugin = {
             execute: (input, context) =>
               Effect.gen(function* () {
                 const current = yield* skills.list()
-                const skill = current.find((skill) => skill.id === input.name)
-                if (!skill) return yield* unableToLoad(input.name)
+                const skill = current.find((skill) => skill.id === input.id)
+                if (!skill) return yield* unableToLoad(input.id)
                 return yield* Effect.gen(function* () {
                   yield* permission.assert({
                     action: name,
@@ -94,7 +94,7 @@ export const Plugin = {
                     directory,
                     output: toModelOutput(skill, files),
                   }
-                }).pipe(Effect.mapError((error) => unableToLoad(input.name, error)))
+                }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
               }),
           }),
         ),

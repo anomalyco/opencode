@@ -172,11 +172,6 @@ export function Session() {
   })
   onCleanup(() => setEpilogue())
   const messages = sessionMessages
-  const transientCompaction = createMemo(() => {
-    if (messages().some((message) => message.type === "compaction" && message.status === "running")) return
-    const text = data.session.compaction(route.sessionID)
-    return text === undefined ? undefined : { text }
-  })
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
@@ -931,9 +926,6 @@ export function Session() {
                     />
                   )}
                 </For>
-                <Show when={transientCompaction()}>
-                  {(compaction) => <CompactionMessage status="running" text={compaction().text} />}
-                </Show>
                 <BackgroundToolHint messages={messages()} />
                 <Show when={session()?.revert?.messageID}>
                   <RevertMessage

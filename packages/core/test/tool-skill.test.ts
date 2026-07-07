@@ -26,7 +26,7 @@ const skillToolNode = makeLocationNode({
 const sessionID = SessionV2.ID.make("ses_skill_tool_test")
 
 describe("SkillTool", () => {
-  it.live("lists available skills, authorizes the selected name, and loads model-facing content", () =>
+  it.live("lists available skills, authorizes the selected ID, and loads model-facing content", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -103,7 +103,7 @@ describe("SkillTool", () => {
               yield* executeTool(registry, {
                 sessionID,
                 ...toolIdentity,
-                call: { type: "tool-call", id: "call-skill", name: "skill", input: { name: "effect" } },
+                call: { type: "tool-call", id: "call-skill", name: "skill", input: { id: "effect" } },
               }),
             ).toEqual({
               type: "text",
@@ -114,7 +114,7 @@ describe("SkillTool", () => {
               yield* settleTool(registry, {
                 sessionID,
                 ...toolIdentity,
-                call: { type: "tool-call", id: "call-skill-overflow", name: "skill", input: { name: "effect" } },
+                call: { type: "tool-call", id: "call-skill-overflow", name: "skill", input: { id: "effect" } },
               }),
             ).toMatchObject({
               result: { type: "text", value: SkillTool.toModelOutput(info, [reference]) },
@@ -128,7 +128,7 @@ describe("SkillTool", () => {
               yield* executeTool(registry, {
                 sessionID,
                 ...toolIdentity,
-                call: { type: "tool-call", id: "call-missing-skill", name: "skill", input: { name: "missing" } },
+                call: { type: "tool-call", id: "call-missing-skill", name: "skill", input: { id: "missing" } },
               }),
             ).toEqual({ type: "error", value: "Unable to load skill missing" })
             deny = true
@@ -136,7 +136,7 @@ describe("SkillTool", () => {
               yield* executeTool(registry, {
                 sessionID,
                 ...toolIdentity,
-                call: { type: "tool-call", id: "call-denied-skill", name: "skill", input: { name: "effect" } },
+                call: { type: "tool-call", id: "call-denied-skill", name: "skill", input: { id: "effect" } },
               }),
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
             deny = false
@@ -158,7 +158,7 @@ describe("SkillTool", () => {
               yield* executeTool(registry, {
                 sessionID,
                 ...toolIdentity,
-                call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
+                call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { id: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
           }).pipe(Effect.provide(skillToolLayer))

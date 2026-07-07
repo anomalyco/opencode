@@ -341,12 +341,14 @@ export const Persisted = PersistedInfo.pipe(
       decode: (persisted): Info => {
         if (persisted.source === "current") return persisted.message
         const message = persisted.message
-        if (message.type === "skill")
+        if (message.type === "skill") {
+          const identity = SkillSchema.normalizeIdentity({ name: message.name })
           return Skill.make({
             ...message,
-            skill: SkillSchema.ID.make(message.name),
-            name: SkillSchema.Name.make(message.name),
+            skill: identity.id,
+            name: identity.name,
           })
+        }
         if (message.type === "shell")
           return Shell.make({
             id: message.id,

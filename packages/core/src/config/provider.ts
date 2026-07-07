@@ -1,6 +1,7 @@
 export * as ConfigProvider from "./provider"
 
 import { Schema } from "effect"
+import { Money } from "@opencode-ai/schema/money"
 import { ModelV2 } from "../model"
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
@@ -17,8 +18,8 @@ export class Request extends Schema.Class<Request>("ConfigV2.Provider.Request")(
 }) {}
 
 class Cache extends Schema.Class<Cache>("ConfigV2.Model.Cost.Cache")({
-  read: Schema.Finite.pipe(Schema.optional),
-  write: Schema.Finite.pipe(Schema.optional),
+  read: Money.USDPerMillionTokens.pipe(Schema.optional),
+  write: Money.USDPerMillionTokens.pipe(Schema.optional),
 }) {}
 
 class Cost extends Schema.Class<Cost>("ConfigV2.Model.Cost")({
@@ -26,8 +27,8 @@ class Cost extends Schema.Class<Cost>("ConfigV2.Model.Cost")({
     type: Schema.Literal("context"),
     size: Schema.Int,
   }).pipe(Schema.optional),
-  input: Schema.Finite,
-  output: Schema.Finite,
+  input: Money.USDPerMillionTokens,
+  output: Money.USDPerMillionTokens,
   cache: Cache.pipe(Schema.optional),
 }) {}
 

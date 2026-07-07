@@ -4,15 +4,6 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { Skill } from "@opencode-ai/schema/skill"
 
-type SkillActivatedData =
-  | (typeof SessionEvent.Skill.Activated.Type)["data"]
-  | (typeof SessionEvent.Skill.ActivatedV1.Type)["data"]
-
-const skillIdentity = (data: SkillActivatedData) => ({
-  skill: "id" in data ? data.id : Skill.ID.make(data.name),
-  name: Skill.Name.make(data.name),
-})
-
 export type MemoryState = {
   messages: SessionMessage.Info[]
 }
@@ -211,12 +202,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         )
       },
       "session.skill.activated": (event) => {
-        const identity = skillIdentity(event.data)
+        const identity = Skill.normalizeIdentity(event.data)
         return adapter.appendMessage(
           SessionMessage.Skill.make({
             id: SessionMessage.ID.fromEvent(event.id),
             type: "skill",
-            skill: identity.skill,
+            skill: identity.id,
             name: identity.name,
             text: event.data.text,
             metadata: event.metadata,

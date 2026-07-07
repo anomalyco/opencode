@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
+import { Money } from "@opencode-ai/schema/money"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -280,7 +281,7 @@ describe("SessionV2.create", () => {
         sessionID: parent.id,
         assistantMessageID,
         finish: "stop",
-        cost: 0.75,
+        cost: Money.USD.make(0.75),
         tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
       })
 
