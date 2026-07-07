@@ -19,8 +19,8 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
     input.gotoLineEnd()
   }
 
-  function confirm(value: string) {
-    props.onConfirm(slugify(value) || Slug.create())
+  function confirm() {
+    props.onConfirm(slugify(input.value) || Slug.create())
   }
 
   useBindings(() => ({
