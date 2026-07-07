@@ -554,6 +554,40 @@ it.instance("handles file inclusion with replacement tokens", () =>
   }),
 )
 
+const apiCredentialIt = configIt({
+  auth: Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        abc: new Auth.Api({ type: "api", key: "sk-test-abc" }),
+      }),
+  }),
+})
+
+apiCredentialIt.instance("resolves cred templates in provider options from auth credentials", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      provider: {
+        abc: {
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            baseURL: "https://api.example.com/v1",
+            apiKey: "{cred:abc}",
+          },
+          models: {
+            "example-model": {
+              name: "Example Model",
+            },
+          },
+        },
+      },
+    })
+    const config = yield* Config.use.get()
+    expect(config.provider?.abc?.options?.apiKey).toBe("sk-test-abc")
+  }),
+)
+
 const accountTokenIt = configIt({
   account: Layer.mock(Account.Service)({
     active: () =>

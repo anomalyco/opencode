@@ -20,6 +20,7 @@ type SubstituteInput = ParseSource & {
   text: string
   missing?: "error" | "empty"
   env?: Record<string, string>
+  credentials?: Record<string, string>
 }
 
 function source(input: ParseSource) {
@@ -30,12 +31,17 @@ function dir(input: ParseSource) {
   return input.type === "path" ? path.dirname(input.path) : input.dir
 }
 
-/** Apply {env:VAR} and {file:path} substitutions to config text. */
+/** Apply {env:VAR}, {cred:id}, and {file:path} substitutions to config text. */
 export async function substitute(input: SubstituteInput) {
   const missing = input.missing ?? "error"
   let text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
     return (input.env?.[varName] ?? process.env[varName]) || ""
   })
+  if (input.credentials) {
+    text = text.replace(/\{cred:([^}]+)\}/g, (_, id) => {
+      return input.credentials?.[id] ?? ""
+    })
+  }
 
   const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
   if (!fileMatches.length) return text
