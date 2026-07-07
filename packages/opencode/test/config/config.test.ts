@@ -1,12 +1,14 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { Effect, Exit, Layer, Option } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { Cause, Effect, Exit, Layer, Option } from "effect"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Npm } from "@opencode-ai/core/npm"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
@@ -40,13 +42,6 @@ import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 
-/** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
-const infra = CrossSpawnSpawner.defaultLayer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
-
-const testFlock = EffectFlock.defaultLayer
-
 const unexpectedHttp = HttpClient.make((request) =>
   Effect.die(`unexpected http request: ${request.method} ${request.url}`),
 )
@@ -71,6 +66,7 @@ const wellKnownAuth = (url: string) =>
 function remoteConfigClient(input: {
   wellKnown: unknown
   remote?: unknown
+  remoteHtml?: string
   seen: { wellKnown?: string; remote?: string; authorization?: string }
 }) {
   return HttpClient.make((request) => {
@@ -78,9 +74,17 @@ function remoteConfigClient(input: {
       input.seen.wellKnown = request.url
       return Effect.succeed(json(request, input.wellKnown))
     }
-    if (input.remote !== undefined && request.url.includes("config.example.com")) {
+    if (request.url.includes("config.example.com") && (input.remote !== undefined || input.remoteHtml !== undefined)) {
       input.seen.remote = request.url
       input.seen.authorization = request.headers.authorization
+      if (input.remoteHtml !== undefined) {
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(input.remoteHtml, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+          ),
+        )
+      }
       return Effect.succeed(json(request, input.remote))
     }
     return Effect.succeed(json(request, {}, 404))
@@ -94,16 +98,12 @@ const configLayer = (
     client?: HttpClient.HttpClient
   } = {},
 ) =>
-  Config.layer.pipe(
-    Layer.provide(testFlock),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
-    Layer.provide(options.account ?? AccountTest.empty),
-    Layer.provideMerge(infra),
-    Layer.provide(NpmTest.noop),
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)),
-    Layer.provideMerge(FSUtil.defaultLayer),
-  )
+  LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+    [Auth.node, options.auth ?? AuthTest.empty],
+    [Account.node, options.account ?? AccountTest.empty],
+    [Npm.node, NpmTest.noop],
+    [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
+  ])
 
 const layer = configLayer()
 
@@ -161,7 +161,7 @@ const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =
     Effect.provideService(TestInstance, { directory: dir }),
     provideInstanceEffect(dir),
     Effect.provide(testInstanceStoreLayer),
-    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
   )
 
 const withGlobalConfigDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
@@ -214,6 +214,7 @@ const wellKnown = (input: {
   config?: unknown
   remoteConfig?: { url: string; headers?: Record<string, string> }
   remote?: unknown
+  remoteHtml?: string
   wellKnown?: unknown
 }) => {
   const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
@@ -224,6 +225,7 @@ const wellKnown = (input: {
       ...(input.remoteConfig !== undefined ? { remote_config: input.remoteConfig } : {}),
     },
     remote: input.remote,
+    remoteHtml: input.remoteHtml,
   })
   return {
     seen,
@@ -313,7 +315,7 @@ it.effect("creates global jsonc config with schema when no global configs exist"
 
       const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
-    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
 )
 
@@ -328,7 +330,7 @@ it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
           expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
-        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
       ),
     )
   }),
@@ -722,6 +724,26 @@ it.instance("migrates mode field to agent field", () =>
   }),
 )
 
+it.instance("accepts the deprecated reference field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      reference: {
+        local: { path: "../library" },
+        sdk: { repository: "github.com/example/sdk", branch: "main" },
+        shorthand: "github.com/example/docs",
+      },
+    })
+    const config = yield* Config.use.get()
+    expect(config.reference).toEqual({
+      local: { path: "../library" },
+      sdk: { repository: "github.com/example/sdk", branch: "main" },
+      shorthand: "github.com/example/docs",
+    })
+  }),
+)
+
 it.instance("loads config from .opencode directory", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
@@ -898,7 +920,7 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(readonly, 0o755).pipe(Effect.ignore))
 
     yield* withProcessEnv("OPENCODE_CONFIG_DIR", readonly, Config.use.get().pipe(provideInstanceEffect(dir)))
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
@@ -916,7 +938,7 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
     )
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 // Note: deduplication and serialization of npm installs is now handled by the
@@ -1501,16 +1523,12 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
-          Config.layer.pipe(
-            Layer.provide(testFlock),
-            Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(Env.defaultLayer),
-            Layer.provide(wellKnownAuth(server.url.origin)),
-            Layer.provide(AccountTest.empty),
-            Layer.provideMerge(infra),
-            Layer.provide(NpmTest.noop),
-            Layer.provide(FetchHttpClient.layer),
-          ),
+          LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+            [Auth.node, wellKnownAuth(server.url.origin)],
+            [Account.node, AccountTest.empty],
+            [Npm.node, NpmTest.noop],
+            [httpClient, FetchHttpClient.layer],
+          ]),
           testInstanceStoreLayer,
         ),
       ),
@@ -1613,6 +1631,24 @@ invalidRemoteWellKnown.it.instance("wellknown remote_config rejects non-object c
     expect(invalidRemoteWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
     expect(Exit.isFailure(exit)).toBe(true)
   }),
+)
+
+const loginPageWellKnown = wellKnown({
+  remoteConfig: { url: "https://config.example.com/opencode.json" },
+  remoteHtml: "<!DOCTYPE html><html><head><title>Sign in</title></head><body>Login required</body></html>",
+})
+
+loginPageWellKnown.it.instance(
+  "wellknown remote_config surfaces an actionable auth error when the gateway returns an HTML login page",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* Config.use.get().pipe(Effect.exit)
+      expect(loginPageWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+      expect(Exit.isFailure(exit)).toBe(true)
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      expect(NamedError.hasName(error, "ConfigRemoteAuthError")).toBe(true)
+      expect((error as { data?: { url?: string } }).data?.url).toBe("https://example.com")
+    }),
 )
 
 describe("resolvePluginSpec", () => {

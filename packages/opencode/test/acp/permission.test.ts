@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import type {
   AgentSideConnection,
   RequestPermissionRequest,
@@ -6,13 +6,23 @@ import type {
   SessionUpdate,
 } from "@agentclientprotocol/sdk"
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { createTwoFilesPatch } from "diff"
 import { Effect, ManagedRuntime } from "effect"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { ACPEvent } from "@/acp/event"
 import { ACPSession } from "@/acp/session"
 
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type PermissionReplyParams = Parameters<OpencodeClient["permission"]["reply"]>[0]
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
+const cleanupDirs: string[] = []
+
+afterEach(async () => {
+  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
 
 const pollUntil = async (
   check: () => boolean | Promise<boolean>,
@@ -28,7 +38,7 @@ const pollUntil = async (
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+  return ManagedRuntime.make(LayerNode.compile(ACPSession.node)).runSync(
     ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
@@ -137,6 +147,14 @@ function textFromUpdates(updates: SessionUpdateParams[], sessionId: string) {
     .join("")
 }
 
+async function tempFile(name: string, content: string) {
+  const dir = await mkdtemp(path.join(tmpdir(), "opencode-acp-permission-"))
+  cleanupDirs.push(dir)
+  const file = path.join(dir, name)
+  await Bun.write(file, content)
+  return file
+}
+
 describe("acp permissions", () => {
   it("sends requestPermission and replies with the selected outcome", async () => {
     const harness = createHarness()
@@ -151,7 +169,7 @@ describe("acp permissions", () => {
       toolCall: {
         toolCallId: "call_1",
         status: "pending",
-        title: "bash",
+        title: "printf hello",
         rawInput: { command: "printf hello" },
         kind: "execute",
         locations: [],
@@ -163,6 +181,116 @@ describe("acp permissions", () => {
       ],
     })
     expect(harness.replies).toEqual([{ requestID: "perm_1", reply: "once", directory: "/workspace" }])
+  })
+
+  it("uses permission metadata for non-shell titles", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_a")
+
+    harness.subscription.handle(
+      permissionAsked("ses_a", "perm_fetch", {
+        permission: "webfetch",
+        metadata: {
+          url: "https://example.com/docs",
+          format: "markdown",
+        },
+        tool: { messageID: "msg_1", callID: "call_1" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "webfetch permission was never replied")
+
+    expect(harness.requests[0]?.toolCall).toMatchObject({
+      toolCallId: "call_1",
+      title: "https://example.com/docs",
+      kind: "fetch",
+      rawInput: { url: "https://example.com/docs", format: "markdown" },
+    })
+  })
+
+  it("includes a diff content block for edit permission metadata", async () => {
+    const filepath = await tempFile("file.ts", "before\n")
+    const harness = createHarness()
+    await createSession(harness.session, "ses_a")
+
+    harness.subscription.handle(
+      permissionAsked("ses_a", "perm_edit", {
+        permission: "edit",
+        metadata: {
+          filepath,
+          diff: createTwoFilesPatch(filepath, filepath, "before\n", "after\n"),
+        },
+        tool: { messageID: "msg_1", callID: "call_1" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "edit permission was never replied")
+
+    expect(harness.requests[0]?.toolCall).toMatchObject({
+      toolCallId: "call_1",
+      title: filepath,
+      kind: "edit",
+      locations: [{ path: filepath }],
+      content: [
+        {
+          type: "diff",
+          path: filepath,
+          oldText: "before\n",
+          newText: "after\n",
+        },
+      ],
+    })
+  })
+
+  it("includes per-file diff blocks and locations for apply_patch permission metadata", async () => {
+    const first = await tempFile("first.ts", "one\n")
+    const second = await tempFile("second.ts", "alpha\n")
+    const harness = createHarness()
+    await createSession(harness.session, "ses_a")
+
+    harness.subscription.handle(
+      permissionAsked("ses_a", "perm_patch", {
+        permission: "edit",
+        metadata: {
+          filepath: "first.ts, second.ts",
+          files: [
+            {
+              filePath: first,
+              relativePath: "first.ts",
+              patch: createTwoFilesPatch(first, first, "one\n", "two\n"),
+            },
+            {
+              filePath: second,
+              relativePath: "second.ts",
+              patch: createTwoFilesPatch(second, second, "alpha\n", "beta\n"),
+            },
+          ],
+        },
+        tool: { messageID: "msg_1", callID: "call_1" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "apply_patch permission was never replied")
+
+    expect(harness.requests[0]?.toolCall).toMatchObject({
+      toolCallId: "call_1",
+      title: "2 files",
+      locations: [{ path: first }, { path: second }],
+      content: [
+        {
+          type: "diff",
+          path: first,
+          oldText: "one\n",
+          newText: "two\n",
+        },
+        {
+          type: "diff",
+          path: second,
+          oldText: "alpha\n",
+          newText: "beta\n",
+        },
+      ],
+    })
   })
 
   it("forwards external_directory metadata and locations to requestPermission", async () => {
@@ -189,7 +317,7 @@ describe("acp permissions", () => {
       toolCall: {
         toolCallId: "call_1",
         status: "pending",
-        title: "external_directory",
+        title: "Create external directory",
         rawInput: {
           command: "mkdir -p /tmp/outside",
           description: "Create external directory",

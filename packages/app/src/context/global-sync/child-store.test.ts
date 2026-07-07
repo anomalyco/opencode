@@ -1,12 +1,19 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { createRoot, getOwner, type Owner } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
+import { ServerScope } from "@/utils/server-scope"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 const querySingles: Array<() => { queryKey?: unknown[]; enabled?: boolean }> = []
+const persist: typeof import("@/utils/persist").persisted = (_target, store) => [
+  store[0],
+  store[1],
+  null,
+  Object.assign(() => true, { promise: undefined }),
+]
 
 const child = () => createStore({} as State)
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
@@ -27,7 +34,9 @@ const queryOptionsApi = {
   }),
   agents: (directory: string) => ({ queryKey: [directory, "agents"], queryFn: async () => [] }),
   mcp: (directory: string) => ({ queryKey: [directory, "mcp"], queryFn: async () => ({}) }),
+  mcpResources: (directory: string) => ({ queryKey: [directory, "mcpResources"], queryFn: async () => ({}) }),
   lsp: (directory: string) => ({ queryKey: [directory, "lsp"], queryFn: async () => [] }),
+  references: (directory: string) => ({ queryKey: [directory, "references"], queryFn: async () => [] }),
   sessions: (directory: string) => ({ queryKey: [directory, "loadSessions"] as const }),
 } as unknown as QueryOptionsApi
 
@@ -42,12 +51,6 @@ function createOwner(callback: (owner: Owner) => void) {
 }
 
 beforeAll(async () => {
-  mock.module("@/utils/persist", () => ({
-    Persist: {
-      workspace: (...parts: string[]) => parts.join(":"),
-    },
-    persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
-  }))
   mock.module("@tanstack/solid-query", () => ({
     useQuery: (options: () => { queryKey?: unknown[]; enabled?: boolean }) => {
       querySingles.push(options)
@@ -80,6 +83,8 @@ describe("createChildStoreManager", () => {
 
     const manager = createChildStoreManager({
       owner,
+      scope: ServerScope.local,
+      persist,
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
@@ -109,6 +114,8 @@ describe("createChildStoreManager", () => {
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
         owner,
+        scope: ServerScope.local,
+        persist,
         isBooting: () => false,
         isLoadingSessions: () => false,
         onBootstrap(directory) {
@@ -128,6 +135,7 @@ describe("createChildStoreManager", () => {
       const [store] = manager.child("/project")
 
       expect(store.status).toBe("loading")
+      expect(store.limit).toBe(5)
       expect(bootstraps).toEqual(["/project"])
     } finally {
       dispose()
@@ -140,6 +148,8 @@ describe("createChildStoreManager", () => {
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
         owner,
+        scope: ServerScope.local,
+        persist,
         isBooting: () => false,
         isLoadingSessions: () => false,
         onBootstrap() {},
@@ -171,6 +181,8 @@ describe("createChildStoreManager", () => {
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
         owner,
+        scope: ServerScope.local,
+        persist,
         isBooting: () => false,
         isLoadingSessions: () => false,
         onBootstrap() {},
@@ -187,14 +199,18 @@ describe("createChildStoreManager", () => {
     try {
       if (!manager) throw new Error("manager required")
       const [store, setStore] = manager.child("/project", { bootstrap: false })
-      expect(querySingles.length - offset).toBe(4)
+      expect(querySingles.length - offset).toBe(6)
       const query = querySingles[offset + 1]
+      const resourceQuery = querySingles[offset + 2]
       if (!query) throw new Error("query required")
+      if (!resourceQuery) throw new Error("resource query required")
       expect(query().enabled).toBe(false)
+      expect(resourceQuery().enabled).toBe(false)
 
       setStore("status", "complete")
       manager.child("/project", { bootstrap: false, mcp: true })
       expect(query().enabled).toBe(true)
+      expect(resourceQuery().enabled).toBe(true)
       expect(store.mcp).toEqual({ demo: { status: "disabled" } })
       expect(mcpLoads).toEqual(["/project"])
 

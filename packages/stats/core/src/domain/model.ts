@@ -8,6 +8,8 @@ import {
   chunks,
   collapseRows,
   inserted,
+  isMissingUniqueUsersColumn,
+  omitUniqueUsers,
   rankBy,
   statPeriodKey,
   statRowScope,
@@ -27,6 +29,7 @@ export type ModelStatMetric = {
   provider: string
   model: string
   sessions: number
+  uniqueUsers: number
   inputTokens: number
   outputTokens: number
   reasoningTokens: number
@@ -55,27 +58,55 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
 
       const listDaily = Effect.fn("ModelStatRepo.listDaily")(function* () {
         return yield* Effect.tryPromise({
-          try: () =>
-            db
-              .select({
-                periodKey: modelStat.period_key,
-                updatedAt: modelStat.updated_at,
-                tier: modelStat.tier,
-                provider: modelStat.provider,
-                model: modelStat.model,
-                sessions: modelStat.sessions,
-                inputTokens: modelStat.input_tokens,
-                outputTokens: modelStat.output_tokens,
-                reasoningTokens: modelStat.reasoning_tokens,
-                cacheReadTokens: modelStat.cache_read_tokens,
-                totalTokens: modelStat.total_tokens,
-                inputCostMicrocents: modelStat.input_cost_microcents,
-                outputCostMicrocents: modelStat.output_cost_microcents,
-                totalCostMicrocents: modelStat.total_cost_microcents,
-              })
-              .from(modelStat)
-              .where(and(eq(modelStat.grain, "day"), eq(modelStat.client, "all"), eq(modelStat.source, "all")))
-              .orderBy(asc(modelStat.period_key)),
+          try: async () => {
+            try {
+              return await db
+                .select({
+                  periodKey: modelStat.period_key,
+                  updatedAt: modelStat.updated_at,
+                  tier: modelStat.tier,
+                  provider: modelStat.provider,
+                  model: modelStat.model,
+                  sessions: modelStat.sessions,
+                  uniqueUsers: modelStat.unique_users,
+                  inputTokens: modelStat.input_tokens,
+                  outputTokens: modelStat.output_tokens,
+                  reasoningTokens: modelStat.reasoning_tokens,
+                  cacheReadTokens: modelStat.cache_read_tokens,
+                  totalTokens: modelStat.total_tokens,
+                  inputCostMicrocents: modelStat.input_cost_microcents,
+                  outputCostMicrocents: modelStat.output_cost_microcents,
+                  totalCostMicrocents: modelStat.total_cost_microcents,
+                })
+                .from(modelStat)
+                .where(modelDailyScope())
+                .orderBy(asc(modelStat.period_key))
+            } catch (cause) {
+              if (!isMissingUniqueUsersColumn(cause)) throw cause
+              return (
+                await db
+                  .select({
+                    periodKey: modelStat.period_key,
+                    updatedAt: modelStat.updated_at,
+                    tier: modelStat.tier,
+                    provider: modelStat.provider,
+                    model: modelStat.model,
+                    sessions: modelStat.sessions,
+                    inputTokens: modelStat.input_tokens,
+                    outputTokens: modelStat.output_tokens,
+                    reasoningTokens: modelStat.reasoning_tokens,
+                    cacheReadTokens: modelStat.cache_read_tokens,
+                    totalTokens: modelStat.total_tokens,
+                    inputCostMicrocents: modelStat.input_cost_microcents,
+                    outputCostMicrocents: modelStat.output_cost_microcents,
+                    totalCostMicrocents: modelStat.total_cost_microcents,
+                  })
+                  .from(modelStat)
+                  .where(modelDailyScope())
+                  .orderBy(asc(modelStat.period_key))
+              ).map((row) => ({ ...row, uniqueUsers: 0 }))
+            }
+          },
           catch: (cause) => DatabaseError.make({ cause }),
         })
       })
@@ -85,43 +116,54 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
           chunks(rows, UPSERT_CHUNK_SIZE),
           (chunk) =>
             Effect.tryPromise({
-              try: () =>
-                db
-                  .insert(modelStat)
-                  .values(chunk)
-                  .onDuplicateKeyUpdate({
-                    set: {
-                      provider_model: inserted("provider_model"),
-                      sessions: inserted("sessions"),
-                      requests: inserted("requests"),
-                      input_tokens: inserted("input_tokens"),
-                      output_tokens: inserted("output_tokens"),
-                      reasoning_tokens: inserted("reasoning_tokens"),
-                      cache_read_tokens: inserted("cache_read_tokens"),
-                      total_tokens: inserted("total_tokens"),
-                      input_cost_microcents: inserted("input_cost_microcents"),
-                      output_cost_microcents: inserted("output_cost_microcents"),
-                      total_cost_microcents: inserted("total_cost_microcents"),
-                      avg_duration_ms: inserted("avg_duration_ms"),
-                      p50_duration_ms: inserted("p50_duration_ms"),
-                      p95_duration_ms: inserted("p95_duration_ms"),
-                      avg_ttfb_ms: inserted("avg_ttfb_ms"),
-                      p50_ttfb_ms: inserted("p50_ttfb_ms"),
-                      p95_ttfb_ms: inserted("p95_ttfb_ms"),
-                      avg_output_tps: inserted("avg_output_tps"),
-                      success_count: inserted("success_count"),
-                      error_count: inserted("error_count"),
-                      sample_count: inserted("sample_count"),
-                      rank_by_tokens: inserted("rank_by_tokens"),
-                      rank_by_requests: inserted("rank_by_requests"),
-                      rank_by_cost: inserted("rank_by_cost"),
-                    },
-                  }),
+              try: async () => {
+                try {
+                  return await upsertModelChunk(chunk, true)
+                } catch (cause) {
+                  if (!isMissingUniqueUsersColumn(cause)) throw cause
+                  return upsertModelChunk(chunk, false)
+                }
+              },
               catch: (cause) => DatabaseError.make({ cause }),
             }),
           { discard: true },
         )
       })
+
+      function upsertModelChunk(chunk: ModelStatRow[], includeUniqueUsers: boolean) {
+        return db
+          .insert(modelStat)
+          .values(includeUniqueUsers ? chunk : omitUniqueUsers(chunk))
+          .onDuplicateKeyUpdate({
+            set: {
+              provider_model: inserted("provider_model"),
+              sessions: inserted("sessions"),
+              requests: inserted("requests"),
+              ...(includeUniqueUsers ? { unique_users: inserted("unique_users") } : {}),
+              input_tokens: inserted("input_tokens"),
+              output_tokens: inserted("output_tokens"),
+              reasoning_tokens: inserted("reasoning_tokens"),
+              cache_read_tokens: inserted("cache_read_tokens"),
+              total_tokens: inserted("total_tokens"),
+              input_cost_microcents: inserted("input_cost_microcents"),
+              output_cost_microcents: inserted("output_cost_microcents"),
+              total_cost_microcents: inserted("total_cost_microcents"),
+              avg_duration_ms: inserted("avg_duration_ms"),
+              p50_duration_ms: inserted("p50_duration_ms"),
+              p95_duration_ms: inserted("p95_duration_ms"),
+              avg_ttfb_ms: inserted("avg_ttfb_ms"),
+              p50_ttfb_ms: inserted("p50_ttfb_ms"),
+              p95_ttfb_ms: inserted("p95_ttfb_ms"),
+              avg_output_tps: inserted("avg_output_tps"),
+              success_count: inserted("success_count"),
+              error_count: inserted("error_count"),
+              sample_count: inserted("sample_count"),
+              rank_by_tokens: inserted("rank_by_tokens"),
+              rank_by_requests: inserted("rank_by_requests"),
+              rank_by_cost: inserted("rank_by_cost"),
+            },
+          })
+      }
 
       const deleteRetiredDimensions = Effect.fn("ModelStatRepo.deleteRetiredDimensions")(function* (
         rows: ModelStatRow[],
@@ -152,6 +194,15 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
 
       return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions })
     }),
+  )
+}
+
+function modelDailyScope() {
+  return and(
+    eq(modelStat.grain, "day"),
+    eq(modelStat.client, "all"),
+    eq(modelStat.source, "all"),
+    inArray(modelStat.tier, ["Go", "go"]),
   )
 }
 

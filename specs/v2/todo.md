@@ -26,19 +26,14 @@ through legacy `SessionPrompt.loop(...)`:
   tool results, and assistant output
 - a scoped `ToolRegistry` advertises definitions and the first permission-checked
   `read` built-in
-- local continuation reloads projected history and stops after 25 provider turns within one local drain activity
+- local continuation reloads projected history, and promoting new user input resets the selected agent's configured provider-turn allowance
 - concurrent resumes for one Session join one process-local run while different
   Sessions remain concurrent
 
 Prompt admission now uses a durable `session_input` inbox rather than immediate
-transcript projection. `steer` inputs coalesce into the active activity at the
-next safe provider-turn boundary. `queue` inputs form a FIFO of future activities
-that open one at a time. A location-scoped `SessionRunCoordinator` coalesces process-local wakeups
-around settlement races. Explicit `run` resumes perform at least one provider
-attempt; advisory `wake` notifications call the provider only for eligible inbox
-work. Steers coalesce into the active activity at
-safe provider boundaries; queued inputs open later activities one at a time in
-FIFO order.
+transcript projection. `steer` inputs promote at the next safe provider-turn
+boundary while the current drain requires continuation. `queue` inputs remain in
+a FIFO until the Session would otherwise become idle and then promote one at a time.
 
 Next reviewed slices:
 
@@ -55,19 +50,19 @@ Next reviewed slices:
 - integrate the new BackgroundJob service with V2 tool execution: support background
   bash jobs and background agent dispatch with durable status observation,
   completion delivery, and explicit cancellation / continuation semantics
-- add compaction, interruption, retries, and stale-owner fencing
-  only as their slices become concrete
+- add durable/clustered interruption, retries, and stale-owner fencing only as
+  their slices become concrete
 
-### Deferred durable activity recovery
+### Deferred durable continuation recovery
 
 Do not infer that ambiguous provider work is safe to retry from an advisory wake.
 The first inbox-driven runner intentionally omits outer provider-attempt markers
 until they have a concrete consumer and a complete recovery policy.
 
-Design post-crash activity recovery as one explicit slice. It should model:
+Design post-crash continuation recovery as one explicit slice. It should model:
 
-- durable activity identity and settlement
-- queue-opener reservation and steer assignment
+- promoted input and projected-history state
+- queued-input promotion and steering assignment
 - provider-attempt preparation versus provider-dispatch ambiguity
 - required post-tool continuation across process loss
 - explicit `retry` and `abandon` decisions for unknown outcomes
@@ -75,9 +70,8 @@ Design post-crash activity recovery as one explicit slice. It should model:
 - retry budget, backoff, visible recovery status, startup discovery, and future
   clustered ownership fencing
 
-## Rework compaction - Aiden?
-
-The new agent loop needs to trigger compaction properly
+Do not introduce an enclosing durable execution identity solely to group these
+facts; a process-local Session drain has no durable transcript boundary.
 
 ## Plugin API design - James?
 
