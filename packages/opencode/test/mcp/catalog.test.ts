@@ -105,3 +105,46 @@ test("preserves output schema validation across paginated tool discovery", async
     await Promise.all([client.close(), server.close()])
   }
 })
+
+test("falls back when a tool output schema contains a non-ECMAScript pattern", async () => {
+  const server = new Server({ name: "invalid-pattern", version: "1.0.0" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, () =>
+    Promise.resolve({
+      tools: [
+        {
+          name: "valid",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: { value: { type: "string" } },
+          },
+        },
+        {
+          name: "invalid_pattern",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: {
+              workflow: {
+                type: "string",
+                pattern: "(?P<workflow_id>wf-[0-9a-f]{32})",
+              },
+            },
+          },
+        },
+      ],
+    }),
+  )
+
+  const client = new Client({ name: "invalid-pattern-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    const tools = await Effect.runPromise(McpCatalog.defs(client))
+    expect(tools?.map((tool) => tool.name)).toEqual(["valid", "invalid_pattern"])
+    expect(tools?.some((tool) => Object.hasOwn(tool, "outputSchema"))).toBe(false)
+  } finally {
+    await Promise.all([client.close(), server.close()])
+  }
+})

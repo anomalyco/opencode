@@ -162,7 +162,7 @@ function listTools(client: Client, timeout: number) {
 }
 
 function isOutputSchemaValidationError(error: Error) {
-  return /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
+  return /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema|invalid regular expression|unrecognized character after/i.test(
     error.message,
   )
 }
