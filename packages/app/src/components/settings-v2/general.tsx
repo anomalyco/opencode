@@ -422,11 +422,6 @@ export const SettingsGeneralV2: Component<{
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => option && theme.setColorScheme(option.value)}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewColorScheme(option.value)
-              return () => theme.cancelPreview()
-            }}
           />
         </SettingsRowV2>
 
@@ -453,11 +448,6 @@ export const SettingsGeneralV2: Component<{
             onSelect={(option) => {
               if (!option) return
               theme.setTheme(option.id)
-            }}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewTheme(option.id)
-              return () => theme.cancelPreview()
             }}
           />
         </SettingsRowV2>

@@ -1262,30 +1262,56 @@ function MarketShareList(props: {
   onActiveAuthorChange: (author: string) => void
 }) {
   const i18n = useI18n()
+  const language = useLanguage()
   return (
     <ol data-component="market-share-list">
       <For each={props.data}>
-        {(item, index) => (
-          <li
-            role="button"
-            tabIndex={0}
-            aria-label={`${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} ${i18n.t("chart.percent")}`}
-            data-active={props.activeAuthor === item.author ? "true" : undefined}
-            onPointerEnter={() => props.onActiveAuthorChange(item.author)}
-            onFocus={() => props.onActiveAuthorChange(item.author)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return
-              event.preventDefault()
-              props.onActiveAuthorChange(item.author)
-            }}
-          >
-            <span>{String(index() + 1).padStart(2, "0")}</span>
-            <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
-            <strong>{item.author}</strong>
-            <em>{formatTrillions(item.tokens)}</em>
-            <b>{item.share.toFixed(1)}%</b>
-          </li>
-        )}
+        {(item, index) => {
+          const label = () =>
+            `${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} ${i18n.t("chart.percent")}`
+          const content = () => (
+            <>
+              <span>{String(index() + 1).padStart(2, "0")}</span>
+              <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
+              <strong>{item.author}</strong>
+              <em>{formatTrillions(item.tokens)}</em>
+              <b>{item.share.toFixed(1)}%</b>
+            </>
+          )
+          const href = () =>
+            item.author === "Other" ? undefined : language.route(`${import.meta.env.BASE_URL}${modelSlug(item.author)}`)
+          return (
+            <li
+              data-active={props.activeAuthor === item.author ? "true" : undefined}
+              onPointerEnter={() => props.onActiveAuthorChange(item.author)}
+            >
+              <Show
+                when={href()}
+                fallback={
+                  <button
+                    type="button"
+                    aria-label={label()}
+                    onClick={() => props.onActiveAuthorChange(item.author)}
+                    onFocus={() => props.onActiveAuthorChange(item.author)}
+                  >
+                    {content()}
+                  </button>
+                }
+              >
+                {(href) => (
+                  <a
+                    href={href()}
+                    aria-label={label()}
+                    onClick={() => props.onActiveAuthorChange(item.author)}
+                    onFocus={() => props.onActiveAuthorChange(item.author)}
+                  >
+                    {content()}
+                  </a>
+                )}
+              </Show>
+            </li>
+          )
+        }}
       </For>
     </ol>
   )

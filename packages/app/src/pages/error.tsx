@@ -277,7 +277,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   return (
     <div
-      class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans"
+      class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center font-sans"
       data-tauri-drag-region
     >
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">

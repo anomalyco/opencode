@@ -31,6 +31,7 @@ export type UpdaterAPI = {
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
+  scheme?: "system" | "light" | "dark"
 }
 export type FatalRendererError = {
   error: string
@@ -49,6 +50,8 @@ export type ElectronAPI = {
   consumeInitialDeepLinks: () => Promise<string[]>
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
+  isFirstLaunchOnboardingPending: () => Promise<boolean>
+  finishFirstLaunchOnboarding: (createDefaultProject: boolean) => Promise<string | null>
   getDisplayBackend: () => Promise<LinuxDisplayBackend | null>
   setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
   parseMarkdownCommand: (markdown: string) => Promise<string>
@@ -62,6 +65,7 @@ export type ElectronAPI = {
   storeLength: (name: string) => Promise<number>
 
   getWindowCount: () => Promise<number>
+  getWindowID: () => Promise<string>
   onMenuCommand: (cb: (id: string) => void) => () => void
   onDeepLink: (cb: (urls: string[]) => void) => () => void
 
