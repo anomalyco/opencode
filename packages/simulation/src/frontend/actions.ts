@@ -2,6 +2,7 @@ import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
+import { SimulationPng } from "./png"
 import { SimulationTrace } from "./trace"
 
 export type Action = SimulationProtocol.Frontend.Action
@@ -120,6 +121,11 @@ export function state(harness: Harness) {
     elements: elements(harness.renderer),
     actions: actions(harness.renderer),
   }
+}
+
+export async function render(harness: Harness) {
+  await harness.renderOnce()
+  return SimulationPng.screenshot(harness.renderer)
 }
 
 export async function execute(harness: Harness, action: Action) {

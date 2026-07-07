@@ -14,7 +14,7 @@ function parseRequest(input: string | Buffer) {
 async function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) {
   switch (request.method) {
     case "ui.render":
-      return
+      return SimulationActions.render(harness)
     case "ui.state": {
       const result = SimulationActions.state(harness)
       SimulationTrace.add("ui.state", { elements: result.elements.length, actions: result.actions.length })
