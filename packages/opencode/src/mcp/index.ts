@@ -337,6 +337,10 @@ const layer = Layer.effect(
       }
     })
 
+    // Tracks the last stderr output from each MCP server for diagnostics.
+    // Keyed by server name; cleared on successful connection.
+    const stderrBuffers = new Map<string, string>()
+
     const connectLocal = Effect.fn("MCP.connectLocal")(function* (
       key: string,
       mcp: ConfigMCPV1.Info & { type: "local" },
@@ -356,15 +360,31 @@ const layer = Layer.effect(
         },
       })
 
+      // Capture stderr from the MCP server process for diagnostics.
+      // Without this, startup errors (e.g. missing files, bad config) are
+      // silently lost and the user only sees "Connection closed".
+      const MAX_STDERR_BYTES = 4096
+      let stderrTail = ""
+      const stderrStream = transport.stderr
+      if (stderrStream) {
+        stderrStream.on("data", (chunk: Buffer) => {
+          const text = chunk.toString()
+          stderrTail = (stderrTail + text).slice(-MAX_STDERR_BYTES)
+        })
+      }
+
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       return yield* connectTransport(transport, connectTimeout).pipe(
-        Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
-          client,
-          status: { status: "connected" },
-        })),
+        Effect.map((client): { client: MCPClient | undefined; status: Status } => {
+          stderrBuffers.delete(key)
+          return { client, status: { status: "connected" } }
+        }),
         Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
           const msg = error instanceof Error ? error.message : String(error)
-          return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
+          const stderr = stderrTail.trim()
+          if (stderr) stderrBuffers.set(key, stderr)
+          const detail = stderr ? `${msg}\nServer stderr: ${stderr}` : msg
+          return Effect.succeed({ client: undefined, status: { status: "failed", error: detail } })
         }),
       )
     })
@@ -445,9 +465,11 @@ const layer = Layer.effect(
         delete s.clients[name]
         delete s.defs[name]
         delete s.instructions[name]
-        s.status[name] = { status: "failed", error: "Connection closed" }
+        const stderr = stderrBuffers.get(name)?.trim()
+        const error = stderr ? `Connection closed\nServer stderr: ${stderr}` : "Connection closed"
+        s.status[name] = { status: "failed", error }
         bridge.fork(
-          Effect.logWarning("MCP connection closed", { server: name }).pipe(
+          Effect.logWarning("MCP connection closed", { server: name, ...(stderr ? { stderr } : {}) }).pipe(
             Effect.andThen(events.publish(ToolsChanged, { server: name })),
             Effect.ignore,
           ),
