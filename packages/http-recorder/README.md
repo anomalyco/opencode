@@ -85,9 +85,13 @@ HttpRecorder.layer(name, options?)
 HttpRecorder.layerFetch(name, options?)
 HttpRecorder.layerSocket(name, options?)
 HttpRecorder.layerWebSocketConstructor(name, options?)
+HttpRecorder.hasCassetteSync(name, options?)
+HttpRecorder.removeCassetteSync(name, options?)
 ```
 
 That is the complete runtime API. `layer` decorates an application-provided `HttpClient`; `layerFetch` is the convenience layer that supplies Effect's fetch client. `layerWebSocketConstructor` decorates Effect's `Socket.WebSocketConstructor`, recording every dynamically selected URL and protocol. `layerSocket` is the lower-level transport-neutral decorator for an application-provided `Socket.Socket`.
+
+Use `hasCassetteSync` when registering fixture-gated tests. `removeCassetteSync` explicitly removes one cassette before a focused refresh; removing a missing cassette is a no-op. Both helpers use the same cassette-name validation and default directory as the recorder layers.
 
 Use `layer` to record through another Effect HTTP transport:
 

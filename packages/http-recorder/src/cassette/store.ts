@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Layer, Schema, Semaphore } from "effect"
-import { existsSync } from "node:fs"
+import { existsSync, rmSync } from "node:fs"
 import path from "node:path"
 import { secretFindings, SecretFindingSchema, type SecretFinding } from "../redaction/secrets.js"
 import { CassetteSchema, encodeCassette, type Cassette, type CassetteMetadata, type Interaction } from "./model.js"
@@ -62,6 +62,9 @@ const cassettePath = (directory: string, name: string) => {
 
 export const hasCassetteSync = (name: string, options: { readonly directory?: string } = {}) =>
   existsSync(cassettePath(options.directory ?? DEFAULT_RECORDINGS_DIR, name))
+
+export const removeCassetteSync = (name: string, options: { readonly directory?: string } = {}) =>
+  rmSync(cassettePath(options.directory ?? DEFAULT_RECORDINGS_DIR, name), { force: true })
 
 const buildCassette = (
   name: string,

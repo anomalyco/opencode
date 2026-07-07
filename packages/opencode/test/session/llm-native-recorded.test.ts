@@ -5,7 +5,6 @@ import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
-import { existsSync, rmSync } from "node:fs"
 import path from "node:path"
 import z from "zod"
 import { Auth } from "@/auth"
@@ -222,7 +221,9 @@ function isSelected(scenario: RecordedScenario) {
 }
 
 const canRun = (scenario: RecordedScenario) =>
-  shouldRecord ? scenario.canRecord() : existsSync(path.join(FIXTURES_DIR, `${scenario.cassette}.json`))
+  shouldRecord
+    ? scenario.canRecord()
+    : HttpRecorder.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
 
 const recordError = (scenario: RecordedScenario) =>
   scenario.id === "openai-oauth"
@@ -272,7 +273,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
   }
   if (shouldRecord) {
     if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
-    rmSync(path.join(FIXTURES_DIR, `${scenario.cassette}.json`), { force: true })
+    HttpRecorder.removeCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
   }
   const recordedHttp = HttpRecorder.layerFetch(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
   return AppNodeBuilder.build(LayerNode.group([Provider.node, LLM.node]), [

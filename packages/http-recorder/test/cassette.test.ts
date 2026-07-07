@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
 import { existsSync, readdirSync, writeFileSync } from "node:fs"
 import type { Interaction } from "../src/cassette/model"
+import { HttpRecorder } from "../src"
 import { Service, hasCassetteSync, memory } from "../src/cassette/store"
 import { cassetteLayer } from "../src/http/recorder"
 import { failureText, post, readCassette, runFileCassette, seedCassetteDirectory, tempDirectory } from "./support"
@@ -133,6 +134,26 @@ describe("cassette", () => {
     using directory = tempDirectory("http-recorder-path-")
     expect(() => hasCassetteSync("../outside", { directory: directory.path })).toThrow("Invalid cassette name")
     expect(() => hasCassetteSync("C:\\outside", { directory: directory.path })).toThrow("Invalid cassette name")
+  })
+
+  test("public cassette lifecycle helpers check and remove a recording", async () => {
+    using directory = tempDirectory("http-recorder-lifecycle-")
+    const options = { directory: directory.path }
+    expect(HttpRecorder.hasCassetteSync("nested/example", options)).toBe(false)
+
+    await seedCassetteDirectory(directory.path, "nested/example", [
+      {
+        transport: "http",
+        request: { method: "GET", url: "https://example.test", headers: {}, body: "" },
+        response: { status: 200, headers: {}, body: "safe" },
+      },
+    ])
+    expect(HttpRecorder.hasCassetteSync("nested/example", options)).toBe(true)
+
+    HttpRecorder.removeCassetteSync("nested/example", options)
+    expect(HttpRecorder.hasCassetteSync("nested/example", options)).toBe(false)
+    expect(() => HttpRecorder.removeCassetteSync("nested/example", options)).not.toThrow()
+    expect(() => HttpRecorder.removeCassetteSync("../outside", options)).toThrow("Invalid cassette name")
   })
 
   test("Cassette.list enumerates recorded cassette names", async () => {

@@ -34,6 +34,8 @@ const options: HttpRecorder.RecorderOptions = { match: () => true, redact: { jso
 const socketOptions: HttpRecorder.SocketRecorderOptions = { redact: { jsonFields: ["access_token"] } }
 HttpRecorder.layer("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient>
 HttpRecorder.layerFetch("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient>
+HttpRecorder.hasCassetteSync("consumer", { directory: "recordings" }) satisfies boolean
+HttpRecorder.removeCassetteSync("consumer", { directory: "recordings" })
 HttpRecorder.layerSocket("consumer/socket", socketOptions).pipe(
   Layer.provide(NodeSocket.layerWebSocket("wss://example.test")),
 ) satisfies Layer.Layer<Socket.Socket>
@@ -54,7 +56,7 @@ if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) {
 }
 
 const namespace = Object.keys(HttpRecorder).sort()
-if (JSON.stringify(namespace) !== JSON.stringify(["layer", "layerFetch", "layerSocket", "layerWebSocketConstructor"])) {
+if (JSON.stringify(namespace) !== JSON.stringify(["hasCassetteSync", "layer", "layerFetch", "layerSocket", "layerWebSocketConstructor", "removeCassetteSync"])) {
   throw new Error(\`Unexpected HttpRecorder exports: \${namespace}\`)
 }
 `,

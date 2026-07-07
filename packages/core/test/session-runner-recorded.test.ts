@@ -39,7 +39,6 @@ import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
-import { rmSync } from "node:fs"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 
@@ -47,7 +46,7 @@ const cassetteName = "session-runner/openai-chat-streams-text"
 const cassetteDirectory = path.resolve(import.meta.dir, "fixtures/recordings")
 if (process.env.RECORD === "true") {
   if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
-  rmSync(path.join(cassetteDirectory, `${cassetteName}.json`), { force: true })
+  HttpRecorder.removeCassetteSync(cassetteName, { directory: cassetteDirectory })
 }
 const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDirectory })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))

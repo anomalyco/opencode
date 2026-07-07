@@ -1,6 +1,5 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { Layer } from "effect"
-import { existsSync, rmSync } from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "../src/route"
@@ -61,7 +60,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
   recordedEffectGroup<RecordedEnv, never, RecordedTestsOptions, RecordedCaseOptions>({
     duplicateLabel: "recorded cassette",
     options,
-    cassetteExists: (cassette) => existsSync(path.join(FIXTURES_DIR, `${cassette}.json`)),
+    cassetteExists: (cassette) => HttpRecorder.hasCassetteSync(cassette, { directory: FIXTURES_DIR }),
     layer: ({ cassette, metadata, options, caseOptions, recording }) => {
       const recorderOptions = mergeOptions(options.options, caseOptions.options)
       const recorderMetadata = {
@@ -70,7 +69,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
       }
       if (recording) {
         if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
-        rmSync(path.join(FIXTURES_DIR, `${cassette}.json`), { force: true })
+        HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
       }
       const requestExecutor = RequestExecutor.layer.pipe(
         Layer.provide(
