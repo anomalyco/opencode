@@ -55,6 +55,7 @@ import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { PluginInternal } from "@opencode-ai/core/plugin/internal"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -225,10 +226,18 @@ const config = Layer.succeed(
       ]),
   }),
 )
+let pluginReady: Effect.Effect<void> = Effect.void
+const pluginInternal = Layer.succeed(
+  PluginInternal.Service,
+  PluginInternal.Service.of({
+    ready: Effect.suspend(() => pluginReady),
+  }),
+)
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
   [SessionRunnerModel.node, models],
+  [PluginInternal.node, pluginInternal],
   [SystemContextRegistry.node, systemContext],
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
@@ -265,6 +274,7 @@ const it = testEffect(
       ToolRegistry.toolsNode,
       echoNode,
       SessionRunnerModel.node,
+      PluginInternal.node,
       SystemContextRegistry.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
@@ -278,6 +288,7 @@ const it = testEffect(
       [LayerNodePlatform.llmClient, client],
       [PermissionV2.node, permission],
       [SessionRunnerModel.node, models],
+      [PluginInternal.node, pluginInternal],
       [SystemContextRegistry.node, systemContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
       [SkillGuidance.node, skillGuidance],
@@ -317,6 +328,7 @@ const setup = Effect.gen(function* () {
   systemUnavailable = false
   systemLoadHook = Effect.void
   modelResolveHook = Effect.void
+  pluginReady = Effect.void
   currentModel = model
   skillBaselines.clear()
   responses = undefined
@@ -652,6 +664,46 @@ describe("SessionRunnerLLM", () => {
         { role: "user", content: [{ type: "text", text: "Second" }] },
       ])
       expect(yield* session.messages({ sessionID })).toHaveLength(2)
+    }),
+  )
+
+  it.effect("waits for internal plugins before materializing the first turn", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const ready = yield* Deferred.make<void>()
+      const waiting = yield* Deferred.make<void>()
+      pluginReady = Deferred.succeed(waiting, undefined).pipe(Effect.andThen(Deferred.await(ready)))
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Wait for plugins" }), resume: false })
+      requests.length = 0
+
+      const running = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(waiting)
+      yield* Effect.yieldNow
+
+      expect(requests).toHaveLength(0)
+
+      yield* Deferred.succeed(ready, undefined)
+      yield* Fiber.join(running)
+
+      expect(requests).toHaveLength(1)
+    }),
+  )
+
+  it.effect("surfaces internal plugin boot failures before streaming", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const failure = new Error("plugin boot failed")
+      pluginReady = Effect.die(failure)
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Fail before streaming" }), resume: false })
+      requests.length = 0
+
+      const exit = yield* session.resume(sessionID).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(failure)
+      expect(requests).toHaveLength(0)
     }),
   )
 

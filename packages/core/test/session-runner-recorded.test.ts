@@ -11,6 +11,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
+import { PluginInternal } from "@opencode-ai/core/plugin/internal"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -72,10 +73,17 @@ const systemContext = AppNodeBuilder.build(SystemContextRegistry.node)
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const pluginInternal = Layer.succeed(
+  PluginInternal.Service,
+  PluginInternal.Service.of({
+    ready: Effect.void,
+  }),
+)
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
   [SessionRunnerModel.node, models],
+  [PluginInternal.node, pluginInternal],
   [SystemContextRegistry.node, systemContext],
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
@@ -109,6 +117,7 @@ const it = testEffect(
       AgentV2.node,
       ToolRegistry.node,
       SessionRunnerModel.node,
+      PluginInternal.node,
       SystemContextRegistry.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
@@ -122,6 +131,7 @@ const it = testEffect(
       [PermissionV2.node, permission],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
       [SessionRunnerModel.node, models],
+      [PluginInternal.node, pluginInternal],
       [SystemContextRegistry.node, systemContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
       [SkillGuidance.node, skillGuidance],
