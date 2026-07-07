@@ -32,7 +32,7 @@ test("exposes every standard HTTP API group", () => {
     "vcs",
     "debug",
   ])
-  expect(Object.keys(client.debug)).toEqual(["location"])
+  expect(Object.keys(client.debug)).toEqual(["location", "evictLocation"])
   expect(Object.keys(client.message)).toEqual(["list"])
   expect(Object.keys(client.integration)).toEqual([
     "list",
