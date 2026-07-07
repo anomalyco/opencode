@@ -47,6 +47,7 @@ type Settings = {
   readonly auto: boolean
   readonly buffer: number
   readonly tokens: number
+  readonly maxRequestBytes?: number
 }
 
 type Dependencies = {
@@ -64,7 +65,9 @@ type Input = {
   readonly request: LLMRequest
 }
 
-const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
+const stringify = (value: unknown) => JSON.stringify(value)
+const estimate = (value: unknown) => Token.estimate(stringify(value))
+const byteLength = (value: string) => new TextEncoder().encode(value).length
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -113,6 +116,7 @@ const settings = (documents: readonly Config.Entry[]) => {
       auto: current.auto ?? result.auto,
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
+      maxRequestBytes: current.max_request_bytes ?? result.maxRequestBytes,
     }),
     { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
   )
@@ -220,9 +224,14 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    const payload = stringify({
+      system: input.request.system,
+      messages: input.request.messages,
+      tools: input.request.tools,
+    })
     if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
+      Token.estimate(payload) <= context - Math.max(output, config.buffer) &&
+      (config.maxRequestBytes === undefined || byteLength(payload) <= config.maxRequestBytes)
     )
       return false
     return yield* compactAfterOverflow(input)

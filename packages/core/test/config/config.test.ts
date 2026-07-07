@@ -340,6 +340,7 @@ describe("Config", () => {
                   prune: false,
                   keep: { tokens: 2000 },
                   buffer: 10000,
+                  max_request_bytes: 1048576,
                 },
                 skills: ["./skills", "~/shared-skills", "https://example.com/.well-known/skills/"],
                 instructions: ["CONTRIBUTING.md", ".cursor/rules/*.md", "https://example.com/shared-rules.md"],
@@ -426,6 +427,7 @@ describe("Config", () => {
               prune: false,
               keep: { tokens: 2000 },
               buffer: 10000,
+              max_request_bytes: 1048576,
             })
             expect(documents[0]?.info.skills).toEqual([
               "./skills",
