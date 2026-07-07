@@ -206,7 +206,7 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..8a0200720454eac591e174f6a948212a
      }
      /**
 diff --git a/dist/cjs/client/streamableHttp.d.ts b/dist/cjs/client/streamableHttp.d.ts
-index 6035b24625d7e7227a71a57fb8d8beccc2cea2f4..a58869004a49b18ddacca2d51b96a39e6e538dcf 100644
+index 6035b24625d7e7227a71a57fb8d8beccc2cea2f4..f974cec5cb120acba0ec9ad275106db9ec132245 100644
 --- a/dist/cjs/client/streamableHttp.d.ts
 +++ b/dist/cjs/client/streamableHttp.d.ts
 @@ -113,6 +113,11 @@ export declare class StreamableHTTPClientTransport implements Transport {
@@ -217,36 +217,32 @@ index 6035b24625d7e7227a71a57fb8d8beccc2cea2f4..a58869004a49b18ddacca2d51b96a39e
 +     * Called after an expired session is reinitialized and before blocked requests resume.
 +     * `startRequest` must invoke the operation synchronously so its transport send can bypass recovery.
 +     */
-+    onsessionrecovered?: (startRequest: <T>(operation: () => Promise<T>) => Promise<T>, triggeringMessage: JSONRPCMessage | JSONRPCMessage[]) => Promise<((message: JSONRPCMessage | JSONRPCMessage[]) => boolean) | void>;
++    onsessionrecovered?: (startRequest: <T>(operation: () => Promise<T>) => Promise<T>) => Promise<void>;
      constructor(url: URL, opts?: StreamableHTTPClientTransportOptions);
      private _authThenStart;
      private _commonHeaders;
 diff --git a/dist/cjs/client/streamableHttp.js b/dist/cjs/client/streamableHttp.js
-index a29a7d3a0f14d9cd800ef5b296485237350c666f..fe6dd29e24f3ec618f6ca05a9d9dc7ebe6caf88f 100644
+index a29a7d3a0f14d9cd800ef5b296485237350c666f..ad1ad923b28f024a37433f2c89d6c15e983cf728 100644
 --- a/dist/cjs/client/streamableHttp.js
 +++ b/dist/cjs/client/streamableHttp.js
-@@ -290,7 +290,61 @@ class StreamableHTTPClientTransport {
+@@ -290,7 +290,48 @@ class StreamableHTTPClientTransport {
          this.onclose?.();
      }
      async send(message, options) {
 +        const isSessionRecoveryRequest = this._sessionRecoveryRequest === true;
 +        return this._send(message, options, false, isSessionRecoveryRequest);
 +    }
-+    async _recoverSession(expiredSessionId, triggeringMessage) {
++    async _recoverSession(expiredSessionId) {
 +        if (this._sessionRecovery) {
-+            const handles = await this._sessionRecovery;
-+            return handles?.(triggeringMessage) !== true;
++            await this._sessionRecovery;
++            return;
 +        }
-+        if (this._sessionId !== expiredSessionId) {
-+            const handles = this._sessionRecoveryResult?.expiredSessionId === expiredSessionId
-+                ? this._sessionRecoveryResult.handles
-+                : undefined;
-+            return handles?.(triggeringMessage) !== true;
-+        }
++        if (this._sessionId !== expiredSessionId)
++            return;
 +        this._sessionId = undefined;
 +        this._sessionRecovery = Promise.resolve().then(async () => {
 +            await this.onsessionexpired?.();
-+            return this.onsessionrecovered?.(operation => {
++            await this.onsessionrecovered?.(operation => {
 +                this._sessionRecoveryRequest = true;
 +                try {
 +                    return operation();
@@ -254,11 +250,10 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..fe6dd29e24f3ec618f6ca05a9d9dc7eb
 +                finally {
 +                    this._sessionRecoveryRequest = false;
 +                }
-+            }, triggeringMessage);
++            });
 +        });
-         try {
-+            const handles = await this._sessionRecovery;
-+            this._sessionRecoveryResult = { expiredSessionId, handles };
++        try {
++            await this._sessionRecovery;
 +        }
 +        catch (error) {
 +            this._sessionId = undefined;
@@ -268,26 +263,18 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..fe6dd29e24f3ec618f6ca05a9d9dc7eb
 +        finally {
 +            this._sessionRecovery = undefined;
 +        }
-+        return true;
 +    }
 +    async _send(message, options, isSessionRetry, isSessionRecoveryRequest) {
-+        try {
+         try {
 +            if (this._sessionRecovery && !isSessionRecoveryRequest && !(0, types_js_1.isInitializeRequest)(message) && !(0, types_js_1.isInitializedNotification)(message)) {
-+                const handles = await this._sessionRecovery;
-+                if (options?.isRequestActive?.() === false) {
-+                    if (handles?.(message) === true)
-+                        await this.close();
++                await this._sessionRecovery;
++                if (options?.isRequestActive?.() === false)
 +                    throw new Error('Request is no longer active');
-+                }
-+                if (handles?.(message) === true && (0, types_js_1.isJSONRPCRequest)(message)) {
-+                    this.onmessage?.({ jsonrpc: '2.0', id: message.id, result: {} });
-+                    return;
-+                }
 +            }
              const { resumptionToken, onresumptiontoken } = options || {};
              if (resumptionToken) {
                  // If we have at last event ID, we need to reconnect the SSE stream
-@@ -298,6 +352,7 @@ class StreamableHTTPClientTransport {
+@@ -298,6 +339,7 @@ class StreamableHTTPClientTransport {
                  return;
              }
              const headers = await this._commonHeaders();
@@ -295,7 +282,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..fe6dd29e24f3ec618f6ca05a9d9dc7eb
              headers.set('content-type', 'application/json');
              headers.set('accept', 'application/json, text/event-stream');
              const init = {
-@@ -310,11 +365,26 @@ class StreamableHTTPClientTransport {
+@@ -310,11 +352,17 @@ class StreamableHTTPClientTransport {
              const response = await (this._fetch ?? fetch)(this._url, init);
              // Handle session ID received during initialization
              const sessionId = response.headers.get('mcp-session-id');
@@ -306,24 +293,15 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..fe6dd29e24f3ec618f6ca05a9d9dc7eb
              if (!response.ok) {
                  const text = await response.text().catch(() => null);
 +                if (response.status === 404 && requestSessionId && !isSessionRetry && !isSessionRecoveryRequest && !(0, types_js_1.isInitializedNotification)(message)) {
-+                    const shouldRetry = await this._recoverSession(requestSessionId, message);
-+                    if (options?.isRequestActive?.() === false) {
-+                        if (!shouldRetry)
-+                            await this.close();
++                    await this._recoverSession(requestSessionId);
++                    if (options?.isRequestActive?.() === false)
 +                        throw new Error('Request is no longer active');
-+                    }
-+                    if (shouldRetry) {
-+                        return this._send(message, options, true, isSessionRecoveryRequest);
-+                    }
-+                    if ((0, types_js_1.isJSONRPCRequest)(message)) {
-+                        this.onmessage?.({ jsonrpc: '2.0', id: message.id, result: {} });
-+                        return;
-+                    }
++                    return this._send(message, options, true, isSessionRecoveryRequest);
 +                }
                  if (response.status === 401 && this._authProvider) {
                      // Prevent infinite recursion when server returns 401 after successful auth
                      if (this._hasCompletedAuthFlow) {
-@@ -335,7 +405,7 @@ class StreamableHTTPClientTransport {
+@@ -335,7 +383,7 @@ class StreamableHTTPClientTransport {
                      // Mark that we completed auth flow
                      this._hasCompletedAuthFlow = true;
                      // Purposely _not_ awaited, so we don't call onerror twice
@@ -332,7 +310,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..fe6dd29e24f3ec618f6ca05a9d9dc7eb
                  }
                  if (response.status === 403 && this._authProvider) {
                      const { resourceMetadataUrl, scope, error } = (0, auth_js_1.extractWWWAuthenticateParams)(response);
-@@ -362,7 +432,7 @@ class StreamableHTTPClientTransport {
+@@ -362,7 +410,7 @@ class StreamableHTTPClientTransport {
                          if (result !== 'AUTHORIZED') {
                              throw new auth_js_1.UnauthorizedError();
                          }
@@ -559,7 +537,7 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..98c214181d9c4c1b197c53dfa7905978
      }
      /**
 diff --git a/dist/esm/client/streamableHttp.d.ts b/dist/esm/client/streamableHttp.d.ts
-index 6035b24625d7e7227a71a57fb8d8beccc2cea2f4..a58869004a49b18ddacca2d51b96a39e6e538dcf 100644
+index 6035b24625d7e7227a71a57fb8d8beccc2cea2f4..f974cec5cb120acba0ec9ad275106db9ec132245 100644
 --- a/dist/esm/client/streamableHttp.d.ts
 +++ b/dist/esm/client/streamableHttp.d.ts
 @@ -113,6 +113,11 @@ export declare class StreamableHTTPClientTransport implements Transport {
@@ -570,12 +548,12 @@ index 6035b24625d7e7227a71a57fb8d8beccc2cea2f4..a58869004a49b18ddacca2d51b96a39e
 +     * Called after an expired session is reinitialized and before blocked requests resume.
 +     * `startRequest` must invoke the operation synchronously so its transport send can bypass recovery.
 +     */
-+    onsessionrecovered?: (startRequest: <T>(operation: () => Promise<T>) => Promise<T>, triggeringMessage: JSONRPCMessage | JSONRPCMessage[]) => Promise<((message: JSONRPCMessage | JSONRPCMessage[]) => boolean) | void>;
++    onsessionrecovered?: (startRequest: <T>(operation: () => Promise<T>) => Promise<T>) => Promise<void>;
      constructor(url: URL, opts?: StreamableHTTPClientTransportOptions);
      private _authThenStart;
      private _commonHeaders;
 diff --git a/dist/esm/client/streamableHttp.js b/dist/esm/client/streamableHttp.js
-index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce8707d127fb6 100644
+index 624172aa24ae255a67c083f9c19053343e4a0581..732c76797b6462a4791280d23de67aa7669ab681 100644
 --- a/dist/esm/client/streamableHttp.js
 +++ b/dist/esm/client/streamableHttp.js
 @@ -1,5 +1,5 @@
@@ -585,28 +563,24 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce870
  import { auth, extractWWWAuthenticateParams, UnauthorizedError } from './auth.js';
  import { EventSourceParserStream } from 'eventsource-parser/stream';
  // Default reconnection options for StreamableHTTP connections
-@@ -286,7 +286,61 @@ export class StreamableHTTPClientTransport {
+@@ -286,7 +286,48 @@ export class StreamableHTTPClientTransport {
          this.onclose?.();
      }
      async send(message, options) {
 +        const isSessionRecoveryRequest = this._sessionRecoveryRequest === true;
 +        return this._send(message, options, false, isSessionRecoveryRequest);
 +    }
-+    async _recoverSession(expiredSessionId, triggeringMessage) {
++    async _recoverSession(expiredSessionId) {
 +        if (this._sessionRecovery) {
-+            const handles = await this._sessionRecovery;
-+            return handles?.(triggeringMessage) !== true;
++            await this._sessionRecovery;
++            return;
 +        }
-+        if (this._sessionId !== expiredSessionId) {
-+            const handles = this._sessionRecoveryResult?.expiredSessionId === expiredSessionId
-+                ? this._sessionRecoveryResult.handles
-+                : undefined;
-+            return handles?.(triggeringMessage) !== true;
-+        }
++        if (this._sessionId !== expiredSessionId)
++            return;
 +        this._sessionId = undefined;
 +        this._sessionRecovery = Promise.resolve().then(async () => {
 +            await this.onsessionexpired?.();
-+            return this.onsessionrecovered?.(operation => {
++            await this.onsessionrecovered?.(operation => {
 +                this._sessionRecoveryRequest = true;
 +                try {
 +                    return operation();
@@ -614,11 +588,10 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce870
 +                finally {
 +                    this._sessionRecoveryRequest = false;
 +                }
-+            }, triggeringMessage);
++            });
 +        });
-         try {
-+            const handles = await this._sessionRecovery;
-+            this._sessionRecoveryResult = { expiredSessionId, handles };
++        try {
++            await this._sessionRecovery;
 +        }
 +        catch (error) {
 +            this._sessionId = undefined;
@@ -628,26 +601,18 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce870
 +        finally {
 +            this._sessionRecovery = undefined;
 +        }
-+        return true;
 +    }
 +    async _send(message, options, isSessionRetry, isSessionRecoveryRequest) {
-+        try {
+         try {
 +            if (this._sessionRecovery && !isSessionRecoveryRequest && !isInitializeRequest(message) && !isInitializedNotification(message)) {
-+                const handles = await this._sessionRecovery;
-+                if (options?.isRequestActive?.() === false) {
-+                    if (handles?.(message) === true)
-+                        await this.close();
++                await this._sessionRecovery;
++                if (options?.isRequestActive?.() === false)
 +                    throw new Error('Request is no longer active');
-+                }
-+                if (handles?.(message) === true && isJSONRPCRequest(message)) {
-+                    this.onmessage?.({ jsonrpc: '2.0', id: message.id, result: {} });
-+                    return;
-+                }
 +            }
              const { resumptionToken, onresumptiontoken } = options || {};
              if (resumptionToken) {
                  // If we have at last event ID, we need to reconnect the SSE stream
-@@ -294,6 +348,7 @@ export class StreamableHTTPClientTransport {
+@@ -294,6 +335,7 @@ export class StreamableHTTPClientTransport {
                  return;
              }
              const headers = await this._commonHeaders();
@@ -655,7 +620,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce870
              headers.set('content-type', 'application/json');
              headers.set('accept', 'application/json, text/event-stream');
              const init = {
-@@ -306,11 +361,26 @@ export class StreamableHTTPClientTransport {
+@@ -306,11 +348,17 @@ export class StreamableHTTPClientTransport {
              const response = await (this._fetch ?? fetch)(this._url, init);
              // Handle session ID received during initialization
              const sessionId = response.headers.get('mcp-session-id');
@@ -666,24 +631,15 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce870
              if (!response.ok) {
                  const text = await response.text().catch(() => null);
 +                if (response.status === 404 && requestSessionId && !isSessionRetry && !isSessionRecoveryRequest && !isInitializedNotification(message)) {
-+                    const shouldRetry = await this._recoverSession(requestSessionId, message);
-+                    if (options?.isRequestActive?.() === false) {
-+                        if (!shouldRetry)
-+                            await this.close();
++                    await this._recoverSession(requestSessionId);
++                    if (options?.isRequestActive?.() === false)
 +                        throw new Error('Request is no longer active');
-+                    }
-+                    if (shouldRetry) {
-+                        return this._send(message, options, true, isSessionRecoveryRequest);
-+                    }
-+                    if (isJSONRPCRequest(message)) {
-+                        this.onmessage?.({ jsonrpc: '2.0', id: message.id, result: {} });
-+                        return;
-+                    }
++                    return this._send(message, options, true, isSessionRecoveryRequest);
 +                }
                  if (response.status === 401 && this._authProvider) {
                      // Prevent infinite recursion when server returns 401 after successful auth
                      if (this._hasCompletedAuthFlow) {
-@@ -331,7 +401,7 @@ export class StreamableHTTPClientTransport {
+@@ -331,7 +379,7 @@ export class StreamableHTTPClientTransport {
                      // Mark that we completed auth flow
                      this._hasCompletedAuthFlow = true;
                      // Purposely _not_ awaited, so we don't call onerror twice
@@ -692,7 +648,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..3c33e3406ac3f4728d4672fd958ce870
                  }
                  if (response.status === 403 && this._authProvider) {
                      const { resourceMetadataUrl, scope, error } = extractWWWAuthenticateParams(response);
-@@ -358,7 +428,7 @@ export class StreamableHTTPClientTransport {
+@@ -358,7 +406,7 @@ export class StreamableHTTPClientTransport {
                          if (result !== 'AUTHORIZED') {
                              throw new UnauthorizedError();
                          }

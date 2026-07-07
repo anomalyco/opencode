@@ -676,7 +676,7 @@ test("does not duplicate an MCP resource subscription started during recovery", 
   )
 })
 
-test("closes a recovered MCP connection when its restored subscription is interrupted", async () => {
+test("does not create an interrupted MCP resource subscription during recovery", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -686,45 +686,23 @@ test("closes a recovered MCP connection when its restored subscription is interr
           new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
           import.meta.dir,
         )
-        const firstExpired = yield* Deferred.make<void>()
-        const secondExpired = yield* Deferred.make<void>()
-        const allowFirstExpired = yield* Deferred.make<void>()
-        const allowSecondExpired = yield* Deferred.make<void>()
-        const restorationStarted = yield* Deferred.make<void>()
-        const allowRestoration = yield* Deferred.make<void>()
-        const closed = yield* Deferred.make<void>()
-        let expiredRequests = 0
+        const expired = yield* Deferred.make<void>()
+        const allowExpired = yield* Deferred.make<void>()
         server.state.onExpiredRequest = () => {
-          expiredRequests += 1
-          if (expiredRequests === 1) {
-            Deferred.doneUnsafe(firstExpired, Exit.void)
-            return Effect.runPromise(Deferred.await(allowFirstExpired))
-          }
-          Deferred.doneUnsafe(secondExpired, Exit.void)
-          return Effect.runPromise(Deferred.await(allowSecondExpired))
+          Deferred.doneUnsafe(expired, Exit.void)
+          return Effect.runPromise(Deferred.await(allowExpired))
         }
-        server.state.onSubscription = () => {
-          Deferred.doneUnsafe(restorationStarted, Exit.void)
-          return Effect.runPromise(Deferred.await(allowRestoration))
-        }
-        connection.onClose(() => Deferred.doneUnsafe(closed, Exit.void))
-        yield* Effect.promise(() => server.restart(2))
+        yield* Effect.promise(() => server.restart())
 
-        const resources = yield* connection.resources().pipe(Effect.forkScoped)
-        yield* Deferred.await(firstExpired)
         const subscription = yield* connection
           .subscribeResource({ uri: "docs://readme" }, () => {})
           .pipe(Effect.forkScoped)
-        yield* Deferred.await(secondExpired)
-        yield* Deferred.succeed(allowFirstExpired, undefined)
-        yield* Deferred.await(restorationStarted)
+        yield* Deferred.await(expired)
         yield* Fiber.interrupt(subscription)
-        yield* Deferred.succeed(allowRestoration, undefined)
-        yield* Fiber.join(resources)
-        yield* Deferred.succeed(allowSecondExpired, undefined)
+        yield* Deferred.succeed(allowExpired, undefined)
 
-        yield* Deferred.await(closed)
-        expect(server.state.subscriptions).toEqual(["docs://readme"])
+        expect(yield* connection.resources()).toEqual([])
+        expect(server.state.subscriptions).toEqual([])
       }),
     ),
   )

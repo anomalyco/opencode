@@ -19,7 +19,6 @@ import {
   ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
-  isJSONRPCRequest,
   PromptListChangedNotificationSchema,
   PromptSchema,
   ResourceListChangedNotificationSchema,
@@ -247,58 +246,7 @@ export const connect = Effect.fnUntraced(function* (
     )
     const catalogTimeout = config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT
     const executionTimeout = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
-    const resourceSubscriptions = new Map<string, Set<() => void>>()
-    const resourceListChangedCallbacks = new Set<() => void>()
-    const resourceSubscriptionLock = Semaphore.makeUnsafe(1)
-    const notify = (callbacks: Iterable<() => void>) => {
-      for (const callback of callbacks) {
-        try {
-          callback()
-        } catch {}
-      }
-    }
-    client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
-      notify(resourceSubscriptions.get(notification.params.uri) ?? []),
-    )
-    client.setNotificationHandler(ResourceListChangedNotificationSchema, () => notify(resourceListChangedCallbacks))
-    if (transport instanceof StreamableHTTPClientTransport) {
-      transport.onsessionrecovered = async (request, triggeringMessage) => {
-        notify(resourceListChangedCallbacks)
-        if (!client.getServerCapabilities()?.resources?.subscribe) return undefined
-        const triggeringSubscription =
-          isJSONRPCRequest(triggeringMessage) &&
-          triggeringMessage.method === "resources/subscribe" &&
-          typeof triggeringMessage.params?.uri === "string"
-            ? triggeringMessage.params.uri
-            : undefined
-        const restored = new Set(
-          await Effect.runPromise(
-            Effect.forEach(resourceSubscriptions.keys(), (uri) => {
-              if (uri === triggeringSubscription) return Effect.succeed(undefined)
-              return Effect.tryPromise({
-                try: (signal) => request(() => client.subscribeResource({ uri }, { signal, timeout: catalogTimeout })),
-                catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-              }).pipe(
-                Effect.tapError((error) =>
-                  Effect.logWarning("failed to restore MCP resource subscription", {
-                    server,
-                    uri,
-                    error: error.message,
-                  }),
-                ),
-                Effect.as(uri),
-              )
-            }),
-          ),
-        )
-        return (message) =>
-          !Array.isArray(message) &&
-          isJSONRPCRequest(message) &&
-          message.method === "resources/subscribe" &&
-          typeof message.params?.uri === "string" &&
-          restored.has(message.params.uri)
-      }
-    }
+    const subscriptions = makeResourceSubscriptions(client, transport, server, catalogTimeout)
     return {
       instructions: client.getInstructions()?.trim() || undefined,
       tools: () =>
@@ -429,66 +377,7 @@ export const connect = Effect.fnUntraced(function* (
             ),
           }
         }),
-      subscribeResource: (input, callback) =>
-        Effect.acquireRelease(
-          resourceSubscriptionLock.withPermit(
-            Effect.gen(function* () {
-              if (!client.getServerCapabilities()?.resources?.subscribe) return undefined
-              const listener = () => callback()
-              const current = resourceSubscriptions.get(input.uri)
-              if (current) current.add(listener)
-              if (!current) {
-                const listeners = new Set([listener])
-                resourceSubscriptions.set(input.uri, listeners)
-                yield* Effect.tryPromise({
-                  try: (signal) => client.subscribeResource({ uri: input.uri }, { signal, timeout: catalogTimeout }),
-                  catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-                }).pipe(
-                  Effect.tapError((error) =>
-                    Effect.logWarning("failed to subscribe to MCP resource", {
-                      server,
-                      uri: input.uri,
-                      error: error.message,
-                    }),
-                  ),
-                  Effect.onExit((exit) => {
-                    if (Exit.isSuccess(exit)) return Effect.void
-                    return Effect.sync(() => {
-                      if (resourceSubscriptions.get(input.uri) === listeners) resourceSubscriptions.delete(input.uri)
-                    })
-                  }),
-                )
-              }
-              return listener
-            }),
-          ),
-          (listener) => {
-            if (!listener) return Effect.void
-            return resourceSubscriptionLock.withPermit(
-              Effect.gen(function* () {
-                const listeners = resourceSubscriptions.get(input.uri)
-                if (!listeners) return
-                listeners.delete(listener)
-                if (listeners.size > 0) return
-                resourceSubscriptions.delete(input.uri)
-                yield* Effect.tryPromise({
-                  try: (signal) => client.unsubscribeResource({ uri: input.uri }, { signal, timeout: catalogTimeout }),
-                  catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-                }).pipe(
-                  Effect.tapError((error) =>
-                    Effect.logWarning("failed to unsubscribe from MCP resource", {
-                      server,
-                      uri: input.uri,
-                      error: error.message,
-                    }),
-                  ),
-                  Effect.ignore,
-                )
-              }),
-            )
-          },
-          { interruptible: true },
-        ).pipe(Effect.map((listener) => listener !== undefined)),
+      subscribeResource: subscriptions.subscribe,
       prompt: (input) =>
         Effect.tryPromise({
           try: (signal) =>
@@ -536,7 +425,7 @@ export const connect = Effect.fnUntraced(function* (
         ),
       onClose: (callback) => {
         client.onclose = () => {
-          resourceSubscriptions.clear()
+          subscriptions.clear()
           callback()
         }
       },
@@ -551,9 +440,7 @@ export const connect = Effect.fnUntraced(function* (
         if (!client.getServerCapabilities()?.prompts?.listChanged) return
         client.setNotificationHandler(PromptListChangedNotificationSchema, async () => callback())
       },
-      onResourcesChanged: (callback) => {
-        resourceListChangedCallbacks.add(callback)
-      },
+      onResourcesChanged: subscriptions.onChanged,
     } satisfies Connection
   }
 
@@ -562,6 +449,116 @@ export const connect = Effect.fnUntraced(function* (
   if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
+
+type StartRequest = <T>(operation: () => Promise<T>) => Promise<T>
+
+function makeResourceSubscriptions(client: Client, transport: Transport, server: string, timeout: number) {
+  const subscriptions = new Map<string, Set<() => void>>()
+  const changed = new Set<() => void>()
+  const lock = Semaphore.makeUnsafe(1)
+  const notify = (callbacks: Iterable<() => void>) => {
+    for (const callback of callbacks) {
+      try {
+        callback()
+      } catch {}
+    }
+  }
+  const request = (uri: string, start?: StartRequest) =>
+    Effect.tryPromise({
+      try: (signal) => {
+        const operation = () => client.subscribeResource({ uri }, { signal, timeout })
+        return start ? start(operation) : operation()
+      },
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    })
+
+  client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
+    notify(subscriptions.get(notification.params.uri) ?? []),
+  )
+  client.setNotificationHandler(ResourceListChangedNotificationSchema, () => notify(changed))
+  if (transport instanceof StreamableHTTPClientTransport)
+    transport.onsessionrecovered = (start) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          notify(changed)
+          if (!client.getServerCapabilities()?.resources?.subscribe) return
+          yield* Effect.forEach(
+            Array.from(subscriptions.keys()),
+            (uri) =>
+              request(uri, start).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("failed to restore MCP resource subscription", {
+                    server,
+                    uri,
+                    error: error.message,
+                  }),
+                ),
+              ),
+            { discard: true },
+          )
+        }),
+      )
+
+  return {
+    subscribe: (input: { readonly uri: string }, callback: () => void) =>
+      Effect.acquireRelease(
+        lock.withPermit(
+          Effect.gen(function* () {
+            if (!client.getServerCapabilities()?.resources?.subscribe) return undefined
+            const current = subscriptions.get(input.uri)
+            if (current) {
+              current.add(callback)
+              return callback
+            }
+            yield* request(input.uri).pipe(
+              Effect.tapError((error) =>
+                Effect.logWarning("failed to subscribe to MCP resource", {
+                  server,
+                  uri: input.uri,
+                  error: error.message,
+                }),
+              ),
+            )
+            subscriptions.set(input.uri, new Set([callback]))
+            return callback
+          }),
+        ),
+        (listener) => {
+          if (!listener) return Effect.void
+          return lock.withPermit(
+            Effect.gen(function* () {
+              const listeners = subscriptions.get(input.uri)
+              if (!listeners) return
+              listeners.delete(listener)
+              if (listeners.size > 0) return
+              subscriptions.delete(input.uri)
+              yield* Effect.tryPromise({
+                try: (signal) => client.unsubscribeResource({ uri: input.uri }, { signal, timeout }),
+                catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("failed to unsubscribe from MCP resource", {
+                    server,
+                    uri: input.uri,
+                    error: error.message,
+                  }),
+                ),
+                Effect.ignore,
+              )
+            }),
+          )
+        },
+        { interruptible: true },
+      ).pipe(Effect.map((listener) => listener !== undefined)),
+    onChanged: (callback: () => void) => {
+      changed.add(callback)
+    },
+    clear: () => {
+      subscriptions.clear()
+      changed.clear()
+    },
+  }
+}
 
 // SDK close stops the MCP process, but not child processes it spawned.
 const cleanupStdioDescendants = (transport: Transport) =>
