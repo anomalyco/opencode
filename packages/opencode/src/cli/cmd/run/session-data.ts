@@ -54,6 +54,7 @@ type SessionCommit = StreamCommit
 //
 // - ids:    parts and error keys we've already committed (dedup guard)
 // - tools:  tool parts we've emitted a "start" for but not yet completed
+// - toolPart: latest full tool payload for active tool parts
 // - call:   tool call inputs, keyed by msg:call, for enriching permission views
 // - role:   message ID → "assistant" | "user", learned from message.updated
 // - msg:    part ID → message ID
@@ -74,6 +75,7 @@ export type SessionData = {
   announced: boolean
   ids: Set<string>
   tools: Set<string>
+  toolPart: Map<string, ToolPart>
   call: Map<string, Dict>
   shell: Map<string, ShellCall>
   permissions: PermissionRequest[]
@@ -112,6 +114,7 @@ export function createSessionData(
     announced: false,
     ids: new Set(),
     tools: new Set(),
+    toolPart: new Map(),
     call: new Map(),
     shell: new Map(),
     permissions: [],
@@ -758,6 +761,21 @@ export function flushInterrupted(data: SessionData, commits: SessionCommit[]) {
     data.ids.add(partID)
     drop(data, partID)
   }
+
+  for (const partID of data.tools) {
+    const part = data.toolPart.get(partID)
+    data.tools.delete(partID)
+    data.toolPart.delete(partID)
+    if (!part || data.ids.has(partID)) {
+      continue
+    }
+
+    data.ids.add(partID)
+    commits.push({
+      ...failTool(part, "Tool execution interrupted"),
+      interrupted: true,
+    })
+  }
 }
 
 // The main reducer. Takes one SDK event and returns scrollback commits and
@@ -930,6 +948,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       }
 
       if (part.state.status === "running") {
+        data.toolPart.set(part.id, part)
         if (data.ids.has(part.id)) {
           return out(data, commits, view)
         }
@@ -946,6 +965,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
         const seen = data.tools.has(part.id)
         const mode = toolView(part.tool)
         data.tools.delete(part.id)
+        data.toolPart.delete(part.id)
         if (data.ids.has(part.id)) {
           return out(data, commits, view)
         }
@@ -982,6 +1002,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       if (part.state.status === "error") {
         const seen = data.tools.has(part.id)
         data.tools.delete(part.id)
+        data.toolPart.delete(part.id)
         if (data.ids.has(part.id)) {
           return out(data, commits, view)
         }

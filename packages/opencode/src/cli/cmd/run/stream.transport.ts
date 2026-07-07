@@ -674,7 +674,7 @@ function createLayer(input: StreamInput) {
         })
 
         const bootstrap = Effect.fn("RunStreamTransport.bootstrap")(function* () {
-          const [messagesList, children, permissions, questions] = yield* Effect.all(
+          const [messagesList, children, permissions, questions, statuses] = yield* Effect.all(
             [
               messages(
                 input.sessionID,
@@ -700,6 +700,10 @@ function createLayer(input: StreamInput) {
                 Effect.map((item) => item.data ?? []),
                 Effect.orElseSucceed(() => []),
               ),
+              Effect.promise(() => input.sdk.session.status()).pipe(
+                Effect.map((item): Record<string, { type: string }> => item.data ?? {}),
+                Effect.orElseSucceed((): Record<string, { type: string }> => ({})),
+              ),
             ],
             {
               concurrency: "unbounded",
@@ -708,6 +712,8 @@ function createLayer(input: StreamInput) {
 
           const sessionPermissions = permissions.filter((item) => item.sessionID === input.sessionID)
           const sessionQuestions = questions.filter((item) => item.sessionID === input.sessionID)
+          const status = statuses[input.sessionID]?.type
+          const settleActive = status !== "busy" && status !== "retry"
           const history = input.replay
             ? replaySession({
                 messages: messagesList,
@@ -716,6 +722,7 @@ function createLayer(input: StreamInput) {
                 thinking: input.thinking,
                 limits: input.limits(),
                 providers: input.providers?.(),
+                settleActive,
               })
             : undefined
           const replay =
@@ -727,6 +734,7 @@ function createLayer(input: StreamInput) {
                   thinking: input.thinking,
                   limits: input.limits(),
                   providers: input.providers?.(),
+                  settleActive,
                 })
               : history
 

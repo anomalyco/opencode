@@ -1,5 +1,11 @@
 import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
-import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
+import {
+  bootstrapSessionData,
+  createSessionData,
+  flushInterrupted,
+  reduceSessionData,
+  type SessionData,
+} from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
 import { messageTurnSummaryCommit } from "./turn-summary"
 import type { FooterPatch, LocalReplayRow, RunProvider, StreamCommit } from "./types"
@@ -11,6 +17,7 @@ type ReplayInput = {
   thinking: boolean
   limits: Record<string, number>
   providers?: RunProvider[]
+  settleActive?: boolean
 }
 
 type ReplayConfig = {
@@ -251,6 +258,10 @@ export function replaySession(input: ReplayInput): SessionReplay {
     })
     commits.push(...next.commits)
     patch = mergePatch(patch, next.patch)
+  }
+
+  if (input.settleActive) {
+    flushInterrupted(data, commits)
   }
 
   return {
