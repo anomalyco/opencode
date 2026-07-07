@@ -1259,7 +1259,11 @@ function SessionSwitchMessageV2(props: { message: SessionMessage }) {
       return switchLabel(props.message.model, ctx.models(), props.message.previous)
     return ""
   }
-  return <text fg={theme.textMuted}>{text()}</text>
+  return (
+    <box paddingLeft={3}>
+      <text fg={theme.textMuted}>{text()}</text>
+    </box>
+  )
 }
 
 function SessionNoticeMessageV2(props: { message: SessionMessage }) {
