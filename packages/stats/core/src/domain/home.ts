@@ -646,8 +646,8 @@ function buildModelTokenMix(aggregate: ModelAggregate): ModelMixEntry[] {
 }
 
 function buildModelPeers(peers: ModelAggregate[], rank: number, totalTokens: number): ModelPeerEntry[] {
-  const start = Math.max(0, Math.min(rank - 4, Math.max(peers.length - 7, 0)))
-  return peers.slice(start, start + 7).map((item, index) => ({
+  const start = Math.max(0, Math.min(rank - 5, Math.max(peers.length - 10, 0)))
+  return peers.slice(start, start + 10).map((item, index) => ({
     model: item.model,
     provider: item.provider,
     author: formatProvider(item.provider),
