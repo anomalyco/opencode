@@ -50,17 +50,17 @@ describe("LocationServiceMap", () => {
           })
           yield* sdk.register(plugin)
 
-          yield* Effect.gen(function* () {
-            const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-            const read = Effect.gen(function* () {
-              yield* (yield* PluginSupervisor.Service).ready
-              return yield* (yield* AgentV2.Service).get(id)
-            })
-
-            expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
-            yield* locations.invalidate(ref)
-            expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const read = Effect.gen(function* () {
+            const supervisor = yield* PluginSupervisor.Service
+            yield* supervisor.ready
+            const agents = yield* AgentV2.Service
+            return yield* agents.get(id)
           })
+
+          expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
+          yield* locations.invalidate(ref)
+          expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
         }),
       ),
     ),

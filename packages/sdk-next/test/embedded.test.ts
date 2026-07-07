@@ -106,6 +106,50 @@ it.live(
 )
 
 it.live(
+  "preserves SDK plugins across Location eviction",
+  () =>
+    withEmbedded("opencode-embedded-plugin-eviction-", (fixture) =>
+      Effect.gen(function* () {
+        const opencode = yield* fixture.sdk.OpenCode.create()
+        const ref = location(fixture)
+        const connected = yield* Latch.make(false)
+        const booted = yield* Deferred.make<void>()
+        // The rebooted Location commits its second plugin generation.
+        const recommitted = yield* Deferred.make<void>()
+        const generations = yield* Ref.make(0)
+        const id = `evicted-sdk-${crypto.randomUUID()}`
+
+        yield* opencode.events.subscribe().pipe(
+          Stream.runForEach((event) => {
+            if (event.type === "server.connected") return connected.open
+            if (event.type !== "plugin.updated" || event.location?.directory !== fixture.directory) return Effect.void
+            return Ref.updateAndGet(generations, (total) => total + 1).pipe(
+              Effect.flatMap((total) => {
+                if (total === 1) return Deferred.succeed(booted, undefined)
+                if (total === 2) return Deferred.succeed(recommitted, undefined)
+                return Effect.void
+              }),
+              Effect.asVoid,
+            )
+          }),
+          Effect.forkScoped,
+        )
+        yield* connected.await
+        yield* opencode.plugin({ id, effect: () => Effect.void })
+
+        yield* opencode.plugin.list({ location: ref })
+        yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
+        yield* opencode.debug.evictLocation({ location: ref })
+        yield* opencode.plugin.list({ location: ref })
+        yield* Deferred.await(recommitted).pipe(Effect.timeout("5 seconds"))
+
+        expect((yield* opencode.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).toContain(id)
+      }),
+    ),
+  15_000,
+)
+
+it.live(
   "keeps SDK plugin registration isolated between embedded hosts",
   () =>
     withEmbedded("opencode-embedded-plugin-isolation-", (fixture) =>
