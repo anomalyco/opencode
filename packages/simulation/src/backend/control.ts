@@ -29,7 +29,7 @@ function parseRequest(input: string | Buffer) {
 }
 
 async function handle(socket: ControlSocket, request: SimulationProtocol.JsonRpc.Request): Promise<unknown> {
-  switch (request.method) {
+  switch (SimulationProtocol.Backend.decodeMethod(request.method)) {
     case "llm.attach": {
       socket.data.unsubscribe?.()
       socket.data.unsubscribe = SimulationLLMExchange.subscribe((exchange) => {
@@ -62,7 +62,6 @@ async function handle(socket: ControlSocket, request: SimulationProtocol.JsonRpc
     case "network.log":
       return { entries: SimulationNetwork.log() }
   }
-  throw new Error(`Unknown simulation control method: ${request.method}`)
 }
 
 export function start(endpoint: string) {

@@ -111,6 +111,17 @@ export namespace Frontend {
 }
 
 export namespace Backend {
+  export const Method = Schema.Literals([
+    "llm.attach",
+    "llm.chunk",
+    "llm.finish",
+    "llm.disconnect",
+    "llm.pending",
+    "network.log",
+  ])
+  export type Method = Schema.Schema.Type<typeof Method>
+  export const decodeMethod = Schema.decodeUnknownSync(Method)
+
   export const Item = Schema.Union([
     Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
