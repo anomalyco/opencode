@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { Agent } from "./agent.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
+import { Permission } from "./permission.js"
 import { Project } from "./project.js"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
 import { SessionEvent } from "./session-event.js"
@@ -46,6 +47,7 @@ export const Info = Schema.Struct({
   location: Location.Ref,
   subpath: RelativePath.pipe(optional),
   revert: Revert.State.pipe(optional),
+  tools: Permission.Ruleset.pipe(optional),
 }).annotate({ identifier: "SessionV2.Info" })
 
 export const ListAnchor = Schema.Struct({

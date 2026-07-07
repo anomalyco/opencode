@@ -21,6 +21,8 @@ import type {
   SessionSwitchAgentOutput,
   SessionSwitchModelInput,
   SessionSwitchModelOutput,
+  SessionConfigureInput,
+  SessionConfigureOutput,
   SessionRenameInput,
   SessionRenameOutput,
   SessionPromptInput,
@@ -467,6 +469,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/model`,
             body: { model: input["model"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      configure: (input: SessionConfigureInput, requestOptions?: RequestOptions) =>
+        request<SessionConfigureOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/configure`,
+            body: { tools: input["tools"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,

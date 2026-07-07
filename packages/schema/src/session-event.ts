@@ -9,6 +9,7 @@ import { Delivery } from "./session-delivery.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { FileAttachment, Prompt } from "./prompt.js"
+import { Permission } from "./permission.js"
 import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
@@ -62,6 +63,16 @@ export const ModelSelected = Event.durable({
   },
 })
 export type ModelSelected = typeof ModelSelected.Type
+
+export const ToolsConfigured = Event.durable({
+  type: "session.tools.configured",
+  ...options,
+  schema: {
+    ...Base,
+    tools: Permission.Ruleset.pipe(optional),
+  },
+})
+export type ToolsConfigured = typeof ToolsConfigured.Type
 
 export const Moved = Event.durable({
   type: "session.moved",
@@ -502,6 +513,7 @@ export namespace RevertEvent {
 export const Definitions = Event.inventory(
   AgentSelected,
   ModelSelected,
+  ToolsConfigured,
   Moved,
   Renamed,
   Deleted,

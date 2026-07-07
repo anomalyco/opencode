@@ -254,6 +254,25 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.configure", "/api/session/:sessionID/configure", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          tools: Schema.Record(Schema.String, Schema.Boolean).pipe(Schema.optional),
+        }),
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.configure",
+            summary: "Configure session",
+            description:
+              "Configure session-scoped tool availability. Tools set to false are denied; tools set to true are explicitly allowed. Omit tools or pass null to clear session overrides.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.rename", "/api/session/:sessionID/rename", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ title: Schema.String }),

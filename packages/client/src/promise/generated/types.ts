@@ -354,6 +354,11 @@ export type SessionListOutput = {
         readonly patch: string
       }>
     }
+    readonly tools?: ReadonlyArray<{
+      readonly action: string
+      readonly resource: string
+      readonly effect: "allow" | "deny" | "ask"
+    }>
   }>
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
 }
@@ -417,6 +422,11 @@ export type SessionCreateOutput = {
         readonly patch: string
       }>
     }
+    readonly tools?: ReadonlyArray<{
+      readonly action: string
+      readonly resource: string
+      readonly effect: "allow" | "deny" | "ask"
+    }>
   }
 }["data"]
 
@@ -456,6 +466,11 @@ export type SessionGetOutput = {
         readonly patch: string
       }>
     }
+    readonly tools?: ReadonlyArray<{
+      readonly action: string
+      readonly resource: string
+      readonly effect: "allow" | "deny" | "ask"
+    }>
   }
 }["data"]
 
@@ -500,6 +515,11 @@ export type SessionForkOutput = {
         readonly patch: string
       }>
     }
+    readonly tools?: ReadonlyArray<{
+      readonly action: string
+      readonly resource: string
+      readonly effect: "allow" | "deny" | "ask"
+    }>
   }
 }["data"]
 
@@ -518,6 +538,13 @@ export type SessionSwitchModelInput = {
 }
 
 export type SessionSwitchModelOutput = void
+
+export type SessionConfigureInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly tools?: { readonly tools?: { readonly [x: string]: boolean } | undefined }["tools"]
+}
+
+export type SessionConfigureOutput = void
 
 export type SessionRenameInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -1166,6 +1193,22 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: string
             readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          }
+        }
+      | {
+          readonly id: string
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown }
+          readonly type: "session.tools.configured"
+          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+          readonly location?: { readonly directory: string; readonly workspaceID?: string }
+          readonly data: {
+            readonly sessionID: string
+            readonly tools?: ReadonlyArray<{
+              readonly action: string
+              readonly resource: string
+              readonly effect: "allow" | "deny" | "ask"
+            }>
           }
         }
       | {
@@ -4465,6 +4508,22 @@ export type EventSubscribeOutput =
       readonly data: {
         readonly sessionID: string
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+      }
+    }
+  | {
+      readonly id: string
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.tools.configured"
+      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly sessionID: string
+        readonly tools?: ReadonlyArray<{
+          readonly action: string
+          readonly resource: string
+          readonly effect: "allow" | "deny" | "ask"
+        }>
       }
     }
   | {

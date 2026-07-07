@@ -196,6 +196,10 @@ export interface Interface {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
   }) => Effect.Effect<void, NotFoundError>
+  readonly configure: (input: {
+    sessionID: SessionSchema.ID
+    tools?: Record<string, boolean>
+  }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
@@ -624,6 +628,20 @@ const layer = Layer.effect(
         yield* events.publish(SessionEvent.ModelSelected, {
           sessionID: input.sessionID,
           model: input.model,
+        })
+      }),
+      configure: Effect.fn("V2Session.configure")(function* (input) {
+        yield* result.get(input.sessionID)
+        const tools = input.tools
+          ? Object.entries(input.tools).map(([action, allowed]) => ({
+              action,
+              resource: "*" as const,
+              effect: allowed ? ("allow" as const) : ("deny" as const),
+            }))
+          : undefined
+        yield* events.publish(SessionEvent.ToolsConfigured, {
+          sessionID: input.sessionID,
+          tools,
         })
       }),
       rename: Effect.fn("V2Session.rename")(function* (input) {

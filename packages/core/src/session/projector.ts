@@ -28,7 +28,7 @@ import { Slug } from "../util/slug"
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
   SessionEvent.DurableEvent,
-  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | typeof SessionEvent.ToolsConfigured.Type
 >
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
@@ -622,6 +622,14 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
       }),
+    )
+    yield* events.project(SessionEvent.ToolsConfigured, (event) =>
+      db
+        .update(SessionTable)
+        .set({ tool_permissions: event.data.tools ?? null, time_updated: DateTime.toEpochMillis(event.created) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
     )
     yield* events.project(SessionEvent.Renamed, (event) =>
       db

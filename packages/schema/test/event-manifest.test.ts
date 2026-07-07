@@ -103,6 +103,7 @@ describe("public event manifest", () => {
         "message.part.removed.1",
         "session.agent.selected.1",
         "session.model.selected.1",
+        "session.tools.configured.1",
         "session.moved.1",
         "session.renamed.1",
         "session.forked.1",
