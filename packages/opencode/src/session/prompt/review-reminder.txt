@@ -1,0 +1,3 @@
+<system-reminder>
+A reviewer agent is configured for this session. When you have finished implementing and verifying your changes, call the review_exit tool to hand the session to the ${reviewer} agent for review. Only do this after completing implementation work; ignore this for questions or discussions that do not change code.
+</system-reminder>
