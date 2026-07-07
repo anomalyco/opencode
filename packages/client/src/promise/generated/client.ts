@@ -23,6 +23,8 @@ import type {
   SessionSwitchModelOutput,
   SessionRenameInput,
   SessionRenameOutput,
+  SessionMoveInput,
+  SessionMoveOutput,
   SessionPromptInput,
   SessionPromptOutput,
   SessionCommandInput,
@@ -481,6 +483,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/rename`,
             body: { title: input["title"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      move: (input: SessionMoveInput, requestOptions?: RequestOptions) =>
+        request<SessionMoveOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/move`,
+            body: { destination: input["destination"], moveChanges: input["moveChanges"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,

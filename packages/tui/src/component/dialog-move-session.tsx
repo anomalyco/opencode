@@ -19,8 +19,10 @@ import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 import type { ProjectDirectoriesOutput } from "@opencode-ai/client/promise"
 import { useRoute } from "../context/route"
+import { DialogPrompt } from "../ui/dialog-prompt"
+import { Slug } from "@opencode-ai/core/util/slug"
 
-export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
+export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new"; name: string }
 type ProjectDirectory = ProjectDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
@@ -291,6 +293,16 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
+  async function create() {
+    const value = await DialogPrompt.show(dialog, "Name worktree", {
+      placeholder: "Worktree name",
+      generateHint: "generate one",
+      onGenerate: Slug.create,
+    })
+    if (value === null) return
+    props.onSelect({ type: "new", name: slugify(value) || Slug.create() })
+  }
+
   const fullHeight = createMemo(() =>
     Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)),
   )
@@ -334,7 +346,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 {
                   command: "dialog.move_session.new",
                   title: "new",
-                  onTrigger: () => props.onSelect({ type: "new" }),
+                  onTrigger: () => void create(),
                 },
                 {
                   command: "dialog.move_session.delete",
@@ -362,4 +374,13 @@ function contains(root: string, directory: string) {
   if (root === directory) return true
   const relative = path.relative(root, directory)
   return relative && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative)
+}
+
+function slugify(input: string) {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
 }

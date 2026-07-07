@@ -10,7 +10,7 @@ import {
 import { useSync } from "../../context/sync"
 import { useTuiPaths } from "../../context/runtime"
 
-export type HomeSessionDestination = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
+export type HomeSessionDestination = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new"; name: string }
 
 type Context = {
   destination: Accessor<HomeSessionDestination | undefined>

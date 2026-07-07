@@ -526,6 +526,20 @@ export type SessionRenameInput = {
 
 export type SessionRenameOutput = void
 
+export type SessionMoveInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly destination: {
+    readonly destination: { readonly directory: string }
+    readonly moveChanges?: boolean | undefined
+  }["destination"]
+  readonly moveChanges?: {
+    readonly destination: { readonly directory: string }
+    readonly moveChanges?: boolean | undefined
+  }["moveChanges"]
+}
+
+export type SessionMoveOutput = void
+
 export type SessionPromptInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
