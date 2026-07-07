@@ -26,9 +26,8 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
     const c = model.current()
     return c ? `${c.provider.id}:${c.id}` : undefined
   })
-  const freeModels = createMemo(() =>
-    model.list().filter((item) => item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)),
-  )
+  const isFree = (item: ReturnType<ModelState["list"]>[number]) =>
+    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
 
   const openProviders = (provider?: string) => {
     void import("./dialog-connect-provider").then((x) => {
@@ -43,6 +42,16 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
     dialog.close()
   }
 
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
+    const buttons = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button"))
+    if (buttons.length === 0) return
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    const next = index < 0 ? (e.key === "ArrowDown" ? 0 : buttons.length - 1) : index + (e.key === "ArrowDown" ? 1 : -1)
+    buttons[(next + buttons.length) % buttons.length]?.focus()
+    e.preventDefault()
+  }
+
   return (
     <DialogV2 containerClass="!h-[min(calc(100vh_-_16px),480px)] !w-[min(calc(100vw_-_16px),560px)]">
       <DialogHeader closeLabel={language.t("common.close")}>
@@ -51,55 +60,50 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
       <div class="h-px w-full shrink-0 bg-v2-border-border-muted" />
       <DialogBody class="min-h-0 flex-1 gap-0">
         <ScrollView class="min-h-0 flex-1 w-full">
-        <div class="flex min-h-full flex-col">
-          <div class="flex h-fit w-full flex-col items-start gap-0.5 px-3.5 pb-3.5 pt-3">
-            <div class="flex h-8 w-full flex-none select-none flex-row items-center gap-2 self-stretch px-2.5 pb-2 pt-1">
-              <div class="flex h-5 flex-none flex-row items-center p-0 font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
-                {language.t("dialog.model.unpaid.freeModels.title")}
-              </div>
-            </div>
-            <For each={freeModels()}>
-              {(item) => (
-                <TooltipV2
-                  class="w-full"
-                  placement="right-start"
-                  gutter={6}
-                  openDelay={0}
-                  value={
-                    <ModelTooltip
-                      model={item}
-                      latest={item.latest}
-                      free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
-                      v2
-                    />
-                  }
-                >
-                  <button
-                    type="button"
-                    class="flex w-full flex-row items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
-                    onClick={() => selectModel(item)}
-                  >
-                    <span class="min-w-0 truncate">{item.name}</span>
-                    <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
-                    <Show when={item.latest}>
-                      <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
-                    </Show>
-                    <Show when={currentKey() === modelKey(item)}>
-                      <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
-                    </Show>
-                  </button>
-                </TooltipV2>
-              )}
-            </For>
-          </div>
-
-          <div class="flex w-full flex-col p-2.5 pt-0">
-            <div class="flex h-fit w-full flex-none grow-0 flex-col items-start gap-0.5 self-stretch rounded-lg bg-v2-background-bg-layer-02 p-1 shadow-[var(--v2-elevation-switch-off)]">
-              <div class="flex h-8 w-full flex-none select-none flex-row items-center gap-2 self-stretch px-2.5 py-1.5">
-                <div class="flex h-5 flex-none flex-row items-center p-0 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
-                  {language.t("dialog.model.unpaid.addMore.title")}
+          <div class="flex min-h-full flex-col" onKeyDown={handleKeyDown}>
+            <div class="flex h-fit w-full flex-col items-start gap-0.5 px-3.5 pb-3.5 pt-3">
+              <div class="flex h-8 w-full flex-none select-none flex-row items-center gap-2 self-stretch px-2.5 pb-2 pt-1">
+                <div class="flex h-5 flex-none flex-row items-center p-0 font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
+                  {language.t("dialog.model.unpaid.freeModels.title")}
                 </div>
               </div>
+              <For each={model.list()}>
+                {(item) => (
+                  <TooltipV2
+                    class="w-full"
+                    placement="right-start"
+                    gutter={6}
+                    openDelay={0}
+                    value={<ModelTooltip model={item} latest={item.latest} free={isFree(item)} v2 />}
+                  >
+                    <button
+                      type="button"
+                      class="flex w-full flex-row items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:Inter,var(--font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                      onClick={() => selectModel(item)}
+                    >
+                      <span class="min-w-0 truncate">{item.name}</span>
+                      <Show when={isFree(item)}>
+                        <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
+                      </Show>
+                      <Show when={item.latest}>
+                        <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
+                      </Show>
+                      <Show when={currentKey() === modelKey(item)}>
+                        <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
+                      </Show>
+                    </button>
+                  </TooltipV2>
+                )}
+              </For>
+            </div>
+
+            <div class="flex w-full flex-col p-2.5 pt-0">
+              <div class="flex h-fit w-full flex-none grow-0 flex-col items-start gap-0.5 self-stretch rounded-lg bg-v2-background-bg-layer-02 p-1 shadow-[var(--v2-elevation-switch-off)]">
+                <div class="flex h-8 w-full flex-none select-none flex-row items-center gap-2 self-stretch px-2.5 py-1.5">
+                  <div class="flex h-5 flex-none flex-row items-center p-0 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
+                    {language.t("dialog.model.unpaid.addMore.title")}
+                  </div>
+                </div>
                 <div class="flex w-full flex-col">
                   <For
                     each={[...providers.popular()].sort((a, b) => {
@@ -150,9 +154,9 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                     </span>
                   </button>
                 </div>
+              </div>
             </div>
           </div>
-        </div>
         </ScrollView>
       </DialogBody>
     </DialogV2>
