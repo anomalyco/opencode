@@ -158,7 +158,7 @@ current omissions to implement, not intentional product boundaries.
 - [ ] Add `Object.is` after runtime method and tool references have stable identity semantics.
 - [ ] Add deterministic modern collection conveniences where they improve orchestration: `Object.groupBy`, Set
       composition methods, and `Array.prototype.toSpliced`.
-- [ ] Decide whether nondeterministic `Math.random` and iterable `Math.sumPrecise` belong in the runtime.
+- [ ] Decide whether iterable `Math.sumPrecise` belongs in the runtime.
 - [ ] Refine diagnostics so user throws, expected tool failures, unexpected host/tool defects, and genuine interpreter
       defects are distinguishable without leaking private causes.
 

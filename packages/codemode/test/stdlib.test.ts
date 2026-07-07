@@ -19,6 +19,28 @@ const error = async (code: string) => {
   return result.error
 }
 
+describe("Number and Math", () => {
+  test("Math.random returns a number in [0, 1)", async () => {
+    expect(await value(`const n = Math.random(); return typeof n === "number" && n >= 0 && n < 1`)).toBe(true)
+  })
+
+  test("Number exposes native non-finite constants", async () => {
+    expect(
+      await value(
+        `return [Number.isNaN(Number.NaN), Number.POSITIVE_INFINITY === Infinity, Number.NEGATIVE_INFINITY === -Infinity]`,
+      ),
+    ).toEqual([true, true, true])
+  })
+
+  test("Number valueOf returns its primitive receiver", async () => {
+    expect(await value(`return (42).valueOf()`)).toBe(42)
+  })
+
+  test("Number valueOf does not enable boxed numbers", async () => {
+    expect((await error(`return new Number(42)`)).kind).toBe("UnsupportedSyntax")
+  })
+})
+
 describe("Date", () => {
   test("Date.now() returns a number", async () => {
     expect(await value(`return typeof Date.now()`)).toBe("number")
