@@ -7,16 +7,12 @@ export interface Server {
   readonly stop: () => void
 }
 
-function actionParam(params: unknown) {
-  return SimulationProtocol.Frontend.decodeActionParams(params).action
-}
-
 function parseRequest(input: string | Buffer) {
-  return SimulationProtocol.JsonRpc.decodeRequest(JSON.parse(typeof input === "string" ? input : input.toString()))
+  return SimulationProtocol.Frontend.decodeRequest(JSON.parse(typeof input === "string" ? input : input.toString()))
 }
 
-async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Request, headless: boolean) {
-  switch (SimulationProtocol.Frontend.decodeMethod(request.method)) {
+async function handle(harness: Harness, request: SimulationProtocol.Frontend.Request, headless: boolean) {
+  switch (request.method) {
     case "ui.state": {
       if (headless) await harness.renderOnce()
       const result = SimulationActions.state(harness)
@@ -24,7 +20,7 @@ async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Requ
       return result
     }
     case "ui.action":
-      return SimulationActions.execute(harness, actionParam(request.params))
+      return SimulationActions.execute(harness, request.params.action)
     case "trace.list":
       return { records: SimulationTrace.list() }
     case "trace.clear":
@@ -52,7 +48,7 @@ export function start(harness: Harness, endpoint: string, headless: boolean): Se
         SimulationTrace.add("control.disconnect")
       },
       async message(socket, message) {
-        let request: SimulationProtocol.JsonRpc.Request | undefined
+        let request: SimulationProtocol.Frontend.Request | undefined
         try {
           request = parseRequest(message)
           const result = await handle(harness, request, headless)
