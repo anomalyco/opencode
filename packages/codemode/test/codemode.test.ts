@@ -659,6 +659,9 @@ describe("CodeMode public contract", () => {
     expect(instructions).not.toContain("host globals")
     expect(instructions).toContain("Use Code Mode tools for external operations")
     expect(instructions).toContain(
+      "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
+    )
+    expect(instructions).toContain(
       "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
     )
   })
