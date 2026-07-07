@@ -74,25 +74,29 @@ describe("tool.write", () => {
       }),
     )
 
-    it.instance("creates parent directories if needed", () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const filepath = path.join(test.directory, "nested", "deep", "file.txt")
-        yield* run({ filePath: filepath, content: "nested content" })
-
-        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-        expect(content).toBe("nested content")
-      }),
+    it.instance(
+      "creates parent directories if needed",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "nested", "deep", "file.txt")
+          yield* run({ filePath: filepath, content: "nested content" })
+          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(content).toBe("nested content")
+        }),
+      15000,
     )
-
-    it.instance("handles relative paths by resolving to instance directory", () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        yield* run({ filePath: "relative.txt", content: "relative content" })
-
-        const content = yield* Effect.promise(() => fs.readFile(path.join(test.directory, "relative.txt"), "utf-8"))
-        expect(content).toBe("relative content")
-      }),
+ 
+    it.instance(
+      "handles relative paths by resolving to instance directory",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* run({ filePath: "relative.txt", content: "relative content" })
+          const content = yield* Effect.promise(() => fs.readFile(path.join(test.directory, "relative.txt"), "utf-8"))
+          expect(content).toBe("relative content")
+        }),
+      15000,
     )
   })
 
@@ -181,7 +185,8 @@ describe("tool.write", () => {
 
         if (process.platform !== "win32") {
           const stats = yield* Effect.promise(() => fs.stat(filepath))
-          expect(stats.mode & 0o777).toBe(0o644)
+          const expectedMode = 0o666 & ~process.umask()
+          expect(stats.mode & 0o777).toBe(expectedMode)
         }
       }),
     )

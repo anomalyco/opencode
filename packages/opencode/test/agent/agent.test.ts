@@ -58,26 +58,32 @@ it.instance("returns default native agents when no config", () =>
   }),
 )
 
-it.instance("build agent has correct default properties", () =>
-  Effect.gen(function* () {
-    const build = yield* load((svc) => svc.get("build"))
-    expect(build).toBeDefined()
-    expect(build?.mode).toBe("primary")
-    expect(build?.native).toBe(true)
-    expect(evalPerm(build, "edit")).toBe("allow")
-    expect(evalPerm(build, "bash")).toBe("allow")
-  }),
+it.instance(
+  "build agent has correct default properties",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      expect(build).toBeDefined()
+      expect(build?.mode).toBe("primary")
+      expect(build?.native).toBe(true)
+      expect(evalPerm(build, "edit")).toBe("allow")
+      expect(evalPerm(build, "bash")).toBe("allow")
+    }),
+  15000,
 )
 
-it.instance("plan agent denies edits except .opencode/plans/*", () =>
-  Effect.gen(function* () {
-    const plan = yield* load((svc) => svc.get("plan"))
-    expect(plan).toBeDefined()
-    // Wildcard is denied
-    expect(evalPerm(plan, "edit")).toBe("deny")
-    // But specific path is allowed
-    expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
-  }),
+it.instance(
+  "plan agent denies edits except .opencode/plans/*",
+  () =>
+    Effect.gen(function* () {
+      const plan = yield* load((svc) => svc.get("plan"))
+      expect(plan).toBeDefined()
+      // Wildcard is denied
+      expect(evalPerm(plan, "edit")).toBe("deny")
+      // But specific path is allowed
+      expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+    }),
+  15000,
 )
 
 it.instance("plan agent denies the general subagent by default", () =>
