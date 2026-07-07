@@ -1095,9 +1095,9 @@ export default function LegacyLayout(props: ParentProps) {
 
   function connectProvider() {
     const run = ++dialogRun
-    void import("@/components/dialog-select-provider").then((x) => {
+    void import("@/components/dialog-connect-provider").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectProvider />)
+      void dialog.show(() => <x.DialogConnectProvider />)
     })
   }
 

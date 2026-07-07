@@ -1,9 +1,11 @@
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
-import { createEffect, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"
 import { normalizePath } from "@/pages/session/v2/review-diff-kinds"
+import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
+import { virtualScrollElement } from "@/components/virtual-scroll-element"
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.
@@ -45,62 +47,107 @@ export function SessionFileListV2(props: {
 }) {
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
-  let rootRef: HTMLDivElement | undefined
+  const normalized = createMemo(() => props.files.map(normalizePath))
+  const [root, setRoot] = createSignal<HTMLDivElement>()
+  const [focused, setFocused] = createSignal<string>()
+  const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+    get count() {
+      return props.files.length
+    },
+    getScrollElement: () => virtualScrollElement(root()),
+    initialRect: { width: 0, height: 600 },
+    estimateSize: () => 28,
+    gap: 2,
+    overscan: 10,
+    get getItemKey() {
+      const files = props.files
+      return (index: number) => files[index] ?? index
+    },
+    rangeExtractor: (range) => {
+      const indexes = defaultRangeExtractor(range)
+      const path = focused()
+      const index = path ? props.files.indexOf(path) : -1
+      if (index < 0 || indexes.includes(index)) return indexes
+      return [...indexes, index].sort((a, b) => a - b)
+    },
+  })
 
   createEffect(() => {
-    highlighted()
-    if (!rootRef) return
+    const index = normalized().indexOf(highlighted())
+    if (index < 0) return
     queueMicrotask(() => {
-      const row = rootRef?.querySelector<HTMLElement>('[data-slot="file-tree-v2-row"][data-highlighted]')
-      row?.scrollIntoView({ block: "nearest" })
+      if (virtualizer.range && index >= virtualizer.range.startIndex && index <= virtualizer.range.endIndex) return
+      virtualizer.scrollToIndex(index, { align: "auto" })
     })
   })
+  const virtualItemByKey = createMemo(
+    () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
+  )
+  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
   return (
     <div
-      ref={(el) => {
-        rootRef = el
-      }}
+      ref={setRoot}
       data-component="file-tree-v2"
+      data-total-rows={props.files.length}
+      style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
     >
-      <For each={props.files}>
-        {(path) => {
-          const normalized = normalizePath(path)
-          const selected = () => {
-            if (highlighted()) return highlighted() === normalized
-            return active() === normalized
-          }
-          const highlightedRow = () => highlighted() === normalized
-          const kind = () => props.kinds?.get(normalized)
-          const directory = () => (normalized.includes("/") ? getDirectory(normalized) : undefined)
-          const filename = () => getFilename(normalized)
+      <For each={virtualRowKeys()}>
+        {(key) => {
+          const path = key as string
+          const value = normalizePath(path)
+          const selected = () => (highlighted() ? highlighted() === value : active() === value)
+          const highlightedRow = () => highlighted() === value
+          const kind = () => props.kinds?.get(value)
+          const directory = () => (value.includes("/") ? getDirectory(value) : undefined)
+          const filename = () => getFilename(value)
           return (
-            <button
-              type="button"
-              data-slot="file-tree-v2-row"
-              data-selected={selected() ? "" : undefined}
-              data-highlighted={highlightedRow() ? "" : undefined}
-              style="padding-left: 8px"
-              onClick={() => props.onFileClick(path)}
-            >
-              <span class="filetree-iconpair size-4">
-                <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
-                <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--mono" mono />
-              </span>
-              <span class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
-                <Show when={directory()}>
-                  {(value) => <span class="text-12-medium text-text-muted truncate min-w-0 shrink">{value()}</span>}
-                </Show>
-                <span class="text-12-medium text-text-base truncate min-w-0 shrink-0">{filename()}</span>
-              </span>
-              <Show when={kind()}>
-                {(value) => (
-                  <span data-slot="file-tree-v2-change" data-change={kindChange(value())}>
-                    {kindLabel(value())}
-                  </span>
-                )}
-              </Show>
-            </button>
+            <Show when={virtualItemByKey().get(key)}>
+              {(item) => (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
+                    width: "100%",
+                    height: `${item().size}px`,
+                    transform: `translateY(${item().start}px)`,
+                  }}
+                >
+                  <button
+                    type="button"
+                    data-slot="file-tree-v2-row"
+                    data-path={path}
+                    data-selected={selected() ? "" : undefined}
+                    data-highlighted={highlightedRow() ? "" : undefined}
+                    style="padding-left: 8px"
+                    onFocus={() => setFocused(path)}
+                    onBlur={() => setFocused(undefined)}
+                    onClick={() => props.onFileClick(path)}
+                  >
+                    <span class="filetree-iconpair size-4">
+                      <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
+                      <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--mono" mono />
+                    </span>
+                    <span class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
+                      <Show when={directory()}>
+                        {(value) => (
+                          <span class="text-12-medium text-text-muted truncate min-w-0 shrink">{value()}</span>
+                        )}
+                      </Show>
+                      <span class="text-12-medium text-text-base truncate min-w-0 shrink-0">{filename()}</span>
+                    </span>
+                    <Show when={kind()}>
+                      {(value) => (
+                        <span data-slot="file-tree-v2-change" data-change={kindChange(value())}>
+                          {kindLabel(value())}
+                        </span>
+                      )}
+                    </Show>
+                  </button>
+                </div>
+              )}
+            </Show>
           )
         }}
       </For>

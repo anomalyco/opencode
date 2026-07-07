@@ -17,8 +17,6 @@ import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 
-const sortableTransition = { duration: 0 }
-
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
