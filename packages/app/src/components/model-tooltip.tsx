@@ -32,7 +32,9 @@ function ModelTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
   )
 }
 
-export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?: boolean; v2?: boolean }> = (props) => {
+export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?: boolean; v2?: boolean }> = (
+  props,
+) => {
   const language = useLanguage()
   const sourceName = (model: ModelInfo) => {
     const value = `${model.id} ${model.name}`.toLowerCase()
