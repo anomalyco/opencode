@@ -116,6 +116,29 @@ describe("user messages", () => {
     ])
   })
 
+  test("should skip non-image file parts without throwing", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hello" },
+          {
+            type: "file",
+            data: Buffer.from([0, 1, 2, 3]).toString("base64"),
+            mediaType: "application/octet-stream",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    ])
+  })
+
   test("should handle multiple text parts without flattening", () => {
     const result = convertToCopilotMessages([
       {

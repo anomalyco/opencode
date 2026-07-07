@@ -1,7 +1,6 @@
 import {
   type LanguageModelV3Prompt,
   type SharedV3ProviderOptions,
-  UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
 import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
@@ -36,14 +35,17 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
 
         messages.push({
           role: "user",
-          content: content.map((part) => {
-            const partMetadata = getOpenAIMetadata(part)
-            switch (part.type) {
-              case "text": {
-                return { type: "text", text: part.text, ...partMetadata }
-              }
-              case "file": {
-                if (part.mediaType.startsWith("image/")) {
+          content: content
+            .filter(
+              (part) => part.type !== "file" || part.mediaType.startsWith("image/")
+            )
+            .map((part) => {
+              const partMetadata = getOpenAIMetadata(part)
+              switch (part.type) {
+                case "text": {
+                  return { type: "text", text: part.text, ...partMetadata }
+                }
+                case "file": {
                   const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
 
                   return {
@@ -56,14 +58,9 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
                     },
                     ...partMetadata,
                   }
-                } else {
-                  throw new UnsupportedFunctionalityError({
-                    functionality: `file part media type ${part.mediaType}`,
-                  })
                 }
               }
-            }
-          }),
+            }),
           ...metadata,
         })
 
