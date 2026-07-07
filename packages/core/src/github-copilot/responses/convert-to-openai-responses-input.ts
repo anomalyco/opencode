@@ -2,11 +2,10 @@ import {
   type LanguageModelV3Prompt,
   type LanguageModelV3ToolCallPart,
   type SharedV3Warning,
-  UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types"
+import type { OpenAIResponsesInput, OpenAIResponsesReasoning, OpenAIResponsesUserMessage } from "./openai-responses-api-types"
 import { localShellInputSchema, localShellOutputSchema } from "./tool/local-shell"
 
 /**
@@ -68,16 +67,16 @@ export async function convertToOpenAIResponsesInput({
       case "user": {
         input.push({
           role: "user",
-          content: content.map((part, index) => {
+          content: content.flatMap<OpenAIResponsesUserMessage["content"][number]>((part, index) => {
             switch (part.type) {
               case "text": {
-                return { type: "input_text", text: part.text }
+                return [{ type: "input_text", text: part.text }]
               }
               case "file": {
                 if (part.mediaType.startsWith("image/")) {
                   const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
 
-                  return {
+                  return [{
                     type: "input_image",
                     ...(part.data instanceof URL
                       ? { image_url: part.data.toString() }
@@ -87,15 +86,15 @@ export async function convertToOpenAIResponsesInput({
                             image_url: `data:${mediaType};base64,${convertToBase64(part.data)}`,
                           }),
                     detail: part.providerOptions?.copilot?.imageDetail,
-                  }
+                  }]
                 } else if (part.mediaType === "application/pdf") {
                   if (part.data instanceof URL) {
-                    return {
+                    return [{
                       type: "input_file",
                       file_url: part.data.toString(),
-                    }
+                    }]
                   }
-                  return {
+                  return [{
                     type: "input_file",
                     ...(typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
                       ? { file_id: part.data }
@@ -103,11 +102,9 @@ export async function convertToOpenAIResponsesInput({
                           filename: part.filename ?? `part-${index}.pdf`,
                           file_data: `data:application/pdf;base64,${convertToBase64(part.data)}`,
                         }),
-                  }
+                  }]
                 } else {
-                  throw new UnsupportedFunctionalityError({
-                    functionality: `file part media type ${part.mediaType}`,
-                  })
+                  return []
                 }
               }
             }

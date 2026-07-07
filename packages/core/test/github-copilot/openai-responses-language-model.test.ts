@@ -203,4 +203,28 @@ describe("convertToOpenAIResponsesInput", () => {
 
     expect((input[0] as any).content[0].detail).toBe("high")
   })
+
+  test("skips unsupported file parts file parts without throwing", async () => {
+    const { input } = await convertToOpenAIResponsesInput({
+      prompt: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Hello" },
+            {
+              type: "file",
+              mediaType: "application/octet-stream",
+              data: Buffer.from([0, 1, 2, 3]).toString("base64"),
+            },
+          ],
+        },
+      ],
+      systemMessageMode: "system",
+      store: false,
+    })
+
+    expect(input).toHaveLength(1)
+    expect((input[0] as any).content).toHaveLength(1)
+    expect((input[0] as any).content[0]).toEqual({ type: "input_text", text: "Hello" })
+  })
 })
