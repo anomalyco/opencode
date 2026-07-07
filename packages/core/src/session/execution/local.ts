@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm"
 import { Cause, Effect, Exit, Layer } from "effect"
+import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { EventTable } from "../../event/sql"
 import { LocationServiceMap } from "../../location-service-map"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionEvent } from "../event"
@@ -19,6 +22,33 @@ export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?:
   return { type: "failed" as const, error: toSessionError(failure) }
 }
 
+export const sessionsInterruptedByShutdown = Effect.fn("SessionExecutionLocal.sessionsInterruptedByShutdown")(
+  function* (db: Database.Interface["db"]) {
+    const latest = yield* db.all<{ sessionID: string; type: string; reason: string | null }>(sql`
+      SELECT aggregate_id AS sessionID, type, json_extract(data, '$.reason') AS reason
+      FROM (
+        SELECT aggregate_id, type, data,
+          row_number() OVER (PARTITION BY aggregate_id ORDER BY seq DESC) AS rank
+        FROM ${EventTable}
+        WHERE type IN (
+          ${EventV2.versionedType(SessionEvent.Execution.Started.type, 1)},
+          ${EventV2.versionedType(SessionEvent.Execution.Succeeded.type, 1)},
+          ${EventV2.versionedType(SessionEvent.Execution.Failed.type, 1)},
+          ${EventV2.versionedType(SessionEvent.Execution.Interrupted.type, 1)}
+        )
+      )
+      WHERE rank = 1
+    `)
+    return latest
+      .filter(
+        (event) =>
+          event.type === EventV2.versionedType(SessionEvent.Execution.Interrupted.type, 1) &&
+          event.reason === "shutdown",
+      )
+      .map((event) => SessionSchema.ID.make(event.sessionID))
+  },
+)
+
 /** Current-process routing for implicit-local Locations. Future remote placement belongs here. */
 const layer = Layer.effect(
   SessionExecution.Service,
@@ -26,6 +56,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
     const events = yield* EventV2.Service
+    const { db } = yield* Database.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -77,6 +108,20 @@ const layer = Layer.effect(
         ),
     })
 
+    const interrupted = yield* sessionsInterruptedByShutdown(db)
+    yield* Effect.forEach(
+      interrupted,
+      (sessionID) =>
+        coordinator.run(sessionID).pipe(
+          Effect.tapCause((cause) =>
+            Effect.logError("Failed to recover Session after shutdown", cause).pipe(Effect.annotateLogs({ sessionID })),
+          ),
+          Effect.ignore,
+          Effect.forkScoped,
+        ),
+      { discard: true },
+    )
+
     return SessionExecution.Service.of({
       active: coordinator.active,
       interrupt: (sessionID) => coordinator.interrupt(sessionID, "user"),
@@ -90,7 +135,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: SessionExecution.Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, EventV2.node],
+  deps: [SessionStore.node, LocationServiceMap.node, EventV2.node, Database.node],
 })
 
 export * as SessionExecutionLocal from "./local"
