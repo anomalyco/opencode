@@ -64,19 +64,21 @@ type Dependencies = {
 
 export type AutoInput = {
   readonly sessionID: SessionSchema.ID
-  readonly messages: readonly SessionMessage.Message[]
+  readonly messages: readonly SessionMessage.Info[]
   readonly request: LLMRequest
 }
 
 type CompactInput = {
   readonly sessionID: SessionSchema.ID
-  readonly messages: readonly SessionMessage.Message[]
+  readonly messages: readonly SessionMessage.Info[]
   readonly model: Model
+  readonly inputID?: SessionMessage.ID
 }
 
 export type ManualInput = {
   readonly session: SessionSchema.Info
-  readonly messages: readonly SessionMessage.Message[]
+  readonly messages: readonly SessionMessage.Info[]
+  readonly inputID: SessionMessage.ID
 }
 
 export interface Interface {
@@ -99,7 +101,7 @@ export const serializeToolContent = (content: SessionMessage.ToolStateCompleted[
     )
     .join("\n")
 
-const serialize = (message: SessionMessage.Message) => {
+const serialize = (message: SessionMessage.Info) => {
   if (message.type === "user") {
     const files =
       message.files?.map(
@@ -128,7 +130,7 @@ const serialize = (message: SessionMessage.Message) => {
   if (message.type === "system") return `[System update]: ${message.text}`
   if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
   if (message.type === "skill") return `[Skill activated: ${message.name}]\n${message.text}`
-  if (message.type === "shell") return `[Shell]: ${message.shell.command}\n${truncate(message.output?.output ?? "")}`
+  if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output?.output ?? "")}`
   return ""
 }
 
@@ -147,7 +149,7 @@ const settings = (documents: readonly Config.Entry[]) => {
 }
 
 const select = (
-  messages: readonly SessionMessage.Message[],
+  messages: readonly SessionMessage.Info[],
   tokens: number,
 ): { readonly head: string; readonly recent: string } | undefined => {
   const conversation = messages
@@ -198,6 +200,7 @@ const make = (dependencies: Dependencies) => {
     readonly context: readonly string[]
     readonly recent: string
     readonly output?: number
+    readonly inputID?: SessionMessage.ID
   }) {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
@@ -208,6 +211,8 @@ const make = (dependencies: Dependencies) => {
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
       reason: input.reason,
+      recent: input.recent,
+      inputID: input.inputID,
     })
 
     const chunks: string[] = []
@@ -235,9 +240,27 @@ const make = (dependencies: Dependencies) => {
         }),
         Effect.as(true),
         Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        Effect.onInterrupt(() =>
+          input.reason === "auto"
+            ? dependencies.events.publish(SessionEvent.Compaction.Failed, {
+                sessionID: input.sessionID,
+                reason: input.reason,
+                error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+                inputID: input.inputID,
+              })
+            : Effect.void,
+        ),
       )
     const summary = chunks.join("")
-    if (!summarized || failed || !summary.trim()) return false
+    if (!summarized || failed || !summary.trim()) {
+      yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
+        sessionID: input.sessionID,
+        reason: input.reason,
+        error: { type: "compaction.failed", message: "Compaction produced no summary" },
+        inputID: input.inputID,
+      })
+      return false
+    }
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
       reason: input.reason,
@@ -284,6 +307,7 @@ const make = (dependencies: Dependencies) => {
       ),
       recent: forcedShortContext ? "" : selected.recent,
       output: input.output,
+      inputID: input.inputID,
     })
   })
   const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: CompactInput) {
@@ -327,6 +351,7 @@ export const layer = Layer.effect(
           sessionID: input.session.id,
           messages: input.messages,
           model: resolved.model,
+          inputID: input.inputID,
         })
       }),
     })

@@ -24,13 +24,13 @@ export const Admitted = Schema.Struct({
 
 export interface PromptEntry extends Schema.Schema.Type<typeof PromptEntry> {}
 export const PromptEntry = Schema.Struct({
-  type: Schema.Literal("prompt"),
+  type: Schema.tag("prompt"),
   ...Admitted.fields,
 }).annotate({ identifier: "SessionInput.PromptEntry" })
 
 export interface Compaction extends Schema.Schema.Type<typeof Compaction> {}
 export const Compaction = Schema.Struct({
-  type: Schema.Literal("compaction"),
+  type: Schema.tag("compaction"),
   admittedSeq: NonNegativeInt,
   id: SessionMessage.ID,
   sessionID: SessionID,
@@ -38,5 +38,8 @@ export const Compaction = Schema.Struct({
   handledSeq: NonNegativeInt.pipe(optional),
 }).annotate({ identifier: "SessionInput.Compaction" })
 
-export const Entry = Schema.Union([PromptEntry, Compaction]).pipe(Schema.toTaggedUnion("type"))
-export type Entry = typeof Entry.Type
+export const Info = Schema.Union([PromptEntry, Compaction]).pipe(
+  Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "SessionInput.Info" }),
+)
+export type Info = typeof Info.Type

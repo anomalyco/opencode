@@ -38,7 +38,7 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(ProjectV2.Directory).toBe(Project.Directory)
   expect(ProjectV2.Directories).toBe(Project.Directories)
   expect(CoreSessionInput.Admitted).toBe(SessionInput.Admitted)
-  expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)
+  expect(CoreSessionMessage.Info).toBe(SessionMessage.Info)
   expect(Api.groups["server.session"].identifier).toBe("server.session")
   expect(Api.groups["server.project"].identifier).toBe("server.project")
   expect(Object.keys(ClientApi.groups)).toEqual(Object.keys(Api.groups))

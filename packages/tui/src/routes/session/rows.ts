@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionMessageAssistant } from "@opencode-ai/sdk/v2"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/sdk/v2"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useData } from "../../context/data"
@@ -88,7 +88,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
                   {
                     id: message.id,
                     created: message.time.created,
-                    input: message.status === "queued" || message.status === "running",
+                    input: message.status === "running",
                   },
                 ]
               : [],
@@ -157,7 +157,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   const isPending = (messageID: string) => {
     const message = data.session.message.get(sessionID(), messageID)
     if (message?.type === "user") return data.session.input.has(sessionID(), messageID)
-    return message?.type === "compaction" && (message.status === "queued" || message.status === "running")
+    return message?.type === "compaction" && message.status === "running"
   }
 
   const queuedStart = (rows: SessionRow[]) => {
@@ -173,7 +173,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   }
   const subscriptions = [
     data.on("session.prompt.admitted", input),
-    data.on("session.compaction.admitted", input),
+    data.on("session.compaction.started", message),
     data.on("session.instructions.updated", message),
     data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
@@ -224,11 +224,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
   return rows
 }
 
-export function reduceSessionRows(messages: SessionMessage[], inputs = new Set<string>()) {
-  const isInput = (message: SessionMessage) => inputs.has(message.id)
-  const pendingCompactions = messages.filter(
-    (message) => message.type === "compaction" && (message.status === "queued" || message.status === "running"),
-  )
+export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>()) {
+  const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
+  const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
   return [
     ...messages.filter((message) => !pending.has(message.id)),

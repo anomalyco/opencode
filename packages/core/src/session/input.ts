@@ -2,7 +2,7 @@ export * as SessionInput from "./input"
 
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
-import { Admitted, Compaction, Delivery, Entry, PromptEntry } from "@opencode-ai/schema/session-input"
+import { Admitted, Compaction, Delivery, Info, PromptEntry } from "@opencode-ai/schema/session-input"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
 import { KeyedMutex } from "../effect/keyed-mutex"
@@ -14,7 +14,7 @@ import { SessionInputTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-export { Admitted, Compaction, Delivery, Entry, PromptEntry }
+export { Admitted, Compaction, Delivery, Info, PromptEntry }
 
 const decodePrompt = Schema.decodeUnknownSync(Prompt)
 const encodePrompt = Schema.encodeSync(Prompt)
@@ -24,7 +24,7 @@ export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict
   id: SessionMessage.ID,
 }) {}
 
-const fromRow = (row: typeof SessionInputTable.$inferSelect): Entry => {
+const fromRow = (row: typeof SessionInputTable.$inferSelect): Info => {
   const base = {
     admittedSeq: row.admitted_seq,
     id: SessionMessage.ID.make(row.id),

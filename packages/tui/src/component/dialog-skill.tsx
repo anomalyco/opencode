@@ -45,10 +45,10 @@ export function DialogSkill(props: DialogSkillProps) {
     return list.map((skill) => ({
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
-      value: skill.name,
+      value: skill.id,
       category: "Skills",
       onSelect: () => {
-        props.onSelect(skill.name)
+        props.onSelect(skill.id)
         dialog.clear()
       },
     }))

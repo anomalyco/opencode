@@ -6,6 +6,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -105,7 +106,7 @@ const eventCount = (type: string) =>
       ),
   )
 
-const encodeMessage = Schema.encodeSync(SessionMessage.Message)
+const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const assistantRow = (id: SessionMessage.ID, seq: number) => {
   const {
     id: _,
@@ -115,7 +116,7 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
     SessionMessage.Assistant.make({
       id,
       type: "assistant",
-      agent: "build",
+      agent: AgentV2.ID.make("build"),
       model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
       content: [],
       time: { created: DateTime.makeUnsafe(0) },
@@ -677,7 +678,6 @@ describe("SessionV2.prompt", () => {
         ...data
       } = encodeMessage({
         id: messageID,
-        sessionID,
         type: "synthetic",
         text: "Existing history",
         time: { created: DateTime.makeUnsafe(0) },

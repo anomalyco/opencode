@@ -448,12 +448,12 @@ export function Autocomplete(props: {
 
     for (const skill of data.location.skill
       .list(location())
-      ?.filter((skill) => skill.slash === true && !commandNames.has(skill.name)) ?? []) {
+      ?.filter((skill) => skill.slash === true && !commandNames.has(skill.id)) ?? []) {
       results.push({
-        display: "/" + skill.name,
+        display: "/" + skill.id,
         description: skill.description,
         onSelect: () => {
-          const newText = "/" + skill.name + " "
+          const newText = "/" + skill.id + " "
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)

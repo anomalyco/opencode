@@ -113,6 +113,7 @@ export type FooterQueuedPrompt = {
 }
 
 export type RunAgent = {
+  id: string
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"

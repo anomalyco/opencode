@@ -16,7 +16,7 @@
 // backgrounding is intentionally absent: subagent jobs block the parent
 // session, so only whole-session `v2.session.background(parentID)` exists.
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
-import type { SessionMessage, SessionMessageAssistantTool, ToolPart } from "@opencode-ai/sdk/v2"
+import type { SessionMessageAssistantTool, SessionMessageInfo, ToolPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import type { FooterSubagentDetail, FooterSubagentState, FooterSubagentTab, StreamCommit } from "./types"
 
@@ -54,7 +54,7 @@ export function legacyTool(input: {
     callID: tool.id,
     tool: tool.name,
   }
-  if (tool.state.status === "pending") {
+  if (tool.state.status === "streaming") {
     return {
       ...base,
       state: { status: "pending", input: {}, raw: tool.state.input },
@@ -83,7 +83,6 @@ export function legacyTool(input: {
         metadata: {
           structured: tool.state.structured,
           content: tool.state.content,
-          outputPaths: tool.state.outputPaths,
           result: tool.state.result,
           providerCall,
           providerResult,
@@ -179,7 +178,7 @@ export type SubagentTrackerInput = {
 export type SubagentTracker = {
   main(event: V2Event): void
   foreign(sessionID: string, event: V2Event): void
-  hydrate(next: { messages: SessionMessage[]; active: Record<string, unknown> }): Promise<void>
+  hydrate(next: { messages: SessionMessageInfo[]; active: Record<string, unknown> }): Promise<void>
   select(sessionID: string | undefined): void
   snapshot(): FooterSubagentState
 }
@@ -316,7 +315,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       messageID,
       tool: item,
     })
-    if (item.state.status === "pending") return
+    if (item.state.status === "streaming") return
     child.callIDs.add(item.id)
     if (item.state.status === "running") {
       setFrame(child, `tool:${item.id}`, toolCommit(part, "start"))
@@ -327,7 +326,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     setFrame(child, `tool:${item.id}`, toolCommit(part, "final"))
   }
 
-  const rebuild = (child: ChildState, messages: SessionMessage[]) => {
+  const rebuild = (child: ChildState, messages: SessionMessageInfo[]) => {
     child.frames = []
     child.text.clear()
     child.projectedText.clear()
@@ -412,7 +411,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         for (const [id, prompt] of pendingPrompts) {
           if (!child.prompts.has(id)) child.prompts.set(id, prompt)
         }
-        rebuild(child, structuredClone(response.data).toReversed() as SessionMessage[])
+        rebuild(child, structuredClone(response.data).toReversed() as SessionMessageInfo[])
         for (const [id, tool] of pendingTools) {
           if (!child.finishedTools.has(id) && !child.tools.has(id)) child.tools.set(id, tool)
         }
@@ -622,7 +621,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
                 input: current?.input ?? {},
                 structured: event.data.structured,
                 content: event.data.content,
-                outputPaths: event.data.outputPaths,
                 result: event.data.result,
               },
           time: {

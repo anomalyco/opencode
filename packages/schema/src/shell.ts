@@ -6,7 +6,7 @@ import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, statics } from "./schema.js"
 
-const IDSchema = Schema.String.check(Schema.isStartsWith("sh_")).pipe(Schema.brand("ShellID"))
+const IDSchema = Schema.String.check(Schema.isStartsWith("sh_")).pipe(Schema.brand("Shell.ID"))
 
 export const ID = IDSchema.pipe(
   statics((schema: typeof IDSchema) => {

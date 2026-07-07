@@ -69,7 +69,7 @@ const providerMetadata = (
 ): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
 const toolInput = (tool: SessionMessage.AssistantTool) =>
-  tool.state.status === "pending"
+  tool.state.status === "streaming"
     ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
     : tool.state.input
 
@@ -168,7 +168,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -202,7 +202,7 @@ function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Mess
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.shell.command}\n\n${message.output?.output ?? ""}`,
+          content: `Shell command: ${message.command}\n\n${message.output?.output ?? ""}`,
           metadata: message.metadata,
         }),
       ]
@@ -232,5 +232,5 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: ModelV2.Ref) =>
+export const toLLMMessages = (messages: readonly SessionMessage.Info[], model: ModelV2.Ref) =>
   messages.flatMap((message) => toLLMMessage(message, model))

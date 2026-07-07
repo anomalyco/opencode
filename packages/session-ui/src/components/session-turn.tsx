@@ -1,8 +1,9 @@
 import {
   AssistantMessage,
-  type SnapshotFileDiff,
+  type FileDiffInfo,
   Message as MessageType,
   Part as PartType,
+  type UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
@@ -90,10 +91,17 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-type SummaryDiff = SnapshotFileDiff & { file: string }
+type SummaryDiffInput = NonNullable<NonNullable<UserMessage["summary"]>["diffs"]>[number]
+type SummaryDiff = FileDiffInfo
 
-function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
-  return typeof value.file === "string"
+function summaryDiff(value: SummaryDiffInput): value is SummaryDiff {
+  return (
+    typeof value.file === "string" &&
+    typeof value.patch === "string" &&
+    typeof value.additions === "number" &&
+    typeof value.deletions === "number" &&
+    value.status !== undefined
+  )
 }
 
 const hidden = new Set(["todowrite"])

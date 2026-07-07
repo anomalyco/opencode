@@ -281,7 +281,6 @@ export async function runNonInteractivePrompt(input: Input) {
             metadata: {
               structured: event.data.structured,
               content: event.data.content,
-              outputPaths: event.data.outputPaths,
               result: event.data.result,
               providerCall: current.provider,
               providerResult: { executed: event.data.executed, state: event.data.resultState },

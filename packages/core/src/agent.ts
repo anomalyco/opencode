@@ -8,6 +8,8 @@ import { State } from "./state"
 
 export const ID = Agent.ID
 export type ID = typeof ID.Type
+export const Name = Agent.Name
+export type Name = Agent.Name
 export const defaultID = ID.make("build")
 
 export const Color = Agent.Color

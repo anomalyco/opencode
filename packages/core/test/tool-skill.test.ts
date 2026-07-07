@@ -42,7 +42,8 @@ describe("SkillTool", () => {
           )
 
           const info: SkillV2.Info = {
-            name: "effect",
+            id: SkillV2.ID.make("effect"),
+            name: SkillV2.Name.make("Effect"),
             description: "Use Effect",
             location: AbsolutePath.make(location),
             content: "# Effect\n\nGuidance",
@@ -117,7 +118,7 @@ describe("SkillTool", () => {
               }),
             ).toMatchObject({
               result: { type: "text", value: SkillTool.toModelOutput(info, [reference]) },
-              output: { structured: { name: "effect" } },
+              output: { structured: { name: "Effect" } },
             })
             expect(assertions).toMatchObject([
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
@@ -140,7 +141,8 @@ describe("SkillTool", () => {
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
             deny = false
             const flat = SkillV2.Info.make({
-              name: "public",
+              id: SkillV2.ID.make("public"),
+              name: SkillV2.Name.make("Public"),
               description: "Public guidance",
               location: AbsolutePath.make(path.join(tmp.path, "public.md")),
               content: "Public",

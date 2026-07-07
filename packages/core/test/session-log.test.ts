@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -11,6 +12,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
@@ -36,6 +38,52 @@ const it = testEffect(
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("SessionV2.log", () => {
+  it.effect("includes retained v1 skill and compaction events", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const created = yield* session.create({ location })
+      const next = Number((yield* events.sequences([created.id])).get(created.id) ?? -1) + 1
+
+      yield* events.replay({
+        id: EventV2.ID.make("evt_legacy_skill_log"),
+        type: EventV2.versionedType(SessionEvent.Skill.Activated.type, 1),
+        created: DateTime.makeUnsafe(1),
+        seq: next,
+        aggregateID: created.id,
+        data: { sessionID: created.id, name: "effect", text: "Use Effect" },
+      })
+      yield* events.replay({
+        id: EventV2.ID.make("evt_legacy_compaction_started_log"),
+        type: EventV2.versionedType(SessionEvent.Compaction.Started.type, 1),
+        created: DateTime.makeUnsafe(2),
+        seq: next + 1,
+        aggregateID: created.id,
+        data: { sessionID: created.id, reason: "auto" },
+      })
+      yield* events.replay({
+        id: EventV2.ID.make("evt_legacy_compaction_failed_log"),
+        type: EventV2.versionedType(SessionEvent.Compaction.Failed.type, 1),
+        created: DateTime.makeUnsafe(3),
+        seq: next + 2,
+        aggregateID: created.id,
+        data: { sessionID: created.id },
+      })
+
+      const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id })))
+      expect(items.map((item) => item.type)).toEqual([
+        "session.skill.activated",
+        "session.compaction.started",
+        "session.compaction.failed",
+        "log.synced",
+      ])
+      expect(items.flatMap((item) => (EventV2.isSynced(item) ? [] : [Number(item.durable.version)]))).toEqual([1, 1, 1])
+      expect(yield* session.messages({ sessionID: created.id })).toContainEqual(
+        expect.objectContaining({ type: "compaction", status: "failed", reason: "auto" }),
+      )
+    }),
+  )
+
   it.effect("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
@@ -87,11 +135,11 @@ describe("SessionV2.log", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const created = yield* session.create({ location })
-      yield* session.switchAgent({ sessionID: created.id, agent: "one" })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("one") })
       // Not in the durable manifest, so reads must skip it without failing.
       yield* events.publish(GapEvent, { sessionID: created.id, value: "filtered" })
-      yield* session.switchAgent({ sessionID: created.id, agent: "two" })
-      yield* session.switchAgent({ sessionID: created.id, agent: "three" })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("two") })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("three") })
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id, after: 1 })))
 

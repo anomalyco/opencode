@@ -1,5 +1,5 @@
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import type { ModelV2Info } from "@opencode-ai/sdk/v2/types"
+import type { ModelInfo } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
@@ -11,7 +11,7 @@ function released(date: string) {
   return Number.isFinite(time) ? time : 0
 }
 
-function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
+function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
   const base = {
     input: input?.input ?? 0,
     output: input?.output ?? 0,
@@ -50,13 +50,13 @@ function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
   ]
 }
 
-function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] | undefined) {
+function mergeCost(base: ModelInfo["cost"], override: ModelsDev.Model["cost"] | undefined) {
   if (!override) return base
   const next = cost(override)
   const [baseDefault, ...baseTiers] = base
   const [nextDefault, ...nextTiers] = next
-  const tierKey = (item: ModelV2Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
-  const merge = (left: ModelV2Info["cost"][number], right: ModelV2Info["cost"][number]) => ({
+  const tierKey = (item: ModelInfo["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
+  const merge = (left: ModelInfo["cost"][number], right: ModelInfo["cost"][number]) => ({
     ...left,
     ...right,
     tier: right.tier ?? left.tier,
@@ -72,7 +72,7 @@ function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] 
 
 const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 
-function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model): NonNullable<ModelV2Info["variants"]> {
+function reasoningVariants(provider: ModelsDev.Provider, model: ModelsDev.Model): NonNullable<ModelInfo["variants"]> {
   const npm = model.provider?.npm ?? provider.npm
   const options = model.reasoning_options ?? []
   const effort = options.find((option) => option.type === "effort")
@@ -117,7 +117,7 @@ function settingsForEffort(npm: string | undefined, effort: string): ProviderV2.
 function budgetVariants(
   npm: string | undefined,
   option: Extract<NonNullable<ModelsDev.Model["reasoning_options"]>[number], { type: "budget_tokens" }>,
-): NonNullable<ModelV2Info["variants"]> {
+): NonNullable<ModelInfo["variants"]> {
   const max = option.max
   const high =
     option.max === undefined
@@ -146,7 +146,7 @@ function modeName(model: ModelsDev.Model, mode: string) {
   return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
 }
 
-function mergeVariants(model: ModelV2Info, next: NonNullable<ModelV2Info["variants"]>) {
+function mergeVariants(model: ModelInfo, next: NonNullable<ModelInfo["variants"]>) {
   const variants = model.variants ?? []
   const existing = new Map(variants.map((variant) => [variant.id, variant]))
   const nextIDs = new Set(next.map((variant) => variant.id))
@@ -157,13 +157,13 @@ function mergeVariants(model: ModelV2Info, next: NonNullable<ModelV2Info["varian
 }
 
 function applyModel(
-  draft: ModelV2Info,
+  draft: ModelInfo,
   model: ModelsDev.Model,
   input: {
     readonly name?: string
-    readonly cost?: ModelV2Info["cost"]
+    readonly cost?: ModelInfo["cost"]
     readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
-    readonly variants?: NonNullable<ModelV2Info["variants"]>
+    readonly variants?: NonNullable<ModelInfo["variants"]>
   } = {},
 ) {
   draft.name = input.name ?? model.name

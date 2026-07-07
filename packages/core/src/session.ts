@@ -34,7 +34,7 @@ import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
-import { Revert } from "@opencode-ai/schema/revert"
+import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "./fs-util"
 import { Mime } from "./mime"
 import type { EventLog } from "@opencode-ai/schema/event-log"
@@ -46,8 +46,8 @@ import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { fileURLToPath } from "url"
 
-export const RevertState = Revert.State
-export type RevertState = Revert.State
+export const RevertState = Session.Revert
+export type RevertState = Session.Revert
 
 // get project -> project.locations
 //
@@ -136,7 +136,7 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.Bus
   sessionID: SessionSchema.ID,
 }) {}
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
-  skill: Schema.String,
+  skill: SkillV2.ID,
 }) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
@@ -170,14 +170,14 @@ export interface Interface {
       id: SessionMessage.ID
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  }) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   readonly message: (input: {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
-  }) => Effect.Effect<SessionMessage.Message | undefined>
+  }) => Effect.Effect<SessionMessage.Info | undefined>
   readonly context: (
     sessionID: SessionSchema.ID,
-  ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   /**
    * Durable, ordered, gap-free session log read. Replays public durable
    * session events after the exclusive `after` cursor, emits a `Synced`
@@ -191,7 +191,10 @@ export interface Interface {
     after?: number
     follow?: boolean
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
-  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
+  readonly switchAgent: (input: {
+    sessionID: SessionSchema.ID
+    agent: AgentV2.ID
+  }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
@@ -209,7 +212,7 @@ export interface Interface {
     sessionID: SessionSchema.ID
     command: string
     arguments?: string
-    agent?: string
+    agent?: AgentV2.ID
     model?: ModelV2.Ref
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
@@ -227,7 +230,7 @@ export interface Interface {
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    skill: string
+    skill: SkillV2.ID
     resume?: boolean
   }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (
@@ -250,7 +253,7 @@ export interface Interface {
       sessionID: SessionSchema.ID
       messageID: SessionMessage.ID
       files?: boolean
-    }) => Effect.Effect<Revert.State, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
+    }) => Effect.Effect<Session.Revert, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
     readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
@@ -273,7 +276,7 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Persisted)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
@@ -529,7 +532,7 @@ const layer = Layer.effect(
         })
         const model = command.model ?? commandAgent?.model ?? input.model
         if (agent !== undefined && session.agent !== AgentV2.ID.make(agent))
-          yield* result.switchAgent({ sessionID: input.sessionID, agent })
+          yield* result.switchAgent({ sessionID: input.sessionID, agent: AgentV2.ID.make(agent) })
         if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
 
         return yield* result.prompt({
@@ -591,12 +594,13 @@ const layer = Layer.effect(
       skill: Effect.fn("V2Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const skills = yield* SkillV2.Service.pipe(Effect.provide(locations.get(session.location)))
-        const skill = (yield* skills.list()).find((item) => item.name === input.skill)
+        const skill = (yield* skills.list()).find((item) => item.id === input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
         yield* events.publish(
           SessionEvent.Skill.Activated,
           {
             sessionID: input.sessionID,
+            id: skill.id,
             name: skill.name,
             text: skill.content,
           },

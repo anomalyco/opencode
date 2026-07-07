@@ -89,12 +89,11 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
     !explicitModel && !sessionModel
       ? await client.model
           .default({ location: { directory: cwd, workspace } })
-          .then((result) =>
-            result.data ? { providerID: result.data.providerID, modelID: result.data.id } : undefined,
-          )
+          .then((result) => (result.data ? { providerID: result.data.providerID, modelID: result.data.id } : undefined))
       : undefined
   const model = pickRunModel(explicitModel, input.variant, sessionModel, defaultModel)
-  if (input.variant && !model) return reportError(input, "Cannot select a variant before selecting a model", session?.id)
+  if (input.variant && !model)
+    return reportError(input, "Cannot select a variant before selecting a model", session?.id)
   if (model) {
     await waitForCatalogReady({ sdk: client, directory: cwd, workspace, model })
     const available = await client.model.list({ location: { directory: cwd, workspace } })
@@ -112,9 +111,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
   if (!session && input.title !== undefined) {
     await client.session.rename({
       sessionID: selected.id,
-      title:
-        input.title ||
-        prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : ""),
+      title: input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : ""),
     })
   }
 
@@ -200,7 +197,7 @@ async function validateAgent(client: OpenCodeClient, directory: string, name?: s
     warning(`failed to list agents${server ? ` from ${server}` : ""}. Falling back to default agent`)
     return
   }
-  const agent = agents.find((item) => item.name === name)
+  const agent = agents.find((item) => item.id === name)
   if (!agent) {
     warning(`agent "${name}" not found. Falling back to default agent`)
     return

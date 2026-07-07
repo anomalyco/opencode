@@ -162,7 +162,7 @@ const layer = Layer.effect(
       for (const message of yield* store.context(sessionID)) {
         if (message.type !== "assistant") continue
         for (const tool of message.content) {
-          if (tool.type !== "tool" || (tool.state.status !== "pending" && tool.state.status !== "running")) continue
+          if (tool.type !== "tool" || (tool.state.status !== "streaming" && tool.state.status !== "running")) continue
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID,
             assistantMessageID: message.id,
@@ -273,8 +273,7 @@ const layer = Layer.effect(
       // Durable publishes are serialized so tool fibers and step settlement never interleave
       // mid-event.
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
-      const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = [], error?: SessionError.Error) =>
-        serialized(publisher.publish(event, outputPaths, error))
+      const publish = (event: LLMEvent, error?: SessionError.Error) => serialized(publisher.publish(event, error))
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -317,7 +316,6 @@ const layer = Layer.effect(
                         result: settlement.result,
                         output: settlement.output,
                       }),
-                      settlement.outputPaths ?? [],
                       settlement.error,
                     ).pipe(
                       Effect.andThen(
@@ -557,12 +555,30 @@ const layer = Layer.effect(
               return yield* compaction.compactManual({
                 session,
                 messages: yield* store.context(sessionID),
+                inputID: pending.id,
               })
             }),
           ).pipe(Effect.exit)
           if (Exit.isSuccess(compacted) && compacted.value) return true
-          yield* events.publish(SessionEvent.Compaction.Failed, { sessionID })
-          if (Exit.isFailure(compacted)) return yield* Effect.failCause(compacted.cause)
+          if (Exit.isFailure(compacted)) {
+            const unsettled = yield* SessionInput.pendingCompaction(db, sessionID)
+            if (unsettled)
+              yield* events.publish(SessionEvent.Compaction.Failed, {
+                sessionID,
+                reason: "manual",
+                error: { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
+                inputID: unsettled.id,
+              })
+            return yield* Effect.failCause(compacted.cause)
+          }
+          const unsettled = yield* SessionInput.pendingCompaction(db, sessionID)
+          if (unsettled)
+            yield* events.publish(SessionEvent.Compaction.Failed, {
+              sessionID,
+              reason: "manual",
+              error: { type: "compaction.failed", message: "Compaction could not start" },
+              inputID: unsettled.id,
+            })
           return true
         }),
       )

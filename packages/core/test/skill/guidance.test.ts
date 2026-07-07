@@ -11,24 +11,28 @@ import { it } from "../lib/effect"
 
 const build = AgentV2.ID.make("build")
 const effect = SkillV2.Info.make({
-  name: "effect",
+  id: SkillV2.ID.make("effect"),
+  name: SkillV2.Name.make("Effect"),
   description: "Build applications with Effect",
   location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
   content: "Effect guidance",
 })
 const hidden = SkillV2.Info.make({
-  name: "hidden",
+  id: SkillV2.ID.make("hidden"),
+  name: SkillV2.Name.make("Hidden"),
   location: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
   content: "Undescribed guidance",
 })
 const denied = SkillV2.Info.make({
-  name: "denied",
+  id: SkillV2.ID.make("denied"),
+  name: SkillV2.Name.make("Denied"),
   description: "Must not be advertised",
   location: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
   content: "Denied guidance",
 })
 const manual = SkillV2.Info.make({
-  name: "manual",
+  id: SkillV2.ID.make("manual"),
+  name: SkillV2.Name.make("Manual"),
   description: "Load only when explicitly selected",
   autoinvoke: false,
   location: AbsolutePath.make(path.resolve("/skills/manual/SKILL.md")),
@@ -59,7 +63,8 @@ describe("SkillGuidance", () => {
           "Use the skill tool to load a skill when a task matches its description.",
           "<available_skills>",
           "  <skill>",
-          "    <name>effect</name>",
+          "    <id>effect</id>",
+          "    <name>Effect</name>",
           "    <description>Build applications with Effect</description>",
           "  </skill>",
           "</available_skills>",
@@ -74,7 +79,7 @@ describe("SkillGuidance", () => {
           .pipe(Effect.flatMap((context) => Instructions.reconcile(context, initialized.applied))),
       ).toMatchObject({
         _tag: "Updated",
-        text: "The following skills are no longer available and must not be used: effect.",
+        text: "The following skill IDs are no longer available and must not be used: effect.",
       })
     }).pipe(Effect.provide(layer(() => skills)))
   })
@@ -82,7 +87,8 @@ describe("SkillGuidance", () => {
   it.effect("announces added and removed skills as deltas without restating the list", () => {
     const agent = AgentV2.Info.make(AgentV2.Info.empty(build))
     const debugging = SkillV2.Info.make({
-      name: "debugging",
+      id: SkillV2.ID.make("debugging"),
+      name: SkillV2.Name.make("Debugging"),
       description: "Diagnose hard bugs",
       location: AbsolutePath.make(path.resolve("/skills/debugging/SKILL.md")),
       content: "Debugging guidance",
@@ -103,7 +109,8 @@ describe("SkillGuidance", () => {
         text: [
           "New skills are available in addition to those previously listed:",
           "  <skill>",
-          "    <name>debugging</name>",
+          "    <id>debugging</id>",
+          "    <name>Debugging</name>",
           "    <description>Diagnose hard bugs</description>",
           "  </skill>",
         ].join("\n"),
@@ -117,7 +124,7 @@ describe("SkillGuidance", () => {
         )
       expect(removed).toMatchObject({
         _tag: "Updated",
-        text: "The following skills are no longer available and must not be used: effect.",
+        text: "The following skill IDs are no longer available and must not be used: effect.",
       })
     }).pipe(Effect.provide(layer(() => skills)))
   })
@@ -192,7 +199,7 @@ describe("SkillGuidance", () => {
       const guidance = yield* SkillGuidance.Service
       expect(
         (yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(Instructions.initialize))).text,
-      ).toContain("<name>effect</name>")
+      ).toContain("<name>Effect</name>")
     }).pipe(Effect.provide(layer(() => [effect])))
   })
 

@@ -4,6 +4,7 @@ import { DateTime, Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
@@ -51,7 +52,7 @@ describe("Tool.Progress", () => {
       yield* service.publish(SessionEvent.Step.Started, {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: AgentV2.ID.make("build"),
         model,
       })
       const readAssistant = Effect.gen(function* () {

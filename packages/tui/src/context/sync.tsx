@@ -15,7 +15,7 @@ import type {
   ProviderListResponse,
   QuestionRequest,
   Session,
-  SnapshotFileDiff,
+  FileDiffInfo,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
@@ -49,7 +49,7 @@ export const {
       question: Record<string, QuestionRequest[]>
       config: Config
       session: Session[]
-      session_diff: Record<string, SnapshotFileDiff[]>
+      session_diff: Record<string, FileDiffInfo[]>
       todo: Record<string, Todo[]>
       message: Record<string, Message[]>
       part: Record<string, Part[]>

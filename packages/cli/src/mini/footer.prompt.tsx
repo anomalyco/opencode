@@ -333,10 +333,10 @@ export function createPromptState(input: PromptInput): PromptState {
       .map((item) => ({
         kind: "mention",
         display: "@" + item.name,
-        value: item.name,
+        value: item.id,
         part: {
           type: "agent",
-          name: item.name,
+          name: item.id,
           source: {
             start: 0,
             end: 0,

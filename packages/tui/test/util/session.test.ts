@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessage } from "@opencode-ai/sdk/v2"
+import type { SessionMessageInfo } from "@opencode-ai/sdk/v2"
 import { isDefaultTitle, lastAssistantWithUsage } from "../../src/util/session"
 
 describe("util.session", () => {
@@ -10,7 +10,7 @@ describe("util.session", () => {
   })
 
   test("tracks usage across undo and redo boundaries", () => {
-    const assistant = (id: string, input: number): SessionMessage => ({
+    const assistant = (id: string, input: number): SessionMessageInfo => ({
       id,
       type: "assistant",
       agent: "build",

@@ -13,10 +13,10 @@ import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { Instructions } from "../instructions/index"
-import type { Revert } from "@opencode-ai/schema/revert"
+import type { Session } from "@opencode-ai/schema/session"
 import type { Schema } from "effect"
 
-type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
+type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
@@ -49,7 +49,7 @@ export const SessionTable = sqliteTable(
     tokens_reasoning: integer().notNull().default(0),
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
-    revert: text({ mode: "json" }).$type<Revert.State>(),
+    revert: text({ mode: "json" }).$type<Session.Revert>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
@@ -148,7 +148,7 @@ export const SessionInputTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionInput.Entry["type"]>().notNull(),
+    type: text().$type<SessionInput.Info["type"]>().notNull(),
     prompt: text({ mode: "json" }).$type<Prompt>(),
     delivery: text().$type<SessionInput.Delivery>(),
     admitted_seq: integer().notNull(),

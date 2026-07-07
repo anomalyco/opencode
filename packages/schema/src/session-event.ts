@@ -12,9 +12,14 @@ import { FileAttachment, Prompt } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
-import { Revert } from "./revert.js"
+import { LegacyRevert, Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
+import { Agent } from "./agent.js"
+import { Skill as SkillSchema } from "./skill.js"
+import { Money } from "./money.js"
+import { Snapshot } from "./snapshot.js"
+import { TokenUsage } from "./token-usage.js"
 
 export { FileAttachment }
 
@@ -23,22 +28,13 @@ export const Source = Schema.Struct({
   end: NonNegativeInt,
   text: Schema.String,
 }).annotate({
-  identifier: "session.event.source",
+  identifier: "Session.Event.Source",
 })
 export interface Source extends Schema.Schema.Type<typeof Source> {}
 
 const Base = {
   sessionID: SessionID,
 }
-const Tokens = Schema.Struct({
-  input: Schema.Finite,
-  output: Schema.Finite,
-  reasoning: Schema.Finite,
-  cache: Schema.Struct({
-    read: Schema.Finite,
-    write: Schema.Finite,
-  }),
-})
 const PromptFields = {
   ...Base,
   inputID: SessionMessage.ID,
@@ -52,12 +48,18 @@ const options = {
     version: 1,
   },
 } as const
+const optionsV2 = {
+  durable: {
+    aggregate: "sessionID",
+    version: 2,
+  },
+} as const
 export const AgentSelected = Event.durable({
   type: "session.agent.selected",
   ...options,
   schema: {
     ...Base,
-    agent: Schema.String,
+    agent: Agent.ID,
   },
 })
 export type AgentSelected = typeof AgentSelected.Type
@@ -97,8 +99,8 @@ export const UsageUpdated = Event.ephemeral({
   type: "session.usage.updated",
   schema: {
     ...Base,
-    cost: Schema.Finite,
-    tokens: Tokens,
+    cost: Money.USD,
+    tokens: TokenUsage.Info,
   },
 })
 export type UsageUpdated = typeof UsageUpdated.Type
@@ -186,12 +188,25 @@ export const Synthetic = Event.durable({
 export type Synthetic = typeof Synthetic.Type
 
 export namespace Skill {
-  export const Activated = Event.durable({
+  /** Persisted before Skill IDs and display names were separated. */
+  export const ActivatedV1 = Event.durable({
     type: "session.skill.activated",
+    identifier: "Session.Skill.ActivatedV1",
     ...options,
     schema: {
       ...Base,
       name: Schema.String,
+      text: Schema.String,
+    },
+  })
+
+  export const Activated = Event.durable({
+    type: "session.skill.activated",
+    ...optionsV2,
+    schema: {
+      ...Base,
+      id: SkillSchema.ID,
+      name: SkillSchema.Name,
       text: Schema.String,
     },
   })
@@ -228,9 +243,9 @@ export namespace Step {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      agent: Schema.String,
+      agent: Agent.ID,
       model: Model.Ref,
-      snapshot: Schema.String.pipe(optional),
+      snapshot: Snapshot.ID.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
@@ -242,9 +257,9 @@ export namespace Step {
       ...Base,
       assistantMessageID: SessionMessage.ID,
       finish: FinishReason,
-      cost: Schema.Finite,
-      tokens: Tokens,
-      snapshot: Schema.String.pipe(optional),
+      cost: Money.USD,
+      tokens: TokenUsage.Info,
+      snapshot: Snapshot.ID.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
     },
   })
@@ -257,8 +272,8 @@ export namespace Step {
       ...Base,
       assistantMessageID: SessionMessage.ID,
       error: SessionError.Error,
-      cost: Schema.Finite.pipe(optional),
-      tokens: Tokens.pipe(optional),
+      cost: Money.USD.pipe(optional),
+      tokens: TokenUsage.Info.pipe(optional),
     },
   })
   export type Failed = typeof Failed.Type
@@ -413,7 +428,6 @@ export namespace Tool {
       ...ToolBase,
       structured: Schema.Record(Schema.String, Schema.Unknown),
       content: Schema.Array(ToolContent),
-      outputPaths: Schema.Array(Schema.String).pipe(optional),
       result: Schema.Unknown.pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
@@ -459,18 +473,32 @@ export namespace Compaction {
   })
   export type Admitted = typeof Admitted.Type
 
-  export const Started = Event.durable({
+  /** Persisted before running compactions projected recent context and manual input identity. */
+  export const StartedV1 = Event.durable({
     type: "session.compaction.started",
+    identifier: "Session.Compaction.StartedV1",
     ...options,
     schema: {
       ...Base,
-      reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
+      reason: Schema.Literals(["auto", "manual"]),
+    },
+  })
+
+  export const Started = Event.durable({
+    type: "session.compaction.started",
+    ...optionsV2,
+    schema: {
+      ...Base,
+      reason: StartedV1.data.fields.reason,
+      recent: Schema.String,
+      inputID: SessionMessage.ID.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
 
-  export const Delta = Event.ephemeral({
+  export const Delta = Event.durable({
     type: "session.compaction.delta",
+    ...options,
     schema: {
       ...Base,
       text: Schema.String,
@@ -490,19 +518,40 @@ export namespace Compaction {
   })
   export type Ended = typeof Ended.Type
 
-  export const Failed = Event.durable({
+  /** Persisted before failures recorded their reason, error, and manual input identity. */
+  export const FailedV1 = Event.durable({
     type: "session.compaction.failed",
+    identifier: "Session.Compaction.FailedV1",
     ...options,
     schema: Base,
+  })
+
+  export const Failed = Event.durable({
+    type: "session.compaction.failed",
+    ...optionsV2,
+    schema: {
+      ...Base,
+      reason: Started.data.fields.reason,
+      error: SessionError.Error,
+      inputID: SessionMessage.ID.pipe(optional),
+    },
   })
   export type Failed = typeof Failed.Type
 }
 
 export namespace RevertEvent {
+  /** Persisted before revert files adopted canonical FileDiff.Info. */
+  export const StagedV1 = Event.durable({
+    type: "session.revert.staged",
+    identifier: "Session.Revert.StagedV1",
+    ...options,
+    schema: { ...Base, revert: LegacyRevert },
+  })
+
   export const Staged = Event.durable({
     type: "session.revert.staged",
-    ...options,
-    schema: { ...Base, revert: Revert.State },
+    ...optionsV2,
+    schema: { ...Base, revert: Revert },
   })
   export const Cleared = Event.durable({ type: "session.revert.cleared", ...options, schema: Base })
   export const Committed = Event.durable({
@@ -512,7 +561,7 @@ export namespace RevertEvent {
   })
 }
 
-export const Definitions = Event.inventory(
+export const CurrentDefinitions = Event.inventory(
   AgentSelected,
   ModelSelected,
   Moved,
@@ -558,15 +607,23 @@ export const Definitions = Event.inventory(
   RevertEvent.Committed,
 )
 
+export const Definitions = Event.inventory(
+  Skill.ActivatedV1,
+  Compaction.StartedV1,
+  Compaction.FailedV1,
+  RevertEvent.StagedV1,
+  ...CurrentDefinitions,
+)
+
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
   .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "SessionDurableEvent" })
+  .annotate({ identifier: "Session.Event.Durable" })
 export type DurableEvent = typeof Durable.Type
 
-export const All = Schema.Union(Definitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export const All = Schema.Union(CurrentDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type Event = typeof All.Type
 export type Type = Event["type"]

@@ -312,6 +312,8 @@ import type {
   V2LocationGetResponses,
   V2McpListErrors,
   V2McpListResponses,
+  V2McpResourceCatalogErrors,
+  V2McpResourceCatalogResponses,
   V2ModelDefaultErrors,
   V2ModelDefaultResponses,
   V2ModelListErrors,
@@ -402,6 +404,8 @@ import type {
   V2SessionMessageResponses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
+  V2SessionMoveErrors,
+  V2SessionMoveResponses,
   V2SessionPermissionCreateErrors,
   V2SessionPermissionCreateResponses,
   V2SessionPermissionGetErrors,
@@ -6098,6 +6102,45 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Move session
+   *
+   * Move a session to another project directory, optionally transferring local changes.
+   */
+  public move<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      destination?: {
+        directory: string
+      }
+      moveChanges?: boolean | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "destination" },
+            { in: "body", key: "moveChanges" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionMoveResponses, V2SessionMoveErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/move",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Send message
    *
    * Durably admit one session input and schedule agent-loop execution unless resume is false.
@@ -6241,6 +6284,7 @@ export class Session3 extends HeyApiClient {
       metadata?: {
         [key: string]: unknown
       }
+      resume?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6253,6 +6297,7 @@ export class Session3 extends HeyApiClient {
             { in: "body", key: "text" },
             { in: "body", key: "description" },
             { in: "body", key: "metadata" },
+            { in: "body", key: "resume" },
           ],
         },
       ],
@@ -6971,6 +7016,34 @@ export class Integration extends HeyApiClient {
   }
 }
 
+export class Resource2 extends HeyApiClient {
+  /**
+   * List MCP resources
+   *
+   * Retrieve resources and resource templates from connected MCP servers.
+   */
+  public catalog<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      V2McpResourceCatalogResponses,
+      V2McpResourceCatalogErrors,
+      ThrowOnError
+    >({
+      url: "/api/mcp/resource",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Mcp2 extends HeyApiClient {
   /**
    * List MCP servers
@@ -6992,6 +7065,11 @@ export class Mcp2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _resource?: Resource2
+  get resource(): Resource2 {
+    return (this._resource ??= new Resource2({ client: this.client }))
   }
 }
 

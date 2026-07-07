@@ -1,6 +1,6 @@
 export * as Event from "./event.js"
 
-import { Schema } from "effect"
+import { Schema, SchemaTransformation } from "effect"
 import { optional } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Location } from "./location.js"
@@ -72,6 +72,7 @@ export type Payload<D extends Definition = Definition> = D extends DurableDefini
 
 type Input<Type extends string, Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>> = {
   readonly type: Type
+  readonly identifier?: string
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
@@ -84,16 +85,29 @@ export function durable<
   const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
 >(input: Input<Type, Fields> & { readonly durable: NonNullable<Input<Type, Fields>["durable"]> }) {
   const data = Schema.Struct(input.schema)
+  const durable = Schema.Struct({
+    aggregateID: DurableEnvelope.fields.aggregateID,
+    seq: DurableEnvelope.fields.seq,
+    version: Schema.Literal(input.durable.version).pipe(
+      Schema.decodeTo(
+        Schema.toType(Version),
+        SchemaTransformation.transform({
+          decode: () => Version.make(input.durable.version),
+          encode: () => input.durable.version,
+        }),
+      ),
+    ),
+  })
   return Schema.Struct({
     id: ID,
     created: DateTimeUtcFromMillis,
     metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
     type: Schema.Literal(input.type),
-    durable: DurableEnvelope,
+    durable,
     location: optional(Location.Ref),
     data,
   })
-    .annotate({ identifier: input.type })
+    .annotate({ identifier: input.identifier ?? input.type })
     .pipe(
       statics(() => ({
         type: input.type,
@@ -117,7 +131,7 @@ export function ephemeral<
     location: optional(Location.Ref),
     data,
   })
-    .annotate({ identifier: input.type })
+    .annotate({ identifier: input.identifier ?? input.type })
     .pipe(
       statics(() => ({
         type: input.type,

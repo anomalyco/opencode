@@ -88,13 +88,15 @@ describe("SkillV2", () => {
           ])
           expect(yield* skill.list()).toEqual([
             SkillV2.Info.make({
-              name: "foo",
+              id: SkillV2.ID.make("foo"),
+              name: SkillV2.Name.make("foo"),
               slash: true,
               location: AbsolutePath.make(path.join(first, "foo.md")),
               content: "# foo",
             }),
             {
-              name: "review",
+              id: SkillV2.ID.make("review"),
+              name: SkillV2.Name.make("review"),
               description: "Second",
               location: AbsolutePath.make(path.join(second, "review", "SKILL.md")),
               content: "# review",
@@ -129,8 +131,8 @@ describe("SkillV2", () => {
           const skill = yield* SkillV2.Service
           yield* skill.transform((editor) => editor.source({ type: "url", url: "https://example.test/skills/" }))
 
-          expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
-          expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
+          expect((yield* skill.list()).map((item) => item.name)).toEqual([SkillV2.Name.make("deploy")])
+          expect((yield* skill.list()).map((item) => item.name)).toEqual([SkillV2.Name.make("deploy")])
           expect(pulls).toBe(1)
           expect(SkillV2.available(yield* skill.list(), (yield* agents.get(AgentV2.ID.make("reviewer")))!)).toEqual([])
         }),
@@ -165,7 +167,8 @@ metadata:
 
           expect(yield* skill.list()).toEqual([
             {
-              name: "manual",
+              id: SkillV2.ID.make("manual"),
+              name: SkillV2.Name.make("manual"),
               description: "Manual only",
               slash: true,
               autoinvoke: false,

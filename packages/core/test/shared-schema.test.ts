@@ -76,6 +76,7 @@ test("Core reuses the canonical shared schemas", async () => {
 
   const schemas = [
     [AgentV2.ID, Agent.ID],
+    [AgentV2.Name, Agent.Name],
     [AgentV2.Color, Agent.Color],
     [AgentV2.Info, Agent.Info],
     [coreCommand.Info, Command.Info],
@@ -145,7 +146,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.Synthetic, SessionMessage.Synthetic],
     [coreSessionMessage.System, SessionMessage.System],
     [coreSessionMessage.Shell, SessionMessage.Shell],
-    [coreSessionMessage.ToolStatePending, SessionMessage.ToolStatePending],
+    [coreSessionMessage.ToolStateStreaming, SessionMessage.ToolStateStreaming],
     [coreSessionMessage.ToolStateRunning, SessionMessage.ToolStateRunning],
     [coreSessionMessage.ToolStateCompleted, SessionMessage.ToolStateCompleted],
     [coreSessionMessage.ToolStateError, SessionMessage.ToolStateError],
@@ -156,7 +157,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.AssistantContent, SessionMessage.AssistantContent],
     [coreSessionMessage.Assistant, SessionMessage.Assistant],
     [coreSessionMessage.Compaction, SessionMessage.Compaction],
-    [coreSessionMessage.Message, SessionMessage.Message],
+    [coreSessionMessage.Info, SessionMessage.Info],
     [coreSessionTodo.Info, SessionTodo.Info],
     [coreSessionTodo.Event, SessionTodo.Event],
     [coreSkill.DirectorySource, Skill.DirectorySource],

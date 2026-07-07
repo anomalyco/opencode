@@ -93,7 +93,7 @@ function permission(id: string, sessionID = "session"): PermissionRequest {
   }
 }
 
-function durable(sessionID: string) {
+function durable(sessionID: string): { aggregateID: string; seq: number; version: 1 } {
   return { aggregateID: sessionID, seq: 0, version: 1 }
 }
 

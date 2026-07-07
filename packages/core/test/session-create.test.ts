@@ -210,7 +210,7 @@ describe("SessionV2.create", () => {
       expect(forked.parentID).toBeUndefined()
       expect(forkContext).toMatchObject([
         { type: "user", text: "First" },
-        { type: "synthetic", text: "parent note", sessionID: forked.id },
+        { type: "synthetic", text: "parent note" },
       ])
       expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
       expect(history).toHaveLength(1)
@@ -273,7 +273,7 @@ describe("SessionV2.create", () => {
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID: parent.id,
         assistantMessageID,
-        agent: "build",
+        agent: AgentV2.ID.make("build"),
         model,
       })
       yield* events.publish(SessionEvent.Step.Ended, {
@@ -533,7 +533,7 @@ describe("SessionV2.create", () => {
 
         const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
         const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
-        expect(shell).toMatchObject({ type: "shell", shell: { command: "echo hello", status: "exited", exit: 0 } })
+        expect(shell).toMatchObject({ type: "shell", command: "echo hello", status: "exited", exit: 0 })
         expect(shell?.output?.output).toContain("hello")
         expect(shell?.output?.truncated).toBe(false)
         expect(shell?.time.completed).toBeDefined()
@@ -553,8 +553,8 @@ describe("SessionV2.create", () => {
 
         const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
         const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
-        expect(shell).toMatchObject({ type: "shell", shell: { command: "false", status: "exited" } })
-        expect(shell?.shell.exit).not.toBe(0)
+        expect(shell).toMatchObject({ type: "shell", command: "false", status: "exited" })
+        expect(shell?.exit).not.toBe(0)
         expect(shell?.time.completed).toBeDefined()
       }),
     ),
@@ -565,7 +565,7 @@ describe("SessionV2.create", () => {
       const session = yield* SessionV2.Service
       const created = yield* session.create({ location })
 
-      yield* session.switchAgent({ sessionID: created.id, agent: "plan" })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("plan") })
 
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
@@ -580,7 +580,7 @@ describe("SessionV2.create", () => {
       const missing = SessionV2.ID.make("ses_missing_agent_switch")
 
       expect(
-        yield* session.switchAgent({ sessionID: missing, agent: "plan" }).pipe(
+        yield* session.switchAgent({ sessionID: missing, agent: AgentV2.ID.make("plan") }).pipe(
           Effect.flip,
           Effect.map((error) => error._tag),
         ),

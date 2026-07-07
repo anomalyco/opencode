@@ -8,7 +8,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
@@ -36,15 +36,15 @@ import {
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
-type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
+type RenderDiff = (FileDiffInfo & { file: string }) | VcsFileDiff
 
-function renderDiff(value: SnapshotFileDiff | VcsFileDiff): value is RenderDiff {
+function renderDiff(value: FileDiffInfo | VcsFileDiff): value is RenderDiff {
   return typeof value.file === "string"
 }
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
-  diffs: () => (SnapshotFileDiff | VcsFileDiff)[]
+  diffs: () => (FileDiffInfo | VcsFileDiff)[]
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean

@@ -3,11 +3,12 @@ export * as Model from "./model.js"
 import { Schema } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
+import { Money } from "./money.js"
 
-export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
 export type ID = typeof ID.Type
 
-export const VariantID = Schema.String.pipe(Schema.brand("VariantID"))
+export const VariantID = Schema.String.pipe(Schema.brand("Model.VariantID"))
 export type VariantID = typeof VariantID.Type
 
 export const Ref = Schema.Struct({
@@ -17,7 +18,7 @@ export const Ref = Schema.Struct({
 }).annotate({ identifier: "Model.Ref" })
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
-export const Family = Schema.String.pipe(Schema.brand("Family"))
+export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
@@ -30,14 +31,14 @@ export const Capabilities = Schema.Struct({
 export interface Cost extends Schema.Schema.Type<typeof Cost> {}
 export const Cost = Schema.Struct({
   tier: Schema.Struct({
-    type: Schema.Literal("context"),
+    type: Schema.tag("context"),
     size: Schema.Int,
   }).pipe(optional),
-  input: Schema.Finite,
-  output: Schema.Finite,
+  input: Money.USDPerMillionTokens,
+  output: Money.USDPerMillionTokens,
   cache: Schema.Struct({
-    read: Schema.Finite,
-    write: Schema.Finite,
+    read: Money.USDPerMillionTokens,
+    write: Money.USDPerMillionTokens,
   }),
 }).annotate({ identifier: "Model.Cost" })
 
@@ -70,7 +71,7 @@ export const Info = Schema.Struct({
     output: Schema.Int,
   }),
 })
-  .annotate({ identifier: "ModelV2.Info" })
+  .annotate({ identifier: "Model.Info" })
   .pipe(
     statics((schema) => ({
       empty: (providerID: Provider.ID, id: ID) =>

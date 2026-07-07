@@ -6,12 +6,14 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
+const build = AgentV2.ID.make("build")
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {
@@ -19,7 +21,7 @@ describe("toLLMMessages", () => {
       SessionMessage.Assistant.make({
         id: id(value),
         type: "assistant",
-        agent: "build",
+        agent: build,
         model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
         content,
         time: { created, completed: created },
@@ -56,7 +58,7 @@ describe("toLLMMessages", () => {
         SessionMessage.AgentSelected.make({
           id: id("agent"),
           type: "agent-switched",
-          agent: "build",
+          agent: build,
           time: { created },
         }),
         SessionMessage.ModelSelected.make({
@@ -82,24 +84,16 @@ describe("toLLMMessages", () => {
         SessionMessage.Synthetic.make({
           id: id("synthetic"),
           type: "synthetic",
-          sessionID: SessionV2.ID.make("ses_translate"),
           text: "Synthetic context",
           time: { created },
         }),
         SessionMessage.Shell.make({
           id: id("shell"),
           type: "shell",
-          shell: Shell.Info.make({
-            id: Shell.ID.make("sh_test"),
-            status: "exited",
-            command: "pwd",
-            cwd: "/project",
-            shell: "/bin/sh",
-            file: "/tmp/sh_test.out",
-            exit: 0,
-            metadata: {},
-            time: { started: 0, completed: 0 },
-          }),
+          shellID: Shell.ID.make("sh_test"),
+          status: "exited",
+          command: "pwd",
+          exit: 0,
           output: { output: "/project", cursor: 8, size: 8, truncated: false },
           time: { created, completed: created },
         }),
@@ -282,7 +276,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantText.make({ type: "text", text: "Checking" }),
@@ -295,7 +289,7 @@ Recent work
               type: "tool",
               id: "pending",
               name: "read",
-              state: SessionMessage.ToolStatePending.make({ status: "pending", input: '{"path":"README.md"}' }),
+              state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input: '{"path":"README.md"}' }),
               time: { created },
             }),
             SessionMessage.AssistantTool.make({
@@ -437,7 +431,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-openai-reasoning"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -467,7 +461,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-failed"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -536,7 +530,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -631,7 +625,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-alias"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({

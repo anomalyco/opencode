@@ -148,7 +148,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
     const message = data.session.message.get(props.request.sessionID, tool.messageID)
     if (message?.type !== "assistant") return {}
     const part = message.content.find((part) => part.type === "tool" && part.id === tool.callID)
-    if (part?.type === "tool" && part.state.status !== "pending") return part.state.input
+    if (part?.type === "tool" && part.state.status !== "streaming") return part.state.input
     return {}
   })
 

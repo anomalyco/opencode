@@ -2,7 +2,7 @@ import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/p
 import type {
   PermissionRequest,
   QuestionRequest,
-  SessionMessage,
+  SessionMessageInfo,
   SessionMessageAssistantTool,
 } from "@opencode-ai/sdk/v2"
 import { Event } from "@opencode-ai/schema/event"
@@ -389,7 +389,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       messageID,
       tool: item,
     })
-    if (item.state.status === "pending") return
+    if (item.state.status === "streaming") return
     if (item.state.status === "running") {
       if (state.tools.get(item.id)?.running) return
       state.tools.set(item.id, {
@@ -417,7 +417,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     ])
   }
 
-  const renderMessage = (message: SessionMessage, render: boolean, reuseVisibleWait: boolean) => {
+  const renderMessage = (message: SessionMessageInfo, render: boolean, reuseVisibleWait: boolean) => {
     if (message.type === "user") {
       const waiting = state.wait?.messageID === message.id
       if (waiting && state.wait) state.wait.promoted = true
@@ -438,34 +438,34 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (message.type === "shell") {
-      state.shellCommands.set(message.shell.id, message.shell.command)
-      if (state.shellWait?.messageID === message.id) state.shellWait.callID = message.shell.id
+      state.shellCommands.set(message.shellID, message.command)
+      if (state.shellWait?.messageID === message.id) state.shellWait.callID = message.shellID
       const completed = message.time.completed !== undefined
       if (!render) {
         // Suppressed history: mark settled shells rendered so live redelivery
         // stays silent. A still-running shell stays unmarked and renders in
         // full when its live shell.ended event arrives.
         if (completed) {
-          state.shellStarted.add(message.shell.id)
-          state.shellEnded.add(message.shell.id)
+          state.shellStarted.add(message.shellID)
+          state.shellEnded.add(message.shellID)
         }
         return
       }
-      if (!state.shellStarted.has(message.shell.id)) {
-        state.shellStarted.add(message.shell.id)
+      if (!state.shellStarted.has(message.shellID)) {
+        state.shellStarted.add(message.shellID)
         write([
-          shellCommit(message.shell.id, message.shell.command, {
+          shellCommit(message.shellID, message.command, {
             text: "running shell",
             phase: "start",
             toolState: "running",
           }),
         ])
       }
-      if (completed && message.output && !state.shellEnded.has(message.shell.id)) {
-        state.shellEnded.add(message.shell.id)
-        write(shellTerminal(message.shell.id, message.shell.command, message.shell, message.output))
+      if (completed && message.output && !state.shellEnded.has(message.shellID)) {
+        state.shellEnded.add(message.shellID)
+        write(shellTerminal(message.shellID, message.command, message, message.output))
       }
-      if (completed && state.shellWait?.callID === message.shell.id) state.shellWait.resolve()
+      if (completed && state.shellWait?.callID === message.shellID) state.shellWait.resolve()
       return
     }
     if (message.type !== "assistant") return
@@ -534,7 +534,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.sdk.question.list({ sessionID: input.sessionID }),
       input.sdk.session.active(),
     ])
-    const projected = structuredClone(messages.data).toReversed() as SessionMessage[]
+    const projected = structuredClone(messages.data).toReversed() as SessionMessageInfo[]
     for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
     state.permissions = permissions.map(permission)
     state.questions = questions.map(question)
@@ -762,7 +762,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
               input: current?.input ?? {},
               structured: event.data.structured,
               content: event.data.content,
-              outputPaths: event.data.outputPaths,
               result: event.data.result,
             },
         time: { created: current?.started ?? event.created, ran: current?.started, completed: event.created },

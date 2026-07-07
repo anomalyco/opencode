@@ -6,13 +6,15 @@ import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { AgentV2 } from "../../agent"
+import { Snapshot } from "../../snapshot"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
-  readonly agent: string
+  readonly agent: AgentV2.ID
   readonly model: ModelV2.Ref
   readonly provider: string
-  readonly snapshot?: string
+  readonly snapshot?: Snapshot.ID
   readonly assistantMessageID?: SessionMessage.ID
 }
 
@@ -256,11 +258,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(new Error(`Unknown tool call: ${callID}`))
   }
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
-    event: LLMEvent,
-    outputPaths: ReadonlyArray<string> = [],
-    error?: SessionError.Error,
-  ) {
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent, error?: SessionError.Error) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -382,7 +380,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
-          outputPaths,
           ...(executed ? { result: event.result } : {}),
           executed,
           resultState,

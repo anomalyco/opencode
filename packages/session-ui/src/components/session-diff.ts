@@ -1,6 +1,6 @@
 import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { parsePatch } from "diff"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
 
 type LegacyDiff = {
   file: string
@@ -12,7 +12,7 @@ type LegacyDiff = {
   status?: "added" | "deleted" | "modified"
 }
 
-type SnapshotDiff = SnapshotFileDiff & { file: string }
+type SnapshotDiff = FileDiffInfo & { file: string }
 type ReviewDiff = SnapshotDiff | VcsFileDiff | LegacyDiff
 export type DiffSource = Pick<LegacyDiff, "file" | "patch" | "before" | "after">
 

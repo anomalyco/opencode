@@ -10,10 +10,11 @@ import { Git } from "./git"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath, RelativePath } from "./schema"
+import { Snapshot as SnapshotSchema } from "@opencode-ai/schema/snapshot"
 import { Hash } from "./util/hash"
 
-export const ID = Schema.String.pipe(Schema.brand("Snapshot.ID"))
-export type ID = typeof ID.Type
+export const ID = SnapshotSchema.ID
+export type ID = SnapshotSchema.ID
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Snapshot.Error", {
   operation: Schema.Literals(["capture", "files", "diff", "preview", "restore"]),

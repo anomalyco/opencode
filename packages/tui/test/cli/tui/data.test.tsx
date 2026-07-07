@@ -24,6 +24,12 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: V2Event)
   events.emit({ ...event, location: { directory } })
 }
 
+function durable(sessionID: string, seq?: number): { aggregateID: string; seq: number; version: 1 }
+function durable<const Version extends number>(
+  sessionID: string,
+  seq: number,
+  version: Version,
+): { aggregateID: string; seq: number; version: Version }
 function durable(sessionID: string, seq = 0, version = 1) {
   return { aggregateID: sessionID, seq, version }
 }
@@ -265,7 +271,7 @@ test("applies absolute usage events without losing full session updates", async 
       id: "evt_usage_deleted",
       created: 9,
       type: "session.deleted",
-      durable: durable(sessionID, 9),
+      durable: durable(sessionID, 9, 2),
       data: { sessionID },
     })
     await Bun.sleep(20)
@@ -389,7 +395,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       id: "evt_revert_staged",
       created: 5,
       type: "session.revert.staged",
-      durable: durable(sessionID, 5),
+      durable: durable(sessionID, 5, 2),
       data: { sessionID, revert: { messageID: "msg_revert_later" } },
     })
     await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_later")
@@ -519,12 +525,13 @@ test("restores running manual compaction before applying live deltas", async () 
       id: "evt_compaction_delta",
       created: 2,
       type: "session.compaction.delta",
+      durable: durable("session-compaction", 1),
       data: { sessionID: "session-compaction", text: "summary" },
     })
 
     await wait(() => {
       const message = data.session.message.get("session-compaction", "message-compaction")
-      return message?.type === "compaction" && message.summary === "Existing summary"
+      return message?.type === "compaction" && message.status === "running" && message.summary === "Existing summary"
     })
   } finally {
     app.renderer.destroy()
@@ -904,7 +911,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_step_ended",
       created: 0,
       type: "session.step.ended",
-      durable: durable("session-live", 1, 2),
+      durable: durable("session-live", 1),
       data: {
         sessionID: "session-live",
         assistantMessageID: "message-live",
@@ -938,7 +945,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_execution_succeeded",
       created: 0,
       type: "session.execution.succeeded",
-      durable: durable("session-live", 1, 3),
+      durable: durable("session-live", 1),
       data: { sessionID: "session-live" },
     })
     await wait(() => data.session.status("session-live") === "idle")
@@ -969,7 +976,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_step_failed",
       created: 0,
       type: "session.step.failed",
-      durable: durable("session-failed", 1, 2),
+      durable: durable("session-failed", 1),
       data: {
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
@@ -1009,7 +1016,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_failed_execution_failed",
       created: 0,
       type: "session.execution.failed",
-      durable: durable("session-failed", 1, 3),
+      durable: durable("session-failed", 1),
       data: {
         sessionID: "session-failed",
         error: { type: "provider.content-filter", message: "Provider blocked the response" },
@@ -1028,7 +1035,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_retry_step_started",
       created: 0,
       type: "session.step.started",
-      durable: durable("session-retry", 1, 2),
+      durable: durable("session-retry", 1),
       data: {
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
@@ -1040,7 +1047,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_retry_scheduled",
       created: 0,
       type: "session.retry.scheduled",
-      durable: durable("session-retry", 1, 3),
+      durable: durable("session-retry", 1),
       data: {
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
@@ -1058,7 +1065,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_retry_next_step",
       created: 2_000,
       type: "session.step.started",
-      durable: durable("session-retry", 1, 4),
+      durable: durable("session-retry", 1),
       data: {
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
@@ -1076,7 +1083,7 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_retry_scheduled_again",
       created: 2_000,
       type: "session.retry.scheduled",
-      durable: durable("session-retry", 1, 5),
+      durable: durable("session-retry", 1),
       data: {
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
@@ -1093,45 +1100,35 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_retry_interrupted",
       created: 2_000,
       type: "session.execution.interrupted",
-      durable: durable("session-retry", 1, 6),
+      durable: durable("session-retry", 1),
       data: { sessionID: "session-retry", reason: "shutdown" },
     })
     await wait(() => data.session.status("session-retry") === "idle")
     expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
 
     emitEvent(events, {
-      id: "evt_compaction_admitted",
-      created: 0,
-      type: "session.compaction.admitted",
-      durable: durable("session-manual", 1),
-      data: { sessionID: "session-manual", inputID: "message-compaction" },
-    })
-    await wait(() => {
-      const message = data.session.message.get("session-manual", "message-compaction")
-      return message?.type === "compaction" && message.status === "queued"
-    })
-    emitEvent(events, {
       id: "evt_manual_compaction_started",
       created: 1,
       type: "session.compaction.started",
-      durable: durable("session-manual", 2),
-      data: { sessionID: "session-manual", reason: "manual" },
+      durable: durable("session-manual", 2, 2),
+      data: { sessionID: "session-manual", reason: "manual", recent: "", inputID: "message-compaction" },
     })
     emitEvent(events, {
       id: "evt_manual_compaction_delta",
       created: 2,
       type: "session.compaction.delta",
+      durable: durable("session-manual", 3),
       data: { sessionID: "session-manual", text: "Streamed summary" },
     })
     await wait(() => {
       const message = data.session.message.get("session-manual", "message-compaction")
-      return message?.type === "compaction" && message.summary === "Streamed summary"
+      return message?.type === "compaction" && message.status === "running" && message.summary === "Streamed summary"
     })
     emitEvent(events, {
       id: "evt_manual_compaction_ended",
       created: 3,
       type: "session.compaction.ended",
-      durable: durable("session-manual", 3),
+      durable: durable("session-manual", 4),
       data: { sessionID: "session-manual", reason: "manual", text: "Streamed summary", recent: "recent" },
     })
     await wait(() => {
@@ -1146,19 +1143,21 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_compaction_started",
       created: 0,
       type: "session.compaction.started",
-      durable: durable("session-live", 2),
-      data: { sessionID: "session-live", reason: "auto" },
+      durable: durable("session-live", 2, 2),
+      data: { sessionID: "session-live", reason: "auto", recent: "" },
     })
     emitEvent(events, {
       id: "evt_compaction_delta_1",
       created: 0,
       type: "session.compaction.delta",
+      durable: durable("session-live", 3),
       data: { sessionID: "session-live", text: "Live " },
     })
     emitEvent(events, {
       id: "evt_compaction_delta_2",
       created: 0,
       type: "session.compaction.delta",
+      durable: durable("session-live", 4),
       data: { sessionID: "session-live", text: "summary" },
     })
     await wait(() => data.session.compaction("session-live") === "Live summary")
@@ -1167,12 +1166,13 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_compaction_ended",
       created: 0,
       type: "session.compaction.ended",
-      durable: durable("session-live", 3),
+      durable: durable("session-live", 5),
       data: { sessionID: "session-live", reason: "auto", text: "Live summary", recent: "recent" },
     })
     await wait(() => data.session.compaction("session-live") === undefined)
-    expect(data.session.message.get("session-live", "msg_compaction_ended")).toMatchObject({
+    expect(data.session.message.get("session-live", "msg_compaction_started")).toMatchObject({
       type: "compaction",
+      status: "completed",
       summary: "Live summary",
     })
   } finally {

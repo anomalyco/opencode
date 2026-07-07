@@ -28,11 +28,15 @@ export type Source = typeof Source.Type
 
 export const Info = Skill.Info
 export type Info = Skill.Info
+export const ID = Skill.ID
+export type ID = Skill.ID
+export const Name = Skill.Name
+export type Name = Skill.Name
 
 export const Event = Skill.Event
 
 export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
-  skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
+  skills.filter((skill) => PermissionV2.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
@@ -96,7 +100,7 @@ const layer = Layer.effect(
           source: Source.key(source),
           type: source.type,
           directories: [],
-          skills: [source.skill.name],
+          skills: [source.skill.id],
         })
         return { skills: [source.skill], directories: [] }
       }
@@ -112,15 +116,13 @@ const layer = Layer.effect(
           if (!markdown) continue
           const frontmatter = decodeFrontmatter(markdown.data).valueOrUndefined
           if (!frontmatter) continue
-          const name =
-            frontmatter.name !== undefined
-              ? frontmatter.name
-              : path.dirname(filepath) === directory
-                ? path.basename(filepath, ".md")
-                : undefined
-          if (!name) continue
+          const id =
+            path.dirname(filepath) === directory
+              ? path.basename(filepath, ".md")
+              : path.basename(path.dirname(filepath))
           skills.push({
-            name,
+            id: ID.make(id),
+            name: Name.make(frontmatter.name ?? id),
             description: frontmatter.description,
             slash: metadataBoolean(frontmatter.metadata, "opencode/slash") ?? frontmatter.slash,
             autoinvoke: metadataBoolean(frontmatter.metadata, "opencode/autoinvoke"),
@@ -133,7 +135,7 @@ const layer = Layer.effect(
         source: Source.key(source),
         type: source.type,
         directories,
-        skills: skills.map((skill) => skill.name),
+        skills: skills.map((skill) => skill.id),
       })
       return { skills, directories }
     })
@@ -148,7 +150,7 @@ const layer = Layer.effect(
       yield* Effect.logInfo("skill cache invalidated", {
         file,
         sources: invalidated.map(([key]) => key),
-        skills: invalidated.flatMap(([, loaded]) => loaded.skills.map((skill) => skill.name)),
+        skills: invalidated.flatMap(([, loaded]) => loaded.skills.map((skill) => skill.id)),
       })
       yield* events.publish(Event.Updated, {}).pipe(Effect.asVoid)
     })
@@ -159,12 +161,12 @@ const layer = Layer.effect(
     )
 
     const list = Effect.fn("SkillV2.list")(function* () {
-      const skills = new Map<string, Info>()
+      const skills = new Map<ID, Info>()
       for (const source of state.get().sources) {
         const key = Source.key(source)
         const loaded = cache.get(key) ?? (yield* load(source))
         cache.set(key, loaded)
-        for (const skill of loaded.skills) skills.set(skill.name, skill)
+        for (const skill of loaded.skills) skills.set(skill.id, skill)
       }
       return Array.from(skills.values())
     })
@@ -180,4 +182,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [SkillDiscovery.node, FSUtil.node, EventV2.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [SkillDiscovery.node, FSUtil.node, EventV2.node],
+})

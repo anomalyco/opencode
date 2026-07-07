@@ -26,7 +26,8 @@ const skills = Layer.mock(SkillV2.Service, {
   list: () =>
     Effect.succeed([
       SkillV2.Info.make({
-        name: "effect",
+        id: SkillV2.ID.make("effect"),
+        name: SkillV2.Name.make("Effect"),
         description: "Effect guidance",
         location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
         content: "Use Effect",
@@ -60,10 +61,10 @@ describe("SessionV2.skill", () => {
       const session = yield* sessions.create({ location })
       const id = SessionMessage.ID.make("msg_caller_skill")
 
-      yield* sessions.skill({ id, sessionID: session.id, skill: "effect", resume: false })
+      yield* sessions.skill({ id, sessionID: session.id, skill: SkillV2.ID.make("effect"), resume: false })
 
       expect(yield* sessions.messages({ sessionID: session.id })).toContainEqual(
-        expect.objectContaining({ id, type: "skill", name: "effect", text: "Use Effect" }),
+        expect.objectContaining({ id, type: "skill", skill: "effect", name: "Effect", text: "Use Effect" }),
       )
     }),
   )

@@ -467,7 +467,7 @@ const recordedStepSettlementEvents = (id: SessionV2.ID, assistantMessageID: Sess
     )
   })
 
-const requireAssistant = (messages: readonly SessionMessage.Message[]) => {
+const requireAssistant = (messages: readonly SessionMessage.Info[]) => {
   const assistant = messages.find((message) => message.type === "assistant")
   if (!assistant) throw new Error("Assistant message missing")
   return assistant
@@ -563,7 +563,7 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         LLMEvent.toolInputStart({ id, name: "echo" }),
         ...chunks.map((text) => LLMEvent.toolInputDelta({ id, name: "echo", text })),
       ]
-      const expectedContent = { type: "tool", id, state: { status: "pending", input: text } }
+      const expectedContent = { type: "tool", id, state: { status: "streaming", input: text } }
       return {
         delta: SessionEvent.Tool.Input.Delta,
         partialEvents,
@@ -1095,7 +1095,7 @@ describe("SessionRunnerLLM", () => {
       skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
       yield* events.publish(SessionEvent.AgentSelected, {
         sessionID,
-        agent: "reviewer",
+        agent: AgentV2.ID.make("reviewer"),
       })
       yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Second" }), resume: false })
       yield* session.resume(sessionID)
@@ -1122,7 +1122,7 @@ describe("SessionRunnerLLM", () => {
         return events
           .publish(SessionEvent.AgentSelected, {
             sessionID,
-            agent: "reviewer",
+            agent: AgentV2.ID.make("reviewer"),
           })
           .pipe(Effect.asVoid)
       })
@@ -1325,6 +1325,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
+        recent: "",
       })
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
@@ -1370,10 +1371,7 @@ describe("SessionRunnerLLM", () => {
       expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toMatchObject({
         id: first.id,
       })
-      expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toMatchObject({
-        type: "compaction",
-        status: "queued",
-      })
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toBeUndefined()
 
       yield* session.prompt({
         sessionID,
@@ -1438,6 +1436,57 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         status: "failed",
       })
+      expect(
+        (yield* recordedEventTypes(sessionID)).filter(
+          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 2),
+        ),
+      ).toHaveLength(1)
+    }),
+  )
+
+  it.effect("settles an admitted manual compaction that cannot start", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const compaction = yield* session.compact({ sessionID })
+
+      yield* session.resume(sessionID)
+
+      expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+        error: { message: "Compaction could not start" },
+      })
+      expect(
+        (yield* recordedEventTypes(sessionID)).filter(
+          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 2),
+        ),
+      ).toHaveLength(1)
+    }),
+  )
+
+  it.effect("settles an admitted manual compaction when pre-start resolution throws", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const compaction = yield* session.compact({ sessionID })
+      modelResolveHook = Effect.die("model resolution failed")
+
+      expect(yield* Effect.exit(session.resume(sessionID))).toMatchObject({ _tag: "Failure" })
+
+      expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+      })
+      expect(
+        (yield* recordedEventTypes(sessionID)).filter(
+          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 2),
+        ),
+      ).toHaveLength(1)
     }),
   )
 
@@ -1596,9 +1645,10 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       const context = yield* session.context(sessionID)
-      expect(context.some((message) => message.type === "compaction")).toBe(false)
-      expect(context.slice(-2)).toMatchObject([
+      expect(context).toContainEqual(expect.objectContaining({ type: "compaction", status: "failed", reason: "auto" }))
+      expect(context.slice(-3)).toMatchObject([
         { type: "user", text: "Continue" },
+        { type: "compaction", status: "failed", reason: "auto" },
         { type: "assistant", finish: "error", error: { message: "prompt too long" } },
       ])
     }),
@@ -1625,7 +1675,9 @@ describe("SessionRunnerLLM", () => {
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
       streamGate = undefined
       expect(requests).toHaveLength(2)
-      expect((yield* session.context(sessionID)).some((message) => message.type === "compaction")).toBe(false)
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({ type: "compaction", status: "failed", reason: "auto" }),
+      )
     }),
   )
 
@@ -1645,6 +1697,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
+        recent: "",
       })
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
@@ -2594,7 +2647,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: AgentV2.ID.make("build"),
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
       })
       yield* events.publish(SessionEvent.Tool.Input.Started, {
@@ -2656,7 +2709,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: AgentV2.ID.make("build"),
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
       })
       yield* events.publish(SessionEvent.Tool.Input.Started, {
@@ -2712,7 +2765,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: AgentV2.ID.make("build"),
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
       })
       yield* events.publish(SessionEvent.Tool.Input.Started, {

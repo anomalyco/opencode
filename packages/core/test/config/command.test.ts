@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, PubSub, Schema, Stream } from "effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { CommandV2 } from "@opencode-ai/core/command"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCommandPlugin } from "@opencode-ai/core/config/plugin/command"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -87,7 +88,7 @@ Review files`,
               name: "review",
               template: "Review files",
               description: "File review",
-              agent: "reviewer",
+              agent: AgentV2.ID.make("reviewer"),
               model: {
                 providerID: ProviderV2.ID.make("anthropic"),
                 id: ModelV2.ID.make("claude"),

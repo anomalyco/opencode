@@ -13,7 +13,7 @@ import type {
   ReferenceInfo,
   Session,
   SessionStatus,
-  SnapshotFileDiff,
+  FileDiffInfo,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
@@ -51,7 +51,7 @@ export type State = {
   }
   session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: SnapshotFileDiff[]
+    [sessionID: string]: FileDiffInfo[]
   }
   todo: {
     [sessionID: string]: Todo[]

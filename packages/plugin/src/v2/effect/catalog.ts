@@ -1,11 +1,11 @@
-import type { ModelV2Info, ProviderV2Info } from "@opencode-ai/sdk/v2/types"
+import type { ModelInfo, ProviderV2Info } from "@opencode-ai/sdk/v2/types"
 import type { CatalogApi } from "@opencode-ai/client/effect/api"
 import type { Effect } from "effect"
 import type { TransformHook } from "./registration.js"
 
 export interface CatalogProviderRecord {
   readonly provider: ProviderV2Info
-  readonly models: ReadonlyMap<string, ModelV2Info>
+  readonly models: ReadonlyMap<string, ModelInfo>
 }
 
 export interface CatalogDraft {
@@ -16,8 +16,8 @@ export interface CatalogDraft {
     remove(providerID: string): void
   }
   readonly model: {
-    get(providerID: string, modelID: string): ModelV2Info | undefined
-    update(providerID: string, modelID: string, update: (model: ModelV2Info) => void): void
+    get(providerID: string, modelID: string): ModelInfo | undefined
+    update(providerID: string, modelID: string, update: (model: ModelInfo) => void): void
     remove(providerID: string, modelID: string): void
     readonly default: {
       get(): { providerID: string; modelID: string } | undefined
