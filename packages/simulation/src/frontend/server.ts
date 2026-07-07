@@ -16,7 +16,7 @@ function parseRequest(input: string | Buffer) {
 }
 
 async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Request, headless: boolean) {
-  switch (request.method) {
+  switch (SimulationProtocol.Frontend.decodeMethod(request.method)) {
     case "ui.state": {
       if (headless) await harness.renderOnce()
       const result = SimulationActions.state(harness)
@@ -33,7 +33,6 @@ async function handle(harness: Harness, request: SimulationProtocol.JsonRpc.Requ
     case "trace.export":
       return SimulationTrace.exportTrace()
   }
-  throw new Error(`Unknown simulation method: ${request.method}`)
 }
 
 export function start(harness: Harness, endpoint: string, headless: boolean): Server {

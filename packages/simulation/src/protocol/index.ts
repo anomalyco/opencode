@@ -46,6 +46,10 @@ export namespace JsonRpc {
 }
 
 export namespace Frontend {
+  export const Method = Schema.Literals(["ui.state", "ui.action", "trace.list", "trace.clear", "trace.export"])
+  export type Method = Schema.Schema.Type<typeof Method>
+  export const decodeMethod = Schema.decodeUnknownSync(Method)
+
   export const KeyModifiers = Schema.Struct({
     ctrl: Schema.optional(Schema.Boolean),
     shift: Schema.optional(Schema.Boolean),
