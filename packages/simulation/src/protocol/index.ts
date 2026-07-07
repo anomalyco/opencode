@@ -59,12 +59,12 @@ export namespace Frontend {
   export interface KeyModifiers extends Schema.Schema.Type<typeof KeyModifiers> {}
 
   export const Action = Schema.Union([
-    Schema.Struct({ type: Schema.Literal("typeText"), text: Schema.String }),
-    Schema.Struct({ type: Schema.Literal("pressKey"), key: Schema.String, modifiers: Schema.optional(KeyModifiers) }),
-    Schema.Struct({ type: Schema.Literal("pressEnter") }),
-    Schema.Struct({ type: Schema.Literal("pressArrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
-    Schema.Struct({ type: Schema.Literal("focus"), target: Schema.Number }),
-    Schema.Struct({ type: Schema.Literal("click"), target: Schema.Number, x: Schema.Number, y: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal("ui.type"), text: Schema.String }),
+    Schema.Struct({ type: Schema.Literal("ui.press"), key: Schema.String, modifiers: Schema.optional(KeyModifiers) }),
+    Schema.Struct({ type: Schema.Literal("ui.enter") }),
+    Schema.Struct({ type: Schema.Literal("ui.arrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
+    Schema.Struct({ type: Schema.Literal("ui.focus"), target: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal("ui.click"), target: Schema.Number, x: Schema.Number, y: Schema.Number }),
   ])
   export type Action = Schema.Schema.Type<typeof Action>
 

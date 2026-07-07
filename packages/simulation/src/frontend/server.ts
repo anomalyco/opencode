@@ -59,22 +59,22 @@ async function handle(
       return SimulationActions.video(current.frames)
     }
     case "ui.type":
-      return SimulationActions.execute(harness, { type: "typeText", text: request.params.text })
+      return SimulationActions.execute(harness, { type: "ui.type", text: request.params.text })
     case "ui.enter":
-      return SimulationActions.execute(harness, { type: "pressEnter" })
+      return SimulationActions.execute(harness, { type: "ui.enter" })
     case "ui.press":
       return SimulationActions.execute(harness, {
-        type: "pressKey",
+        type: "ui.press",
         key: request.params.key,
         modifiers: request.params.modifiers,
       })
     case "ui.arrow":
-      return SimulationActions.execute(harness, { type: "pressArrow", direction: request.params.direction })
+      return SimulationActions.execute(harness, { type: "ui.arrow", direction: request.params.direction })
     case "ui.focus":
-      return SimulationActions.execute(harness, { type: "focus", target: request.params.target })
+      return SimulationActions.execute(harness, { type: "ui.focus", target: request.params.target })
     case "ui.click":
       return SimulationActions.execute(harness, {
-        type: "click",
+        type: "ui.click",
         target: request.params.target,
         x: request.params.x,
         y: request.params.y,

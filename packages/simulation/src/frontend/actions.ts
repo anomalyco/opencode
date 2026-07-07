@@ -99,19 +99,21 @@ export function actions(renderer: CliRenderer, options: { text?: string } = {}):
   const items = elements(renderer)
   return [
     ...(renderer.currentFocusedEditor
-      ? ([{ type: "typeText", text: options.text ?? "hello" }, { type: "pressEnter" }] satisfies Action[])
+      ? ([{ type: "ui.type", text: options.text ?? "hello" }, { type: "ui.enter" }] satisfies Action[])
       : []),
-    ...items.filter((item) => item.focusable && !item.focused).map((item) => ({ type: "focus" as const, target: item.num })),
+    ...items
+      .filter((item) => item.focusable && !item.focused)
+      .map((item) => ({ type: "ui.focus" as const, target: item.num })),
     ...items
       .filter((item) => item.clickable)
       .map((item) => ({
-        type: "click" as const,
+        type: "ui.click" as const,
         target: item.num,
         x: Math.floor(item.x + item.width / 2),
         y: Math.floor(item.y + item.height / 2),
       })),
-    { type: "pressArrow", direction: "down" },
-    { type: "pressArrow", direction: "up" },
+    { type: "ui.arrow", direction: "down" },
+    { type: "ui.arrow", direction: "up" },
   ]
 }
 
@@ -190,22 +192,22 @@ export async function video(frames: CapturedFrame[]) {
 export async function execute(harness: Harness, action: Action) {
   SimulationTrace.add("ui.action", { action })
   switch (action.type) {
-    case "typeText":
+    case "ui.type":
       await harness.mockInput.typeText(action.text)
       break
-    case "pressKey":
+    case "ui.press":
       harness.mockInput.pressKey(action.key, action.modifiers)
       break
-    case "pressEnter":
+    case "ui.enter":
       harness.mockInput.pressEnter()
       break
-    case "pressArrow":
+    case "ui.arrow":
       harness.mockInput.pressArrow(action.direction)
       break
-    case "focus":
+    case "ui.focus":
       all(harness.renderer.root).find((item) => item.num === action.target)?.focus()
       break
-    case "click":
+    case "ui.click":
       await harness.mockMouse.click(action.x, action.y)
       break
   }
