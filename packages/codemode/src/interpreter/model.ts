@@ -30,7 +30,6 @@ export type Binding = {
 
 export type StatementResult =
   | { kind: "none" }
-  | { kind: "value"; value: unknown }
   | { kind: "return"; value: unknown }
   | { kind: "break" }
   | { kind: "continue" }

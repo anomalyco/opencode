@@ -1081,6 +1081,24 @@ describe("CodeMode public contract", () => {
     expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 
+  test("returns the final top-level expression when return is omitted", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ code: `1; 2` }))
+
+    expect(result).toStrictEqual({ ok: true, value: 2, toolCalls: [] })
+  })
+
+  test("does not implicitly return expressions nested in control flow", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ code: `if (true) { 2 }` }))
+
+    expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
+  })
+
+  test("returns null when the final top-level statement is not an expression", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ code: `1; const value = 2` }))
+
+    expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
+  })
+
   test("rejects invalid configuration and discovery limits", async () => {
     expect(() => CodeMode.execute({ code: "return 1", limits: { timeoutMs: 0 } })).toThrow(RangeError)
     expect(() => CodeMode.execute({ code: "return 1", limits: { timeoutMs: Number.POSITIVE_INFINITY } })).toThrow(

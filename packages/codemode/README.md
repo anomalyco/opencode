@@ -62,7 +62,7 @@ const result =
 
 `result` is always a `CodeMode.Result`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
 
-Successful result values are JSON-safe data. A program that returns `undefined`, including by reaching the end without `return`, produces `null`; nested `undefined` values are normalized to `null` as well.
+Successful result values are JSON-safe data. An explicit `return` produces the program result; when it is omitted, the final executable top-level expression is returned as a model-friendly REPL convenience. Otherwise reaching the end produces `null`. Returned `undefined` and nested `undefined` values are normalized to `null` as well.
 
 ## API
 

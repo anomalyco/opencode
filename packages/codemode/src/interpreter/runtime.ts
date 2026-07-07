@@ -606,7 +606,6 @@ class Interpreter<R> {
   // ToolRuntime.make like invokeTool: the interpreter never holds the tree itself.
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   private readonly logs: Array<string>
-  private lastValue: unknown
   // Caps how many eagerly forked tool calls run at once (the parallel-call concurrency cap).
   private readonly callPermits: Semaphore.Semaphore
   // Fiber-backed promises whose settlement no program construct has observed yet. Successful
@@ -625,7 +624,6 @@ class Interpreter<R> {
     this.invokeTool = invokeTool
     this.toolKeys = toolKeys
     this.logs = logs
-    this.lastValue = undefined
     this.callPermits = shared?.callPermits ?? Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY)
     this.pendingSettlements = shared?.pendingSettlements ?? new Set<SandboxPromise>()
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
@@ -671,13 +669,15 @@ class Interpreter<R> {
     return Effect.gen(function* () {
       self.hoistFunctions(program.body)
       let value: unknown = undefined
-      let returned = false
-      for (const statement of program.body) {
+      for (const [index, statement] of program.body.entries()) {
+        if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
+          value = yield* self.evaluateExpression(getNode(statement, "expression"))
+          break
+        }
         const result = yield* self.evaluateStatement(statement)
 
         if (result.kind === "return") {
           value = result.value
-          returned = true
           break
         }
 
@@ -685,11 +685,7 @@ class Interpreter<R> {
           throw new InterpreterRuntimeError(`Unexpected '${result.kind}' outside of a loop.`, statement)
         }
 
-        if (result.kind === "value") {
-          self.lastValue = result.value
-        }
       }
-      if (!returned) value = self.lastValue
 
       // The program body runs inside an implicit async function, so a returned promise
       // resolves before crossing the data boundary - `return tools.ns.tool(...)` works
@@ -780,7 +776,7 @@ class Interpreter<R> {
   private evaluateStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     switch (node.type) {
       case "ExpressionStatement":
-        return Effect.map(this.evaluateExpression(getNode(node, "expression")), (value) => ({ kind: "value", value }))
+        return Effect.as(this.evaluateExpression(getNode(node, "expression")), { kind: "none" })
       case "VariableDeclaration":
         return Effect.map(this.evaluateVariableDeclaration(node), () => ({ kind: "none" }))
       case "ReturnStatement": {
@@ -832,11 +828,6 @@ class Interpreter<R> {
       for (const statementValue of body) {
         const statement = asNode(statementValue, "body")
         const result = yield* self.evaluateStatement(statement)
-
-        if (result.kind === "value") {
-          self.lastValue = result.value
-          continue
-        }
 
         if (result.kind !== "none") {
           return result
@@ -929,7 +920,6 @@ class Interpreter<R> {
           const result = yield* self.evaluateStatement(asNode(statementValue, "consequent"))
           if (result.kind === "break") return { kind: "none" } satisfies StatementResult
           if (result.kind === "return" || result.kind === "continue") return result
-          if (result.kind === "value") self.lastValue = result.value
         }
       }
       return { kind: "none" } satisfies StatementResult
@@ -957,9 +947,6 @@ class Interpreter<R> {
           return result
         }
 
-        if (result.kind === "value") {
-          self.lastValue = result.value
-        }
       }
 
       return { kind: "none" } satisfies StatementResult
@@ -987,9 +974,6 @@ class Interpreter<R> {
           return result
         }
 
-        if (result.kind === "value") {
-          self.lastValue = result.value
-        }
       } while (yield* self.evaluateExpression(testNode))
 
       return { kind: "none" } satisfies StatementResult
@@ -1043,10 +1027,6 @@ class Interpreter<R> {
 
         if (result.kind === "break") {
           return { kind: "none" } satisfies StatementResult
-        }
-
-        if (result.kind === "value") {
-          self.lastValue = result.value
         }
 
         if (iterationScope) {
@@ -1131,10 +1111,6 @@ class Interpreter<R> {
 
         if (result.kind === "break") {
           return { kind: "none" }
-        }
-
-        if (result.kind === "value") {
-          self.lastValue = result.value
         }
 
         if (result.kind === "continue") {
@@ -1224,10 +1200,6 @@ class Interpreter<R> {
 
         if (result.kind === "break") {
           return { kind: "none" }
-        }
-
-        if (result.kind === "value") {
-          self.lastValue = result.value
         }
 
         if (result.kind === "continue") {
@@ -2372,7 +2344,7 @@ class Interpreter<R> {
 
       if (fn.body.type === "BlockStatement") {
         const result = yield* invocation.evaluateStatement(fn.body)
-        return result.kind === "return" || result.kind === "value" ? result.value : undefined
+        return result.kind === "return" ? result.value : undefined
       }
 
       return yield* invocation.evaluateExpression(fn.body)
