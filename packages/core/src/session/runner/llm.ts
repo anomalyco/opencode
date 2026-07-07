@@ -266,14 +266,8 @@ const layer = Layer.effect(
           request.tools.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
         ),
       }
-      // Model policy shapes the initial draft; plugins may override it, but cannot
-      // advertise tools excluded earlier by permissions or registration state.
-      const usePatch = model.provider.toLowerCase() === "openai" || model.id.toLowerCase().includes("gpt")
-      if (usePatch) {
-        delete requestEvent.tools.edit
-        delete requestEvent.tools.write
-      }
-      if (!usePatch) delete requestEvent.tools.patch
+      // Plugins may reshape the draft, but cannot advertise tools excluded earlier
+      // by permissions or registration state.
       yield* hooks.trigger("session", "request", requestEvent)
       const hookedRequest = LLM.updateRequest(request, {
         system: requestEvent.system,

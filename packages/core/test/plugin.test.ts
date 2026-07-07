@@ -97,25 +97,40 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("retries the same generation after materialization fails", () =>
+  it.effect("skips failed plugins and loads the rest", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
       let fail = true
-      const plugin = EffectPlugin.define({
-        id: "retry",
+      const good = EffectPlugin.define({
+        id: "good",
         effect: (ctx) =>
           ctx.agent
-            .transform(() => {
-              if (fail) throw new Error("materialization failed")
-            })
+            .transform((agents) =>
+              agents.update("configured", (agent) => {
+                agent.description = "loaded"
+              }),
+            )
             .pipe(Effect.asVoid),
       })
+      const bad = EffectPlugin.define({
+        id: "bad",
+        effect: () => {
+          if (fail) return Effect.die(new Error("materialization failed"))
+          return Effect.void
+        },
+      })
 
-      expect(Exit.isFailure(yield* plugins.activate([{ plugin }]).pipe(Effect.exit))).toBe(true)
+      yield* plugins.activate([{ plugin: good }, { plugin: bad }])
+      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }])
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("loaded")
+
       fail = false
-      yield* plugins.activate([{ plugin }])
-
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("retry") }])
+      yield* plugins.activate([{ plugin: good }, { plugin: bad }])
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("good") },
+        { id: Plugin.ID.make("bad") },
+      ])
     }),
   )
 

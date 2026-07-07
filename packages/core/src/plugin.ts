@@ -58,12 +58,13 @@ const layer = Layer.effect(
             generation.length === definitions.length &&
             generation.every(
               (plugin, index) => plugin.id === definitions[index]?.id && plugin.version === definitions[index]?.version,
-            )
+            ) &&
+            definitions.every((definition) => active.has(definition.id))
           ) {
             return
           }
           generation = undefined
-          const exit = yield* State.batch(
+          yield* State.batch(
             Effect.gen(function* () {
               const scopes = Array.from(active.values()).toReversed()
               active.clear()
@@ -82,13 +83,17 @@ const layer = Layer.effect(
                   Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
                   Effect.exit,
                 )
-                if (Exit.isFailure(loaded)) return loaded
+                if (Exit.isFailure(loaded)) {
+                  yield* Effect.logWarning("failed to load plugin", {
+                    "plugin.id": definition.id,
+                    cause: loaded.cause,
+                  })
+                  continue
+                }
                 active.set(definition.id, child)
               }
-              return Exit.void
             }),
           )
-          if (Exit.isFailure(exit)) return yield* exit
           generation = definitions.map((definition) => ({
             id: definition.id,
             ...(definition.version === undefined ? {} : { version: definition.version }),
