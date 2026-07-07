@@ -243,6 +243,7 @@ export interface Interface {
     text: string
     description?: string
     metadata?: Record<string, unknown>
+    resume?: boolean
   }) => Effect.Effect<void, NotFoundError>
   readonly revert: {
     readonly stage: (input: {
@@ -682,6 +683,7 @@ const layer = Layer.effect(
           description: input.description,
           metadata: input.metadata,
         })
+        if (input.resume === false) return
         yield* execution
           .resume(input.sessionID)
           .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)

@@ -3,7 +3,6 @@ import { Agent } from "@/agent/agent"
 import { Job } from "@/job"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
@@ -34,10 +33,9 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const worktreeSvc = yield* Worktree.Service
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
-    const flags = yield* RuntimeFlags.Service
 
     const capabilities = Effect.fn("ExperimentalHttpApi.capabilities")(function* () {
-      return { backgroundSubagents: flags.experimentalBackgroundSubagents }
+      return { backgroundSubagents: true }
     })
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
@@ -159,7 +157,6 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const sessionBackground = Effect.fn("ExperimentalHttpApi.sessionBackground")(function* (ctx: {
       params: { sessionID: SessionID }
     }) {
-      if (!flags.experimentalBackgroundSubagents) return false
       return (yield* jobs.backgroundAll({ sessionID: ctx.params.sessionID, type: "task" })).length > 0
     })
 

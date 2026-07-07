@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
+import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
 import { Provider } from "../src/provider.js"
@@ -51,6 +52,11 @@ describe("contract hygiene", () => {
     const identifiers = [
       Agent.Color,
       FileSystem.Submatch,
+      Mcp.Resource,
+      Mcp.ResourceTemplate,
+      Mcp.ResourceCatalog,
+      Mcp.ResourceContentPart,
+      Mcp.ResourceContent,
       Model.Ref,
       Model.Capabilities,
       Model.Cost,

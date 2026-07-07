@@ -3,7 +3,7 @@ export * as MCPClient from "./client"
 import path from "node:path"
 import { execFile } from "node:child_process"
 import { pathToFileURL } from "node:url"
-import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
@@ -21,6 +21,7 @@ import {
   ListToolsResultSchema,
   PromptListChangedNotificationSchema,
   PromptSchema,
+  ResourceListChangedNotificationSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
   ToolListChangedNotificationSchema,
@@ -68,11 +69,13 @@ export interface ToolDefinition {
 export interface PromptDefinition {
   readonly name: string
   readonly description: string | undefined
-  readonly arguments: ReadonlyArray<{
-    readonly name: string
-    readonly description: string | undefined
-    readonly required: boolean | undefined
-  }> | undefined
+  readonly arguments:
+    | ReadonlyArray<{
+        readonly name: string
+        readonly description: string | undefined
+        readonly required: boolean | undefined
+      }>
+    | undefined
 }
 
 export interface PromptMessage {
@@ -82,6 +85,28 @@ export interface PromptMessage {
 
 export interface PromptResult {
   readonly messages: ReadonlyArray<PromptMessage>
+}
+
+export interface ResourceDefinition {
+  readonly name: string
+  readonly uri: string
+  readonly description: string | undefined
+  readonly mimeType: string | undefined
+}
+
+export interface ResourceTemplateDefinition {
+  readonly name: string
+  readonly uriTemplate: string
+  readonly description: string | undefined
+  readonly mimeType: string | undefined
+}
+
+export type ResourceContentPart =
+  | { readonly type: "text"; readonly uri: string; readonly text: string; readonly mimeType: string | undefined }
+  | { readonly type: "blob"; readonly uri: string; readonly blob: string; readonly mimeType: string | undefined }
+
+export interface ReadResourceResult {
+  readonly contents: ReadonlyArray<ResourceContentPart>
 }
 
 export type CallToolContent =
@@ -124,6 +149,12 @@ export interface Connection {
   readonly tools: () => Effect.Effect<ToolDefinition[], Error>
   /** Lists the server's prompts; returns [] when the server doesn't advertise prompt support, fails on a transport error. */
   readonly prompts: () => Effect.Effect<PromptDefinition[], Error>
+  /** Lists the server's resources; returns [] when the server doesn't advertise resource support. */
+  readonly resources: () => Effect.Effect<ResourceDefinition[], Error>
+  /** Lists the server's resource templates; returns [] when the server doesn't advertise resource support. */
+  readonly resourceTemplates: () => Effect.Effect<ResourceTemplateDefinition[], Error>
+  /** Reads one resource; returns undefined when the server doesn't advertise resource support. */
+  readonly readResource: (input: { readonly uri: string }) => Effect.Effect<ReadResourceResult | undefined, Error>
   /** Invokes a prompt on the server. Interruption aborts the in-flight request. */
   readonly prompt: (input: {
     readonly name: string
@@ -141,6 +172,8 @@ export interface Connection {
   readonly onToolsChanged: (callback: () => void) => void
   /** Registers a callback fired when the server announces its prompt list changed; no-op if unsupported. */
   readonly onPromptsChanged: (callback: () => void) => void
+  /** Registers a callback fired when the server announces its resource catalog changed. */
+  readonly onResourcesChanged: (callback: () => void) => void
 }
 
 /** Connects an MCP server; closing the calling scope tears down the transport and any spawned process. */
@@ -168,7 +201,8 @@ export const connect = Effect.fnUntraced(function* (
         },
       })
     }
-    if (!URL.canParse(config.url)) return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
+    if (!URL.canParse(config.url))
+      return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
     return new StreamableHTTPClientTransport(new URL(config.url), {
       requestInit: config.headers ? { headers: config.headers } : undefined,
       authProvider,
@@ -202,10 +236,7 @@ export const connect = Effect.fnUntraced(function* (
   }).pipe(Effect.exit)
   if (Exit.isSuccess(exit)) {
     yield* Effect.addFinalizer(() =>
-      cleanupStdioDescendants(transport).pipe(
-        Effect.andThen(Effect.promise(() => client.close())),
-        Effect.ignore,
-      ),
+      cleanupStdioDescendants(transport).pipe(Effect.andThen(Effect.promise(() => client.close())), Effect.ignore),
     )
     const catalogTimeout = config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT
     const executionTimeout = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
@@ -257,7 +288,9 @@ export const connect = Effect.fnUntraced(function* (
               ),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }).pipe(
-            Effect.tapError((error) => Effect.logWarning("failed to list MCP prompts", { server, error: error.message })),
+            Effect.tapError((error) =>
+              Effect.logWarning("failed to list MCP prompts", { server, error: error.message }),
+            ),
           )
           return prompts.map((prompt) => ({
             name: prompt.name,
@@ -268,6 +301,74 @@ export const connect = Effect.fnUntraced(function* (
               required: argument.required,
             })),
           }))
+        }),
+      resources: () =>
+        Effect.gen(function* () {
+          if (!client.getServerCapabilities()?.resources) return []
+          const resources = yield* Effect.tryPromise({
+            try: () =>
+              paginate(
+                (cursor) =>
+                  client.listResources(cursor === undefined ? undefined : { cursor }, { timeout: catalogTimeout }),
+                (result) => result.resources,
+              ),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          }).pipe(
+            Effect.tapError((error) =>
+              Effect.logWarning("failed to list MCP resources", { server, error: error.message }),
+            ),
+          )
+          return resources.map((resource) => ({
+            name: resource.name,
+            uri: resource.uri,
+            description: resource.description,
+            mimeType: resource.mimeType,
+          }))
+        }),
+      resourceTemplates: () =>
+        Effect.gen(function* () {
+          if (!client.getServerCapabilities()?.resources) return []
+          const templates = yield* Effect.tryPromise({
+            try: () =>
+              paginate(
+                (cursor) =>
+                  client.listResourceTemplates(cursor === undefined ? undefined : { cursor }, {
+                    timeout: catalogTimeout,
+                  }),
+                (result) => result.resourceTemplates,
+              ),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          }).pipe(
+            Effect.tapError((error) =>
+              Effect.logWarning("failed to list MCP resource templates", { server, error: error.message }),
+            ),
+          )
+          return templates.map((template) => ({
+            name: template.name,
+            uriTemplate: template.uriTemplate,
+            description: template.description,
+            mimeType: template.mimeType,
+          }))
+        }),
+      readResource: (input) =>
+        Effect.gen(function* () {
+          if (!client.getServerCapabilities()?.resources) return undefined
+          const result = yield* Effect.tryPromise({
+            try: (signal) => client.readResource({ uri: input.uri }, { signal, timeout: executionTimeout }),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          }).pipe(
+            Effect.tapError((error) =>
+              Effect.logWarning("failed to read MCP resource", { server, uri: input.uri, error: error.message }),
+            ),
+          )
+          return {
+            contents: result.contents.map(
+              (part): ResourceContentPart =>
+                "text" in part
+                  ? { type: "text", uri: part.uri, text: part.text, mimeType: part.mimeType }
+                  : { type: "blob", uri: part.uri, blob: part.blob, mimeType: part.mimeType },
+            ),
+          }
         }),
       prompt: (input) =>
         Effect.tryPromise({
@@ -328,13 +429,14 @@ export const connect = Effect.fnUntraced(function* (
         if (!client.getServerCapabilities()?.prompts?.listChanged) return
         client.setNotificationHandler(PromptListChangedNotificationSchema, async () => callback())
       },
+      onResourcesChanged: (callback) => {
+        if (!client.getServerCapabilities()?.resources?.listChanged) return
+        client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => callback())
+      },
     } satisfies Connection
   }
 
-  yield* cleanupStdioDescendants(transport).pipe(
-    Effect.andThen(Effect.promise(() => transport.close())),
-    Effect.ignore,
-  )
+  yield* cleanupStdioDescendants(transport).pipe(Effect.andThen(Effect.promise(() => transport.close())), Effect.ignore)
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })

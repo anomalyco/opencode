@@ -19,6 +19,28 @@ const error = async (code: string) => {
   return result.error
 }
 
+describe("Number and Math", () => {
+  test("Math.random returns a number in [0, 1)", async () => {
+    expect(await value(`const n = Math.random(); return typeof n === "number" && n >= 0 && n < 1`)).toBe(true)
+  })
+
+  test("Number exposes native non-finite constants", async () => {
+    expect(
+      await value(
+        `return [Number.isNaN(Number.NaN), Number.POSITIVE_INFINITY === Infinity, Number.NEGATIVE_INFINITY === -Infinity]`,
+      ),
+    ).toEqual([true, true, true])
+  })
+
+  test("Number valueOf returns its primitive receiver", async () => {
+    expect(await value(`return (42).valueOf()`)).toBe(42)
+  })
+
+  test("Number valueOf does not enable boxed numbers", async () => {
+    expect((await error(`return new Number(42)`)).kind).toBe("UnsupportedSyntax")
+  })
+})
+
 describe("Date", () => {
   test("Date.now() returns a number", async () => {
     expect(await value(`return typeof Date.now()`)).toBe("number")
@@ -751,6 +773,43 @@ describe("sandbox values at intra-sandbox checkpoints", () => {
     )
   })
 
+  test("Object.values/entries preserve nested object identity", async () => {
+    expect(
+      await value(`
+      const child = { selected: false }
+      const rows = { a: child }
+      Object.values(rows)[0].selected = true
+      return child.selected
+    `),
+    ).toBe(true)
+    expect(
+      await value(`
+      const child = { selected: false }
+      const rows = { a: child }
+      Object.entries(rows)[0][1].selected = true
+      return child.selected
+    `),
+    ).toBe(true)
+  })
+
+  test("Object enumeration preserves promises and callable references", async () => {
+    expect(
+      await value(`
+      const pending = Promise.resolve(1)
+      const source = { pending }
+      return [Object.keys(source), Object.hasOwn(source, "pending"), await Object.values(source)[0], await Object.entries(source)[0][1]]
+    `),
+    ).toEqual([["pending"], true, 1, 1])
+    expect(await value(`return Object.values({ max: Math.max })[0](1, 2)`)).toBe(2)
+  })
+
+  test("Object enumeration rejects invalid receivers and gives promises an await hint", async () => {
+    const diagnostic = await error(`return Object.keys(Promise.resolve({ a: 1 }))`)
+    expect(diagnostic.kind).toBe("InvalidDataValue")
+    expect(diagnostic.message).toContain("await")
+    expect((await error(`return Object.keys(Math)`)).kind).toBe("InvalidDataValue")
+  })
+
   test("Object.assign keeps Maps usable", async () => {
     expect(await value(`const merged = Object.assign({}, { m: new Map([["a", 1]]) }); return merged.m.get("a")`)).toBe(
       1,
@@ -771,6 +830,53 @@ describe("sandbox values at intra-sandbox checkpoints", () => {
 
   test("Array.from over arrays keeps nested sandbox values usable", async () => {
     expect(await value(`return Array.from([new Date(5)])[0].getTime()`)).toBe(5)
+  })
+
+  test("Array.from and Array.of preserve nested object identity", async () => {
+    expect(
+      await value(`
+      const child = { selected: false }
+      Array.from([child])[0].selected = true
+      return child.selected
+    `),
+    ).toBe(true)
+    expect(
+      await value(`
+      const child = { selected: false }
+      Array.of(child)[0].selected = true
+      return child.selected
+    `),
+    ).toBe(true)
+  })
+
+  test("Array.from and Array.of preserve promises and callable references", async () => {
+    expect(
+      await value(`
+      const pending = Promise.resolve(1)
+      return [await Array.from([pending])[0], await Array.of(pending)[0]]
+    `),
+    ).toEqual([1, 1])
+    expect(await value(`return [Array.from([Math.max])[0](1, 2), Array.of(Math.max)[0](3, 4)]`)).toEqual([2, 4])
+  })
+
+  test("Array.from preserves identity across supported collection shapes", async () => {
+    expect(
+      await value(`
+      const child = { selected: false }
+      const fromArrayLike = Array.from({ 0: child, length: 1 })
+      const fromMap = Array.from(new Map([["child", child]]))
+      const fromSet = Array.from(new Set([child]))
+      fromArrayLike[0].selected = true
+      return [fromMap[0][1] === child, fromSet[0] === child, child.selected]
+    `),
+    ).toEqual([true, true, true])
+  })
+
+  test("Array.from rejects invalid receivers and gives promises an await hint", async () => {
+    const diagnostic = await error(`return Array.from(Promise.resolve([1]))`)
+    expect(diagnostic.kind).toBe("InvalidDataValue")
+    expect(diagnostic.message).toContain("await")
+    expect((await error(`return Array.from(() => 1)`)).kind).toBe("InvalidDataValue")
   })
 
   test("regexes stay callable through Object.values", async () => {

@@ -1,6 +1,6 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { isBlockedMember } from "../tool-runtime.js"
-import { isSandboxValue, SandboxMap, SandboxSet, SandboxURLSearchParams } from "../values.js"
+import { isSandboxValue, SandboxMap, SandboxPromise, SandboxSet, SandboxURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
 export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "assign", "fromEntries"])
@@ -10,13 +10,23 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
   if (!objectStatics.has(name)) throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
   const requireObject = (): Record<string, unknown> => {
     const input = args[0]
-    const value = boundedData(args[0], `Object.${name} input`)
     if (Array.isArray(input)) return input as unknown as Record<string, unknown>
-    if (isSandboxValue(value)) return {}
-    if (value === null || typeof value !== "object") {
-      throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node)
+    if (isSandboxValue(input)) return {}
+    if (input instanceof SandboxPromise) {
+      throw new InterpreterRuntimeError(
+        `Object.${name} received an un-awaited Promise; await it before inspecting the result.`,
+        node,
+        "InvalidDataValue",
+      )
     }
-    return value as Record<string, unknown>
+    if (input === null || typeof input !== "object") {
+      throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
+    }
+    const prototype = Object.getPrototypeOf(input)
+    if (prototype !== null && prototype !== Object.prototype) {
+      throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
+    }
+    return input as Record<string, unknown>
   }
   const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
     if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
@@ -28,15 +38,8 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     guardedSet(out, coerceToString(key), item)
   }
   switch (name) {
-    case "keys": {
-      const value = boundedData(args[0], "Object.keys input")
-      if (isSandboxValue(value)) return []
-      if (Array.isArray(value)) return Object.keys(value)
-      if (value === null || typeof value !== "object") {
-        throw new InterpreterRuntimeError("Object.keys expects a data object or array.", node)
-      }
-      return Object.keys(value)
-    }
+    case "keys":
+      return Object.keys(requireObject())
     case "values":
       return Object.values(requireObject())
     case "entries":

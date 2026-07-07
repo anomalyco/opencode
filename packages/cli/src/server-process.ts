@@ -7,7 +7,6 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Flock } from "@opencode-ai/core/util/flock"
 import { start } from "@opencode-ai/server/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import path from "node:path"
@@ -37,14 +36,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(Global.Path.home))
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      if (options.mode === "service") {
-        const service = yield* ServiceConfig.options()
-        yield* Flock.effect(path.basename(service.file, ".json") + "-process", {
-          dir: path.dirname(service.file),
-          staleMs: 3_000,
-          timeoutMs: 15_000,
-        })
-      }
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {

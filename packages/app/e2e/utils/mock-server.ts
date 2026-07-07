@@ -55,7 +55,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
     if (path === "/global/health") return json(route, { healthy: true })
-    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: false })
+    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
     if (path === "/permission")
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")

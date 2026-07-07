@@ -218,7 +218,10 @@ export function Prompt(props: PromptProps) {
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const workspace = usePromptWorkspace(props.sessionID)
-  const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
+  const move = usePromptMove({
+    projectID: () => (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ?? project.project(),
+    sessionID: () => props.sessionID,
+  })
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const connected = useConnected()
@@ -955,13 +958,13 @@ export function Prompt(props: PromptProps) {
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.text) return false
-    const agent = local.agent.current()
-    if (!agent) return false
     const trimmed = store.prompt.text.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
+    const agent = local.agent.current()
+    if (!agent) return false
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
@@ -991,7 +994,7 @@ export function Prompt(props: PromptProps) {
       const selectedWorkspace = workspace.selection()
       const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
 
-      const directory = await move.getDirectory(store.prompt.text)
+      const directory = await move.getDirectory()
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
       const location = data.location.default()

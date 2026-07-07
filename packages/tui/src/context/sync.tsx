@@ -42,9 +42,6 @@ export const {
       provider_default: Record<string, string>
       provider_next: ProviderListResponse
       console_state: ConsoleState
-      capabilities: {
-        experimentalBackgroundSubagents: boolean
-      }
       provider_auth: Record<string, ProviderAuthMethod[]>
       agent: Agent[]
       command: Command[]
@@ -71,9 +68,6 @@ export const {
         connected: [],
       },
       console_state: emptyConsoleState,
-      capabilities: {
-        experimentalBackgroundSubagents: false,
-      },
       provider_auth: {},
       agent: [],
       command: [],

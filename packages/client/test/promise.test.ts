@@ -50,6 +50,29 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
 })
 
+test("MCP resource catalog uses the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: {
+          resources: [{ server: "docs", name: "Readme", uri: "docs://readme" }],
+          templates: [{ server: "docs", name: "File", uriTemplate: "docs://{path}" }],
+        },
+      })
+    },
+  })
+
+  const result = await client["server.mcp"].catalog({ location: { directory: "/tmp/project" } })
+
+  expect(result.data.resources[0]?.uri).toBe("docs://readme")
+  expect(request?.method).toBe("GET")
+  expect(request?.url).toBe("http://localhost:3000/api/mcp/resource?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
 test("file.read returns binary content from the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({

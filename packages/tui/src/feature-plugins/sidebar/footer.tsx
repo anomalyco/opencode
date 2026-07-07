@@ -6,7 +6,7 @@ import { useTuiPaths } from "../../context/runtime"
 
 const id = "internal:sidebar-footer"
 
-function View(props: { api: TuiPluginApi; sessionID: string }) {
+function View(props: { api: TuiPluginApi; directory: string }) {
   const paths = useTuiPaths()
   const theme = () => props.api.theme.current
   const has = createMemo(() =>
@@ -17,10 +17,8 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
   const show = createMemo(() => !has() && !done())
   const path = createMemo(() => {
-    const session = props.api.state.session.get(props.sessionID)
-    const dir = session?.directory || props.api.state.path.directory || paths.cwd
-    const out = abbreviateHome(dir, paths.home)
-    const branch = session?.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
+    const out = abbreviateHome(props.directory, paths.home)
+    const branch = props.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
     const text = branch ? out + ":" + branch : out
     const list = text.split("/")
     return {
@@ -84,7 +82,7 @@ const tui: TuiPlugin = async (api) => {
     order: 100,
     slots: {
       sidebar_footer(_ctx, props) {
-        return <View api={api} sessionID={props.session_id} />
+        return <View api={api} directory={props.directory} />
       },
     },
   })

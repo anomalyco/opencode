@@ -659,6 +659,9 @@ describe("CodeMode public contract", () => {
     expect(instructions).not.toContain("host globals")
     expect(instructions).toContain("Use Code Mode tools for external operations")
     expect(instructions).toContain(
+      "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
+    )
+    expect(instructions).toContain(
       "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
     )
   })
@@ -1079,6 +1082,24 @@ describe("CodeMode public contract", () => {
       toolCalls: [],
     })
     expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
+  })
+
+  test("returns the final top-level expression when return is omitted", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ code: `1; 2` }))
+
+    expect(result).toStrictEqual({ ok: true, value: 2, toolCalls: [] })
+  })
+
+  test("does not implicitly return expressions nested in control flow", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ code: `if (true) { 2 }` }))
+
+    expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
+  })
+
+  test("returns null when the final top-level statement is not an expression", async () => {
+    const result = await Effect.runPromise(CodeMode.execute({ code: `1; const value = 2` }))
+
+    expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
   })
 
   test("rejects invalid configuration and discovery limits", async () => {

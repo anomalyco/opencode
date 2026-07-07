@@ -23,6 +23,8 @@ import type {
   SessionSwitchModelOutput,
   SessionRenameInput,
   SessionRenameOutput,
+  SessionMoveInput,
+  SessionMoveOutput,
   SessionPromptInput,
   SessionPromptOutput,
   SessionCommandInput,
@@ -87,6 +89,8 @@ import type {
   IntegrationAttemptCancelOutput,
   ServerMcpListInput,
   ServerMcpListOutput,
+  ServerMcpCatalogInput,
+  ServerMcpCatalogOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialRemoveInput,
@@ -487,6 +491,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      move: (input: SessionMoveInput, requestOptions?: RequestOptions) =>
+        request<SessionMoveOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/move`,
+            body: { destination: input["destination"], moveChanges: input["moveChanges"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
       prompt: (input: SessionPromptInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionPromptOutput }>(
           {
@@ -538,7 +554,12 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
-            body: { text: input["text"], description: input["description"], metadata: input["metadata"] },
+            body: {
+              text: input["text"],
+              description: input["description"],
+              metadata: input["metadata"],
+              resume: input["resume"],
+            },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
@@ -885,6 +906,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/mcp`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      catalog: (input?: ServerMcpCatalogInput, requestOptions?: RequestOptions) =>
+        request<ServerMcpCatalogOutput>(
+          {
+            method: "GET",
+            path: `/api/mcp/resource`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],

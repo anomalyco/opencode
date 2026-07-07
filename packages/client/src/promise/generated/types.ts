@@ -526,6 +526,20 @@ export type SessionRenameInput = {
 
 export type SessionRenameOutput = void
 
+export type SessionMoveInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly destination: {
+    readonly destination: { readonly directory: string }
+    readonly moveChanges?: boolean | undefined
+  }["destination"]
+  readonly moveChanges?: {
+    readonly destination: { readonly directory: string }
+    readonly moveChanges?: boolean | undefined
+  }["moveChanges"]
+}
+
+export type SessionMoveOutput = void
+
 export type SessionPromptInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
@@ -856,17 +870,26 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
   }["text"]
   readonly description?: {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
   }["description"]
   readonly metadata?: {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
   }["metadata"]
+  readonly resume?: {
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly resume?: boolean | null
+  }["resume"]
 }
 
 export type SessionSyntheticOutput = void
@@ -2483,6 +2506,36 @@ export type ServerMcpListOutput = {
       | { readonly status: "needs_client_registration"; readonly error: string }
     readonly integrationID?: string
   }>
+}
+
+export type ServerMcpCatalogInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ServerMcpCatalogOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly resources: ReadonlyArray<{
+      readonly server: string
+      readonly name: string
+      readonly uri: string
+      readonly description?: string
+      readonly mimeType?: string
+    }>
+    readonly templates: ReadonlyArray<{
+      readonly server: string
+      readonly name: string
+      readonly uriTemplate: string
+      readonly description?: string
+      readonly mimeType?: string
+    }>
+  }
 }
 
 export type CredentialUpdateInput = {
@@ -5536,6 +5589,14 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "mcp.status.changed"
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: { readonly server: string }
+    }
+  | {
+      readonly id: string
+      readonly created: number
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "mcp.resources.changed"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly server: string }
     }

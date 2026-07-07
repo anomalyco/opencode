@@ -134,7 +134,6 @@ describe("run interactive runtime", () => {
         variant: undefined,
         files: [],
         thinking: false,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async () => {
@@ -233,7 +232,6 @@ describe("run interactive runtime", () => {
         variant: undefined,
         files: [],
         thinking: false,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async () => {
@@ -406,7 +404,6 @@ describe("run interactive runtime", () => {
         variant: undefined,
         files: [],
         thinking: true,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async (input) => {
@@ -496,7 +493,6 @@ describe("run interactive runtime", () => {
         variant: undefined,
         files: [],
         thinking: false,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async (input) => {
@@ -557,7 +553,6 @@ describe("run interactive runtime", () => {
         variant: undefined,
         files: [],
         thinking: false,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async () => {
@@ -603,7 +598,6 @@ describe("run interactive runtime", () => {
         variant: undefined,
         files: [],
         thinking: false,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async (input) => {
@@ -716,7 +710,6 @@ describe("run interactive runtime", () => {
         variant: "low",
         files: [],
         thinking: false,
-        backgroundSubagents: false,
       },
       {
         createRuntimeLifecycle: async (input) => {

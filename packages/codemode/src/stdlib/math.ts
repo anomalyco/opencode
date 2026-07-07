@@ -1,6 +1,7 @@
 export const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQRT2", "SQRT1_2"])
 
 export const mathMethods = new Set([
+  "random",
   "max",
   "min",
   "abs",
@@ -40,6 +41,7 @@ export const mathMethods = new Set([
 
 export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNode): number => {
   if (!mathMethods.has(name)) throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
+  if (name === "random") return Math.random()
   const nums = args.map((arg) => {
     if (typeof arg !== "number") throw new InterpreterRuntimeError(`Math.${name} expects number arguments.`, node)
     return arg

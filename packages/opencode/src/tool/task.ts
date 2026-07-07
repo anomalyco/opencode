@@ -1,6 +1,5 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
-import { ToolJsonSchema } from "./json-schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Job } from "@/job"
 import { Session } from "@/session/session"
@@ -12,7 +11,6 @@ import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 
 export interface TaskPromptOps {
@@ -51,8 +49,6 @@ const BaseParameterFields = {
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 }
 
-const BaseParameters = Schema.Struct(BaseParameterFields)
-
 export const Parameters = Schema.Struct({
   ...BaseParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({
@@ -86,7 +82,6 @@ export const TaskTool = Tool.define(
     const config = yield* Config.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
-    const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
@@ -95,11 +90,6 @@ export const TaskTool = Tool.define(
     ) {
       const cfg = yield* config.get()
       const runInBackground = params.background === true
-      if (runInBackground && !flags.experimentalBackgroundSubagents) {
-        return yield* Effect.fail(
-          new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
-        )
-      }
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
@@ -333,11 +323,8 @@ export const TaskTool = Tool.define(
     })
 
     return {
-      description: flags.experimentalBackgroundSubagents
-        ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
-        : DESCRIPTION,
+      description: [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n"),
       parameters: Parameters,
-      jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
     }

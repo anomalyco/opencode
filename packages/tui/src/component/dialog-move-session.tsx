@@ -19,8 +19,9 @@ import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 import type { ProjectDirectoriesOutput } from "@opencode-ai/client/promise"
 import { useRoute } from "../context/route"
+import { DialogProjectCopyName } from "./dialog-project-copy-name"
 
-export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
+export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new"; name: string }
 type ProjectDirectory = ProjectDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
@@ -291,6 +292,12 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
+  async function create() {
+    const name = await DialogProjectCopyName.show(dialog)
+    if (name === null) return
+    props.onSelect({ type: "new", name })
+  }
+
   const fullHeight = createMemo(() =>
     Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)),
   )
@@ -334,7 +341,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 {
                   command: "dialog.move_session.new",
                   title: "new",
-                  onTrigger: () => props.onSelect({ type: "new" }),
+                  onTrigger: () => void create(),
                 },
                 {
                   command: "dialog.move_session.delete",

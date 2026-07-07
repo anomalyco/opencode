@@ -1,6 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
-import { truthy } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Effect } from "effect"
 import path from "node:path"
@@ -84,9 +83,6 @@ export async function runMini(input: MiniCommandInput) {
       files: [],
       initialInput,
       thinking: true,
-      backgroundSubagents:
-        truthy("OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS") ||
-        (process.env.OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS === undefined && truthy("OPENCODE_EXPERIMENTAL")),
       replay: input.replay ?? true,
       replayLimit: input.replayLimit,
       demo: input.demo,

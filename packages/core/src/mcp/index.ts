@@ -83,48 +83,16 @@ export class PromptResult extends Schema.Class<PromptResult>("MCP.PromptResult")
   messages: Schema.Array(PromptMessage),
 }) {}
 
-export class Resource extends Schema.Class<Resource>("MCP.Resource")({
-  server: ServerName,
-  name: Schema.String,
-  uri: Schema.String,
-  description: Schema.String.pipe(Schema.optional),
-  mimeType: Schema.String.pipe(Schema.optional),
-}) {}
-
-export class ResourceTemplate extends Schema.Class<ResourceTemplate>("MCP.ResourceTemplate")({
-  server: ServerName,
-  name: Schema.String,
-  uriTemplate: Schema.String,
-  description: Schema.String.pipe(Schema.optional),
-  mimeType: Schema.String.pipe(Schema.optional),
-}) {}
-
-export class ResourceCatalog extends Schema.Class<ResourceCatalog>("MCP.ResourceCatalog")({
-  resources: Schema.Array(Resource),
-  templates: Schema.Array(ResourceTemplate),
-}) {}
-
-export const ResourceContentPart = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("text"),
-    uri: Schema.String,
-    text: Schema.String,
-    mimeType: Schema.String.pipe(Schema.optional),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("blob"),
-    uri: Schema.String,
-    blob: Schema.String,
-    mimeType: Schema.String.pipe(Schema.optional),
-  }),
-]).pipe(Schema.toTaggedUnion("type"))
-export type ResourceContentPart = typeof ResourceContentPart.Type
-
-export class ResourceContent extends Schema.Class<ResourceContent>("MCP.ResourceContent")({
-  server: ServerName,
-  uri: Schema.String,
-  contents: Schema.Array(ResourceContentPart),
-}) {}
+export const Resource = Mcp.Resource
+export type Resource = Mcp.Resource
+export const ResourceTemplate = Mcp.ResourceTemplate
+export type ResourceTemplate = Mcp.ResourceTemplate
+export const ResourceCatalog = Mcp.ResourceCatalog
+export type ResourceCatalog = Mcp.ResourceCatalog
+export const ResourceContentPart = Mcp.ResourceContentPart
+export type ResourceContentPart = Mcp.ResourceContentPart
+export const ResourceContent = Mcp.ResourceContent
+export type ResourceContent = Mcp.ResourceContent
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP.NotFoundError", {
   server: ServerName,
@@ -415,6 +383,24 @@ export const layer = Layer.effect(
         ),
       })
 
+    const toResource = (server: ServerName, def: MCPClient.ResourceDefinition) =>
+      Resource.make({
+        server,
+        name: def.name,
+        uri: def.uri,
+        description: def.description,
+        mimeType: def.mimeType,
+      })
+
+    const toResourceTemplate = (server: ServerName, def: MCPClient.ResourceTemplateDefinition) =>
+      ResourceTemplate.make({
+        server,
+        name: def.name,
+        uriTemplate: def.uriTemplate,
+        description: def.description,
+        mimeType: def.mimeType,
+      })
+
     const refreshTools = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
       connection.tools().pipe(
         Effect.map((defs) => {
@@ -443,6 +429,7 @@ export const layer = Layer.effect(
         entry.prompts = undefined
         entry.status = { status: "failed", error: "Connection closed" }
         fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
+        fork(events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore))
         fork(events.publish(Command.Event.Updated, {}).pipe(Effect.ignore))
         fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
       })
@@ -457,6 +444,10 @@ export const layer = Layer.effect(
       })
       connection.onPromptsChanged(() => {
         fork(refreshPrompts(name, entry, connection).pipe(Effect.ignore))
+      })
+      connection.onResourcesChanged(() => {
+        if (entry.client !== connection) return
+        fork(events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore))
       })
     }
 
@@ -501,6 +492,7 @@ export const layer = Layer.effect(
           // after the initial registration sweep and emits no list-changed notification would otherwise
           // stay invisible to the model.
           yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+          yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
           yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
           fork(refreshPrompts(name, entry, result.value.connection).pipe(Effect.ignore))
           return
@@ -557,11 +549,6 @@ export const layer = Layer.effect(
       concurrency: "unbounded",
       discard: true,
     })
-    const gate = Effect.fnUntraced(function* (server: ServerName | string) {
-      const target = yield* requireServer(server)
-      yield* Deferred.await(target.entry.startup)
-    })
-
     return Service.of({
       servers: Effect.fn("MCP.servers")(function* () {
         const entries = Array.from(runtime).toSorted(([a], [b]) => a.localeCompare(b))
@@ -637,11 +624,54 @@ export const layer = Layer.effect(
       }),
       resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
         yield* whenAllReady
-        return new ResourceCatalog({ resources: [], templates: [] })
+        const catalogs = yield* Effect.forEach(
+          Array.from(runtime),
+          ([name, entry]) => {
+            if (!entry.client) return Effect.succeed({ resources: [], templates: [] })
+            return Effect.all(
+              {
+                resources: entry.client.resources().pipe(Effect.catch(() => Effect.succeed([]))),
+                templates: entry.client.resourceTemplates().pipe(Effect.catch(() => Effect.succeed([]))),
+              },
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.map((catalog) => ({
+                resources: catalog.resources.map((def) => toResource(name, def)),
+                templates: catalog.templates.map((def) => toResourceTemplate(name, def)),
+              })),
+            )
+          },
+          { concurrency: "unbounded" },
+        )
+        return ResourceCatalog.make({
+          resources: catalogs
+            .flatMap((catalog) => catalog.resources)
+            .toSorted(
+              (a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name) || a.uri.localeCompare(b.uri),
+            ),
+          templates: catalogs
+            .flatMap((catalog) => catalog.templates)
+            .toSorted(
+              (a, b) =>
+                a.server.localeCompare(b.server) ||
+                a.name.localeCompare(b.name) ||
+                a.uriTemplate.localeCompare(b.uriTemplate),
+            ),
+        })
       }),
       readResource: Effect.fn("MCP.readResource")(function* (input) {
-        yield* gate(input.server)
-        return undefined
+        const target = yield* requireServer(input.server)
+        yield* Deferred.await(target.entry.startup)
+        if (!target.entry.client) return undefined
+        const result = yield* target.entry.client
+          .readResource({ uri: input.uri })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!result) return undefined
+        return ResourceContent.make({
+          server: target.name,
+          uri: input.uri,
+          contents: result.contents,
+        })
       }),
     })
   }),

@@ -245,6 +245,12 @@ describe("promises at data boundaries", () => {
     expect(diagnostic.message).toContain("await tools.ns.tool(...)")
   })
 
+  test("collection helpers do not let un-awaited promises cross the result boundary", async () => {
+    const diagnostic = await error(`return Array.from([Promise.resolve(1)])`)
+    expect(diagnostic.kind).toBe("InvalidDataValue")
+    expect(diagnostic.message).toContain("un-awaited Promise")
+  })
+
   test("passing an un-awaited promise as a tool argument is a clear diagnostic", async () => {
     const diagnostic = await error(`return await tools.host.sleepy({ id: tools.host.sleepy({ id: 1 }) })`)
     expect(diagnostic.kind).toBe("InvalidDataValue")

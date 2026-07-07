@@ -1,8 +1,11 @@
-import type { CliRenderer, Renderable } from "@opentui/core"
+import { mkdtemp } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import type { CapturedFrame, CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
-import { SimulationTrace } from "./trace"
+import { SimulationPng } from "./png"
 
 export type Action = SimulationProtocol.Frontend.Action
 export type Element = SimulationProtocol.Frontend.Element
@@ -91,57 +94,95 @@ export function elements(renderer: CliRenderer): Element[] {
     .filter((element) => element.focusable || element.clickable || element.editor)
 }
 
-export function actions(renderer: CliRenderer, options: { text?: string } = {}): Action[] {
-  const items = elements(renderer)
-  return [
-    ...(renderer.currentFocusedEditor
-      ? ([{ type: "typeText", text: options.text ?? "hello" }, { type: "pressEnter" }] satisfies Action[])
-      : []),
-    ...items.filter((item) => item.focusable && !item.focused).map((item) => ({ type: "focus" as const, target: item.num })),
-    ...items
-      .filter((item) => item.clickable)
-      .map((item) => ({
-        type: "click" as const,
-        target: item.num,
-        x: Math.floor(item.x + item.width / 2),
-        y: Math.floor(item.y + item.height / 2),
-      })),
-    { type: "pressArrow", direction: "down" },
-    { type: "pressArrow", direction: "up" },
-  ]
-}
-
 export function state(harness: Harness) {
   return {
-    screen: harness.screen(),
     focused: {
       renderable: harness.renderer.currentFocusedRenderable?.num,
       editor: Boolean(harness.renderer.currentFocusedEditor),
     },
     elements: elements(harness.renderer),
-    actions: actions(harness.renderer),
   }
 }
 
+export async function screenshot(harness: Harness) {
+  await harness.renderOnce()
+  const image = SimulationPng.screenshot(harness.renderer)
+  const path = join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
+  await Bun.write(path, image.data)
+  return path
+}
+
+export function frame(harness: Harness): CapturedFrame {
+  const buffer = harness.renderer.currentRenderBuffer
+  return {
+    cols: buffer.width,
+    rows: buffer.height,
+    cursor: [0, 0],
+    lines: buffer.getSpanLines().map((line) => ({
+      spans: line.spans.map((span) => ({
+        text: span.text,
+        fg: span.fg,
+        bg: span.bg,
+        attributes: span.attributes,
+        width: span.width,
+      })),
+    })),
+  }
+}
+
+export async function video(frames: CapturedFrame[]) {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-drive-recording-"))
+  await Promise.all(
+    frames.map((frame, index) =>
+      Bun.write(
+        join(directory, `frame-${index.toString().padStart(6, "0")}.png`),
+        SimulationPng.screenshotFrame(frame).data,
+      ),
+    ),
+  )
+  const path = join(directory, "recording.mp4")
+  const process = Bun.spawn(
+    [
+      "ffmpeg",
+      "-loglevel",
+      "error",
+      "-framerate",
+      "10",
+      "-i",
+      join(directory, "frame-%06d.png"),
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
+      "-y",
+      path,
+    ],
+    { stderr: "pipe" },
+  )
+  if ((await process.exited) !== 0) throw new Error(`ffmpeg failed: ${await new Response(process.stderr).text()}`)
+  return path
+}
+
 export async function execute(harness: Harness, action: Action) {
-  SimulationTrace.add("ui.action", { action })
   switch (action.type) {
-    case "typeText":
+    case "ui.type":
       await harness.mockInput.typeText(action.text)
       break
-    case "pressKey":
+    case "ui.press":
       harness.mockInput.pressKey(action.key, action.modifiers)
       break
-    case "pressEnter":
+    case "ui.enter":
       harness.mockInput.pressEnter()
       break
-    case "pressArrow":
+    case "ui.arrow":
       harness.mockInput.pressArrow(action.direction)
       break
-    case "focus":
+    case "ui.focus":
       all(harness.renderer.root).find((item) => item.num === action.target)?.focus()
       break
-    case "click":
+    case "ui.click":
       await harness.mockMouse.click(action.x, action.y)
       break
   }

@@ -14,15 +14,12 @@ export const emptyMcpLayer = Layer.succeed(
     instructions: () => Effect.succeed([]),
     prompts: () => Effect.succeed([]),
     prompt: () => Effect.succeed(undefined),
-    resourceCatalog: () => Effect.succeed(new MCP.ResourceCatalog({ resources: [], templates: [] })),
+    resourceCatalog: () => Effect.succeed(MCP.ResourceCatalog.make({ resources: [], templates: [] })),
     readResource: () => Effect.succeed(undefined),
   }),
 )
 
-export const emptyConfigLayer = Layer.succeed(
-  Config.Service,
-  Config.Service.of({ entries: () => Effect.succeed([]) }),
-)
+export const emptyConfigLayer = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 
 export const testLocationLayer = Layer.succeed(
   Location.Service,

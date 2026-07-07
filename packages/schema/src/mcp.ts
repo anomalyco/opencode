@@ -25,14 +25,9 @@ const NeedsClientRegistration = Schema.Struct({
 }).annotate({ identifier: "Mcp.Status.NeedsClientRegistration" })
 
 export type Status = typeof Status.Type
-export const Status = Schema.Union([
-  Connected,
-  Pending,
-  Disabled,
-  Failed,
-  NeedsAuth,
-  NeedsClientRegistration,
-]).pipe(Schema.toTaggedUnion("status"))
+export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth, NeedsClientRegistration]).pipe(
+  Schema.toTaggedUnion("status"),
+)
 
 export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
@@ -42,3 +37,50 @@ export const Server = Schema.Struct({
   // without matching by name, which could collide with provider or plugin integrations.
   integrationID: optional(IntegrationID),
 }).annotate({ identifier: "Mcp.Server" })
+
+export interface Resource extends Schema.Schema.Type<typeof Resource> {}
+export const Resource = Schema.Struct({
+  server: Schema.String,
+  name: Schema.String,
+  uri: Schema.String,
+  description: optional(Schema.String),
+  mimeType: optional(Schema.String),
+}).annotate({ identifier: "Mcp.Resource" })
+
+export interface ResourceTemplate extends Schema.Schema.Type<typeof ResourceTemplate> {}
+export const ResourceTemplate = Schema.Struct({
+  server: Schema.String,
+  name: Schema.String,
+  uriTemplate: Schema.String,
+  description: optional(Schema.String),
+  mimeType: optional(Schema.String),
+}).annotate({ identifier: "Mcp.ResourceTemplate" })
+
+export interface ResourceCatalog extends Schema.Schema.Type<typeof ResourceCatalog> {}
+export const ResourceCatalog = Schema.Struct({
+  resources: Schema.Array(Resource),
+  templates: Schema.Array(ResourceTemplate),
+}).annotate({ identifier: "Mcp.ResourceCatalog" })
+
+export const ResourceContentPart = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("text"),
+    uri: Schema.String,
+    text: Schema.String,
+    mimeType: optional(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("blob"),
+    uri: Schema.String,
+    blob: Schema.String,
+    mimeType: optional(Schema.String),
+  }),
+]).pipe(Schema.toTaggedUnion("type"), Schema.annotate({ identifier: "Mcp.ResourceContentPart" }))
+export type ResourceContentPart = typeof ResourceContentPart.Type
+
+export interface ResourceContent extends Schema.Schema.Type<typeof ResourceContent> {}
+export const ResourceContent = Schema.Struct({
+  server: Schema.String,
+  uri: Schema.String,
+  contents: Schema.Array(ResourceContentPart),
+}).annotate({ identifier: "Mcp.ResourceContent" })

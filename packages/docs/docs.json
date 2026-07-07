@@ -17,7 +17,12 @@
     "tabs": [
       {
         "tab": "Docs",
-        "pages": ["index", "config", "plugins", "troubleshooting"]
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "config", "plugins", "troubleshooting"]
+          }
+        ]
       },
       {
         "tab": "SDK",
@@ -38,19 +43,6 @@
       }
     ],
     "global": {}
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Discord",
-        "href": "https://opencode.ai/discord"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "GitHub",
-      "href": "https://github.com/anomalyco/opencode"
-    }
   },
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude", "mcp", "cursor", "vscode"]

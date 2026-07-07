@@ -10,6 +10,13 @@ export const ToolsChanged = Event.ephemeral({
   },
 })
 
+export const ResourcesChanged = Event.ephemeral({
+  type: "mcp.resources.changed",
+  schema: {
+    server: Schema.String,
+  },
+})
+
 export const BrowserOpenFailed = Event.ephemeral({
   type: "mcp.browser.open.failed",
   schema: {
@@ -27,4 +34,4 @@ export const StatusChanged = Event.ephemeral({
   },
 })
 
-export const Definitions = Event.inventory(ToolsChanged, StatusChanged)
+export const Definitions = Event.inventory(ToolsChanged, ResourcesChanged, StatusChanged)
