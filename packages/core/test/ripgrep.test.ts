@@ -62,4 +62,36 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  // Regression for #35523: a single match whose JSON record exceeds the
+  // 64 KiB parse guard (a line longer than ~65536 bytes) used to fail the
+  // entire grep with "Ripgrep JSON record exceeded N bytes". Such oversized
+  // lines (minified bundles, base64, data rows) should be skipped so the rest
+  // of the search results are still returned, instead of aborting the whole call.
+  it.live("skips oversized match lines instead of failing the whole grep", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const ripgrep = yield* Ripgrep.Service
+
+          // A line longer than MAX_RECORD_BYTES (64 * 1024). The match record
+          // rg emits carries the full line in lines.text, so its JSON record
+          // exceeds the guard.
+          const oversized = "needle" + "x".repeat(70_000) + "\n"
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "big.txt"), oversized))
+          // A normal short line in a different file, matching the same pattern.
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "small.txt"), "needle here\n"))
+
+          const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10 })
+
+          // The short-line match must still be returned.
+          expect(matches.map((item) => item.entry.path)).toContain(RelativePath.make("small.txt"))
+          // The oversized line is skipped (not returned), but crucially the call
+          // did not throw — confirmed by reaching this assertion.
+          expect(matches.map((item) => item.entry.path)).not.toContain(RelativePath.make("big.txt"))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
