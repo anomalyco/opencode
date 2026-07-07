@@ -105,3 +105,43 @@ test("preserves output schema validation across paginated tool discovery", async
     await Promise.all([client.close(), server.close()])
   }
 })
+
+test("falls back to raw tool discovery when an output schema pattern is not ECMAScript", async () => {
+  const server = new Server({ name: "invalid-pattern", version: "1.0.0" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, () =>
+    Promise.resolve({
+      tools: [
+        {
+          name: "python_pattern",
+          inputSchema: { type: "object" },
+          outputSchema: {
+            type: "object",
+            properties: {
+              workflow: {
+                type: "string",
+                pattern: "(?P<workflow_id>wf-[0-9a-f]{32})",
+              },
+            },
+          },
+        },
+        {
+          name: "plain",
+          inputSchema: { type: "object" },
+        },
+      ],
+    }),
+  )
+
+  const client = new Client({ name: "invalid-pattern-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    await expect(client.listTools()).rejects.toThrow("Invalid regular expression")
+
+    const tools = await Effect.runPromise(McpCatalog.defs(client))
+    expect(tools?.map((tool) => tool.name)).toEqual(["python_pattern", "plain"])
+  } finally {
+    await Promise.all([client.close(), server.close()])
+  }
+})

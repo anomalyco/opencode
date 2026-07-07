@@ -162,8 +162,13 @@ function listTools(client: Client, timeout: number) {
 }
 
 function isOutputSchemaValidationError(error: Error) {
-  return /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
-    error.message,
+  return (
+    /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
+      error.message,
+    ) ||
+    // The SDK compiles outputSchema validators during listTools.
+    // Malformed ECMA patterns surface without the outputSchema prefix.
+    /invalid regular expression/i.test(error.message)
   )
 }
 
