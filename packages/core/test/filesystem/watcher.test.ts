@@ -17,6 +17,13 @@ import { testEffect } from "../lib/effect"
 
 const describeWatcher = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
 
+// The watcher normalizes emitted paths to forward slashes (see normalizeWatchPath
+// in filesystem/watcher.ts). On Windows, path.join produces backslashes, so
+// expected paths used in event comparisons must be normalized the same way.
+function toPosix(p: string): string {
+  return process.platform === "win32" ? p.replaceAll("\\", "/") : p
+}
+
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, EventV2.node])))
@@ -133,7 +140,7 @@ function noUpdate<E>(check: (event: WatcherEvent) => boolean, trigger: Effect.Ef
 }
 
 function ready(directory: string) {
-  const file = path.join(directory, `.watcher-${Math.random().toString(36).slice(2)}`)
+  const file = toPosix(path.join(directory, `.watcher-${Math.random().toString(36).slice(2)}`))
   return Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     yield* eventuallyUpdate(
@@ -149,7 +156,7 @@ describeWatcher("Watcher", () => {
       (directory) =>
         Effect.gen(function* () {
           const fs = yield* FSUtil.Service
-          const file = path.join(directory, "watch.txt")
+          const file = toPosix(path.join(directory, "watch.txt"))
           yield* ready(directory)
           for (const item of [
             { event: "add" as const, trigger: fs.writeFileString(file, "a") },
@@ -172,7 +179,7 @@ describeWatcher("Watcher", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const fs = yield* FSUtil.Service
-        const file = path.join(directory, "plain.txt")
+        const file = toPosix(path.join(directory, "plain.txt"))
         yield* noUpdate((event) => event.file === file, fs.writeFileString(file, "plain"))
       }),
     ),
@@ -186,11 +193,8 @@ describeWatcher("Watcher", () => {
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
-      yield* ready(tmp.path).pipe(
-        provide(tmp.path, { type: "git", store: AbsolutePath.make(path.join(tmp.path, ".git")) }),
-        Effect.scoped,
-      )
-      const file = path.join(tmp.path, "after-dispose.txt")
+      yield* ready(tmp.path).pipe(provide(tmp.path), Effect.scoped)
+      const file = toPosix(path.join(tmp.path, "after-dispose.txt"))
       yield* noUpdate((event) => event.file === file, fs.writeFileString(file, "gone")).pipe(
         Effect.provideService(EventV2.Service, events),
       )
@@ -202,7 +206,7 @@ describeWatcher("Watcher", () => {
       (directory) =>
         Effect.gen(function* () {
           const fs = yield* FSUtil.Service
-          const index = path.join(directory, ".git", "index")
+          const index = toPosix(path.join(directory, ".git", "index"))
           yield* ready(directory)
           yield* noUpdate(
             (event) => event.file === index,
@@ -220,7 +224,7 @@ describeWatcher("Watcher", () => {
       (directory) =>
         Effect.gen(function* () {
           const fs = yield* FSUtil.Service
-          const head = path.join(directory, ".git", "HEAD")
+          const head = toPosix(path.join(directory, ".git", "HEAD"))
           const branch = `watch-${Math.random().toString(36).slice(2)}`
           yield* ready(directory)
           yield* Effect.promise(() => $`git branch ${branch}`.cwd(directory).quiet())
@@ -242,15 +246,15 @@ describeWatcher("Watcher", () => {
             const actual = path.join(directory, "..", `actual_${path.basename(directory)}`)
             yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(actual, { recursive: true, force: true })))
             yield* ready(directory)
-            const head = path.join(directory, ".git", "HEAD")
+            const head = toPosix(path.join(directory, ".git", "HEAD"))
             const branch = `watch-${Math.random().toString(36).slice(2)}`
             yield* Effect.promise(() => $`git branch ${branch}`.cwd(directory).quiet())
             expect(
               yield* nextUpdate(
-                (event) => event.file === path.join(actual, "HEAD"),
+                (event) => event.file === toPosix(path.join(actual, "HEAD")),
                 afs.writeFileString(head, `ref: refs/heads/${branch}\n`),
               ),
-            ).toEqual({ file: path.join(actual, "HEAD"), event: "change" })
+            ).toEqual({ file: toPosix(path.join(actual, "HEAD")), event: "change" })
           }),
         {
           git: true,
@@ -263,4 +267,20 @@ describeWatcher("Watcher", () => {
       ),
     )
   })
+
+  // Regression for #35329: @parcel/watcher emits OS-native separators, so on
+  // Windows the raw path has backslashes. The watcher must normalize them to
+  // forward slashes before publishing, or path comparisons elsewhere break.
+  it.live("publishes forward-slash paths (no backslashes) on Windows", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const file = toPosix(path.join(directory, "sep.txt"))
+        yield* ready(directory)
+        const event = yield* nextUpdate((e) => e.event === "add", fs.writeFileString(file, "x"))
+        expect(event.file).toBe(file)
+        expect(event.file).not.toContain("\\")
+      }),
+    ),
+  )
 })

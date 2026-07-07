@@ -41,6 +41,16 @@ function getBackend() {
   if (process.platform === "linux") return "inotify"
 }
 
+// @parcel/watcher emits OS-native separators, so on Windows `update.path`
+// arrives with backslashes (e.g. `C:\foo\bar.txt`). The rest of the codebase
+// compares and stores paths with forward slashes, so unnormalized backslash
+// paths cause mismatches and inconsistent behavior. Mirror the `storagePath`
+// normalization used in database/path.ts. (#35329)
+function normalizeWatchPath(input: string): string {
+  if (process.platform !== "win32") return input
+  return input.replaceAll("\\", "/")
+}
+
 function protecteds(dir: string) {
   return Protected.paths().filter((item) => {
     const relative = path.relative(dir, item)
@@ -85,9 +95,10 @@ const layer = Layer.effect(
 
     const callback: ParcelWatcher.SubscribeCallback = (_error, updates) => {
       for (const update of updates) {
-        if (update.type === "create") runFork(events.publish(Event.Updated, { file: update.path, event: "add" }))
-        if (update.type === "update") runFork(events.publish(Event.Updated, { file: update.path, event: "change" }))
-        if (update.type === "delete") runFork(events.publish(Event.Updated, { file: update.path, event: "unlink" }))
+        const file = normalizeWatchPath(update.path)
+        if (update.type === "create") runFork(events.publish(Event.Updated, { file, event: "add" }))
+        if (update.type === "update") runFork(events.publish(Event.Updated, { file, event: "change" }))
+        if (update.type === "delete") runFork(events.publish(Event.Updated, { file, event: "unlink" }))
       }
     }
 
