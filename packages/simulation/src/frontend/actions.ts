@@ -1,3 +1,6 @@
+import { mkdtemp } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
 import type { SimulationProtocol } from "../protocol"
@@ -125,7 +128,10 @@ export function state(harness: Harness) {
 
 export async function render(harness: Harness) {
   await harness.renderOnce()
-  return SimulationPng.screenshot(harness.renderer)
+  const image = SimulationPng.screenshot(harness.renderer)
+  const path = join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
+  await Bun.write(path, image.data)
+  return { path }
 }
 
 export async function execute(harness: Harness, action: Action) {

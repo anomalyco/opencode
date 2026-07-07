@@ -93,10 +93,7 @@ export namespace Frontend {
   export interface State extends Schema.Schema.Type<typeof State> {}
 
   export const Render = Schema.Struct({
-    mime: Schema.Literal("image/png"),
-    width: Schema.Number,
-    height: Schema.Number,
-    data: Schema.String,
+    path: Schema.String,
   })
   export interface Render extends Schema.Schema.Type<typeof Render> {}
 

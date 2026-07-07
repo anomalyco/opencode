@@ -63,10 +63,9 @@ export function screenshot(renderer: CliRenderer) {
   })
 
   return {
-    mime: "image/png" as const,
     width,
     height,
-    data: encode(width, height, pixels).toString("base64"),
+    data: encode(width, height, pixels),
   }
 }
 
