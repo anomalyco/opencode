@@ -79,13 +79,6 @@ async function handle(
         x: request.params.x,
         y: request.params.y,
       })
-    case "trace.list":
-      return { records: SimulationTrace.list() }
-    case "trace.clear":
-      SimulationTrace.clear()
-      return { cleared: true }
-    case "trace.export":
-      return SimulationTrace.exportTrace()
   }
 }
 

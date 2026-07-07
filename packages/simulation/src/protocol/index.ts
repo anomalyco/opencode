@@ -129,25 +129,12 @@ export namespace Frontend {
         "ui.state",
         "ui.start-record",
         "ui.end-record",
-        "trace.list",
-        "trace.clear",
-        "trace.export",
       ]),
     }),
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
 
-  export const TraceRecord = Schema.Struct({
-    id: Schema.Number,
-    time: Schema.String,
-    type: Schema.String,
-    data: Schema.optional(Schema.Json),
-  })
-  export interface TraceRecord extends Schema.Schema.Type<typeof TraceRecord> {}
-
-  export const TraceList = Schema.Struct({ records: Schema.Array(TraceRecord) })
-  export interface TraceList extends Schema.Schema.Type<typeof TraceList> {}
 }
 
 export namespace Backend {
