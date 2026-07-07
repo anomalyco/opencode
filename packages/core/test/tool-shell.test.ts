@@ -105,7 +105,7 @@ const executionNode = makeGlobalNode({
           sessionID: id,
           assistantMessageID,
           finish: "stop",
-          cost: Money.USD.make(0),
+          cost: Money.USD.zero,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         })
       })

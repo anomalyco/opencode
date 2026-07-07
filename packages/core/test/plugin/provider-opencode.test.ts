@@ -71,8 +71,8 @@ const cost = (input: number, output = 0) => [
     input: Money.USDPerMillionTokens.make(input),
     output: Money.USDPerMillionTokens.make(output),
     cache: {
-      read: Money.USDPerMillionTokens.make(0),
-      write: Money.USDPerMillionTokens.make(0),
+      read: Money.USDPerMillionTokens.zero,
+      write: Money.USDPerMillionTokens.zero,
     },
   },
 ]

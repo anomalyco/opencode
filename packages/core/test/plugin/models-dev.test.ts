@@ -121,7 +121,7 @@ describe("ModelsDevPlugin", () => {
           output: Money.USDPerMillionTokens.make(30),
           cache: {
             read: Money.USDPerMillionTokens.make(0.5),
-            write: Money.USDPerMillionTokens.make(0),
+            write: Money.USDPerMillionTokens.zero,
           },
         },
         {
@@ -130,7 +130,7 @@ describe("ModelsDevPlugin", () => {
           output: Money.USDPerMillionTokens.make(18),
           cache: {
             read: Money.USDPerMillionTokens.make(0.25),
-            write: Money.USDPerMillionTokens.make(0),
+            write: Money.USDPerMillionTokens.zero,
           },
         },
         {
@@ -139,7 +139,7 @@ describe("ModelsDevPlugin", () => {
           output: Money.USDPerMillionTokens.make(22.5),
           cache: {
             read: Money.USDPerMillionTokens.make(0.5),
-            write: Money.USDPerMillionTokens.make(0),
+            write: Money.USDPerMillionTokens.zero,
           },
         },
       ])

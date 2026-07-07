@@ -192,7 +192,7 @@ describe("OpenAIPlugin", () => {
               output: Money.USDPerMillionTokens.make(2),
               cache: {
                 read: Money.USDPerMillionTokens.make(0.1),
-                write: Money.USDPerMillionTokens.make(0),
+                write: Money.USDPerMillionTokens.zero,
               },
             },
           ]

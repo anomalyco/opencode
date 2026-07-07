@@ -161,7 +161,7 @@ test("does not apply an ineligible tier without base pricing", () => {
       ],
       { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 0 } },
     ),
-  ).toBe(Money.USD.make(0))
+  ).toBe(Money.USD.zero)
 })
 
 const authorizations: Tool.Context[] = []

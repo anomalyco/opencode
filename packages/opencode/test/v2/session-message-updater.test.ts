@@ -52,7 +52,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
         sessionID,
         assistantMessageID,
         finish: "stop",
-        cost: Money.USD.make(0),
+        cost: Money.USD.zero,
         tokens: {
           input: 1,
           output: 2,

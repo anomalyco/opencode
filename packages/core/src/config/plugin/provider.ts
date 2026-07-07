@@ -92,8 +92,8 @@ export const Plugin = define({
                   input: cost.input,
                   output: cost.output,
                   cache: {
-                    read: cost.cache?.read ?? Money.USDPerMillionTokens.make(0),
-                    write: cost.cache?.write ?? Money.USDPerMillionTokens.make(0),
+                    read: cost.cache?.read ?? Money.USDPerMillionTokens.zero,
+                    write: cost.cache?.write ?? Money.USDPerMillionTokens.zero,
                   },
                 }))
               }

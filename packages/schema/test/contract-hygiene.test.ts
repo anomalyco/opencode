@@ -32,6 +32,8 @@ describe("contract hygiene", () => {
 
     expect(invalidUSD).toBe(Money.USD.make(1))
     expect(invalidRate).toBe(Money.USDPerMillionTokens.make(1))
+    expect(Money.USD.zero).toBe(Money.USD.make(0))
+    expect(Money.USDPerMillionTokens.zero).toBe(Money.USDPerMillionTokens.make(0))
   })
 
   test("optional properties preserve transformations and omit undefined while encoding", () => {

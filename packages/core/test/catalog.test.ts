@@ -304,8 +304,8 @@ describe("CatalogV2", () => {
               input: Money.USDPerMillionTokens.make(1),
               output: Money.USDPerMillionTokens.make(1),
               cache: {
-                read: Money.USDPerMillionTokens.make(0),
-                write: Money.USDPerMillionTokens.make(0),
+                read: Money.USDPerMillionTokens.zero,
+                write: Money.USDPerMillionTokens.zero,
               },
             },
           ]
@@ -319,8 +319,8 @@ describe("CatalogV2", () => {
               input: Money.USDPerMillionTokens.make(10),
               output: Money.USDPerMillionTokens.make(10),
               cache: {
-                read: Money.USDPerMillionTokens.make(0),
-                write: Money.USDPerMillionTokens.make(0),
+                read: Money.USDPerMillionTokens.zero,
+                write: Money.USDPerMillionTokens.zero,
               },
             },
           ]

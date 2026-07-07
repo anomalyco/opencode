@@ -326,7 +326,7 @@ const layer = Layer.effect(
                 variant: input.model.variant,
               }
             : undefined,
-          cost: Money.USD.make(0),
+          cost: Money.USD.zero,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },
         })

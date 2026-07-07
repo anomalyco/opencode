@@ -66,7 +66,7 @@ export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
     .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
     .toSorted((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
   const cost = tier ?? costs.find((cost) => cost.tier === undefined)
-  if (!cost) return Money.USD.make(0)
+  if (!cost) return Money.USD.zero
   return Money.USD.make(
     (tokens.input * cost.input +
       (tokens.output + tokens.reasoning) * cost.output +

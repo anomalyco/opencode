@@ -259,8 +259,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
             input: Money.USDPerMillionTokens.make(1),
             output: Money.USDPerMillionTokens.make(2),
             cache: {
-              read: Money.USDPerMillionTokens.make(0),
-              write: Money.USDPerMillionTokens.make(0),
+              read: Money.USDPerMillionTokens.zero,
+              write: Money.USDPerMillionTokens.zero,
             },
             tier: undefined,
           },

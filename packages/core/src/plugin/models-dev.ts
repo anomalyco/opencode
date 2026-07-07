@@ -14,11 +14,11 @@ function released(date: string) {
 
 function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
   const base = {
-    input: input?.input ?? Money.USDPerMillionTokens.make(0),
-    output: input?.output ?? Money.USDPerMillionTokens.make(0),
+    input: input?.input ?? Money.USDPerMillionTokens.zero,
+    output: input?.output ?? Money.USDPerMillionTokens.zero,
     cache: {
-      read: input?.cache_read ?? Money.USDPerMillionTokens.make(0),
-      write: input?.cache_write ?? Money.USDPerMillionTokens.make(0),
+      read: input?.cache_read ?? Money.USDPerMillionTokens.zero,
+      write: input?.cache_write ?? Money.USDPerMillionTokens.zero,
     },
   }
   return [
@@ -28,8 +28,8 @@ function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
       input: item.input,
       output: item.output,
       cache: {
-        read: item.cache_read ?? Money.USDPerMillionTokens.make(0),
-        write: item.cache_write ?? Money.USDPerMillionTokens.make(0),
+        read: item.cache_read ?? Money.USDPerMillionTokens.zero,
+        write: item.cache_write ?? Money.USDPerMillionTokens.zero,
       },
     })) ?? []),
     ...(input?.context_over_200k
@@ -42,8 +42,8 @@ function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
             input: input.context_over_200k.input,
             output: input.context_over_200k.output,
             cache: {
-              read: input.context_over_200k.cache_read ?? Money.USDPerMillionTokens.make(0),
-              write: input.context_over_200k.cache_write ?? Money.USDPerMillionTokens.make(0),
+              read: input.context_over_200k.cache_read ?? Money.USDPerMillionTokens.zero,
+              write: input.context_over_200k.cache_write ?? Money.USDPerMillionTokens.zero,
             },
           },
         ]
@@ -71,11 +71,11 @@ function mergeCost(base: ModelInfo["cost"], override: ModelsDev.Model["cost"] | 
   return [
     merge(
       baseDefault ?? {
-        input: Money.USDPerMillionTokens.make(0),
-        output: Money.USDPerMillionTokens.make(0),
+        input: Money.USDPerMillionTokens.zero,
+        output: Money.USDPerMillionTokens.zero,
         cache: {
-          read: Money.USDPerMillionTokens.make(0),
-          write: Money.USDPerMillionTokens.make(0),
+          read: Money.USDPerMillionTokens.zero,
+          write: Money.USDPerMillionTokens.zero,
         },
       },
       nextDefault,
