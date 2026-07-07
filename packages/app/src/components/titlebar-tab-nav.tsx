@@ -249,7 +249,9 @@ export function TabNavItem(props: {
           <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
             <Show
               when={props.session()}
-              fallback={<span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />}
+              fallback={
+                <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
+              }
             >
               {(session) => (
                 <SessionTabAvatar
