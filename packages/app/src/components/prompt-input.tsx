@@ -224,6 +224,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const inset = 56
   const space = `${inset}px`
 
+  const isRtl = createMemo(() => {
+    if (typeof window === "undefined" || !(window as any).api) return false
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    const rtlRegex = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+    return rtlRegex.test(text)
+  })
+
   const scrollCursorIntoView = () => {
     const container = scrollRef
     const selection = window.getSelection()
@@ -1608,6 +1618,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       "[&_[data-type=agent]]:text-syntax-type": true,
                       "font-mono!": store.mode === "shell",
                     }}
+                    style={isRtl() ? { direction: "rtl", "text-align": "right" } : undefined}
                   />
                   <div
                     data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
@@ -1811,7 +1822,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     "[&_[data-type=agent]]:text-syntax-type": true,
                     "font-mono!": store.mode === "shell",
                   }}
-                  style={{ "padding-bottom": space }}
+                  style={isRtl() ? { direction: "rtl", "text-align": "right", "padding-bottom": space } : { "padding-bottom": space }}
                 />
                 <div
                   class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"

@@ -2550,8 +2550,26 @@ ToolRegistry.register({
                 const answer = () => answers()[i()] ?? []
                 return (
                   <div data-slot="question-answer-item">
-                    <div data-slot="question-text">{q.question}</div>
-                    <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
+                    <div
+                      data-slot="question-text"
+                      style={
+                        typeof window !== "undefined" && (window as any).api && /[\u0590-\u05FF\u0600-\u06FF\u0700-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(q.question)
+                          ? { direction: "rtl", "text-align": "right" }
+                          : undefined
+                      }
+                    >
+                      {q.question}
+                    </div>
+                    <div
+                      data-slot="answer-text"
+                      style={
+                        typeof window !== "undefined" && (window as any).api && /[\u0590-\u05FF\u0600-\u06FF\u0700-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(answer().join(", "))
+                          ? { direction: "rtl", "text-align": "right" }
+                          : undefined
+                      }
+                    >
+                      {answer().join(", ") || i18n.t("ui.question.answer.none")}
+                    </div>
                   </div>
                 )
               }}

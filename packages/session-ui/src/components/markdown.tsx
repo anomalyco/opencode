@@ -275,6 +275,18 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
+
+  if (typeof window !== "undefined" && (window as any).api) {
+    const rtlRegex = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+    const elements = root.querySelectorAll("p, td, th, li, h1, h2, h3, h4, h5, h6")
+    for (const el of Array.from(elements)) {
+      if (el instanceof HTMLElement && rtlRegex.test(el.textContent ?? "")) {
+        el.style.direction = "rtl"
+        el.style.textAlign = "right"
+      }
+    }
+  }
+
   if (!document.body.hasAttribute("data-new-layout")) return
   markInlineCode(root)
   markCodeLinks(root)
