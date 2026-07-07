@@ -3913,6 +3913,50 @@
   color: #b82d35;
 }
 
+[data-page="stats"] [data-slot="model-efficiency-pattern"] {
+  width: 100%;
+  height: 16px;
+  margin-bottom: 40px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position: center top;
+  mask-repeat: repeat;
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: center top;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  box-sizing: border-box;
+  gap: 0;
+  height: 120px;
+  min-height: 120px;
+  padding: 16px;
+  background: var(--stats-layer);
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] span {
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] strong {
+  margin-top: 32px;
+  font-size: 28px;
+  line-height: 42px;
+}
+
 [data-page="stats"] [data-section="model-panel"][data-variant="lab-models"] {
   overflow: hidden;
 }
@@ -5699,6 +5743,7 @@
 
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
+  [data-page="stats"] [data-component="model-efficiency-grid"],
   [data-page="stats"] [data-component="lab-model-grid"] {
     grid-template-columns: 1fr 1fr;
   }
@@ -6125,12 +6170,22 @@
 
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
+  [data-page="stats"] [data-component="model-efficiency-grid"],
   [data-page="stats"] [data-component="lab-model-grid"] {
     grid-template-columns: 1fr;
   }
 
   [data-page="stats"] [data-component="model-metric"] {
     min-height: 112px;
+  }
+
+  [data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] {
+    height: 112px;
+    min-height: 112px;
+  }
+
+  [data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] strong {
+    margin-top: 24px;
   }
 
   [data-page="stats"] [data-component="model-usage-chart"] {
