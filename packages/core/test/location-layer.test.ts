@@ -9,7 +9,7 @@ import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
@@ -29,25 +29,28 @@ import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])))
+const itWithSdk = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SdkPlugins.node, LocationServiceMap.node])),
+)
 
 describe("LocationServiceMap", () => {
-  it.live("preserves embedded SDK plugins after Location eviction", () =>
+  itWithSdk.live("preserves embedded SDK plugins after Location eviction", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const store = SdkPlugins.makeStore()
+          const sdk = yield* SdkPlugins.Service
+          const locations = yield* LocationServiceMap.Service
           const id = AgentV2.ID.make("persistent-sdk-agent")
           const plugin = define({
             id: "persistent-sdk-plugin",
             effect: (ctx) => ctx.agent.transform((agents) => agents.update(id, () => {})),
           })
-          store.plugins.set(plugin.id, plugin)
+          yield* sdk.register(plugin)
 
-          return yield* Effect.gen(function* () {
-            const locations = yield* LocationServiceMap.Service
+          yield* Effect.gen(function* () {
             const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
             const read = Effect.gen(function* () {
               yield* (yield* PluginSupervisor.Service).ready
@@ -57,11 +60,7 @@ describe("LocationServiceMap", () => {
             expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
             yield* locations.invalidate(ref)
             expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
-          }).pipe(
-            Effect.provide(buildLocationServiceMap([[SdkPlugins.node, SdkPlugins.layerWithStore(store)]]), {
-              local: true,
-            }),
-          )
+          })
         }),
       ),
     ),

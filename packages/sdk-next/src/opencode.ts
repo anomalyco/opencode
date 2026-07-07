@@ -1,47 +1,23 @@
 import { OpenCode } from "@opencode-ai/client/effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { Project } from "@opencode-ai/core/project"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
-import { Context, Effect, Layer, Scope } from "effect"
-import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
+import { Context, Effect, Layer, ManagedRuntime } from "effect"
+import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
 
 export const create = Effect.fn("OpenCode.create")(function* () {
-  const scope = yield* Scope.Scope
-  const memoMap = yield* Layer.makeMemoMap
-  const sdkPlugins = SdkPlugins.makeStore()
-  const context = yield* Layer.buildWithMemoMap(
-    AppNodeBuilder.build(LayerNode.group([EventV2.node, PermissionSaved.node, Project.node, SdkPlugins.node]), [
-      [SdkPlugins.node, SdkPlugins.layerWithStore(sdkPlugins)],
-    ]),
-    memoMap,
-    scope,
+  const runtime = yield* Effect.acquireRelease(
+    Effect.sync(() => ManagedRuntime.make(createEmbeddedRoutes().pipe(Layer.provide(HttpServer.layerServices)))),
+    (runtime) => runtime.disposeEffect,
   )
+  const context = yield* runtime.contextEffect
   const plugins = Context.get(context, SdkPlugins.Service)
-  const permissions = Context.get(context, PermissionSaved.Service)
-  const project = Context.get(context, Project.Service)
-  const web = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      HttpRouter.toWebHandler(
-        createEmbeddedRoutes(sdkPlugins).pipe(
-          HttpRouter.provideRequest(Layer.succeed(PermissionSaved.Service, permissions)),
-          HttpRouter.provideRequest(Layer.succeed(Project.Service, project)),
-          Layer.provide(HttpServer.layerServices),
-        ),
-        { disableLogger: true, memoMap },
-      ),
-    ),
-    (web) => Effect.promise(web.dispose),
-  )
-  const fetch = Object.assign((input: RequestInfo | URL, init?: RequestInit) => web.handler(new Request(input, init)), {
+  const router = Context.get(context, HttpRouter.HttpRouter)
+  const handler = HttpEffect.toWebHandler(router.asHttpEffect())
+  const fetch = Object.assign((input: RequestInfo | URL, init?: RequestInit) => handler(new Request(input, init)), {
     preconnect: () => undefined,
   }) satisfies typeof globalThis.fetch
   const client = yield* OpenCode.make({ baseUrl: "http://opencode.local" }).pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.provideService(FetchHttpClient.Fetch, fetch),
+    Effect.provide(FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch)), Layer.fresh)),
   )
   return {
     ...client,

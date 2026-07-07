@@ -1,14 +1,9 @@
 export * as ServerProcess from "./process"
 
 import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node"
-import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Project } from "@opencode-ai/core/project"
 import { HealthGroup } from "@opencode-ai/protocol/groups/health"
 import { Context, Effect, Layer, Option } from "effect"
-import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApi, HttpApiClient } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
@@ -53,9 +48,11 @@ function listen(options: Options) {
 function bind(hostname: string, port: number, password: string) {
   const server = createServer()
   return Layer.build(
-    HttpRouter.serve(createRoutes(password), { disableListenLog: true }).pipe(
+    createRoutes(password).pipe(
+      Layer.flatMap((context) =>
+        HttpServer.serve(Context.get(context, HttpRouter.HttpRouter).asHttpEffect(), HttpMiddleware.logger),
+      ),
       Layer.provideMerge(NodeHttpServer.layer(() => server, { port, host: hostname })),
-      Layer.provide(AppNodeBuilder.build(LayerNode.group([Credential.node, PermissionSaved.node, Project.node]))),
     ),
   ).pipe(
     Effect.tap(() => Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))),
