@@ -781,8 +781,15 @@ export function Session() {
                     for await (const event of sdk.api.session.log({ sessionID: sessionData.id, follow: false })) {
                       if (event.type !== "log.synced") events.push(event)
                     }
-                    events.push(...sdk.connection.history())
-                    events.sort((a, b) => a.created - b.created)
+                    // Durable events stay in aggregate order even when their wall-clock timestamps differ.
+                    sdk.connection.history().forEach((event) => {
+                      const index = events.findIndex((item) => item.created > event.created)
+                      if (index === -1) {
+                        events.push(event)
+                        return
+                      }
+                      events.splice(index, 0, event)
+                    })
                     return JSON.stringify({ info: sessionData, events }, null, 2) + EOL
                   }
 
