@@ -20,7 +20,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     // Stops and starts the managed service; present only in service mode.
     reload?: () => Promise<void>
   }) => {
-    const log = useLog()
+    const log = useLog({ component: "sdk" })
     const abort = new AbortController()
     let client = props.client
     let api = props.api
@@ -54,6 +54,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           )
           controller.signal.addEventListener("abort", cancel, { once: true })
           const error = await (async () => {
+            log.info("event stream connecting", { attempt })
             const response = await client.v2.event.subscribe({
               signal: connection.signal,
               sseMaxRetryAttempts: 0,
@@ -70,6 +71,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
               return new Error("Event stream did not start with server.connected")
             clearTimeout(timeout)
             attempt = 0
+            log.info("event stream connected")
             events.emit(first.value.type, first.value)
             setConnection({ status: "connected", attempt: 0, error: undefined })
             connected()
@@ -93,6 +95,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             })
           if (abort.signal.aborted || controller.signal.aborted) return
           attempt += 1
+          log.info("event stream disconnected", {
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          })
           // Re-resolve the transport before retrying: the server may have
           // moved (service restarted on a new port) or need starting. Static
           // transports (--server, standalone) resolve to the same address.
