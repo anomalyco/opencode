@@ -76,7 +76,11 @@ export function usePromptWorkspace(sessionID?: string) {
     if (sourceWorkspaceID && stashMsg) {
       const status = await sdk.client.vcs.status({ workspace: sourceWorkspaceID }).catch(() => undefined)
       if (status?.data?.length) {
-        await sdk.client.vcs.stash({ message: stashMsg, workspace: sourceWorkspaceID }).catch(() => undefined)
+        const stashResult = await sdk.client.vcs.stash({ message: stashMsg, workspace: sourceWorkspaceID }).catch((err) => ({ error: err }))
+        if (stashResult && "error" in stashResult) {
+          toast.show({ title: "Warp", message: "Failed to stash changes", variant: "error" })
+          return
+        }
         toast.show({ title: "Warp", message: "Uncommitted changes stashed", variant: "info" })
       }
     }
@@ -103,8 +107,12 @@ export function usePromptWorkspace(sessionID?: string) {
     if (warped) {
       showNotice(workspace.name)
       if (stashMsg) {
-        const popped = await sdk.client.vcs.stashPop({ message: stashMsg, workspace: workspace.id ?? undefined }).catch(() => undefined)
-        if (popped?.data) toast.show({ title: "Warp", message: "Uncommitted changes restored", variant: "success" })
+        const popped = await sdk.client.vcs.stashPop({ message: stashMsg, workspace: sourceWorkspaceID }).catch((err) => ({ error: err }))
+        if (popped && "error" in popped) {
+          toast.show({ title: "Warp", message: "Failed to restore stashed changes", variant: "error" })
+        } else if (popped?.data) {
+          toast.show({ title: "Warp", message: "Uncommitted changes restored", variant: "success" })
+        }
       }
     }
   }
