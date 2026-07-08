@@ -94,11 +94,11 @@ export namespace Frontend {
   export const Screenshot = Schema.String
   export type Screenshot = Schema.Schema.Type<typeof Screenshot>
 
-  export const StartRecord = Schema.Struct({ recording: Schema.Literal(true) })
-  export interface StartRecord extends Schema.Schema.Type<typeof StartRecord> {}
+  export const RecordingFinish = Schema.String
+  export type RecordingFinish = Schema.Schema.Type<typeof RecordingFinish>
 
-  export const EndRecord = Schema.String
-  export type EndRecord = Schema.Schema.Type<typeof EndRecord>
+  export const ArtifactParams = Schema.Struct({ path: Schema.optional(Schema.String) })
+  export interface ArtifactParams extends Schema.Schema.Type<typeof ArtifactParams> {}
 
   export const TypeParams = Schema.Struct({ text: Schema.String })
   export interface TypeParams extends Schema.Schema.Type<typeof TypeParams> {}
@@ -123,18 +123,16 @@ export namespace Frontend {
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
-      method: Schema.Literals([
-        "ui.enter",
-        "ui.screenshot",
-        "ui.state",
-        "ui.start-record",
-        "ui.end-record",
-      ]),
+      method: Schema.Literal("ui.screenshot"),
+      params: Schema.optional(ArtifactParams),
+    }),
+    Schema.Struct({
+      ...JsonRpc.RequestFields,
+      method: Schema.Literals(["ui.enter", "ui.state", "ui.recording.finish"]),
     }),
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
-
 }
 
 export namespace Backend {
@@ -189,7 +187,6 @@ export namespace Backend {
     matched: Schema.Boolean,
   })
   export interface NetworkLogEntry extends Schema.Schema.Type<typeof NetworkLogEntry> {}
-
 }
 
 export * as SimulationProtocol from "./index"

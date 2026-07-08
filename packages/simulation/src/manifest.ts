@@ -1,11 +1,14 @@
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { isAbsolute, join } from "node:path"
 
 export interface Manifest {
   readonly endpoints: {
     readonly ui: string
     readonly backend: string
+  }
+  readonly recording?: {
+    readonly timeline: string
   }
 }
 
@@ -32,17 +35,17 @@ export function resolve() {
   if (!isManifest(manifest)) throw new Error(`Invalid drive manifest: ${file}`)
   validateEndpoint(manifest.endpoints.ui, "ui")
   validateEndpoint(manifest.endpoints.backend, "backend")
+  if (manifest.recording && !isAbsolute(manifest.recording.timeline)) {
+    throw new Error(`Invalid drive recording timeline path: ${manifest.recording.timeline}`)
+  }
   return manifest
 }
 
 function isManifest(value: unknown): value is Manifest {
-  if (typeof value !== "object" || value === null) return false
-  if (!("endpoints" in value) || typeof value.endpoints !== "object" || value.endpoints === null) return false
   return (
+    "endpoints" in value &&
     "ui" in value.endpoints &&
-    typeof value.endpoints.ui === "string" &&
-    "backend" in value.endpoints &&
-    typeof value.endpoints.backend === "string"
+    "backend" in value.endpoints
   )
 }
 

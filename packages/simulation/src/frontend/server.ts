@@ -1,4 +1,3 @@
-import type { CapturedFrame } from "@opentui/core"
 import { SimulationProtocol } from "../protocol"
 import { SimulationActions, type Harness } from "./actions"
 
@@ -11,50 +10,20 @@ function parseRequest(input: string | Buffer) {
   return SimulationProtocol.Frontend.decodeRequest(JSON.parse(typeof input === "string" ? input : input.toString()))
 }
 
-interface Recording {
-  readonly frames: CapturedFrame[]
-  readonly timer: ReturnType<typeof setInterval>
-  pending: Promise<void>
-}
-
 async function handle(
   harness: Harness,
   request: SimulationProtocol.Frontend.Request,
-  recording: { current?: Recording },
-  headless: boolean,
+  finishRecording?: () => Promise<string>,
 ) {
   switch (request.method) {
     case "ui.screenshot":
-      return SimulationActions.screenshot(harness)
+      return SimulationActions.screenshot(harness, request.params?.path)
     case "ui.state": {
       return SimulationActions.state(harness)
     }
-    case "ui.start-record": {
-      if (recording.current) throw new Error("UI recording is already active")
-      const frames = [SimulationActions.frame(harness)]
-      const current: Recording = {
-        frames,
-        timer: setInterval(() => {
-          current.pending = current.pending.then(async () => {
-            if (headless) await harness.renderOnce()
-            frames.push(SimulationActions.frame(harness))
-          })
-        }, 100),
-        pending: Promise.resolve(),
-      }
-      recording.current = current
-      return { recording: true }
-    }
-    case "ui.end-record": {
-      if (!recording.current) throw new Error("UI recording is not active")
-      const current = recording.current
-      clearInterval(current.timer)
-      await current.pending
-      if (headless) await harness.renderOnce()
-      current.frames.push(SimulationActions.frame(harness))
-      recording.current = undefined
-      return SimulationActions.video(current.frames)
-    }
+    case "ui.recording.finish":
+      if (!finishRecording) throw new Error("UI recording is not available")
+      return finishRecording()
     case "ui.type":
       return SimulationActions.execute(harness, { type: "ui.type", text: request.params.text })
     case "ui.enter":
@@ -79,14 +48,13 @@ async function handle(
   }
 }
 
-export function start(harness: Harness, endpoint: string, headless: boolean): Server {
+export function start(harness: Harness, endpoint: string, finishRecording?: () => Promise<string>): Server {
   const url = new URL(endpoint)
-  const recording: { current?: Recording } = {}
-  const server = Bun.serve<{ readonly drive: true; readonly headless: boolean }>({
+  const server = Bun.serve<{ readonly drive: true }>({
     hostname: url.hostname,
     port: Number(url.port),
     fetch(request, server) {
-      if (server.upgrade(request, { data: { drive: true, headless } })) return undefined
+      if (server.upgrade(request, { data: { drive: true } })) return undefined
       return new Response("opencode drive ui websocket", { status: 426 })
     },
     websocket: {
@@ -94,7 +62,7 @@ export function start(harness: Harness, endpoint: string, headless: boolean): Se
         let request: SimulationProtocol.Frontend.Request | undefined
         try {
           request = parseRequest(message)
-          const result = await handle(harness, request, recording, headless)
+          const result = await handle(harness, request, finishRecording)
           const next = SimulationProtocol.JsonRpc.success(request.id, result)
           if (next) socket.send(JSON.stringify(next))
         } catch (error) {
@@ -106,7 +74,6 @@ export function start(harness: Harness, endpoint: string, headless: boolean): Se
   return {
     url: endpoint,
     stop: () => {
-      if (recording.current) clearInterval(recording.current.timer)
       server.stop(true)
     },
   }

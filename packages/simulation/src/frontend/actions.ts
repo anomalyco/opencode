@@ -1,7 +1,7 @@
-import { mkdtemp } from "node:fs/promises"
+import { mkdir, mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
-import type { CapturedFrame, CliRenderer, Renderable } from "@opentui/core"
+import { dirname, join } from "node:path"
+import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
@@ -104,64 +104,12 @@ export function state(harness: Harness) {
   }
 }
 
-export async function screenshot(harness: Harness) {
+export async function screenshot(harness: Harness, output?: string) {
   await harness.renderOnce()
   const image = SimulationPng.screenshot(harness.renderer)
-  const path = join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
+  const path = output ?? join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
+  if (output) await mkdir(dirname(output), { recursive: true })
   await Bun.write(path, image.data)
-  return path
-}
-
-export function frame(harness: Harness): CapturedFrame {
-  const buffer = harness.renderer.currentRenderBuffer
-  return {
-    cols: buffer.width,
-    rows: buffer.height,
-    cursor: [0, 0],
-    lines: buffer.getSpanLines().map((line) => ({
-      spans: line.spans.map((span) => ({
-        text: span.text,
-        fg: span.fg,
-        bg: span.bg,
-        attributes: span.attributes,
-        width: span.width,
-      })),
-    })),
-  }
-}
-
-export async function video(frames: CapturedFrame[]) {
-  const directory = await mkdtemp(join(tmpdir(), "opencode-drive-recording-"))
-  await Promise.all(
-    frames.map((frame, index) =>
-      Bun.write(
-        join(directory, `frame-${index.toString().padStart(6, "0")}.png`),
-        SimulationPng.screenshotFrame(frame).data,
-      ),
-    ),
-  )
-  const path = join(directory, "recording.mp4")
-  const process = Bun.spawn(
-    [
-      "ffmpeg",
-      "-loglevel",
-      "error",
-      "-framerate",
-      "10",
-      "-i",
-      join(directory, "frame-%06d.png"),
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-movflags",
-      "+faststart",
-      "-y",
-      path,
-    ],
-    { stderr: "pipe" },
-  )
-  if ((await process.exited) !== 0) throw new Error(`ffmpeg failed: ${await new Response(process.stderr).text()}`)
   return path
 }
 
@@ -180,7 +128,9 @@ export async function execute(harness: Harness, action: Action) {
       harness.mockInput.pressArrow(action.direction)
       break
     case "ui.focus":
-      all(harness.renderer.root).find((item) => item.num === action.target)?.focus()
+      all(harness.renderer.root)
+        .find((item) => item.num === action.target)
+        ?.focus()
       break
     case "ui.click":
       await harness.mockMouse.click(action.x, action.y)
