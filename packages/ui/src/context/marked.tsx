@@ -378,19 +378,20 @@ export const OpenCodeTheme = {
 
 registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
 
-function renderMathInText(text: string): string {
+export function renderMathInText(text: string): string {
   let result = text
 
-  // Display math: $$...$$
-  const displayMathRegex = /\$\$([\s\S]*?)\$\$/g
-  result = result.replace(displayMathRegex, (_, math) => {
+  // Display math: $$...$$ or \[...\]
+  const displayMathRegex = /\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/g
+  result = result.replace(displayMathRegex, (match, dollarMath, bracketMath) => {
+    const math = dollarMath ?? bracketMath
     try {
       return katex.renderToString(math, {
         displayMode: true,
         throwOnError: false,
       })
     } catch {
-      return `$$${math}$$`
+      return match
     }
   })
 
@@ -412,8 +413,9 @@ function renderMathInText(text: string): string {
 
 const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
 const blockMathRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
+const blockMathBracketRegex = /^\\\[\n([\s\S]+?)\n\\\](?:\n|$)/
 
-const katexExtension: MarkedExtension = {
+export const katexExtension: MarkedExtension = {
   extensions: [
     {
       name: "inlineKatex",
@@ -439,7 +441,7 @@ const katexExtension: MarkedExtension = {
       name: "blockKatex",
       level: "block",
       tokenizer(src) {
-        const match = src.match(blockMathRegex)
+        const match = src.match(blockMathRegex) ?? src.match(blockMathBracketRegex)
         if (!match) return
         return {
           type: "blockKatex",
