@@ -34,6 +34,12 @@ export interface Settings {
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
     newLayoutDesigns?: boolean
+    // OpenWork flags. `workMode` toggles the Cowork-style UI (simplified session,
+    // hidden terminal/file-tree, work agent as default). `workPermissionMode` decides
+    // whether the work agent asks before destructive ops ("ask", default) or acts
+    // without asking ("auto"). The work agent always double-asks on deletes.
+    workMode: boolean
+    workPermissionMode: "ask" | "auto"
   }
   appearance: {
     fontSize: number
@@ -118,6 +124,8 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    workMode: false,
+    workPermissionMode: "ask",
   },
   appearance: {
     fontSize: 14,
@@ -252,10 +260,30 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
         },
+        workMode: withFallback(() => store.general?.workMode, defaultSettings.general.workMode),
+        setWorkMode(value: boolean) {
+          setStore("general", "workMode", value)
+        },
+        workPermissionMode: withFallback(
+          () => store.general?.workPermissionMode,
+          defaultSettings.general.workPermissionMode,
+        ),
+        setWorkPermissionMode(value: "ask" | "auto") {
+          setStore("general", "workPermissionMode", value)
+        },
       },
       visibility: {
-        fileTree: visible(showFileTree),
-        search: visible(showSearch),
+        // OpenWork mode forces a simplified session: no file tree, no search panel.
+        // Terminal visibility is handled at the session level via `settings.general.showTerminal`,
+        // but here we additionally suppress file tree and search to match the Cowork-style UI.
+        fileTree: () => {
+          if (withFallback(() => store.general?.workMode, defaultSettings.general.workMode)()) return false
+          return visible(showFileTree)()
+        },
+        search: () => {
+          if (withFallback(() => store.general?.workMode, defaultSettings.general.workMode)()) return false
+          return visible(showSearch)()
+        },
         status: visible(showStatus),
         customAgents: visible(showCustomAgents),
       },

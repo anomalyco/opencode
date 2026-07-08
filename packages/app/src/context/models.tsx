@@ -112,7 +112,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("user", store.user.length, { ...model, visibility: state })
     }
 
-    const visible = (model: ModelKey) => {
+    const visible = (model: ModelKey, agent?: string) => {
       const key = modelKey(model)
       const state = visibility().get(key)
       if (state === "hide") return false
@@ -120,6 +120,13 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       if (latestSet().has(key)) return true
       const date = release().get(key)
       if (!date?.isValid) return true
+      if (agent === "work") {
+        // OpenWork requires tool-calling capable models. The app sync only exposes
+        // `capabilities.reasoning`, which is a strong proxy for agentic-capable models
+        // (the families that support reasoning also support tool calls in practice).
+        const entry = available().find((m) => modelKey({ providerID: m.provider.id, modelID: m.id }) === key)
+        if (entry && entry.capabilities && entry.capabilities.reasoning === false) return false
+      }
       return false
     }
 

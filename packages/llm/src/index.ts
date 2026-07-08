@@ -9,6 +9,7 @@ export type {
   Service as LLMClientService,
 } from "./route/client"
 export * from "./schema"
+export { rateLimitCache } from "./rate-limit-cache"
 export { Tool, ToolFailure, toDefinitions } from "./tool"
 export { ToolRuntime } from "./tool-runtime"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime"

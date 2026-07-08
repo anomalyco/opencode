@@ -31,6 +31,7 @@ import {
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
+import { useWorkMode } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
@@ -364,47 +365,66 @@ function webSearchProviderLabel(provider: unknown) {
   return "Web Search"
 }
 
+const WORK_KEY_MAP: Record<string, string> = {
+  "ui.tool.read": "ui.tool.work.read",
+  "ui.tool.list": "ui.tool.work.list",
+  "ui.tool.glob": "ui.tool.work.glob",
+  "ui.tool.grep": "ui.tool.work.grep",
+  "ui.tool.webfetch": "ui.tool.work.webfetch",
+  "ui.tool.shell": "ui.tool.work.shell",
+  "ui.tool.patch": "ui.tool.work.patch",
+  "ui.tool.todos": "ui.tool.work.todos",
+  "ui.tool.questions": "ui.tool.work.questions",
+  "ui.tool.skill": "ui.tool.work.skill",
+  "ui.tool.websearch": "ui.tool.work.websearch",
+  "ui.tool.task": "ui.tool.work.task",
+  "ui.messagePart.title.edit": "ui.tool.work.edit",
+  "ui.messagePart.title.write": "ui.tool.work.write",
+}
+
 export function getToolInfo(
   tool: string,
   input: any = {},
   metadata: Record<string, unknown> | undefined = {},
 ): ToolInfo {
   const i18n = useI18n()
+  const workMode = useWorkMode()?.() ?? false
+  const t = (key: string) => i18n.t(workMode ? (WORK_KEY_MAP[key] ?? key) : key)
   switch (tool) {
     case "read":
       return {
         icon: "glasses",
-        title: i18n.t("ui.tool.read"),
+        title: t("ui.tool.read"),
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
       }
     case "list":
       return {
         icon: "bullet-list",
-        title: i18n.t("ui.tool.list"),
+        title: t("ui.tool.list"),
         subtitle: input.path ? getFilename(input.path) : undefined,
       }
     case "glob":
       return {
         icon: "magnifying-glass-menu",
-        title: i18n.t("ui.tool.glob"),
+        title: t("ui.tool.glob"),
         subtitle: input.pattern,
       }
     case "grep":
       return {
         icon: "magnifying-glass-menu",
-        title: i18n.t("ui.tool.grep"),
+        title: t("ui.tool.grep"),
         subtitle: input.pattern,
       }
     case "webfetch":
       return {
         icon: "window-cursor",
-        title: i18n.t("ui.tool.webfetch"),
+        title: t("ui.tool.webfetch"),
         subtitle: input.url,
       }
     case "websearch":
       return {
         icon: "window-cursor",
-        title: webSearchProviderLabel(metadata?.provider),
+        title: workMode ? t("ui.tool.websearch") : webSearchProviderLabel(metadata?.provider),
         subtitle: input.query,
       }
     case "task": {
@@ -414,32 +434,32 @@ export function getToolInfo(
           : undefined
       return {
         icon: "task",
-        title: agentTitle(i18n, type),
+        title: workMode ? t("ui.tool.task") : agentTitle(i18n, type),
         subtitle: input.description,
       }
     }
     case "bash":
       return {
         icon: "console",
-        title: i18n.t("ui.tool.shell"),
+        title: t("ui.tool.shell"),
         subtitle: input.command,
       }
     case "edit":
       return {
         icon: "code-lines",
-        title: i18n.t("ui.messagePart.title.edit"),
+        title: t("ui.messagePart.title.edit"),
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
       }
     case "write":
       return {
         icon: "code-lines",
-        title: i18n.t("ui.messagePart.title.write"),
+        title: t("ui.messagePart.title.write"),
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
       }
     case "apply_patch":
       return {
         icon: "code-lines",
-        title: i18n.t("ui.tool.patch"),
+        title: t("ui.tool.patch"),
         subtitle: input.files?.length
           ? `${input.files.length} ${i18n.t(input.files.length > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
           : undefined,
@@ -447,17 +467,17 @@ export function getToolInfo(
     case "todowrite":
       return {
         icon: "checklist",
-        title: i18n.t("ui.tool.todos"),
+        title: t("ui.tool.todos"),
       }
     case "question":
       return {
         icon: "bubble-5",
-        title: i18n.t("ui.tool.questions"),
+        title: t("ui.tool.questions"),
       }
     case "skill":
       return {
         icon: "brain",
-        title: input.name || i18n.t("ui.tool.skill"),
+        title: workMode ? t("ui.tool.skill") : (input.name || i18n.t("ui.tool.skill")),
       }
     default:
       return {
@@ -765,6 +785,8 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const include = typeof input.include === "string" ? input.include : undefined
   const offset = typeof input.offset === "number" ? input.offset : undefined
   const limit = typeof input.limit === "number" ? input.limit : undefined
+  const workMode = useWorkMode()?.() ?? false
+  const t = (key: string) => i18n.t(workMode ? (WORK_KEY_MAP[key] ?? key) : key)
 
   switch (part.tool) {
     case "read": {
@@ -772,19 +794,19 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       if (offset !== undefined) args.push("offset=" + offset)
       if (limit !== undefined) args.push("limit=" + limit)
       return {
-        title: i18n.t("ui.tool.read"),
+        title: t("ui.tool.read"),
         subtitle: filePath ? getFilename(filePath) : "",
         args,
       }
     }
     case "list":
       return {
-        title: i18n.t("ui.tool.list"),
+        title: t("ui.tool.list"),
         subtitle: getDirectory(path),
       }
     case "glob":
       return {
-        title: i18n.t("ui.tool.glob"),
+        title: t("ui.tool.glob"),
         subtitle: getDirectory(path),
         args: pattern ? ["pattern=" + pattern] : [],
       }
@@ -793,7 +815,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       if (pattern) args.push("pattern=" + pattern)
       if (include) args.push("include=" + include)
       return {
-        title: i18n.t("ui.tool.grep"),
+        title: t("ui.tool.grep"),
         subtitle: getDirectory(path),
         args,
       }

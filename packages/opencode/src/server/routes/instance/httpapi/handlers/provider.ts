@@ -2,6 +2,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { Config } from "@/config/config"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
+import { rateLimitCache } from "@opencode-ai/llm"
 
 import { mapValues } from "remeda"
 import { Effect, Schema } from "effect"
@@ -37,9 +38,69 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const provider = yield* Provider.Service
     const svc = yield* ProviderAuth.Service
 
+    // Built-in providers not in models.dev that should appear in the connect list
+    const localProviders: Record<string, ModelsDev.Provider> = {
+      huawei: {
+        id: "huawei",
+        name: "Huawei Cloud",
+        env: ["HUAWEI_MAAS_API_KEY"],
+        api: "https://api-ap-southeast-1.modelarts-maas.com/openai/v1",
+        models: {
+          "deepseek-v4-flash": {
+            id: "deepseek-v4-flash",
+            name: "DeepSeek V4 Flash",
+            family: "deepseek",
+            tool_call: true,
+            reasoning: true,
+            temperature: true,
+            attachment: false,
+            limit: { context: 1048576, output: 131072 },
+            modalities: { input: ["text"], output: ["text"] },
+            release_date: "",
+          },
+          "deepseek-v4-pro": {
+            id: "deepseek-v4-pro",
+            name: "DeepSeek V4 Pro",
+            family: "deepseek",
+            tool_call: true,
+            reasoning: true,
+            temperature: true,
+            attachment: false,
+            limit: { context: 1048576, output: 131072 },
+            modalities: { input: ["text"], output: ["text"] },
+            release_date: "",
+          },
+          "glm-5.2": {
+            id: "glm-5.2",
+            name: "GLM 5.2",
+            family: "glm",
+            tool_call: true,
+            reasoning: true,
+            temperature: true,
+            attachment: false,
+            limit: { context: 198000, output: 131072 },
+            modalities: { input: ["text"], output: ["text"] },
+            release_date: "",
+          },
+          "deepseek-r1-250528": {
+            id: "deepseek-r1-250528",
+            name: "DeepSeek R1",
+            family: "deepseek",
+            tool_call: true,
+            reasoning: true,
+            temperature: true,
+            attachment: false,
+            limit: { context: 128000, output: 32768 },
+            modalities: { input: ["text"], output: ["text"] },
+            release_date: "",
+          },
+        },
+      },
+    }
+
     const list = Effect.fn("ProviderHttpApi.list")(function* () {
       const config = yield* cfg.get()
-      const all = yield* ModelsDev.Service.use((s) => s.get())
+      const all = { ...(yield* ModelsDev.Service.use((s) => s.get())), ...localProviders }
       const disabled = new Set(config.disabled_providers ?? [])
       const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
       const filtered: Record<string, (typeof all)[string]> = {}
@@ -51,6 +112,11 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
         connected,
       )
+      // Inject cached rate limits from provider response headers
+      for (const [id, p] of Object.entries(providers)) {
+        const rl = rateLimitCache.get(id)
+        if (rl) p.options = { ...p.options, rateLimit: rl }
+      }
       return {
         all: Object.values(providers).map(Provider.toPublicInfo),
         default: Provider.defaultModelIDs(providers),

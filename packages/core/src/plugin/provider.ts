@@ -1,6 +1,7 @@
 import { AlibabaPlugin } from "./provider/alibaba"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock"
 import { AnthropicPlugin } from "./provider/anthropic"
+import { HuaweiPlugin } from "./provider/huawei"
 import { AzureCognitiveServicesPlugin, AzurePlugin } from "./provider/azure"
 import { CerebrasPlugin } from "./provider/cerebras"
 import { CloudflareAIGatewayPlugin } from "./provider/cloudflare-ai-gateway"
@@ -46,6 +47,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   DeepInfraPlugin,
   GatewayPlugin,
   GithubCopilotPlugin,
+  HuaweiPlugin,
   GitLabPlugin,
   GooglePlugin,
   GoogleVertexAnthropicPlugin,

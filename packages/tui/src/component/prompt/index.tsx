@@ -320,7 +320,7 @@ export function Prompt(props: PromptProps) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
         if (msg.model) {
-          local.model.set(msg.model)
+          local.model.set(msg.model, { validate: false, recent: true })
           local.model.variant.set(msg.model.variant)
         }
       }

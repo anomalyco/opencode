@@ -42,6 +42,7 @@ import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
+import { useSettings } from "@/context/settings"
 import {
   closeHomeProject,
   displayName,
@@ -148,6 +149,7 @@ export function NewHome() {
   const notification = useNotification()
   const marked = useMarked()
   const openSettings = useSettingsCommand()
+  const settings = useSettings()
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
@@ -215,11 +217,18 @@ export function NewHome() {
       projectByID,
     }),
   )
-  const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
+  const workMode = createMemo(() => settings.general.workMode())
+  const records = createMemo(() => {
+    const all = allRecords()
+    const filtered = workMode() ? all.filter((record) => record.session.agent === "work") : all
+    return filtered.slice(0, HOME_SESSION_LIMIT)
+  })
   const searchResults = createMemo(() => {
     const query = search().toLowerCase()
     if (!query) return []
-    return allRecords().filter((record) => matchesHomeSessionSearch(record, query))
+    const all = allRecords()
+    const scoped = workMode() ? all.filter((record) => record.session.agent === "work") : all
+    return scoped.filter((record) => matchesHomeSessionSearch(record, query))
   })
   const searchOpen = createMemo(() => state.searchFocused && search().length > 0)
   const groups = createMemo(() => groupSessions(records(), language))
