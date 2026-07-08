@@ -42,11 +42,9 @@ export function resolve() {
 }
 
 function isManifest(value: unknown): value is Manifest {
-  return (
-    "endpoints" in value &&
-    "ui" in value.endpoints &&
-    "backend" in value.endpoints
-  )
+  if (typeof value !== "object" || value === null || !("endpoints" in value)) return false
+  if (typeof value.endpoints !== "object" || value.endpoints === null) return false
+  return "ui" in value.endpoints && "backend" in value.endpoints
 }
 
 function validateEndpoint(value: string, name: string) {
