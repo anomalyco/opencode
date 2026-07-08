@@ -2686,7 +2686,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-missing",
               state: {
                 status: "error",
-                error: { type: "tool.execution", message: "Tool is not available for this request: missing" },
+                error: { type: "tool.unknown", message: "Unknown tool: missing" },
               },
             },
           ],
