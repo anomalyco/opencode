@@ -393,6 +393,10 @@ import type {
   VcsDiffResponses,
   VcsGetErrors,
   VcsGetResponses,
+  VcsStashErrors,
+  VcsStashPopErrors,
+  VcsStashPopResponses,
+  VcsStashResponses,
   VcsStatusErrors,
   VcsStatusResponses,
   WorktreeCreateErrors,
@@ -1050,6 +1054,7 @@ export class Workspace extends HeyApiClient {
       id?: string
       type?: string
       branch?: string | null
+      name?: string
       extra?: unknown | null
     },
     options?: Options<never, ThrowOnError>,
@@ -1064,6 +1069,7 @@ export class Workspace extends HeyApiClient {
             { in: "body", key: "id" },
             { in: "body", key: "type" },
             { in: "body", key: "branch" },
+            { in: "body", key: "name" },
             { in: "body", key: "extra" },
           ],
         },
@@ -1196,11 +1202,12 @@ export class Workspace extends HeyApiClient {
    */
   public warp<ThrowOnError extends boolean = false>(
     parameters?: {
-      directory?: string
+      query_directory?: string
       workspace?: string
       id?: string | null
       sessionID?: string
       copyChanges?: boolean
+      body_directory?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1209,11 +1216,20 @@ export class Workspace extends HeyApiClient {
       [
         {
           args: [
-            { in: "query", key: "directory" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
             { in: "query", key: "workspace" },
             { in: "body", key: "id" },
             { in: "body", key: "sessionID" },
             { in: "body", key: "copyChanges" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
           ],
         },
       ],
@@ -2140,6 +2156,80 @@ export class Vcs extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<VcsApplyResponses, VcsApplyErrors, ThrowOnError>({
       url: "/vcs/apply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stash changes
+   *
+   * Stash uncommitted changes with a message.
+   */
+  public stash<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      message?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "message" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsStashResponses, VcsStashErrors, ThrowOnError>({
+      url: "/vcs/stash",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Pop stashed changes
+   *
+   * Pop a stash with a matching message.
+   */
+  public stashPop<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      message?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "message" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsStashPopResponses, VcsStashPopErrors, ThrowOnError>({
+      url: "/vcs/stash-pop",
       ...options,
       ...params,
       headers: {

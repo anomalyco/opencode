@@ -8283,6 +8283,66 @@ export type VcsApplyResponses = {
 
 export type VcsApplyResponse = VcsApplyResponses[keyof VcsApplyResponses]
 
+export type VcsStashData = {
+  body?: {
+    message: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/stash"
+}
+
+export type VcsStashErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsStashError = VcsStashErrors[keyof VcsStashErrors]
+
+export type VcsStashResponses = {
+  /**
+   * Changes stashed
+   */
+  204: void
+}
+
+export type VcsStashResponse = VcsStashResponses[keyof VcsStashResponses]
+
+export type VcsStashPopData = {
+  body?: {
+    message: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/stash-pop"
+}
+
+export type VcsStashPopErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsStashPopError = VcsStashPopErrors[keyof VcsStashPopErrors]
+
+export type VcsStashPopResponses = {
+  /**
+   * Stash popped
+   */
+  200: boolean
+}
+
+export type VcsStashPopResponse = VcsStashPopResponses[keyof VcsStashPopResponses]
+
 export type CommandListData = {
   body?: never
   path?: never
@@ -11068,6 +11128,7 @@ export type ExperimentalWorkspaceCreateData = {
     id?: string
     type: string
     branch?: string | null
+    name?: string
     extra?: unknown | null
   }
   path?: never
@@ -11195,6 +11256,7 @@ export type ExperimentalWorkspaceWarpData = {
     id: string | null
     sessionID: string
     copyChanges?: boolean
+    directory?: string
   }
   path?: never
   query?: {
