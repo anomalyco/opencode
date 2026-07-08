@@ -173,19 +173,25 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, provider
       return []
     case "user":
       const files = message.files ?? []
+      const attachments = files.flatMap((file): ContentPart[] => {
+        if (file.mime === "text/plain") return [textAttachment(file)]
+        if (file.mime === "application/x-directory") return [directoryAttachment(file)]
+        if (imageMimes.has(file.mime)) return [media(file)]
+        return []
+      })
+      const firstTextAttachment = message.text === "" ? attachments.findIndex((part) => part.type === "text") : -1
+      const content: ContentPart[] = [
+        ...(message.text === "" ? [] : [{ type: "text" as const, text: message.text }]),
+        ...attachments.map((part, index) =>
+          part.type === "text" && index !== firstTextAttachment ? { ...part, text: `\n\n${part.text}` } : part,
+        ),
+      ]
+      if (content.length === 0) return []
       return [
         Message.make({
           id: message.id,
           role: "user",
-          content: [
-            { type: "text", text: message.text },
-            ...files.flatMap((file): ContentPart[] => {
-              if (file.mime === "text/plain") return [textAttachment(file)]
-              if (file.mime === "application/x-directory") return [directoryAttachment(file)]
-              if (imageMimes.has(file.mime)) return [media(file)]
-              return []
-            }),
-          ],
+          content,
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),

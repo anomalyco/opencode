@@ -172,7 +172,7 @@ Recent work
         { type: "text", text: "Review this file" },
         {
           type: "text",
-          text: "Attached file: main.ts\n\nexport const value = 1",
+          text: "\n\nAttached file: main.ts\n\nexport const value = 1",
           metadata: { attachment: { source: file.source, name: "main.ts" } },
         },
       ],
@@ -204,7 +204,7 @@ Recent work
       { type: "text", text: "Review this file" },
       {
         type: "text",
-        text: "Attached file: inline.txt\n\ninline content",
+        text: "\n\nAttached file: inline.txt\n\ninline content",
       },
     ])
   })
@@ -237,7 +237,7 @@ Recent work
         { type: "text", text: "Review this directory" },
         {
           type: "text",
-          text: "Attached directory: src/\n\nlib/\nindex.ts",
+          text: "\n\nAttached directory: src/\n\nlib/\nindex.ts",
           metadata: { attachment: { source: directory.source, name: "src/" } },
         },
       ],
@@ -274,9 +274,34 @@ Recent work
     expect(messages).toHaveLength(1)
     expect(messages[0]?.content.map((part) => (part.type === "text" ? part.text : part.type))).toEqual([
       "Review these attachments",
-      "Attached directory: src/\n\nindex.ts",
-      "Attached file: main.ts\n\nexport const value = 1",
+      "\n\nAttached directory: src/\n\nindex.ts",
+      "\n\nAttached file: main.ts\n\nexport const value = 1",
     ])
+  })
+
+  test("omits empty prompt text before an attachment", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-attachment-only"),
+          type: "user",
+          text: "",
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("index.ts").toString("base64")),
+              mime: "application/x-directory",
+              source: { type: "uri", uri: "file:///project/src" },
+              name: "src/",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.content).toMatchObject([{ type: "text", text: "Attached directory: src/\n\nindex.ts" }])
   })
 
   test("uses materialized image data as provider media and drops unsupported attachments", () => {
