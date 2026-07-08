@@ -526,10 +526,10 @@
       "name": "@opencode-ai/http-recorder",
       "version": "1.17.14",
       "dependencies": {
-        "@effect/platform-node": "4.0.0-beta.83",
         "@effect/platform-node-shared": "4.0.0-beta.83",
       },
       "devDependencies": {
+        "@effect/platform-node": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -538,7 +538,7 @@
         "typescript": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.83",
+        "effect": "catalog:",
       },
     },
     "packages/httpapi-codegen": {
