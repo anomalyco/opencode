@@ -6,7 +6,6 @@ import { useSync } from "../../context/sync"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
 import {
-  confirmWorkspaceFileChanges,
   openWorkspaceSelect,
   warpWorkspaceSession,
   type WorkspaceSelection,
@@ -28,7 +27,11 @@ export function usePromptWorkspace(sessionID?: string) {
     setCreating(true)
     let result
     try {
-      result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
+      result = await sdk.client.experimental.workspace.create({
+        type: selection.workspaceType,
+        branch: null,
+        ...(selection.name ? { name: selection.name } : {}),
+      })
     } catch (err) {
       setSelection(undefined)
       setCreating(false)
@@ -66,10 +69,17 @@ export function usePromptWorkspace(sessionID?: string) {
       return
     }
     const sourceWorkspaceID = project.workspace.current()
-    const copyChanges = await confirmWorkspaceFileChanges({ dialog, sdk, sourceWorkspaceID })
-    if (copyChanges === undefined) return
     setSelection(selection)
     dialog.clear()
+
+    const stashMsg = sessionID ? `opencode:${sessionID}` : undefined
+    if (sourceWorkspaceID && stashMsg) {
+      const status = await sdk.client.vcs.status({ workspace: sourceWorkspaceID }).catch(() => undefined)
+      if (status?.data?.length) {
+        await sdk.client.vcs.stash({ message: stashMsg, workspace: sourceWorkspaceID }).catch(() => undefined)
+        toast.show({ title: "Warp", message: "Uncommitted changes stashed", variant: "info" })
+      }
+    }
 
     const workspace =
       selection.type === "none"
@@ -88,9 +98,15 @@ export function usePromptWorkspace(sessionID?: string) {
       sourceWorkspaceID,
       workspaceID: workspace.id,
       sessionID,
-      copyChanges,
+      copyChanges: false,
     })
-    if (warped) showNotice(workspace.name)
+    if (warped) {
+      showNotice(workspace.name)
+      if (stashMsg) {
+        const popped = await sdk.client.vcs.stashPop({ message: stashMsg, workspace: workspace.id ?? undefined }).catch(() => undefined)
+        if (popped?.data) toast.show({ title: "Warp", message: "Uncommitted changes restored", variant: "success" })
+      }
+    }
   }
 
   function showNotice(name: string) {
@@ -105,6 +121,14 @@ export function usePromptWorkspace(sessionID?: string) {
   function open() {
     void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp })
   }
+
+  createEffect(() => {
+    const selected = selection()
+    if (selected && selected.type === "existing") {
+      const exists = project.workspace.list().some((w) => w.id === selected.workspaceID)
+      if (!exists) setSelection(undefined)
+    }
+  })
 
   createEffect(() => {
     if (!creating()) {
