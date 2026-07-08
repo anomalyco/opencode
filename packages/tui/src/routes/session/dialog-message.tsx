@@ -24,7 +24,7 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
           description: "undo messages and file changes",
           onSelect: async (dialog) => {
             await sdk.api.session
-              .revertStage({ sessionID: props.sessionID, messageID: props.messageID })
+              .revert.stage({ sessionID: props.sessionID, messageID: props.messageID })
               .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },

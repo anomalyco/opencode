@@ -51,6 +51,8 @@ import { llmClient } from "../../effect/app-node-platform"
 import { StepFailedError, UserInterruptedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
+import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
+import { PluginHooks } from "../../plugin/hooks"
 
 type StepTokens = {
   readonly input: number
@@ -133,6 +135,7 @@ const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const agents = yield* AgentV2.Service
     const tools = yield* ToolRegistry.Service
+    const hooks = yield* PluginHooks.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
@@ -253,10 +256,34 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
+      const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
+      const requestEvent: SessionHooks["request"] = {
+        sessionID: session.id,
+        agent: agent.id,
+        model: resolved.ref,
+        system: [...request.system],
+        messages: [...request.messages],
+        tools: Object.fromEntries(
+          request.tools.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
+        ),
+      }
+      // Plugins may reshape the draft, but cannot advertise tools excluded earlier
+      // by permissions or registration state.
+      yield* hooks.trigger("session", "request", requestEvent)
+      const hookedRequest = LLM.updateRequest(request, {
+        system: requestEvent.system,
+        messages: requestEvent.messages,
+        tools: Object.entries(requestEvent.tools).flatMap(([name, tool]) => {
+          const registered = availableTools.get(name)
+          if (!registered) return []
+          return [{ ...registered, description: tool.description, inputSchema: tool.input }]
+        }),
+      })
+      const advertisedTools = new Set(hookedRequest.tools.map((tool) => tool.name))
       // Automatic compaction completed; rebuild the request from compacted history.
       if (
         !(yield* SessionInput.pendingCompaction(db, session.id)) &&
-        (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request }))
+        (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request: hookedRequest }))
       )
         return { _tag: "RestartAfterCompaction", step: currentStep } as const
       const startSnapshot = yield* snapshots.capture()
@@ -276,7 +303,7 @@ const layer = Layer.effect(
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
       const publish = (event: LLMEvent, error?: SessionError.Error) => serialized(publisher.publish(event, error))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(request).pipe(
+      const providerStream = llm.stream(hookedRequest).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
@@ -288,11 +315,11 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            if (!toolMaterialization) {
+            if (!toolMaterialization || !advertisedTools.has(event.name)) {
               yield* serialized(
                 publisher.failUnsettledTools({
                   type: "tool.execution",
-                  message: "Tools are disabled after the maximum agent steps",
+                  message: `Tool is not available for this request: ${event.name}`,
                 }),
               )
               return
@@ -642,6 +669,7 @@ export const node = makeLocationNode({
     llmClient,
     AgentV2.node,
     ToolRegistry.node,
+    PluginHooks.node,
     SessionRunnerModel.node,
     SessionStore.node,
     Location.node,

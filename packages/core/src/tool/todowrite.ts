@@ -1,6 +1,6 @@
 export * as TodoWriteTool from "./todowrite"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { PermissionV2 } from "../permission"

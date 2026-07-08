@@ -180,7 +180,7 @@ function KeyMethod(props: {
       onConfirm={(key) => {
         if (!key) return
         void sdk.api.integration
-          .connectKey({
+          .connect.key({
             integrationID: props.integration.id,
             location: location(data),
             key,
@@ -219,7 +219,7 @@ function OAuthStarting(props: {
 
   onMount(() => {
     void sdk.api.integration
-      .connectOauth({
+      .connect.oauth({
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
@@ -288,7 +288,7 @@ function OAuthAuto(props: {
 
   const poll = () => {
     void sdk.api.integration
-      .attemptStatus({ attemptID: props.attempt.attemptID, location: location(data) })
+      .attempt.status({ attemptID: props.attempt.attemptID, location: location(data) })
       .then((result) => {
         const status = result.data
         if (status.status === "pending") {
@@ -314,7 +314,7 @@ function OAuthAuto(props: {
   onCleanup(() => {
     if (timer) clearTimeout(timer)
     if (settled) return
-    void sdk.api.integration.attemptCancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void sdk.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
   })
 
   return (
@@ -344,7 +344,7 @@ function OAuthCode(props: {
 
   onCleanup(() => {
     if (settled) return
-    void sdk.api.integration.attemptCancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void sdk.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
   })
 
   return (
@@ -354,7 +354,7 @@ function OAuthCode(props: {
       onConfirm={(code) => {
         if (!code) return
         void sdk.api.integration
-          .attemptComplete({ attemptID: props.attempt.attemptID, location: location(data), code })
+          .attempt.complete({ attemptID: props.attempt.attemptID, location: location(data), code })
           .then(() => {
             settled = true
             return connected(props.integration, data, dialog, toast, props.onConnected)

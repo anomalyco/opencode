@@ -1,6 +1,6 @@
-import { define } from "@opencode-ai/plugin/v2/promise"
+import { Plugin } from "@opencode-ai/plugin/v2"
 
-export default define({
+export default Plugin.define({
   id: "config-promise-plugin",
   setup: async (ctx) => {
     await ctx.agent.transform((agents) => {

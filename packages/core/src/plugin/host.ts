@@ -1,6 +1,6 @@
 export * as PluginHost from "./host"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
@@ -22,6 +22,7 @@ import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
 import { ToolHooks } from "../tool/hooks"
 import { WorkspaceV2 } from "../workspace"
+import { PluginHooks } from "./hooks"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
@@ -36,6 +37,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
   const toolHooks = yield* ToolHooks.Service
+  const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
     new Location.Info({
@@ -43,7 +45,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       workspaceID: location.workspaceID,
       project: location.project,
     })
-  const locationRef = (input?: Parameters<PluginContext["agent"]["list"]>[0]) =>
+  const locationRef = (input?: Parameters<Plugin.Context["agent"]["list"]>[0]) =>
     input?.location === undefined
       ? undefined
       : Location.Ref.make({
@@ -79,32 +81,32 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
     },
     aisdk: {
-      sdk: (callback) =>
-        aisdk.hook.sdk((event) => {
+      hook: (name, callback) => {
+        if (name === "sdk") {
+          return aisdk.hook.sdk((event) => {
+            const output = {
+              model: mutable(event.model),
+              package: event.package,
+              options: event.options,
+              sdk: event.sdk,
+            }
+            return Reflect.apply(callback, undefined, [output]).pipe(
+              Effect.tap(() => Effect.sync(() => (event.sdk = output.sdk))),
+            )
+          })
+        }
+        return aisdk.hook.language((event) => {
           const output = {
             model: mutable(event.model),
-            package: event.package,
             options: event.options,
             sdk: event.sdk,
-          }
-          const result = callback(output)
-          return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
-            Effect.tap(() => Effect.sync(() => (event.sdk = output.sdk))),
-          )
-        }),
-      language: (callback) =>
-        aisdk.hook.language((event) => {
-          const output = {
-            model: mutable(event.model),
-            sdk: event.sdk,
-            options: event.options,
             language: event.language,
           }
-          const result = callback(output)
-          return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
+          return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() => Effect.sync(() => (event.language = output.language))),
           )
-        }),
+        })
+      },
     },
     catalog: {
       provider: {
@@ -164,25 +166,29 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     integration: {
       list: () => response(integration.list()),
       get: (input) => response(integration.get(Integration.ID.make(input.integrationID))),
-      connectKey: (input) =>
-        integration.connection.key({
-          integrationID: Integration.ID.make(input.integrationID),
-          key: input.key,
-          label: input.label,
-        }),
-      connectOauth: (input) =>
-        response(
-          integration.connection.oauth({
+      connect: {
+        key: (input) =>
+          integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
-            methodID: Integration.MethodID.make(input.methodID),
-            inputs: input.inputs,
+            key: input.key,
             label: input.label,
           }),
-        ),
-      attemptStatus: (input) => response(integration.attempt.status(Integration.AttemptID.make(input.attemptID))),
-      attemptComplete: (input) =>
-        integration.attempt.complete({ attemptID: Integration.AttemptID.make(input.attemptID), code: input.code }),
-      attemptCancel: (input) => integration.attempt.cancel(Integration.AttemptID.make(input.attemptID)),
+        oauth: (input) =>
+          response(
+            integration.connection.oauth({
+              integrationID: Integration.ID.make(input.integrationID),
+              methodID: Integration.MethodID.make(input.methodID),
+              inputs: input.inputs,
+              label: input.label,
+            }),
+          ),
+      },
+      attempt: {
+        status: (input) => response(integration.attempt.status(Integration.AttemptID.make(input.attemptID))),
+        complete: (input) =>
+          integration.attempt.complete({ attemptID: Integration.AttemptID.make(input.attemptID), code: input.code }),
+        cancel: (input) => integration.attempt.cancel(Integration.AttemptID.make(input.attemptID)),
+      },
       reload: integration.reload,
       connection: {
         active: (id) => integration.connection.active(Integration.ID.make(id)),
@@ -317,11 +323,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             registrations,
             (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
             { discard: true },
-          )
+          ).pipe(Effect.orDie)
+          return { dispose: Effect.void }
         }),
-      execute: {
-        before: (callback) =>
-          toolHooks.hook.before((event) => {
+      hook: (name, callback) => {
+        if (name === "execute.before") {
+          return toolHooks.hook.before((event) => {
             const output = {
               tool: event.tool,
               sessionID: event.sessionID,
@@ -330,38 +337,37 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               toolCallID: event.toolCallID,
               input: event.input,
             }
-            const result = callback(output)
-            return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
+            return Reflect.apply(callback, undefined, [output]).pipe(
               Effect.tap(() => Effect.sync(() => (event.input = output.input))),
             )
-          }),
-        after: (callback) =>
-          toolHooks.hook.after((event) => {
-            const output = {
-              tool: event.tool,
-              sessionID: event.sessionID,
-              agent: event.agent,
-              assistantMessageID: event.assistantMessageID,
-              toolCallID: event.toolCallID,
-              input: event.input,
-              result: event.result,
-              output: event.output,
-              outputPaths: event.outputPaths,
-            }
-            const result = callback(output)
-            return Effect.suspend(() => (Effect.isEffect(result) ? result : Effect.void)).pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  event.result = output.result
-                  event.output = output.output
-                  event.outputPaths = output.outputPaths
-                }),
-              ),
-            )
-          }),
+          })
+        }
+        return toolHooks.hook.after((event) => {
+          const output = {
+            tool: event.tool,
+            sessionID: event.sessionID,
+            agent: event.agent,
+            assistantMessageID: event.assistantMessageID,
+            toolCallID: event.toolCallID,
+            input: event.input,
+            result: event.result,
+            output: event.output,
+            outputPaths: event.outputPaths,
+          }
+          return Reflect.apply(callback, undefined, [output]).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                event.result = output.result
+                event.output = output.output
+                event.outputPaths = output.outputPaths
+              }),
+            ),
+          )
+        })
       },
     },
     session: {
+      hook: (name, callback) => hooks.register("session", name, callback),
       create: (input) =>
         runtime.session.create({
           id: input?.id,
@@ -375,5 +381,5 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       command: runtime.session.command,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
     },
-  } satisfies PluginContext
+  } satisfies Plugin.Context
 })

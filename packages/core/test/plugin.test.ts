@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Effect, Exit, Fiber, Schema, Stream } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -49,7 +49,7 @@ describe("PluginV2", () => {
         .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
 
       const managed = () =>
-        define({
+        EffectPlugin.define({
           id: "managed",
           effect: (ctx) =>
             ctx.agent
@@ -97,25 +97,40 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("retries the same generation after materialization fails", () =>
+  it.effect("skips failed plugins and loads the rest", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
       let fail = true
-      const plugin = define({
-        id: "retry",
+      const good = EffectPlugin.define({
+        id: "good",
         effect: (ctx) =>
           ctx.agent
-            .transform(() => {
-              if (fail) throw new Error("materialization failed")
-            })
+            .transform((agents) =>
+              agents.update("configured", (agent) => {
+                agent.description = "loaded"
+              }),
+            )
             .pipe(Effect.asVoid),
       })
+      const bad = EffectPlugin.define({
+        id: "bad",
+        effect: () => {
+          if (fail) return Effect.die(new Error("materialization failed"))
+          return Effect.void
+        },
+      })
 
-      expect(Exit.isFailure(yield* plugins.activate([{ plugin }]).pipe(Effect.exit))).toBe(true)
+      yield* plugins.activate([{ plugin: good }, { plugin: bad }])
+      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }])
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("loaded")
+
       fail = false
-      yield* plugins.activate([{ plugin }])
-
-      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("retry") }])
+      yield* plugins.activate([{ plugin: good }, { plugin: bad }])
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("good") },
+        { id: Plugin.ID.make("bad") },
+      ])
     }),
   )
 
@@ -142,7 +157,7 @@ describe("PluginV2", () => {
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       let visible = true
-      const plugin = define({
+      const plugin = EffectPlugin.define({
         id: "isolated",
         effect: () =>
           Effect.serviceOption(Secret).pipe(
@@ -161,7 +176,7 @@ describe("PluginV2", () => {
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
-      const plugin = define({
+      const plugin = EffectPlugin.define({
         id: "tool-plugin",
         effect: (ctx) =>
           ctx.tool
@@ -202,7 +217,7 @@ describe("PluginV2", () => {
           output: Schema.Struct({ ok: Schema.Boolean }),
           execute: () => Effect.succeed({ ok: true }),
         })
-      const plugin = define({
+      const plugin = EffectPlugin.define({
         id: "grouped-tools",
         effect: (ctx) =>
           ctx.tool
@@ -234,7 +249,7 @@ describe("PluginV2", () => {
         after?: { input: unknown; result: unknown; output: unknown }
       } = {}
 
-      const plugin = define({
+      const plugin = EffectPlugin.define({
         id: "tool-hooks",
         effect: (ctx) =>
           Effect.gen(function* () {
@@ -252,19 +267,23 @@ describe("PluginV2", () => {
               )
               .pipe(Effect.orDie)
 
-            yield* ctx.tool.execute
-              .before((event) => {
-                seen.before = event.input
-                event.input = { text: "before-mutated" }
-              })
+            yield* ctx.tool
+              .hook("execute.before", (event) =>
+                Effect.sync(() => {
+                  seen.before = event.input
+                  event.input = { text: "before-mutated" }
+                }),
+              )
               .pipe(Effect.asVoid)
 
-            yield* ctx.tool.execute
-              .after((event) => {
-                seen.after = { input: event.input, result: event.result, output: event.output }
-                event.result = { type: "text", value: "after-mutated" }
-                event.output = { structured: { rewritten: true }, content: [] }
-              })
+            yield* ctx.tool
+              .hook("execute.after", (event) =>
+                Effect.sync(() => {
+                  seen.after = { input: event.input, result: event.result, output: event.output }
+                  event.result = { type: "text", value: "after-mutated" }
+                  event.output = { structured: { rewritten: true }, content: [] }
+                }),
+              )
               .pipe(Effect.asVoid)
           }),
       })

@@ -5,7 +5,7 @@ import { Config } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Money } from "@opencode-ai/schema/money"
 import { Context, DateTime, Effect, Equal, Hash, RcMap, Schema, Stream } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -45,7 +45,7 @@ describe("LocationServiceMap", () => {
           const sdk = yield* SdkPlugins.Service
           const locations = yield* LocationServiceMap.Service
           const id = AgentV2.ID.make("persistent-sdk-agent")
-          const plugin = define({
+          const plugin = EffectPlugin.define({
             id: "persistent-sdk-plugin",
             effect: (ctx) => ctx.agent.transform((agents) => agents.update(id, () => {})),
           })
@@ -433,7 +433,7 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const plugins = yield* PluginV2.Service
-          const reviewer = define({
+          const reviewer = EffectPlugin.define({
             id: "reviewer",
             effect: (ctx) =>
               ctx.agent

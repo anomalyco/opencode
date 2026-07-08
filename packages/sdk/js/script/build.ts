@@ -134,7 +134,7 @@ if (sessionListTypesPatched === logTypesPatched) {
   throw new Error("Session list numeric query patch did not apply")
 }
 const sessionMessagesTypesPatched = sessionListTypesPatched.replace(
-  /(export type V2SessionMessagesData = \{[\s\S]*?query\?: \{[\s\S]*?limit\?: )string( \| null)/,
+  /(export type V2MessageListData = \{[\s\S]*?query\?: \{[\s\S]*?limit\?: )string( \| null)/,
   "$1number$2",
 )
 if (sessionMessagesTypesPatched === sessionListTypesPatched) {

@@ -1,10 +1,11 @@
 export * as SubagentTool from "./subagent"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { AgentV2 } from "../agent"
 import { PluginRuntime } from "../plugin/runtime"
+import { PermissionV2 } from "../permission"
 import { SessionSchema } from "../session/schema"
 import { Tool } from "./tool"
 
@@ -42,6 +43,7 @@ export const Plugin = {
   effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: PluginContext) {
     const runtime = yield* PluginRuntime.Service
     const agents = yield* AgentV2.Service
+    const permission = yield* PermissionV2.Service
     const scope = yield* Scope.Scope
 
     // Concatenate the child's final completed assistant text. Distinguishes "completed with no
@@ -114,6 +116,20 @@ export const Plugin = {
                 if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
                 if (agent.mode === "primary")
                   return yield* new ToolFailure({ message: `Agent ${input.agent} cannot run as a subagent` })
+                yield* permission
+                  .assert({
+                    action: name,
+                    resources: [agent.id],
+                    save: [agent.id],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: {
+                      type: "tool",
+                      messageID: context.assistantMessageID,
+                      callID: context.toolCallID,
+                    },
+                  })
+                  .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
 
                 // Model selection is policy/config/session state, not an LLM-facing tool argument.
                 const model = agent.model ?? parent.model
@@ -176,5 +192,32 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    yield* ctx.session.hook("request", (event) =>
+      Effect.gen(function* () {
+        const tool = event.tools[name]
+        if (!tool) return
+        const selected = yield* agents.resolve(event.agent)
+        if (!selected) return
+        const available = (yield* agents.list())
+          .filter(
+            (agent) =>
+              agent.mode !== "primary" &&
+              !agent.hidden &&
+              PermissionV2.evaluate(name, agent.id, selected.permissions).effect !== "deny",
+          )
+          .toSorted((a, b) => a.id.localeCompare(b.id))
+        if (available.length === 0) return
+        tool.description = [
+          tool.description,
+          "",
+          "Available subagents:",
+          ...available.map(
+            (agent) =>
+              `- ${agent.id}: ${agent.description ?? "This subagent should only be called when explicitly requested."}`,
+          ),
+        ].join("\n")
+      }),
+    )
   }),
 }

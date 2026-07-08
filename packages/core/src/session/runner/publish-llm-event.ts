@@ -104,27 +104,36 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
     single = false,
   ) => {
-    const chunks = new Map<string, { readonly ordinal: number; readonly values: string[] }>()
+    const chunks = new Map<
+      string,
+      { readonly ordinal: number; readonly values: string[]; state?: Record<string, unknown> }
+    >()
     let nextOrdinal = 0
-    const start = (id: string) =>
+    const start = (id: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
         if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
         const ordinal = nextOrdinal++
-        chunks.set(id, { ordinal, values: [] })
+        chunks.set(id, { ordinal, values: [], state })
         return Effect.succeed(ordinal)
       })
-    const append = (id: string, value: string) =>
+    const append = (id: string, value: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         const current = chunks.get(id)
         if (!current) return Effect.die(new Error(`${name} delta before start: ${id}`))
         current.values.push(value)
+        if (state !== undefined) current.state = { ...current.state, ...state }
         return Effect.succeed(current.ordinal)
       })
     const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* ended(id, current.values.join(""), current.ordinal, state)
+      yield* ended(
+        id,
+        current.values.join(""),
+        current.ordinal,
+        state === undefined ? current.state : { ...current.state, ...state },
+      )
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -287,7 +296,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "reasoning-start":
         retryEvidence = true
-        const startedReasoningOrdinal = yield* reasoning.start(event.id)
+        const startedReasoningOrdinal = yield* reasoning.start(event.id, providerState(event.providerMetadata))
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
@@ -296,7 +305,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         })
         return
       case "reasoning-delta":
-        const deltaReasoningOrdinal = yield* reasoning.append(event.id, event.text)
+        const deltaReasoningOrdinal = yield* reasoning.append(
+          event.id,
+          event.text,
+          providerState(event.providerMetadata),
+        )
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),

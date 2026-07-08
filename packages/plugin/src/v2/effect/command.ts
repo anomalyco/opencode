@@ -1,7 +1,7 @@
 import type { CommandInfo } from "@opencode-ai/sdk/v2/types"
 import type { CommandApi } from "@opencode-ai/client/effect/api"
 import type { Effect } from "effect"
-import type { TransformHook } from "./registration.js"
+import type { Transform } from "./registration.js"
 
 export interface CommandDraft {
   list(): readonly CommandInfo[]
@@ -10,7 +10,7 @@ export interface CommandDraft {
   remove(name: string): void
 }
 
-export interface CommandHooks extends CommandApi<unknown> {
-  readonly transform: TransformHook<CommandDraft>
+export interface CommandDomain extends CommandApi<unknown> {
+  readonly transform: Transform<CommandDraft>
   readonly reload: () => Effect.Effect<void>
 }

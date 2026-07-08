@@ -82,7 +82,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("selects one edit tool family for each model", () =>
+  it.effect("materializes all permission-eligible edit tools before request policy", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({
@@ -96,10 +96,13 @@ describe("ToolRegistry", () => {
           .materialize({ model })
           .pipe(Effect.map((materialized) => materialized.definitions.map((tool) => tool.name)))
 
-      expect(yield* names({ id: "gpt-5", provider: "openai" })).toEqual(["read", "patch"])
-      expect(yield* names({ id: "gpt-4o", provider: "opencode" })).toEqual(["read", "patch"])
-      expect(yield* names({ id: "computer-use-preview", provider: "openai" })).toEqual(["read", "patch"])
-      expect(yield* names({ id: "claude-sonnet-4", provider: "anthropic" })).toEqual(["read", "edit", "write"])
+      expect(yield* names({ id: "gpt-5", provider: "openai" })).toEqual(["read", "edit", "write", "patch"])
+      expect(yield* names({ id: "claude-sonnet-4", provider: "anthropic" })).toEqual([
+        "read",
+        "edit",
+        "write",
+        "patch",
+      ])
     }),
   )
 

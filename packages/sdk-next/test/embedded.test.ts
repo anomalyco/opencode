@@ -139,7 +139,7 @@ it.live(
 
         yield* opencode.plugin.list({ location: ref })
         yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
-        yield* opencode.debug.evictLocation({ location: ref })
+        yield* opencode.debug.location.evict({ location: ref })
         yield* opencode.plugin.list({ location: ref })
         yield* Deferred.await(recommitted).pipe(Effect.timeout("5 seconds"))
 

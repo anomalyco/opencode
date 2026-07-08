@@ -107,7 +107,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.connectToken",
+          identifier: "v2.pty.connect.token",
           summary: "Create PTY WebSocket token",
           description: "Create a short-lived single-use ticket for opening a PTY WebSocket connection.",
         }),

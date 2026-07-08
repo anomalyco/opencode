@@ -1,11 +1,12 @@
 export * as PluginPromise from "./promise"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
-import type { Plugin, PluginContext } from "@opencode-ai/plugin/v2/promise"
+import { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Scope, Stream } from "effect"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
+type PromisePlugin = import("@opencode-ai/plugin/v2/plugin").Plugin
+type PromisePluginContext = import("@opencode-ai/plugin/v2/plugin").Context
 
 /**
  * Adapts a Promise plugin into an Effect plugin so the existing Effect-only
@@ -16,8 +17,8 @@ type Registration = { readonly dispose: () => Promise<void> }
  * preserves boot-time batching, so Promise-plugin transforms still coalesce
  * into one reload per domain.
  */
-export function fromPromise(plugin: Plugin) {
-  return define({
+export function fromPromise(plugin: PromisePlugin) {
+  return Plugin.define({
     id: plugin.id,
     effect: (host) =>
       Effect.gen(function* () {
@@ -43,7 +44,7 @@ export function fromPromise(plugin: Plugin) {
               }),
             )
 
-        const context2: PluginContext = {
+        const context2: PromisePluginContext = {
           options: host.options,
           agent: {
             list: (input) => run(host.agent.list(input)),
@@ -51,10 +52,8 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.agent.reload()),
           },
           aisdk: {
-            sdk: (callback) =>
-              register(host.aisdk.sdk((event) => Effect.promise(() => Promise.resolve(callback(event))))),
-            language: (callback) =>
-              register(host.aisdk.language((event) => Effect.promise(() => Promise.resolve(callback(event))))),
+            hook: (name, callback) =>
+              register(host.aisdk.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
           },
           catalog: {
             provider: {
@@ -79,11 +78,15 @@ export function fromPromise(plugin: Plugin) {
           integration: {
             list: (input) => run(host.integration.list(input)),
             get: (input) => run(host.integration.get(input)),
-            connectKey: (input) => run(host.integration.connectKey(input)),
-            connectOauth: (input) => run(host.integration.connectOauth(input)),
-            attemptStatus: (input) => run(host.integration.attemptStatus(input)),
-            attemptComplete: (input) => run(host.integration.attemptComplete(input)),
-            attemptCancel: (input) => run(host.integration.attemptCancel(input)),
+            connect: {
+              key: (input) => run(host.integration.connect.key(input)),
+              oauth: (input) => run(host.integration.connect.oauth(input)),
+            },
+            attempt: {
+              status: (input) => run(host.integration.attempt.status(input)),
+              complete: (input) => run(host.integration.attempt.complete(input)),
+              cancel: (input) => run(host.integration.attempt.cancel(input)),
+            },
             transform: transform(host.integration),
             reload: () => run(host.integration.reload()),
             connection: {
@@ -104,12 +107,19 @@ export function fromPromise(plugin: Plugin) {
             transform: transform(host.skill),
             reload: () => run(host.skill.reload()),
           },
+          tool: {
+            transform: transform(host.tool),
+            hook: (name, callback) =>
+              register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
           session: {
             create: (input) => run(host.session.create(input)),
             get: (input) => run(host.session.get(input)),
             prompt: (input) => run(host.session.prompt(input)),
             command: (input) => run(host.session.command(input)),
             interrupt: (input) => run(host.session.interrupt(input)),
+            hook: (name, callback) =>
+              register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
           },
         }
 

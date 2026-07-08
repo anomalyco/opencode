@@ -1,6 +1,6 @@
 export * as ApplyPatchTool from "./apply-patch"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/llm"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -194,6 +194,19 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    yield* ctx.session.hook("request", (event) =>
+      Effect.sync(() => {
+        const usePatch =
+          event.model.providerID.toLowerCase() === "openai" || event.model.id.toLowerCase().includes("gpt")
+        if (usePatch) {
+          delete event.tools.edit
+          delete event.tools.write
+          return
+        }
+        delete event.tools.patch
+      }),
+    )
   }),
 }
 

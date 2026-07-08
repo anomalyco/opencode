@@ -23,14 +23,16 @@ export const GithubCopilotPlugin = define({
         model.enabled = false
       })
     })
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/github-copilot") return
         const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.githubCopilot) return
         if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {

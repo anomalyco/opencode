@@ -381,9 +381,7 @@ const adaptGroup4 = (raw: RawClient["server.session"]) => ({
   shell: Endpoint4_14(raw),
   compact: Endpoint4_15(raw),
   wait: Endpoint4_16(raw),
-  revertStage: Endpoint4_17(raw),
-  revertClear: Endpoint4_18(raw),
-  revertCommit: Endpoint4_19(raw),
+  revert: { stage: Endpoint4_17(raw), clear: Endpoint4_18(raw), commit: Endpoint4_19(raw) },
   context: Endpoint4_20(raw),
   instructions: { entry: { list: Endpoint4_21(raw), put: Endpoint4_22(raw), remove: Endpoint4_23(raw) } },
   log: Endpoint4_24(raw),
@@ -536,11 +534,8 @@ const Endpoint9_6 = (raw: RawClient["server.integration"]) => (input: Endpoint9_
 const adaptGroup9 = (raw: RawClient["server.integration"]) => ({
   list: Endpoint9_0(raw),
   get: Endpoint9_1(raw),
-  connectKey: Endpoint9_2(raw),
-  connectOauth: Endpoint9_3(raw),
-  attemptStatus: Endpoint9_4(raw),
-  attemptComplete: Endpoint9_5(raw),
-  attemptCancel: Endpoint9_6(raw),
+  connect: { key: Endpoint9_2(raw), oauth: Endpoint9_3(raw) },
+  attempt: { status: Endpoint9_4(raw), complete: Endpoint9_5(raw), cancel: Endpoint9_6(raw) },
 })
 
 type Endpoint10_0Request = Parameters<RawClient["server.mcp"]["mcp.list"]>[0]
@@ -553,7 +548,10 @@ type Endpoint10_1Input = { readonly location?: Endpoint10_1Request["query"]["loc
 const Endpoint10_1 = (raw: RawClient["server.mcp"]) => (input?: Endpoint10_1Input) =>
   raw["mcp.resource.catalog"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup10 = (raw: RawClient["server.mcp"]) => ({ list: Endpoint10_0(raw), catalog: Endpoint10_1(raw) })
+const adaptGroup10 = (raw: RawClient["server.mcp"]) => ({
+  list: Endpoint10_0(raw),
+  resource: { catalog: Endpoint10_1(raw) },
+})
 
 type Endpoint11_0Request = Parameters<RawClient["server.credential"]["credential.update"]>[0]
 type Endpoint11_0Input = {
@@ -690,7 +688,7 @@ const Endpoint13_6 = (raw: RawClient["server.form"]) => (input: Endpoint13_6Inpu
   )
 
 const adaptGroup13 = (raw: RawClient["server.form"]) => ({
-  listRequests: Endpoint13_0(raw),
+  request: { list: Endpoint13_0(raw) },
   list: Endpoint13_1(raw),
   create: Endpoint13_2(raw),
   get: Endpoint13_3(raw),
@@ -778,9 +776,8 @@ const Endpoint14_6 = (raw: RawClient["server.permission"]) => (input: Endpoint14
   }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup14 = (raw: RawClient["server.permission"]) => ({
-  listRequests: Endpoint14_0(raw),
-  listSaved: Endpoint14_1(raw),
-  removeSaved: Endpoint14_2(raw),
+  request: { list: Endpoint14_0(raw) },
+  saved: { list: Endpoint14_1(raw), remove: Endpoint14_2(raw) },
   create: Endpoint14_3(raw),
   list: Endpoint14_4(raw),
   get: Endpoint14_5(raw),
@@ -1013,7 +1010,7 @@ const Endpoint21_3 = (raw: RawClient["server.question"]) => (input: Endpoint21_3
   )
 
 const adaptGroup21 = (raw: RawClient["server.question"]) => ({
-  listRequests: Endpoint21_0(raw),
+  request: { list: Endpoint21_0(raw) },
   list: Endpoint21_1(raw),
   reply: Endpoint21_2(raw),
   reject: Endpoint21_3(raw),
@@ -1099,8 +1096,7 @@ const Endpoint25_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint25_1In
   raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup25 = (raw: RawClient["server.debug"]) => ({
-  location: Endpoint25_0(raw),
-  evictLocation: Endpoint25_1(raw),
+  location: { list: Endpoint25_0(raw), evict: Endpoint25_1(raw) },
 })
 
 const adaptClient = (raw: RawClient) => ({

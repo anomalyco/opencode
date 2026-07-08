@@ -3,15 +3,14 @@ import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from
 import {
   ClientApi,
   effectOmitEndpoints,
-  endpointNames,
   groupNames,
   promiseOmitEndpoints,
 } from "@opencode-ai/protocol/client"
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
 
-const promiseContract = compile(ClientApi, { groupNames, endpointNames, omitEndpoints: promiseOmitEndpoints })
-const effectContract = compile(ClientApi, { groupNames, endpointNames, omitEndpoints: effectOmitEndpoints })
+const promiseContract = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints })
+const effectContract = compile(ClientApi, { groupNames, omitEndpoints: effectOmitEndpoints })
 
 await Effect.runPromise(
   Effect.all(

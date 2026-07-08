@@ -5,7 +5,7 @@ import { Agent } from "@opencode-ai/schema/agent"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, JsonSchema, Schema, type Scope } from "effect"
-import type { Hooks } from "./registration.js"
+import type { Hooks, Transform } from "./registration.js"
 
 export interface Context {
   readonly sessionID: Session.ID
@@ -253,7 +253,12 @@ export interface ToolDraft {
   add(name: string, tool: AnyTool, options?: RegisterOptions): void
 }
 
+export interface ToolHooks {
+  readonly "execute.before": ToolExecuteBeforeEvent
+  readonly "execute.after": ToolExecuteAfterEvent
+}
+
 export interface ToolDomain {
-  readonly transform: (callback: (draft: ToolDraft) => void) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  readonly execute: Hooks<{ before: ToolExecuteBeforeEvent; after: ToolExecuteAfterEvent }>
+  readonly transform: Transform<ToolDraft>
+  readonly hook: Hooks<ToolHooks>
 }

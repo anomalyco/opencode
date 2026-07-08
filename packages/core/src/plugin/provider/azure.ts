@@ -26,7 +26,8 @@ export const AzurePlugin = define({
         })
       }
     })
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/azure") return
         if (evt.model.providerID === ProviderV2.ID.azure) {
@@ -44,7 +45,8 @@ export const AzurePlugin = define({
         evt.sdk = mod.createAzure(evt.options)
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.azure) return
         evt.language = selectLanguage(
@@ -75,7 +77,8 @@ export const AzureCognitiveServicesPlugin = define({
         })
       }
     })
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
         evt.language = selectLanguage(

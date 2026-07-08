@@ -32,17 +32,12 @@ test("exposes every standard HTTP API group", () => {
     "vcs",
     "debug",
   ])
-  expect(Object.keys(client.debug)).toEqual(["location", "evictLocation"])
+  expect(Object.keys(client.debug)).toEqual(["location"])
+  expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
   expect(Object.keys(client.message)).toEqual(["list"])
-  expect(Object.keys(client.integration)).toEqual([
-    "list",
-    "get",
-    "connectKey",
-    "connectOauth",
-    "attemptStatus",
-    "attemptComplete",
-    "attemptCancel",
-  ])
+  expect(Object.keys(client.integration)).toEqual(["list", "get", "connect", "attempt"])
+  expect(Object.keys(client.integration.connect)).toEqual(["key", "oauth"])
+  expect(Object.keys(client.integration.attempt)).toEqual(["status", "complete", "cancel"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.vcs)).toEqual(["status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
@@ -66,7 +61,7 @@ test("MCP resource catalog uses the public HTTP contract", async () => {
     },
   })
 
-  const result = await client["server.mcp"].catalog({ location: { directory: "/tmp/project" } })
+  const result = await client["server.mcp"].resource.catalog({ location: { directory: "/tmp/project" } })
 
   expect(result.data.resources[0]?.uri).toBe("docs://readme")
   expect(request?.method).toBe("GET")

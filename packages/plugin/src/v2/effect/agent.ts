@@ -1,7 +1,7 @@
 import type { AgentApi } from "@opencode-ai/client/effect/api"
 import type { AgentInfo } from "@opencode-ai/sdk/v2/types"
 import type { Effect } from "effect"
-import type { TransformHook } from "./registration.js"
+import type { Transform } from "./registration.js"
 
 export interface AgentDraft {
   list(): readonly AgentInfo[]
@@ -11,7 +11,7 @@ export interface AgentDraft {
   remove(id: string): void
 }
 
-export interface AgentHooks extends AgentApi<unknown> {
-  readonly transform: TransformHook<AgentDraft>
+export interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentDraft>
   readonly reload: () => Effect.Effect<void>
 }

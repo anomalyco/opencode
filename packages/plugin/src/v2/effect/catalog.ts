@@ -1,7 +1,7 @@
 import type { ModelInfo, ProviderV2Info } from "@opencode-ai/sdk/v2/types"
 import type { CatalogApi } from "@opencode-ai/client/effect/api"
 import type { Effect } from "effect"
-import type { TransformHook } from "./registration.js"
+import type { Transform } from "./registration.js"
 
 export interface CatalogProviderRecord {
   readonly provider: ProviderV2Info
@@ -26,7 +26,7 @@ export interface CatalogDraft {
   }
 }
 
-export interface CatalogHooks extends CatalogApi<unknown> {
-  readonly transform: TransformHook<CatalogDraft>
+export interface CatalogDomain extends CatalogApi<unknown> {
+  readonly transform: Transform<CatalogDraft>
   readonly reload: () => Effect.Effect<void>
 }

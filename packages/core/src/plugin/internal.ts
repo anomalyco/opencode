@@ -1,6 +1,6 @@
 export * as PluginInternal from "./internal"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { AgentV2 } from "../agent"

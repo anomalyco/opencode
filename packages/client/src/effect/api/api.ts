@@ -291,9 +291,11 @@ export interface SessionApi<E = never> {
   readonly shell: SessionShellOperation<E>
   readonly compact: SessionCompactOperation<E>
   readonly wait: SessionWaitOperation<E>
-  readonly revertStage: SessionRevertStageOperation<E>
-  readonly revertClear: SessionRevertClearOperation<E>
-  readonly revertCommit: SessionRevertCommitOperation<E>
+  readonly revert: {
+    readonly stage: SessionRevertStageOperation<E>
+    readonly clear: SessionRevertClearOperation<E>
+    readonly commit: SessionRevertCommitOperation<E>
+  }
   readonly context: SessionContextOperation<E>
   readonly instructions: {
     readonly entry: {
@@ -438,11 +440,15 @@ export type IntegrationAttemptCancelOperation<E = never> = (
 export interface IntegrationApi<E = never> {
   readonly list: IntegrationListOperation<E>
   readonly get: IntegrationGetOperation<E>
-  readonly connectKey: IntegrationConnectKeyOperation<E>
-  readonly connectOauth: IntegrationConnectOauthOperation<E>
-  readonly attemptStatus: IntegrationAttemptStatusOperation<E>
-  readonly attemptComplete: IntegrationAttemptCompleteOperation<E>
-  readonly attemptCancel: IntegrationAttemptCancelOperation<E>
+  readonly connect: {
+    readonly key: IntegrationConnectKeyOperation<E>
+    readonly oauth: IntegrationConnectOauthOperation<E>
+  }
+  readonly attempt: {
+    readonly status: IntegrationAttemptStatusOperation<E>
+    readonly complete: IntegrationAttemptCompleteOperation<E>
+    readonly cancel: IntegrationAttemptCancelOperation<E>
+  }
 }
 
 type Endpoint10_0Request = Parameters<RawClient["server.mcp"]["mcp.list"]>[0]
@@ -453,11 +459,13 @@ export type ServerMcpListOperation<E = never> = (input?: Endpoint10_0Input) => E
 type Endpoint10_1Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
 export type Endpoint10_1Input = { readonly location?: Endpoint10_1Request["query"]["location"] }
 export type Endpoint10_1Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.resource.catalog"]>>
-export type ServerMcpCatalogOperation<E = never> = (input?: Endpoint10_1Input) => Effect.Effect<Endpoint10_1Output, E>
+export type ServerMcpResourceCatalogOperation<E = never> = (
+  input?: Endpoint10_1Input,
+) => Effect.Effect<Endpoint10_1Output, E>
 
 export interface ServerMcpApi<E = never> {
   readonly list: ServerMcpListOperation<E>
-  readonly catalog: ServerMcpCatalogOperation<E>
+  readonly resource: { readonly catalog: ServerMcpResourceCatalogOperation<E> }
 }
 
 type Endpoint11_0Request = Parameters<RawClient["server.credential"]["credential.update"]>[0]
@@ -507,7 +515,7 @@ export interface ProjectApi<E = never> {
 type Endpoint13_0Request = Parameters<RawClient["server.form"]["form.request.list"]>[0]
 export type Endpoint13_0Input = { readonly location?: Endpoint13_0Request["query"]["location"] }
 export type Endpoint13_0Output = EffectValue<ReturnType<RawClient["server.form"]["form.request.list"]>>
-export type FormListRequestsOperation<E = never> = (input?: Endpoint13_0Input) => Effect.Effect<Endpoint13_0Output, E>
+export type FormRequestListOperation<E = never> = (input?: Endpoint13_0Input) => Effect.Effect<Endpoint13_0Output, E>
 
 type Endpoint13_1Request = Parameters<RawClient["server.form"]["session.form.list"]>[0]
 export type Endpoint13_1Input = { readonly sessionID: Endpoint13_1Request["params"]["sessionID"] }
@@ -561,7 +569,7 @@ export type Endpoint13_6Output = EffectValue<ReturnType<RawClient["server.form"]
 export type FormCancelOperation<E = never> = (input: Endpoint13_6Input) => Effect.Effect<Endpoint13_6Output, E>
 
 export interface FormApi<E = never> {
-  readonly listRequests: FormListRequestsOperation<E>
+  readonly request: { readonly list: FormRequestListOperation<E> }
   readonly list: FormListOperation<E>
   readonly create: FormCreateOperation<E>
   readonly get: FormGetOperation<E>
@@ -573,7 +581,7 @@ export interface FormApi<E = never> {
 type Endpoint14_0Request = Parameters<RawClient["server.permission"]["permission.request.list"]>[0]
 export type Endpoint14_0Input = { readonly location?: Endpoint14_0Request["query"]["location"] }
 export type Endpoint14_0Output = EffectValue<ReturnType<RawClient["server.permission"]["permission.request.list"]>>
-export type PermissionListRequestsOperation<E = never> = (
+export type PermissionRequestListOperation<E = never> = (
   input?: Endpoint14_0Input,
 ) => Effect.Effect<Endpoint14_0Output, E>
 
@@ -582,14 +590,14 @@ export type Endpoint14_1Input = { readonly projectID?: Endpoint14_1Request["quer
 export type Endpoint14_1Output = EffectValue<
   ReturnType<RawClient["server.permission"]["permission.saved.list"]>
 >["data"]
-export type PermissionListSavedOperation<E = never> = (
+export type PermissionSavedListOperation<E = never> = (
   input?: Endpoint14_1Input,
 ) => Effect.Effect<Endpoint14_1Output, E>
 
 type Endpoint14_2Request = Parameters<RawClient["server.permission"]["permission.saved.remove"]>[0]
 export type Endpoint14_2Input = { readonly id: Endpoint14_2Request["params"]["id"] }
 export type Endpoint14_2Output = EffectValue<ReturnType<RawClient["server.permission"]["permission.saved.remove"]>>
-export type PermissionRemoveSavedOperation<E = never> = (
+export type PermissionSavedRemoveOperation<E = never> = (
   input: Endpoint14_2Input,
 ) => Effect.Effect<Endpoint14_2Output, E>
 
@@ -637,9 +645,8 @@ export type Endpoint14_6Output = EffectValue<ReturnType<RawClient["server.permis
 export type PermissionReplyOperation<E = never> = (input: Endpoint14_6Input) => Effect.Effect<Endpoint14_6Output, E>
 
 export interface PermissionApi<E = never> {
-  readonly listRequests: PermissionListRequestsOperation<E>
-  readonly listSaved: PermissionListSavedOperation<E>
-  readonly removeSaved: PermissionRemoveSavedOperation<E>
+  readonly request: { readonly list: PermissionRequestListOperation<E> }
+  readonly saved: { readonly list: PermissionSavedListOperation<E>; readonly remove: PermissionSavedRemoveOperation<E> }
   readonly create: PermissionCreateOperation<E>
   readonly list: PermissionListOperation<E>
   readonly get: PermissionGetOperation<E>
@@ -808,7 +815,7 @@ export interface ShellApi<E = never> {
 type Endpoint21_0Request = Parameters<RawClient["server.question"]["question.request.list"]>[0]
 export type Endpoint21_0Input = { readonly location?: Endpoint21_0Request["query"]["location"] }
 export type Endpoint21_0Output = EffectValue<ReturnType<RawClient["server.question"]["question.request.list"]>>
-export type QuestionListRequestsOperation<E = never> = (
+export type QuestionRequestListOperation<E = never> = (
   input?: Endpoint21_0Input,
 ) => Effect.Effect<Endpoint21_0Output, E>
 
@@ -835,7 +842,7 @@ export type Endpoint21_3Output = EffectValue<ReturnType<RawClient["server.questi
 export type QuestionRejectOperation<E = never> = (input: Endpoint21_3Input) => Effect.Effect<Endpoint21_3Output, E>
 
 export interface QuestionApi<E = never> {
-  readonly listRequests: QuestionListRequestsOperation<E>
+  readonly request: { readonly list: QuestionRequestListOperation<E> }
   readonly list: QuestionListOperation<E>
   readonly reply: QuestionReplyOperation<E>
   readonly reject: QuestionRejectOperation<E>
@@ -905,16 +912,15 @@ export interface VcsApi<E = never> {
 }
 
 export type Endpoint25_0Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.location"]>>
-export type DebugLocationOperation<E = never> = () => Effect.Effect<Endpoint25_0Output, E>
+export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint25_0Output, E>
 
 type Endpoint25_1Request = Parameters<RawClient["server.debug"]["debug.location.evict"]>[0]
 export type Endpoint25_1Input = { readonly location?: Endpoint25_1Request["query"]["location"] }
 export type Endpoint25_1Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.location.evict"]>>
-export type DebugEvictLocationOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
+export type DebugLocationEvictOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
 
 export interface DebugApi<E = never> {
-  readonly location: DebugLocationOperation<E>
-  readonly evictLocation: DebugEvictLocationOperation<E>
+  readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
 export interface AppApi<E = never> {

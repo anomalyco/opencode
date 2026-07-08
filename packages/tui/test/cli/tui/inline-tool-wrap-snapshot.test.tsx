@@ -122,6 +122,8 @@ describe("TUI inline tool wrapping", () => {
     // Legacy tool names normalize to their renamed views.
     expect(toolDisplay("bash")).toBe("shell")
     expect(toolDisplay("task")).toBe("subagent")
+    expect(toolDisplay("apply_patch")).toBe("patch")
+    expect(toolDisplay("patch")).toBe("patch")
     expect(toolDisplay("plugin_tool")).toBe("generic")
   })
 

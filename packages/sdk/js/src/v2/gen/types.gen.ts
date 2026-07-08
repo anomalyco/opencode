@@ -208,13 +208,7 @@ export type UserMessage = {
   summary?: {
     title?: string
     body?: string
-    diffs: Array<{
-      file?: string
-      patch?: string
-      additions: number
-      deletions: number
-      status?: "added" | "deleted" | "modified"
-    }>
+    diffs: Array<FileDiffLegacyInfo>
   }
   agent: string
   model: {
@@ -1237,13 +1231,7 @@ export type GlobalEvent = {
         type: "session.diff"
         properties: {
           sessionID: string
-          diff: Array<{
-            file?: string
-            patch?: string
-            additions: number
-            deletions: number
-            status?: "added" | "deleted" | "modified"
-          }>
+          diff: Array<FileDiffLegacyInfo>
         }
       }
     | {
@@ -2327,7 +2315,7 @@ export type GlobalSession = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<FileDiffInfo>
+    diffs?: Array<FileDiffLegacyInfo>
   }
   cost?: number
   tokens?: {
@@ -2675,7 +2663,7 @@ export type Session = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<FileDiffInfo>
+    diffs?: Array<FileDiffLegacyInfo>
   }
   cost?: number
   tokens?: {
@@ -3289,6 +3277,14 @@ export type MoveSessionDestination = {
   directory: string
 }
 
+export type FileDiffLegacyInfo = {
+  file?: string
+  patch?: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
+
 export type SessionV1Info = {
   id: string
   slug: string
@@ -3301,13 +3297,7 @@ export type SessionV1Info = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<{
-      file?: string
-      patch?: string
-      additions: number
-      deletions: number
-      status?: "added" | "deleted" | "modified"
-    }>
+    diffs?: Array<FileDiffLegacyInfo>
   }
   cost?: number
   tokens?: {
@@ -6309,13 +6299,7 @@ export type SessionDiff = {
   location?: LocationRef
   data: {
     sessionID: string
-    diff: Array<{
-      file?: string
-      patch?: string
-      additions: number
-      deletions: number
-      status?: "added" | "deleted" | "modified"
-    }>
+    diff: Array<FileDiffLegacyInfo>
   }
 }
 
@@ -7728,13 +7712,7 @@ export type EventSessionDiff = {
   type: "session.diff"
   properties: {
     sessionID: string
-    diff: Array<{
-      file?: string
-      patch?: string
-      additions: number
-      deletions: number
-      status?: "added" | "deleted" | "modified"
-    }>
+    diff: Array<FileDiffLegacyInfo>
   }
 }
 
@@ -8362,13 +8340,7 @@ export type UserMessageV2 = {
   summary?: {
     title?: string | null
     body?: string | null
-    diffs: Array<{
-      file?: string
-      patch?: string
-      additions: number
-      deletions: number
-      status?: "added" | "deleted" | "modified"
-    }>
+    diffs: Array<FileDiffLegacyInfoV2>
   } | null
   agent: string
   model: {
@@ -10264,6 +10236,14 @@ export type AgentUpdatedV2 = {
     | Array<unknown>
 }
 
+export type FileDiffLegacyInfoV2 = {
+  file?: string | null
+  patch?: string | null
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified" | null
+}
+
 export type SessionV1InfoV2 = {
   id: string
   slug: string
@@ -10276,13 +10256,7 @@ export type SessionV1InfoV2 = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<{
-      file?: string
-      patch?: string
-      additions: number
-      deletions: number
-      status?: "added" | "deleted" | "modified"
-    }>
+    diffs?: Array<FileDiffLegacyInfoV2>
   }
   cost?: number
   tokens?: {
@@ -13890,7 +13864,7 @@ export type SessionDiffResponses = {
   /**
    * Successfully retrieved diff
    */
-  200: Array<FileDiffInfo>
+  200: Array<FileDiffLegacyInfo>
 }
 
 export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
@@ -16627,7 +16601,7 @@ export type V2SessionMessageResponses = {
 
 export type V2SessionMessageResponse = V2SessionMessageResponses[keyof V2SessionMessageResponses]
 
-export type V2SessionMessagesData = {
+export type V2MessageListData = {
   body?: never
   path: {
     sessionID: string
@@ -16646,7 +16620,7 @@ export type V2SessionMessagesData = {
   url: "/api/session/{sessionID}/message"
 }
 
-export type V2SessionMessagesErrors = {
+export type V2MessageListErrors = {
   /**
    * InvalidCursorError | InvalidRequestError
    */
@@ -16665,16 +16639,16 @@ export type V2SessionMessagesErrors = {
   500: UnknownErrorV2
 }
 
-export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]
+export type V2MessageListError = V2MessageListErrors[keyof V2MessageListErrors]
 
-export type V2SessionMessagesResponses = {
+export type V2MessageListResponses = {
   /**
    * SessionMessagesResponse
    */
   200: SessionMessagesResponseV2
 }
 
-export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+export type V2MessageListResponse = V2MessageListResponses[keyof V2MessageListResponses]
 
 export type V2ModelListData = {
   body?: never
@@ -19137,14 +19111,14 @@ export type V2DebugLocationEvictResponses = {
 
 export type V2DebugLocationEvictResponse = V2DebugLocationEvictResponses[keyof V2DebugLocationEvictResponses]
 
-export type V2DebugLocationData = {
+export type V2DebugLocationListData = {
   body?: never
   path?: never
   query?: never
   url: "/api/debug/location"
 }
 
-export type V2DebugLocationErrors = {
+export type V2DebugLocationListErrors = {
   /**
    * InvalidRequestError
    */
@@ -19155,16 +19129,16 @@ export type V2DebugLocationErrors = {
   401: UnauthorizedError
 }
 
-export type V2DebugLocationError = V2DebugLocationErrors[keyof V2DebugLocationErrors]
+export type V2DebugLocationListError = V2DebugLocationListErrors[keyof V2DebugLocationListErrors]
 
-export type V2DebugLocationResponses = {
+export type V2DebugLocationListResponses = {
   /**
    * Success
    */
   200: Array<LocationRefV2>
 }
 
-export type V2DebugLocationResponse = V2DebugLocationResponses[keyof V2DebugLocationResponses]
+export type V2DebugLocationListResponse = V2DebugLocationListResponses[keyof V2DebugLocationListResponses]
 
 export type PtyConnectData = {
   body?: never

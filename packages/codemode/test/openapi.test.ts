@@ -177,13 +177,13 @@ describe("OpenAPI.fromSpec", () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    expect(result.skipped).toHaveLength(5)
+    expect(result.skipped).toHaveLength(4)
     expect(result.skipped).toContainEqual({
       method: "GET",
       path: "/api/pty/{ptyID}/connect",
       reason: "WebSocket operations are not supported",
     })
-    expect(result.skipped.filter((item) => item.reason === "SSE operations are not supported")).toHaveLength(3)
+    expect(result.skipped.filter((item) => item.reason === "SSE operations are not supported")).toHaveLength(2)
     expect(result.skipped).toContainEqual({
       method: "GET",
       path: "/api/fs/read/*",
@@ -210,11 +210,11 @@ describe("OpenAPI.fromSpec", () => {
     if (!Tool.isDefinition(instructionPut)) throw new Error("v2.session.instructions.entry.put was not generated")
     expect(inputTypeScript(instructionPut)).toBe("{ sessionID: string; key: string; value: unknown }")
     expect(toolAt(result.tools, "v2_session_instructions_entry_put_2")).toBeUndefined()
-    expect(toolAt(result.tools, "v2.pty.connect")).toBeUndefined()
+    expect(Tool.isDefinition(toolAt(result.tools, "v2.pty.connect"))).toBe(false)
     expect(toolAt(result.tools, "v2.session.log")).toBeUndefined()
     expect(toolAt(result.tools, "v2.event.subscribe")).toBeUndefined()
     expect(toolAt(result.tools, "v2.fs.read")).toBeUndefined()
-    expect(toolAt(result.tools, "v2.pty.connectToken")).not.toBeUndefined()
+    expect(toolAt(result.tools, "v2.pty.connect.token")).not.toBeUndefined()
   })
 
   test("preserves operation path sanitization and collision handling", () => {

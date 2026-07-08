@@ -1,6 +1,6 @@
 export * as PluginSupervisor from "./supervisor"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
 import { Context, Effect, Fiber, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import path from "path"
