@@ -73,15 +73,21 @@ export function usePromptWorkspace(sessionID?: string) {
     dialog.clear()
 
     const stashMsg = sessionID ? `opencode:${sessionID}` : undefined
-    if (sourceWorkspaceID && stashMsg) {
+    let hasStashed = false
+    if (stashMsg) {
       const status = await sdk.client.vcs.status({ workspace: sourceWorkspaceID }).catch(() => undefined)
       if (status?.data?.length) {
-        const stashResult = await sdk.client.vcs.stash({ message: stashMsg, workspace: sourceWorkspaceID }).catch((err) => ({ error: err }))
-        if (stashResult && "error" in stashResult) {
-          toast.show({ title: "Warp", message: "Failed to stash changes", variant: "error" })
-          return
+        if (sourceWorkspaceID) {
+          const stashResult = await sdk.client.vcs.stash({ message: stashMsg, workspace: sourceWorkspaceID }).catch((err) => ({ error: err }))
+          if (stashResult && "error" in stashResult) {
+            toast.show({ title: "Warp", message: "Failed to stash changes", variant: "error" })
+            return
+          }
+          hasStashed = true
+          toast.show({ title: "Warp", message: "Uncommitted changes stashed", variant: "info" })
+        } else {
+          toast.show({ title: "Warp", message: "You have uncommitted changes in local project", variant: "info" })
         }
-        toast.show({ title: "Warp", message: "Uncommitted changes stashed", variant: "info" })
       }
     }
 
@@ -106,7 +112,7 @@ export function usePromptWorkspace(sessionID?: string) {
     })
     if (warped) {
       showNotice(workspace.name)
-      if (stashMsg) {
+      if (hasStashed && stashMsg) {
         const popped = await sdk.client.vcs.stashPop({ message: stashMsg, workspace: sourceWorkspaceID }).catch((err) => ({ error: err }))
         if (popped && "error" in popped) {
           toast.show({ title: "Warp", message: "Failed to restore stashed changes", variant: "error" })
