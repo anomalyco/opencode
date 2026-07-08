@@ -6,11 +6,13 @@ import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { useSettingsCommand } from "@/components/settings-dialog"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
   const navigate = useNavigate()
   setNavigate(navigate)
+  useSettingsCommand()
 
   createEffect(() => setV2Toast(true))
 
