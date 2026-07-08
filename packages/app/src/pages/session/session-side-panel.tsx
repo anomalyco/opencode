@@ -23,7 +23,6 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
@@ -35,7 +34,6 @@ import {
 } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { filterRenderableDiff } from "@/pages/session/v2/review-diff-kinds"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -54,7 +52,6 @@ export function SessionSidePanel(props: {
 }) {
   const layout = useLayout()
   const settings = useSettings()
-  const sync = useSync()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
@@ -83,7 +80,7 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
-  const diffs = createMemo(() => props.diffs().filter(filterRenderableDiff))
+  const diffs = createMemo(() => props.diffs())
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {

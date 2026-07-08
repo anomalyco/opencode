@@ -5,7 +5,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { SessionV2 } from "@opencode-ai/core/session"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime } from "effect"
@@ -13,7 +12,7 @@ import { DateTime } from "effect"
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
-const build = AgentV2.ID.make("build")
+const build = AgentV2.defaultID
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {

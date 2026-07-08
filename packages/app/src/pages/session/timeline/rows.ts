@@ -1,5 +1,5 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { AssistantMessage, FileDiffInfo, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import { AssistantMessage, Part, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 
@@ -167,16 +167,8 @@ export namespace Timeline {
     return rows
   }
 
-  type SummaryDiffInput = NonNullable<NonNullable<UserMessage["summary"]>["diffs"]>[number]
-
-  function isSummaryDiff(value: SummaryDiffInput): value is SummaryDiff {
-    return (
-      typeof value.file === "string" &&
-      typeof value.patch === "string" &&
-      typeof value.additions === "number" &&
-      typeof value.deletions === "number" &&
-      value.status !== undefined
-    )
+  function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
+    return typeof value.file === "string"
   }
 
   function reasoningHeading(text: string) {

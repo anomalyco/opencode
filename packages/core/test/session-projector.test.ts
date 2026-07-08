@@ -39,7 +39,7 @@ const created = DateTime.makeUnsafe(0)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
 const previousModel = { ...model, variant: ModelV2.VariantID.make("medium") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-const build = AgentV2.ID.make("build")
+const build = AgentV2.defaultID
 
 const assistantRow = (
   id: SessionMessage.ID,

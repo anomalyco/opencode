@@ -1,14 +1,9 @@
 export * from "./gen/types.gen.js"
 export type { FileSystemEntry as LocationFileSystemEntry } from "./gen/types.gen.js"
+import type { UserMessage } from "./gen/types.gen.js"
 
 /** @deprecated V1 snapshot compatibility. Use FileDiffInfo for current API responses. */
-export type SnapshotFileDiff = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
-}
+export type SnapshotFileDiff = NonNullable<NonNullable<UserMessage["summary"]>["diffs"]>[number]
 
 import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"

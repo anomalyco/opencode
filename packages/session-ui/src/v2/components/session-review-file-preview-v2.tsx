@@ -27,7 +27,7 @@ import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import "./session-review-v2.css"
 
-type ReviewDiff = (FileDiffInfo & { file: string }) | VcsFileDiff
+type ReviewDiff = FileDiffInfo | VcsFileDiff
 
 export type SessionReviewFilePreviewV2Props = {
   file: string

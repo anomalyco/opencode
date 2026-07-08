@@ -65,11 +65,9 @@ export type SessionReviewFocus = { file: string; id: string }
 type RawReviewDiff = (FileDiffInfo | VcsFileDiff) & {
   preloaded?: PreloadMultiFileDiffResult<any>
 }
-type ReviewDiff = ((FileDiffInfo & { file: string }) | VcsFileDiff) & {
+type ReviewDiff = (FileDiffInfo | VcsFileDiff) & {
   preloaded?: PreloadMultiFileDiffResult<any>
 }
-type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
-
 function diff(value: unknown): value is ReviewDiff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   if (!("file" in value) || typeof value.file !== "string") return false
@@ -185,7 +183,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const itemsMap = createMemo(() =>
     Object.fromEntries(list(props.diffs).map((diff) => [diff.file, { ...normalize(diff), preloaded: diff.preloaded }])),
   )
-  const files = createMemo(() => props.diffs.map((diff) => diff.file!))
+  const files = createMemo(() => props.diffs.map((diff) => diff.file))
   const grouped = createMemo(() => {
     const next = new Map<string, SessionReviewComment[]>()
     for (const comment of props.comments ?? []) {

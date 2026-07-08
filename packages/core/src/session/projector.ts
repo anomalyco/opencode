@@ -24,7 +24,6 @@ import {
 } from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
-import { Skill } from "@opencode-ai/schema/skill"
 import { PersistedRevert } from "@opencode-ai/schema/session-revert"
 import { Money } from "@opencode-ai/schema/money"
 
@@ -678,13 +677,12 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        const admitted = yield* SessionInput.projectCompactionAdmitted(db, {
+        yield* SessionInput.projectCompactionAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
           timeCreated: event.created,
         })
-        if (admitted.id !== event.data.inputID) return
       }),
     )
     yield* events.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
@@ -692,20 +690,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
     yield* events.project(SessionEvent.InstructionsUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
-    yield* events.project(SessionEvent.Skill.Activated, (event) =>
-      Effect.gen(function* () {
-        const identity = Skill.normalizeIdentity(event.data)
-        yield* insertMessage(db, event, {
-          id: SessionMessage.ID.fromEvent(event.id),
-          type: "skill",
-          skill: identity.id,
-          name: identity.name,
-          text: event.data.text,
-          metadata: event.metadata,
-          time: { created: event.created },
-        })
-      }),
-    )
+    yield* events.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
