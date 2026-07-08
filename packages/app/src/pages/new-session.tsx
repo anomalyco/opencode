@@ -229,8 +229,10 @@ function ProviderTip(props: { ready: () => boolean; connected: () => boolean; op
 
   function dismiss() {
     if (state.dismissing) return
+    const dismissedAt = Date.now()
     setState("dismissing", true)
-    setPersistedState("dismissedAt", Date.now())
+    setState("now", dismissedAt)
+    setPersistedState("dismissedAt", dismissedAt)
     dismissTimer = setTimeout(completeDismissal, providerTipExitDuration + 50)
   }
 
