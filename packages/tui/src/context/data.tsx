@@ -35,7 +35,10 @@ export type DataSessionStatus = "idle" | "running"
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 
-export type FormInfo = FormFormInfo | FormUrlInfo
+// Global MCP elicitations temporarily use "global" instead of a real session ID, so the
+// server cannot recover their Location when settling them. Preserve the event Location
+// until MCP elicitations carry session ownership.
+export type FormInfo = (FormFormInfo | FormUrlInfo) & { readonly location?: LocationRef }
 
 type LocationData = {
   agent?: AgentInfo[]
@@ -62,7 +65,7 @@ type Data = {
     message: Record<string, SessionMessageInfo[]>
     input: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
-    // Pending forms keyed by session ID.
+    // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormInfo[]>
   }
   project: {
@@ -734,7 +737,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
           setStore("session", "form", event.data.form.sessionID, [
             ...(store.session.form[event.data.form.sessionID] ?? []),
-            mutable(event.data.form),
+            mutable(
+              event.data.form.sessionID === "global"
+                ? { ...event.data.form, location: event.location }
+                : event.data.form,
+            ),
           ])
           break
         case "form.replied":
@@ -849,10 +856,31 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
         },
         form: {
-          list(sessionID: string) {
-            return store.session.form[sessionID]
+          list(sessionID: string, ref?: LocationRef) {
+            const forms = store.session.form[sessionID]
+            if (sessionID !== "global") return forms
+            if (!ref) return
+            const key = locationKey(ref)
+            return forms?.filter((form) => form.location && locationKey(form.location) === key)
           },
-          async refresh(sessionID: string) {
+          async refresh(sessionID: string, ref?: LocationRef) {
+            if (sessionID === "global") {
+              const response = await sdk.api.form.request.list({ location: locationQuery(ref ?? defaultLocation()) })
+              const location = {
+                directory: response.location.directory,
+                workspaceID: response.location.workspaceID,
+              }
+              const key = locationKey(location)
+              setStore("session", "form", sessionID, [
+                ...(store.session.form[sessionID] ?? []).filter(
+                  (form) => form.location && locationKey(form.location) !== key,
+                ),
+                ...mutable(
+                  response.data.filter((form) => form.sessionID === "global").map((form) => ({ ...form, location })),
+                ),
+              ])
+              return
+            }
             setStore("session", "form", sessionID, mutable(await sdk.api.form.list({ sessionID })))
           },
         },
@@ -1009,10 +1037,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           setStore("session", "permission", reconcile(permissions))
         }),
         sdk.api.form.request.list({ location: locationQuery(defaultLocation()) }).then((response) => {
+          const location = {
+            directory: response.location.directory,
+            workspaceID: response.location.workspaceID,
+          }
           const forms = mutable(response.data).reduce<Record<string, FormInfo[]>>(
             (result, form) => ({
               ...result,
-              [form.sessionID]: [...(result[form.sessionID] ?? []), form],
+              [form.sessionID]: [
+                ...(result[form.sessionID] ?? []),
+                form.sessionID === "global" ? { ...form, location } : form,
+              ],
             }),
             {},
           )
@@ -1029,9 +1064,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         result.location.skill.refresh(),
         result.shell.refresh(),
       ])
-        .then((settled) => {
+        .then(async (settled) => {
           for (const failure of settled.filter((item) => item.status === "rejected"))
             console.error("Failed to refresh default location data", failure.reason)
+          const key = locationKey(defaultLocation())
+          const locations = new Map(
+            Object.values(store.session.info).map((session) => [locationKey(session.location), session.location] as const),
+          )
+          const refreshed = await Promise.allSettled(
+            Array.from(locations)
+              .filter(([location]) => location !== key)
+              .map(([, location]) => result.session.form.refresh("global", location)),
+          )
+          for (const failure of refreshed.filter((item) => item.status === "rejected"))
+            console.error("Failed to refresh global forms", failure.reason)
         })
         .finally(() => {
           bootstrapping = undefined

@@ -87,7 +87,12 @@ export function Home() {
           <box height={1} minHeight={0} flexShrink={1} />
           <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
             <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
-              <Prompt ref={bind} right={<pluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
+              <Prompt
+                ref={bind}
+                right={<pluginRuntime.Slot name="home_prompt_right" />}
+                placeholders={placeholder}
+                disabled={forms().length > 0}
+              />
             </pluginRuntime.Slot>
           </box>
           <pluginRuntime.Slot name="home_bottom" />
@@ -97,22 +102,25 @@ export function Home() {
         <box width="100%" flexShrink={0}>
           <pluginRuntime.Slot name="home_footer" mode="single_winner" />
         </box>
-        <Show when={forms()[0]}>
-          {(form) => (
-            <box
-              position="absolute"
-              zIndex={2000}
-              left={0}
-              right={0}
-              bottom={1}
-              paddingLeft={2}
-              paddingRight={2}
-            >
-              <box width="100%">
-                <FormPrompt form={form()} />
+        <Show when={forms()[0]?.id} keyed>
+          {(_) => {
+            const form = forms()[0]
+            return form ? (
+              <box
+                position="absolute"
+                zIndex={2000}
+                left={0}
+                right={0}
+                bottom={1}
+                paddingLeft={2}
+                paddingRight={2}
+              >
+                <box width="100%">
+                  <FormPrompt form={form} />
+                </box>
               </box>
-            </box>
-          )}
+            ) : null
+          }}
         </Show>
       </HomeSessionDestinationProvider>
     </LocationProvider>

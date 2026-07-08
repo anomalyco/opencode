@@ -183,8 +183,11 @@ export function Session() {
     )
   })
   const forms = createMemo(() => {
-    if (session()?.parentID) return []
-    return data.session.form.list(route.sessionID) ?? []
+    const global = data.session.form.list("global", location()) ?? []
+    if (session()?.parentID) return global
+    return [route.sessionID, ...descendantSessionIDs()]
+      .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
+      .concat(global)
   })
   const [composer, setComposer] = createStore({
     open: false,
@@ -237,7 +240,12 @@ export function Session() {
 
   createEffect(
     on(descendantSessionIDs, (sessionIDs) => {
-      void Promise.all(sessionIDs.map((sessionID) => data.session.permission.refresh(sessionID)))
+      void Promise.all(
+        sessionIDs.flatMap((sessionID) => [
+          data.session.permission.refresh(sessionID),
+          data.session.form.refresh(sessionID),
+        ]),
+      )
     }),
   )
 
@@ -259,6 +267,15 @@ export function Session() {
         navigate({ type: "home" })
         return
       }
+      void data.session.form
+        .refresh("global", info.location)
+        .catch((error) =>
+          toast.show({
+            message: `Failed to refresh global forms: ${errorMessage(error)}`,
+            variant: "error",
+            duration: 5000,
+          }),
+        )
       project.workspace.set(info.location.workspaceID)
       editor.reconnect(info.location.directory)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
@@ -941,12 +958,12 @@ export function Session() {
               <box flexShrink={0}>
                 <Composer
                   sessionID={route.sessionID}
-                  open={composer.open || !!session()?.parentID}
+                  open={composer.open || (!!session()?.parentID && forms().length === 0)}
                   defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
                   onClose={() => setComposer("open", false)}
                 />
                 <Switch>
-                  <Match when={composer.open || !!session()?.parentID}>{null}</Match>
+                  <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
                   <Match when={permissions().length > 0}>
                     <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
                   </Match>
