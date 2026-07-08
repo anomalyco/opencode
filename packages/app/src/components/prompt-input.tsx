@@ -1508,6 +1508,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     current: props.controls.agents.current,
     style: control(),
     onSelect: (value) => {
+      if (value === props.controls.agents.current) return
       props.controls.agents.select(value)
       restoreFocus()
     },
@@ -1694,6 +1695,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               <MenuV2.RadioGroup
                                 value={props.controls.model.selection.variant.current() ?? "default"}
                                 onChange={(value) => {
+                                  const current = props.controls.model.selection.variant.current() ?? "default"
+                                  if (value === current) return
                                   props.controls.model.selection.variant.set(value === "default" ? undefined : value)
                                   restoreFocus()
                                 }}
@@ -1934,6 +1937,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             options={props.controls.agents.options}
                             current={props.controls.agents.current}
                             onSelect={(value) => {
+                              if (value === props.controls.agents.current) return
                               props.controls.agents.select(value)
                               restoreFocus()
                             }}
@@ -2043,6 +2047,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                 current={props.controls.model.selection.variant.current() ?? "default"}
                                 label={(x) => (x === "default" ? language.t("common.default") : x)}
                                 onSelect={(value) => {
+                                  const current = props.controls.model.selection.variant.current() ?? "default"
+                                  if (value === current) return
                                   props.controls.model.selection.variant.set(value === "default" ? undefined : value)
                                   restoreFocus()
                                 }}

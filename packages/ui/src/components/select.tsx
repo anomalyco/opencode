@@ -124,6 +124,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         </Kobalte.Item>
       )}
       onChange={(v) => {
+        if (v === local.current) return
         local.onSelect?.(v ?? undefined)
         stop()
       }}
