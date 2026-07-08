@@ -28,6 +28,7 @@ export const dict = {
   "command.project.previous": "Vorheriges Projekt",
   "command.project.next": "Nächstes Projekt",
   "command.project.index": "Zu Projekt {{index}} wechseln",
+  "command.project.run": "Startbefehl ausführen",
   "command.provider.connect": "Anbieter verbinden",
   "command.server.switch": "Server wechseln",
   "command.settings.open": "Einstellungen öffnen",

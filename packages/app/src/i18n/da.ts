@@ -26,6 +26,7 @@ export const dict = {
   "command.project.previous": "Forrige projekt",
   "command.project.next": "Næste projekt",
   "command.project.index": "Skift til projekt {{index}}",
+  "command.project.run": "Kør opstarts kommando",
   "command.provider.connect": "Tilslut udbyder",
   "command.server.switch": "Skift server",
   "command.settings.open": "Åbn indstillinger",
