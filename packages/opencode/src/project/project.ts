@@ -23,6 +23,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Project } from "@opencode-ai/schema/project"
 
+const dbDir = (dir: string) => (process.platform === "win32" ? dir.replaceAll("\\", "/") : dir)
+
 export const Info = Project.Info
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
@@ -292,7 +294,7 @@ const layer = Layer.effect(
         yield* db
           .update(SessionTable)
           .set({ project_id: projectID })
-          .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, data.directory)))
+          .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, dbDir(data.directory))))
           .run()
           .pipe(Effect.orDie)
       }
