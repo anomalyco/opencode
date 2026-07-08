@@ -17,7 +17,7 @@ export type ExecutionLimits = {
   readonly timeoutMs?: number
   /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
-  /** Maximum UTF-8 bytes of model-facing output. No default: absent means no truncation. */
+  /** Maximum UTF-8 bytes retained from output payloads. Fixed truncation notices and host formatting are additional. */
   readonly maxOutputBytes?: number
 }
 

@@ -3557,11 +3557,11 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
 }
 
 /**
- * Bounds the model-facing output (serialized result value plus logs) to `maxOutputBytes`.
- * Oversized values are replaced by their truncated serialized text with an explanatory marker,
- * and logs are kept from the start until the remaining budget is exhausted. Truncation never
- * fails the execution; `truncated: true` marks affected results. Only runs when the host set
- * `maxOutputBytes` - with the limit absent, output passes through unbounded.
+ * Bounds retained payload bytes (serialized result value, rejection diagnostics, and logs) to
+ * `maxOutputBytes`. Fixed truncation notices are added outside that payload budget, as is any
+ * framing added when a host renders the structured result. Truncation never fails the execution;
+ * `truncated: true` marks affected results. Only runs when the host set `maxOutputBytes` - with
+ * the limit absent, output passes through unbounded.
  */
 const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   let truncated = false

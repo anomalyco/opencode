@@ -73,7 +73,8 @@ fibers instead. At most eight tool calls execute concurrently.
 
 The public execution-policy knobs are `timeoutMs`, `maxToolCalls`, and `maxOutputBytes`. The package supplies no
 defaults because budgets are host policy. The interpreter also enforces fixed internal boundaries for tool-call
-concurrency and data nesting depth.
+concurrency and data nesting depth. `maxOutputBytes` bounds retained payload bytes, not the complete rendered message;
+fixed truncation notices and host-added framing are intentionally outside the budget.
 
 ### Data, files, and failures
 

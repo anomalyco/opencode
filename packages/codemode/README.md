@@ -265,7 +265,7 @@ The limits are exactly three knobs:
 | ---------------- | -------------------: | -------------------------------------------------------------------- |
 | `timeoutMs`      |    none - no timeout | Wall-clock execution time.                                           |
 | `maxToolCalls`   |     none - unlimited | Tool calls admitted during the execution.                            |
-| `maxOutputBytes` | none - no truncation | Model-facing output: result value, unhandled rejections, and logs.     |
+| `maxOutputBytes` | none - no truncation | Retained payload: result value, unhandled rejections, and logs.       |
 
 No limit has a default, on purpose: execution budgets are host policy, not library policy - a host that wants a bound sets one; a host that can interrupt the execution fiber (as OpenCode does on user cancel) may set no timeout, and a host with its own tool-output truncation (as OpenCode has) may leave `maxOutputBytes` unset. A host with neither should set `maxOutputBytes`, or oversized results silently flood model context.
 
@@ -282,6 +282,8 @@ const runtime = CodeMode.make({
 ```
 
 Limits are safe integers. `timeoutMs` must be at least `1`; the others may be `0`. Invalid configuration throws a `RangeError` when `CodeMode.make` or `CodeMode.execute` is called. An explicitly `undefined` value is the same as leaving the limit unset.
+
+`maxOutputBytes` is a payload budget, not a strict byte cap on the final rendered tool message. It counts the serialized result value, retained rejection diagnostics, and retained log lines. Fixed truncation notices and framing added by a host when it renders the structured result are additional and may make the final message exceed the configured number.
 
 Exceeding a configured `maxOutputBytes` never fails the execution. An oversized result value is replaced by its truncated serialized text plus an explanatory marker, leading unhandled rejections and logs are kept within the remaining budget, omitted entries receive a summary marker, and the result carries `truncated: true`.
 
