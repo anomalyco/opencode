@@ -3,7 +3,9 @@ export * as Watcher from "./watcher"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { Cause, Context, Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
+import { Cause, Context, Effect, Layer } from "effect"
+import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import path from "path"
 import { Config } from "../config"
 import { EventV2 } from "../event"
@@ -19,15 +21,7 @@ declare const OPENCODE_LIBC: string | undefined
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "file.watcher.updated",
-    schema: {
-      file: Schema.String,
-      event: Schema.Literals(["add", "change", "unlink"]),
-    },
-  }),
-}
+export const Event = FileSystemWatcher.Event
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
   try {
@@ -60,7 +54,7 @@ export interface Interface {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileWatcher") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return Service.of({})
@@ -119,7 +113,7 @@ export const layer = Layer.effect(
     }
 
     if (location.vcs?.type === "git") {
-      const resolved = yield* git.dir(location.directory)
+      const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
       if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
         const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
@@ -139,4 +133,8 @@ export const layer = Layer.effect(
   ),
 )
 
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer), Layer.provide(Git.defaultLayer))
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [FSUtil.node, Location.node, Config.node, Git.node, EventV2.node],
+})

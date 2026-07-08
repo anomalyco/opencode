@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { Agent } from "../../src/agent/agent"
@@ -6,7 +7,7 @@ import { deriveSubagentSessionPermission } from "../../src/agent/subagent-permis
 import { Permission } from "../../src/permission"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Agent.defaultLayer)
+const it = testEffect(LayerNode.compile(Agent.node))
 
 function testAgent(input: {
   name: string

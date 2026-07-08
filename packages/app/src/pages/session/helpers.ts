@@ -20,8 +20,8 @@ type TabsInput = {
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
 
-export function shouldShowFileTree(input: { desktopV2: boolean; showFileTree: boolean; opened: boolean }) {
-  return input.opened && (!input.desktopV2 || input.showFileTree)
+export function shouldShowFileTree(input: { visible: boolean; opened: boolean }) {
+  return input.opened && input.visible
 }
 
 export const createSessionTabs = (input: TabsInput) => {
@@ -96,13 +96,6 @@ export const focusTerminalById = (id: string) => {
       : new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
   )
   return true
-}
-
-const skip = new Set(["Alt", "Control", "Meta", "Shift"])
-
-export const shouldFocusTerminalOnKeyDown = (event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">) => {
-  if (skip.has(event.key)) return false
-  return !(event.ctrlKey || event.metaKey || event.altKey)
 }
 
 export const createOpenReviewFile = (input: {

@@ -9,7 +9,7 @@ import {
 import type { Binding } from "@opentui/keymap"
 import { useTheme, selectedForeground } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -25,6 +25,7 @@ export interface DialogSelectProps<T> {
   titleView?: JSX.Element
   placeholder?: string
   footer?: JSX.Element
+  emptyView?: JSX.Element
   options: DialogSelectOption<T>[]
   flat?: boolean
   ref?: (ref: DialogSelectRef<T>) => void
@@ -34,6 +35,7 @@ export interface DialogSelectProps<T> {
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
+  preserveSelection?: boolean
   actions?: {
     command: string
     title: string
@@ -92,6 +94,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
+  let selection: { value: T; category?: string } | undefined
+  let resetSelection = false
+  let visibilityGeneration = 0
 
   createEffect(
     on(
@@ -101,6 +106,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
+            selection = flat()[currentIndex]
           }
         }
       },
@@ -209,10 +215,68 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const selected = createMemo(() => flat()[store.selected])
 
   createEffect(
+    on(
+      () => props.options,
+      () => {
+        if (!props.preserveSelection) return
+        if (resetSelection && store.filter.length > 0) {
+          const option = flat()[0]
+          if (!option) return
+          setStore("selected", 0)
+          selection = option
+          return
+        }
+        if (!selection) {
+          if (props.current !== undefined) {
+            const index = flat().findIndex((option) => isDeepEqual(option.value, props.current))
+            if (index >= 0) {
+              setStore("selected", index)
+              selection = flat()[index]
+              return
+            }
+          }
+          const option = selected()
+          if (!option) return
+          selection = option
+          return
+        }
+        const previous = selection
+        const index = flat().findIndex((option) => isDeepEqual(option.value, previous.value))
+        if (index >= 0) {
+          const option = flat()[index]
+          const moved = index !== store.selected || option.category !== previous.category
+          setStore("selected", index)
+          selection = option
+          if (!moved) return
+          const value = option.value
+          const generation = ++visibilityGeneration
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (generation !== visibilityGeneration) return
+              if (!props.preserveSelection || store.filter.length > 0) return
+              if (!isDeepEqual(selected()?.value, value)) return
+              scrollToSelection(false)
+            })
+          })
+          return
+        }
+        const next = Math.min(store.selected, flat().length - 1)
+        if (next < 0) return
+        setStore("selected", next)
+        selection = flat()[next]
+      },
+    ),
+  )
+  onCleanup(() => {
+    visibilityGeneration++
+  })
+
+  createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
+      if (filter.length > 0) resetSelection = true
       setTimeout(() => {
         if (filter.length > 0) {
-          moveTo(0, true)
+          moveTo(0, true, false)
         } else if (current) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
@@ -232,15 +296,33 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     moveTo(next, true)
   }
 
-  function moveTo(next: number, center = false) {
+  function moveTo(next: number, center = false, preserve = true) {
     setFocusedAction(undefined)
     setStore("selected", next)
     const option = selected()
+    if (option) {
+      selection = option
+      resetSelection = !preserve
+    }
     if (option) props.onMove?.(option)
+    scrollToSelection(center)
+  }
+
+  function scrollToSelection(center: boolean) {
     if (!scroll) return
-    const target = scroll.getChildren().find((child: { id?: string }) => {
-      return child.id === JSON.stringify(selected()?.value)
-    })
+    let remaining = store.selected
+    let index = 0
+    // Locate the row by position because a unique renderable ID cannot currently be ensured.
+    for (const [category, options] of grouped()) {
+      if (category) index++
+      if (remaining < options.length) {
+        index += remaining
+        break
+      }
+      index += options.length
+      remaining -= options.length
+    }
+    const target = scroll.getChildren()[index]
     if (!target) return
     const y = target.y - scroll.y
     if (center) {
@@ -517,9 +599,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <Show
           when={grouped().length > 0}
           fallback={
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={theme.textMuted}>No results found</text>
-            </box>
+            props.emptyView ?? (
+              <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+                <text fg={theme.textMuted}>No results found</text>
+              </box>
+            )
           }
         >
           <scrollbox
@@ -553,7 +637,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       const current = createMemo(() => isDeepEqual(option.value, props.current))
                       return (
                         <box
-                          id={JSON.stringify(option.value)}
                           flexDirection="column"
                           position="relative"
                           onMouseMove={() => {

@@ -20,12 +20,31 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
 
 let params: { id?: string } = {}
+let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+const prompt = {
+  ready: Object.assign(() => true, { promise: Promise.resolve(true) }),
+  current: () => promptValue,
+  cursor: () => 0,
+  dirty: () => true,
+  reset: () => undefined,
+  set: () => undefined,
+  context: {
+    add: () => undefined,
+    remove: () => undefined,
+    removeComment: () => undefined,
+    updateComment: () => undefined,
+    replaceComments: () => undefined,
+    items: () => [],
+  },
+  capture: () => prompt,
+}
 
 const clientFor = (directory: string) => {
   createdClients.push(directory)
@@ -62,7 +81,7 @@ beforeAll(async () => {
     useNavigate: () => () => undefined,
     useParams: () => params,
     useLocation: () => ({}),
-    useSearchParams: () => [{}, () => undefined],
+    useSearchParams: () => [search, () => undefined],
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -73,6 +92,7 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
+    Toast: { Region: () => null },
     showToast: () => 0,
   }))
 
@@ -111,21 +131,15 @@ beforeAll(async () => {
 
   mock.module("@/context/tabs", () => ({
     useTabs: () => ({
-      promoteDraft: () => undefined,
+      draft: () => ({ server: "project-server" }),
+      promoteDraft: (draftID: string, session: { server: string; sessionId: string }) => {
+        promotedDrafts.push({ draftID, ...session })
+      },
     }),
   }))
 
   mock.module("@/context/prompt", () => ({
-    usePrompt: () => ({
-      current: () => promptValue,
-      reset: () => undefined,
-      set: () => undefined,
-      context: {
-        add: () => undefined,
-        remove: () => undefined,
-        items: () => [],
-      },
-    }),
+    usePrompt: () => prompt,
   }))
 
   mock.module("@/context/layout", () => ({
@@ -147,12 +161,12 @@ beforeAll(async () => {
           return clientFor(opts.directory)
         },
       }
-      return sdk
+      return () => sdk
     },
   }))
 
   mock.module("@/context/sync", () => ({
-    useSync: () => ({
+    useSync: () => () => ({
       data: { command: [] },
       session: {
         optimistic: {
@@ -176,7 +190,11 @@ beforeAll(async () => {
   }))
 
   mock.module("@/context/server-sync", () => ({
-    useServerSync: () => ({
+    useServerSync: () => () => ({
+      session: {
+        remember: () => undefined,
+        set: () => undefined,
+      },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
@@ -221,7 +239,9 @@ beforeEach(() => {
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
+  promotedDrafts.length = 0
   params = {}
+  search = {}
   sentShell.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
@@ -232,6 +252,7 @@ beforeEach(() => {
 describe("prompt submit worktree selection", () => {
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
+      prompt,
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
@@ -269,6 +290,7 @@ describe("prompt submit worktree selection", () => {
 
   test("applies auto-accept to newly created sessions", async () => {
     const submit = createPromptSubmit({
+      prompt,
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
@@ -294,11 +316,39 @@ describe("prompt submit worktree selection", () => {
     expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/worktree-a" }])
   })
 
+  test("promotes drafts using the selected project's server", async () => {
+    search = { draftId: "draft-1" }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server", sessionId: "session-1" }])
+  })
+
   test("includes the selected variant on optimistic prompts", async () => {
     params = { id: "session-1" }
     variant = "high"
 
     const submit = createPromptSubmit({
+      prompt,
       info: () => ({ id: "session-1" }),
       imageAttachments: () => [],
       commentCount: () => 0,
@@ -330,6 +380,7 @@ describe("prompt submit worktree selection", () => {
 
   test("seeds new sessions before optimistic prompts are added", async () => {
     const submit = createPromptSubmit({
+      prompt,
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,

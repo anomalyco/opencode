@@ -1,9 +1,4 @@
-import { SessionV2 } from "@opencode-ai/core/session"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Layer } from "effect"
-import { layer as locationLayer } from "./groups/location"
-import { sessionLocationLayer } from "./middleware/session-location"
 import { MessageHandler } from "./handlers/message"
 import { ModelHandler } from "./handlers/model"
 import { ProviderHandler } from "./handlers/provider"
@@ -15,11 +10,13 @@ import { SkillHandler } from "./handlers/skill"
 import { EventHandler } from "./handlers/event"
 import { AgentHandler } from "./handlers/agent"
 import { HealthHandler } from "./handlers/health"
+import { PtyHandler } from "./handlers/pty"
 import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
-import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { LocationHandler } from "./handlers/location"
-import { ConnectorHandler } from "./handlers/connector"
+import { IntegrationHandler } from "./handlers/integration"
+import { CredentialHandler } from "./handlers/credential"
+import { ProjectCopyHandler } from "./handlers/project-copy"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
@@ -29,19 +26,15 @@ export const handlers = Layer.mergeAll(
   MessageHandler,
   ModelHandler,
   ProviderHandler,
-  ConnectorHandler,
+  IntegrationHandler,
+  CredentialHandler,
   PermissionHandler,
   FileSystemHandler,
   CommandHandler,
   SkillHandler,
   EventHandler,
+  PtyHandler,
   QuestionHandler,
   ReferenceHandler,
-).pipe(
-  Layer.provide(sessionLocationLayer),
-  Layer.provide(locationLayer),
-  Layer.provide(SessionV2.defaultLayer),
-  Layer.provide(SessionExecutionLocal.defaultLayer),
-  Layer.provide(PermissionSaved.defaultLayer),
-  Layer.provide(LocationServiceMap.layer),
+  ProjectCopyHandler,
 )
