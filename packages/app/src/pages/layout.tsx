@@ -68,11 +68,14 @@ import {
   sortedRootSessions,
 } from "./layout/helpers"
 import {
+  collectConnectToDeepLinks,
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
 } from "./layout/deep-links"
+import { toServerConnection } from "./layout/connect-to-deep-links"
+import { consumeConnect } from "./layout/connect-flow"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -1256,6 +1259,11 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   const handleDeepLinks = (urls: string[]) => {
+    for (const link of collectConnectToDeepLinks(urls)) {
+      if (!consumeConnect(link.request)) continue
+      server.add(toServerConnection(link))
+    }
+
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {

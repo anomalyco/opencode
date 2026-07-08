@@ -192,6 +192,9 @@ export namespace ServerConnection {
     type: "http"
     http: HttpBase
     authToken?: boolean
+    // "server" forces server-side filesystem browsing (a loopback URL may be a tunnel,
+    // so it can't prove locality); absent/"local" uses the local OS picker.
+    filesystem?: "local" | "server"
   } & Base
 
   export type Sidecar = {
@@ -239,7 +242,8 @@ export namespace ServerConnection {
 
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
   export const local = (conn?: Any) =>
-    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+    !!conn &&
+    (builtin(conn) || (conn.type === "http" && conn.filesystem !== "server" && isLocalHost(conn.http.url) === "local"))
 }
 
 export function nextServerAfterRemoval(

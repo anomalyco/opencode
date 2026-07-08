@@ -95,6 +95,29 @@ test("active server removal falls back across built-in and persisted servers", (
   ).toBe(ServerConnection.Key.make("sidecar"))
 })
 
+describe("filesystem: server", () => {
+  test("survives persistence round-trip through resolveServerList", () => {
+    const stored: ServerConnection.Http = {
+      type: "http",
+      filesystem: "server",
+      http: { url: "http://127.0.0.1:51234" },
+      displayName: "my-server",
+    }
+    const list = resolveServerList({ stored: [stored] })
+    expect(list).toHaveLength(1)
+    expect(list[0]?.type === "http" ? list[0].filesystem : undefined).toBe("server")
+  })
+
+  test("forces server-side browsing even on a loopback url", () => {
+    // A loopback url can't prove locality (it may be a tunnel), so the flag wins.
+    expect(
+      ServerConnection.local({ type: "http", filesystem: "server", http: { url: "http://127.0.0.1:51234" } }),
+    ).toBe(false)
+    // Without the flag, the same loopback url is treated as local.
+    expect(ServerConnection.local({ type: "http", http: { url: "http://127.0.0.1:51234" } })).toBe(true)
+  })
+})
+
 describe("createServerProjects", () => {
   test("keeps active and explicit server buckets in one reactive store", () => {
     createRoot((dispose) => {

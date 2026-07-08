@@ -140,6 +140,14 @@ export function getLastFocusedWindow() {
   return win
 }
 
+// Falls back to any non-destroyed window so deep links reach an app that isn't OS-focused.
+export function getWindowForDeepLink() {
+  const preferred = getLastFocusedWindow()
+  if (preferred) return preferred
+  const open = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed())
+  return open[0] ?? null
+}
+
 export function restoreMainWindows() {
   const ids = registry.persisted()
   return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))

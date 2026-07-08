@@ -6,11 +6,14 @@ import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { useConnectToDeepLinks } from "./layout/connect-to-deep-links"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
   const navigate = useNavigate()
   setNavigate(navigate)
+
+  useConnectToDeepLinks()
 
   createEffect(() => setV2Toast(true))
 

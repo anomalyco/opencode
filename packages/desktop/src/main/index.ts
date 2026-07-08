@@ -29,6 +29,7 @@ import {
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
 import {
+  getWindowForDeepLink,
   getLastFocusedWindow,
   registerRendererProtocol,
   setRelaunchHandler,
@@ -70,11 +71,26 @@ function useEnvProxy() {
   }
 }
 
+// Redacts the query string (uri, request id, credentials) — logs keep only scheme + action.
+function redactDeepLink(url: string) {
+  try {
+    const parsed = new URL(url)
+    return `${parsed.protocol}//${parsed.hostname}`
+  } catch {
+    return "opencode://<unparseable>"
+  }
+}
+
 function emitDeepLinks(urls: string[]) {
   if (urls.length === 0) return
+  const win = getWindowForDeepLink()
+  if (win) {
+    sendDeepLinks(win, urls)
+    win.show()
+    win.focus()
+    return
+  }
   pendingDeepLinks.push(...urls)
-  const win = getLastFocusedWindow()
-  if (win) sendDeepLinks(win, urls)
 }
 
 async function killSidecar() {
@@ -196,7 +212,7 @@ const main = Effect.gen(function* () {
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
     if (urls.length) {
-      logger.log("deep link received via second-instance", { urls })
+      logger.log("deep link received via second-instance", { kinds: urls.map(redactDeepLink) })
       emitDeepLinks(urls)
     }
     const win = getLastFocusedWindow()
@@ -208,7 +224,7 @@ const main = Effect.gen(function* () {
 
   app.on("open-url", (event: Event, url: string) => {
     event.preventDefault()
-    logger.log("deep link received via open-url", { url })
+    logger.log("deep link received via open-url", { kind: redactDeepLink(url) })
     emitDeepLinks([url])
   })
 

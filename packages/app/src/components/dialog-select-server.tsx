@@ -16,6 +16,8 @@ import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { isExternalSchemeAddress, isSafeBrokerScheme } from "@/utils/server-address"
+import { beginConnect } from "@/pages/layout/connect-flow"
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
@@ -96,6 +98,8 @@ function useServerPreview() {
     setStatus: (value: boolean | undefined) => void,
   ) => {
     setStatus(undefined)
+    // No server to health-check: an external-scheme address is brokered by the OS.
+    if (isExternalSchemeAddress(value)) return
     if (!looksComplete(value)) return
     const normalized = normalizeServerUrl(value)
     if (!normalized) return
@@ -245,6 +249,20 @@ export function useServerManagementController(options: { onSelect?: () => void; 
 
   const addMutation = useMutation(() => ({
     mutationFn: async (value: string) => {
+      if (isExternalSchemeAddress(value)) {
+        const trimmed = value.trim()
+        // The broker hands the server back via an OS scheme callback, which only desktop
+        // receives — on web the launch would strand the user at "Connecting…".
+        if (platform.platform !== "desktop" || !isSafeBrokerScheme(trimmed)) {
+          setStore("addServer", { error: language.t("dialog.server.add.error") })
+          return
+        }
+        platform.openLink(beginConnect(trimmed))
+        resetAdd()
+        options.onSelect?.()
+        return
+      }
+
       const normalized = normalizeServerUrl(value)
       if (!normalized) {
         resetAdd()
@@ -301,6 +319,8 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         type: "http",
         displayName: name,
         http: { url: normalized, username, password },
+        // Preserve filesystem policy so an edit doesn't silently demote a tunneled server to local.
+        ...(input.original.filesystem ? { filesystem: input.original.filesystem } : {}),
       }
       const result = await checkServerHealth(conn.http)
       if (!result.healthy) {
