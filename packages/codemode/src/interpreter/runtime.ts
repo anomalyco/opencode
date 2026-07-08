@@ -623,9 +623,9 @@ class PromiseRuntime<R> {
   constructor(private readonly scope: Scope.Scope) {}
 
   create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
+    const id = this.nextID++
     return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
       const promise = new SandboxPromise(fiber)
-      const id = this.nextID++
       this.active.add(promise)
       this.ids.set(promise, id)
       fiber.addObserver((exit) => {
@@ -648,22 +648,13 @@ class PromiseRuntime<R> {
     return Fiber.await(promise.fiber)
   }
 
-  drain(): Effect.Effect<void, unknown> {
+  drain(): Effect.Effect<Array<Diagnostic>> {
     const self = this
     return Effect.gen(function* () {
       while (self.active.size > 0) {
         for (const promise of [...self.active]) yield* Fiber.await(promise.fiber)
       }
-
-      const failure = [...self.failures].sort(([left], [right]) => left - right)[0]?.[1]
-      if (failure !== undefined) {
-        throw new InterpreterRuntimeError(
-          `Unhandled rejection from an un-awaited promise: ${failure.message}`,
-          undefined,
-          failure.kind,
-          ["Await promises so failures can be caught and handled."],
-        )
-      }
+      return [...self.failures].sort(([left], [right]) => left - right).map(([, failure]) => failure)
     })
   }
 }
@@ -758,7 +749,6 @@ class Interpreter<R> {
       // resolves before crossing the data boundary - `return tools.ns.tool(...)` works
       // without an explicit await, exactly as in JS.
       if (value instanceof SandboxPromise) value = yield* self.settlePromise(value)
-      yield* self.promises.drain()
       return value
     }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
   }
@@ -3510,10 +3500,14 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
         const promises = new PromiseRuntime<Services<Tools>>(scope)
         const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, promises, logs)
         const value = yield* interpreter.run(program)
+        // Validate the result before draining so an invalid value is a fatal completion that
+        // closes the promise scope instead of waiting for unrelated work.
         const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
+        const unhandledRejections = yield* promises.drain()
         return {
           ok: true,
           value: result,
+          ...(unhandledRejections.length > 0 ? { unhandledRejections } : {}),
           ...logged(),
           toolCalls: tools.calls,
         } satisfies Result
@@ -3587,9 +3581,23 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
     }
   }
 
+  const rejections = result.ok ? (result.unhandledRejections ?? []) : []
+  const keptRejections: Array<Diagnostic> = []
+  const rejectionBudget = Math.max(0, maxOutputBytes - valueBytes)
+  let rejectionBytes = 0
+  for (const rejection of rejections) {
+    const bytes = utf8ByteLength(JSON.stringify(rejection)) + 1
+    if (rejectionBytes + bytes > rejectionBudget) break
+    rejectionBytes += bytes
+    keptRejections.push(rejection)
+  }
+  if (keptRejections.length < rejections.length) {
+    truncated = true
+  }
+
   const logs = result.logs ?? []
   const kept: Array<string> = []
-  const logBudget = Math.max(0, maxOutputBytes - valueBytes)
+  const logBudget = Math.max(0, maxOutputBytes - valueBytes - rejectionBytes)
   let logBytes = 0
   for (const line of logs) {
     const lineBytes = utf8ByteLength(line) + 1
@@ -3603,8 +3611,19 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   }
 
   if (!truncated) return result
+  const rejectionsPart = keptRejections.length > 0 ? { unhandledRejections: keptRejections } : {}
+  const rejectionsTruncatedPart =
+    keptRejections.length < rejections.length ? { unhandledRejectionsTruncated: true as const } : {}
   const logsPart = kept.length > 0 ? { logs: kept } : {}
   return result.ok
-    ? { ok: true, value, ...logsPart, truncated: true, toolCalls: result.toolCalls }
+    ? {
+        ok: true,
+        value,
+        ...rejectionsPart,
+        ...rejectionsTruncatedPart,
+        ...logsPart,
+        truncated: true,
+        toolCalls: result.toolCalls,
+      }
     : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
 }

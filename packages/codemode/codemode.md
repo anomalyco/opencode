@@ -67,8 +67,9 @@ async functions, `Promise.all`, `Promise.allSettled`, `Promise.race`, `Promise.r
 functions therefore cannot end the lifetime of work they started. Independent aggregate batches overlap, and rejection
 is observed at the eventual `await`. `Promise.race` uses native non-cancelling settlement semantics: its first result
 wins while losers continue. Before normal completion, CodeMode drains all active promises without marking them observed,
-then reports an unobserved rejection as a diagnostic. Timeout or host interruption closes the execution promise scope
-and interrupts its active fibers. At most eight tool calls execute concurrently.
+then returns every unobserved ordinary rejection in `Success.unhandledRejections` while preserving the program value.
+A fatal program failure, timeout, or host interruption closes the execution promise scope and interrupts its active
+fibers instead. At most eight tool calls execute concurrently.
 
 The public execution-policy knobs are `timeoutMs`, `maxToolCalls`, and `maxOutputBytes`. The package supplies no
 defaults because budgets are host policy. The interpreter also enforces fixed internal boundaries for tool-call

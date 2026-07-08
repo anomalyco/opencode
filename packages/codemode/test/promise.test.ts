@@ -48,6 +48,13 @@ const failingTool = Tool.make({
   run: () => Effect.fail(toolError("Lookup refused")),
 })
 
+const interruptedTool = Tool.make({
+  description: "Interrupt this call",
+  input: Schema.Struct({}),
+  output: Schema.String,
+  run: () => Effect.interrupt,
+})
+
 const completedTool = (trace: Trace) =>
   Tool.make({
     description: "Return the number of completed sleepy calls",
@@ -63,7 +70,14 @@ const run = (
   const trace = options.trace ?? makeTrace()
   return Effect.runPromise(
     CodeMode.execute({
-      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool, completed: completedTool(trace) } },
+      tools: {
+        host: {
+          sleepy: sleepyTool(trace),
+          fail: failingTool,
+          interrupt: interruptedTool,
+          completed: completedTool(trace),
+        },
+      },
       code,
       ...(options.limits ? { limits: options.limits } : {}),
     }),
@@ -174,8 +188,7 @@ describe("first-class promise values", () => {
   })
 
   test("an awaited failure is catchable exactly like a synchronous throw", async () => {
-    expect(
-      await value(`
+    const result = await run(`
       const p = tools.host.fail({})
       try {
         await p
@@ -183,8 +196,11 @@ describe("first-class promise values", () => {
       } catch (e) {
         return e.message
       }
-    `),
-    ).toBe("Lookup refused")
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("Lookup refused")
+    expect(result.unhandledRejections).toBeUndefined()
   })
 
   test("a fire-and-forget call completes before the execution ends", async () => {
@@ -201,30 +217,47 @@ describe("first-class promise values", () => {
     expect(trace.interrupted).toBe(0)
   })
 
-  test("a never-awaited failing call surfaces as an unhandled-rejection diagnostic", async () => {
-    const diagnostic = await error(`
+  test("a never-awaited failing call preserves the result and reports the rejection", async () => {
+    const result = await run(`
       tools.host.fail({})
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ToolFailure")
-    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
-    expect(diagnostic.message).toContain("Lookup refused")
-    expect(diagnostic.suggestions?.join(" ")).toContain("Await promises")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.unhandledRejections).toStrictEqual([{ kind: "ToolFailure", message: "Lookup refused" }])
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 
-  test("a never-awaited failing async function surfaces as an unhandled promise rejection", async () => {
-    const diagnostic = await error(`
+  test("a never-awaited failing async function is reported with a successful result", async () => {
+    const result = await run(`
       const fail = async () => { throw new Error("boom") }
       fail()
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ExecutionFailure")
-    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
-    expect(diagnostic.message).toContain("boom")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.unhandledRejections).toStrictEqual([{ kind: "ExecutionFailure", message: "Uncaught: boom" }])
   })
 
-  test("drains promises started by an async function after an await", async () => {
-    const diagnostic = await error(`
+  test("output truncation bounds unhandled rejection diagnostics", async () => {
+    const result = await run(
+      `
+        for (let i = 0; i < 100; i += 1) Promise.reject(new Error("x".repeat(1_000)))
+        return "done"
+      `,
+      { limits: { maxOutputBytes: 64 } },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.truncated).toBe(true)
+    expect(result.unhandledRejections).toBeUndefined()
+    expect(result.unhandledRejectionsTruncated).toBe(true)
+  })
+
+  test("drains and reports promises started by an async function after an await", async () => {
+    const result = await run(`
       const run = async () => {
         await tools.host.sleepy({ id: 1 })
         tools.host.fail({})
@@ -232,8 +265,72 @@ describe("first-class promise values", () => {
       run()
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ToolFailure")
-    expect(diagnostic.message).toContain("Lookup refused")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.unhandledRejections).toStrictEqual([{ kind: "ToolFailure", message: "Lookup refused" }])
+  })
+
+  test("reports every unhandled rejection in promise creation order", async () => {
+    const result = await run(`
+      Promise.reject(new Error("first"))
+      tools.host.fail({})
+      Promise.reject(new Error("third"))
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.unhandledRejections).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Uncaught: first" },
+      { kind: "ToolFailure", message: "Lookup refused" },
+      { kind: "ExecutionFailure", message: "Uncaught: third" },
+    ])
+  })
+
+  test("orders an async function rejection before promises created inside its body", async () => {
+    const result = await run(`
+      const outer = async () => {
+        Promise.reject(new Error("inner"))
+        throw new Error("outer")
+      }
+      outer()
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.unhandledRejections).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Uncaught: outer" },
+      { kind: "ExecutionFailure", message: "Uncaught: inner" },
+    ])
+  })
+
+  test("un-awaited interruptions settle without becoming rejections", async () => {
+    const result = await run(`
+      tools.host.interrupt({})
+      Promise.all([tools.host.interrupt({})])
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.unhandledRejections).toBeUndefined()
+  })
+
+  test("a fatal program error cancels outstanding work without reporting unhandled rejections", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        tools.host.sleepy({ id: 1, ms: 1_000 })
+        throw new Error("boom")
+      `,
+      { trace },
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.message).toBe("Uncaught: boom")
+    expect("unhandledRejections" in result).toBe(false)
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
   test("async-function promises remain owned by the execution after the function returns", async () => {
@@ -269,6 +366,22 @@ describe("promises at data boundaries", () => {
     const diagnostic = await error(`return Array.from([Promise.resolve(1)])`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("un-awaited Promise")
+  })
+
+  test("invalid returned data cancels pending work before final draining", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        const pending = tools.host.sleepy({ id: 1, ms: 60_000 })
+        return { pending }
+      `,
+      { trace, limits: { timeoutMs: 100 } },
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.kind).toBe("InvalidDataValue")
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
   test("passing an un-awaited promise as a tool argument is a clear diagnostic", async () => {
@@ -413,16 +526,18 @@ describe("Promise.all over arbitrary arrays", () => {
   })
 
   test("rejects with the first failure, catchable in-program", async () => {
-    expect(
-      await value(`
+    const result = await run(`
       try {
         await Promise.all([tools.host.sleepy({ id: 1 }), tools.host.fail({})])
         return "no"
       } catch (e) {
         return e.message
       }
-    `),
-    ).toBe("Lookup refused")
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("Lookup refused")
+    expect(result.unhandledRejections).toBeUndefined()
   })
 
   test("rejects before an earlier slow promise fulfills", async () => {
@@ -510,7 +625,9 @@ describe("Promise.allSettled", () => {
       return settled.filter((s) => s.status === "rejected").length
     `)
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toBe(2)
+    if (!result.ok) return
+    expect(result.value).toBe(2)
+    expect(result.unhandledRejections).toBeUndefined()
   })
 })
 
@@ -581,6 +698,14 @@ describe("Promise.race", () => {
     expect(trace.interrupted).toBe(0)
   })
 
+  test("a rejected race loser is observed by the aggregate", async () => {
+    const result = await run(`return await Promise.race(["winner", tools.host.fail({})])`)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("winner")
+    expect(result.unhandledRejections).toBeUndefined()
+  })
+
   test("an empty race is a clear error instead of hanging", async () => {
     const diagnostic = await error(`return await Promise.race([])`)
     expect(diagnostic.message).toContain("never settle")
@@ -626,14 +751,14 @@ describe("Promise.resolve / Promise.reject", () => {
   })
 
   test("an abandoned rejected promise is reported as unhandled", async () => {
-    const diagnostic = await error(`
+    const result = await run(`
       Promise.reject(new Error("abandoned"))
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ExecutionFailure")
-    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
-    expect(diagnostic.message).toContain("abandoned")
-    expect(diagnostic.message.split("Unhandled rejection from an un-awaited promise").length - 1).toBe(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.unhandledRejections).toStrictEqual([{ kind: "ExecutionFailure", message: "Uncaught: abandoned" }])
   })
 })
 

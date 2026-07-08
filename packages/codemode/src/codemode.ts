@@ -92,6 +92,8 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
+  unhandledRejections: Schema.optionalKey(Schema.Array(Diagnostic)),
+  unhandledRejectionsTruncated: Schema.optionalKey(Schema.Boolean),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),
   toolCalls: Schema.Array(ToolCallSchema),
