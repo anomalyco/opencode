@@ -34,6 +34,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       )
 
       const config = Config.Service.of({
+        revision: () => 0,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -119,6 +120,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const config = Config.Service.of({
+        revision: () => 0,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -187,6 +189,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* agents.transform((editor) => editor.update(build, () => {}))
 
       const config = Config.Service.of({
+        revision: () => 0,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -246,6 +249,7 @@ Use native v2 fields.`,
           })
           const agents = yield* AgentV2.Service
           const config = Config.Service.of({
+            revision: () => 0,
             entries: () =>
               Effect.succeed([
                 new Config.Document({

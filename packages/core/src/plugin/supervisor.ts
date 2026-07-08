@@ -245,11 +245,14 @@ const resolvePackageEntrypoint = Effect.fnUntraced(function* (fs: FSUtil.Interfa
   }).pipe(Effect.map((items) => items.find((item): item is string => item !== undefined)))
 })
 
+type Revision = {
+  readonly config: number
+  readonly sdk: number
+}
+
 export interface Interface {
-  /** Apply at least every Config and SDK plugin update observed when this Effect begins. */
-  readonly synchronize: Effect.Effect<void>
-  /** @deprecated Use synchronize. */
-  readonly ready: Effect.Effect<void>
+  /** Apply at least every Config and SDK plugin revision observed when this Effect begins. */
+  readonly flush: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PluginSupervisor") {}
@@ -261,25 +264,12 @@ const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
     const events = yield* EventV2.Service
-    const location = yield* Location.Service
     const runActivation = yield* FiberSet.makeRuntime<never, void>()
     const lock = Semaphore.makeUnsafe(1)
-    let requested = 1
-    let applied = 0
-    const unsubscribe = yield* events.listen((event) =>
-      Effect.sync(() => {
-        if (event.type !== Event.Updated.type && event.type !== SdkPlugins.Updated.type) return
-        if (
-          event.location &&
-          (event.location.directory !== location.directory || event.location.workspaceID !== location.workspaceID)
-        )
-          return
-        requested++
-      }),
-    )
-    yield* Effect.addFinalizer(() => unsubscribe)
-    const activateThrough = Effect.fn("PluginSupervisor.activateThrough")(function* (target: number) {
-      if (applied >= target) return
+    const target = (): Revision => ({ config: config.revision(), sdk: sdk.revision() })
+    let applied: Revision | undefined
+    const activateThrough = Effect.fn("PluginSupervisor.activateThrough")(function* (target: Revision) {
+      if (applied && applied.config >= target.config && applied.sdk >= target.sdk) return
       // Resolve OpenCode's internal plugins with their privileged Location services.
       const internal = yield* PluginInternal.list()
       // Combine internal plugins with host-contributed SDK plugins in boot order.
@@ -288,13 +278,13 @@ const layer = Layer.effect(
       // Apply config operations and load enabled package plugins into one ordered generation.
       const plugins = yield* resolve(pre, internal.post, operations)
       // Replace the active generation in one scoped, batched activation.
-      yield* registry.activate(plugins, { force: applied > 0 })
+      yield* registry.activate(plugins, { force: applied !== undefined })
       applied = target
     })
-    const activateTarget = Effect.fn("PluginSupervisor.activateTarget")((target: number) =>
+    const activateTarget = Effect.fn("PluginSupervisor.activateTarget")((target: Revision) =>
       lock.withPermit(activateThrough(target)),
     )
-    const reload = Effect.suspend(() => activateTarget(requested))
+    const reload = Effect.suspend(() => activateTarget(target()))
     yield* events.subscribe([Event.Updated, SdkPlugins.Updated]).pipe(
       Stream.runForEach(() =>
         reload.pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
@@ -303,12 +293,12 @@ const layer = Layer.effect(
     )
     yield* reload.pipe(Effect.withSpan("PluginSupervisor.boot"), Effect.forkScoped({ startImmediately: true }))
     const context = yield* Effect.context<Effect.Services<ReturnType<typeof activateTarget>>>()
-    const synchronize = Effect.suspend(() => {
-      const target = requested
-      const activation = activateTarget(target).pipe(Effect.provideContext(context))
+    const flush = Effect.suspend(() => {
+      const revision = target()
+      const activation = activateTarget(revision).pipe(Effect.provideContext(context))
       return Fiber.join(runActivation(activation))
     })
-    return Service.of({ synchronize, ready: synchronize })
+    return Service.of({ flush })
   }),
 )
 

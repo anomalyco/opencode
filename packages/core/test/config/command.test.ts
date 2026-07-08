@@ -71,6 +71,7 @@ Review files`,
             Effect.provideService(
               Config.Service,
               Config.Service.of({
+                revision: () => 0,
                 entries: () =>
                   Effect.succeed([
                     new Config.Document({

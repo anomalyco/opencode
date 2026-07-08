@@ -107,9 +107,7 @@ const it = testEffect(layer)
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
-    yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
-      Effect.provide(locations.get(location)),
-    )
+    yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
     yield* AgentV2.Service.use((agents) =>
       agents.transform((draft) => {
         // The caller identity used by executeTool; subagent permission asserts against it.

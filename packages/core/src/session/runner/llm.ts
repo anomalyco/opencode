@@ -212,76 +212,51 @@ const layer = Layer.effect(
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
-      yield* plugins.synchronize
-      const prepared = yield* Effect.gen(function* () {
-        const agent = yield* agents.select(session.agent)
-        const agentInfo = agent.info
-        if (!agentInfo)
-          return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
-        // Establish what the model knows before admitting what the user said, so
-        // a blocked first step leaves pending inputs untouched.
-        const checkpoint = yield* InstructionCheckpoint.prepare(
-          db,
-          events,
-          loadInstructions(agent, session.id),
-          session.id,
-        )
-        let currentStep = step
-        if (promotion) {
-          let promoted = 0
-          if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
-          if (promotion === "queue") {
-            promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
-            promoted += yield* SessionInput.promoteSteers(db, events, session.id)
-          }
-          if (promoted > 0) currentStep = 1
+      yield* plugins.flush
+      const agent = yield* agents.select(session.agent)
+      const agentInfo = agent.info
+      if (!agentInfo) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+      // Establish what the model knows before admitting what the user said, so
+      // a blocked first step leaves pending inputs untouched.
+      const checkpoint = yield* InstructionCheckpoint.prepare(
+        db,
+        events,
+        loadInstructions(agent, session.id),
+        session.id,
+      )
+      let currentStep = step
+      if (promotion) {
+        let promoted = 0
+        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
+        if (promotion === "queue") {
+          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
+          promoted += yield* SessionInput.promoteSteers(db, events, session.id)
         }
-        const resolved = yield* models.resolve(session)
-        const providerMetadataKey = resolved.model.route.providerMetadataKey ?? resolved.model.provider
-        const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
-        const context = entries.map((entry) => entry.message)
-        const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
-        const toolMaterialization = isLastStep
-          ? undefined
-          : yield* tools.materialize({ permissions: agentInfo.permissions, model: resolved.model })
-        const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
-        return {
-          agent,
-          agentInfo,
-          currentStep,
-          resolved,
-          providerMetadataKey,
-          context,
-          isLastStep,
-          toolMaterialization,
-          request: LLM.request({
-            model: resolved.model,
-            providerOptions: { openai: { promptCacheKey } },
-            system: [
-              agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(resolved.model),
-              checkpoint.baseline,
-            ]
-              .filter((part): part is string => part !== undefined && part.length > 0)
-              .map(SystemPart.make),
-            messages: [
-              ...toLLMMessages(context, resolved.ref, providerMetadataKey),
-              ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
-            ],
-            tools: toolMaterialization?.definitions ?? [],
-            toolChoice: isLastStep ? "none" : undefined,
-          }),
-        }
-      })
-      const agent = prepared.agent
-      const agentInfo = prepared.agentInfo
-      const currentStep = prepared.currentStep
-      const resolved = prepared.resolved
-      const providerMetadataKey = prepared.providerMetadataKey
+        if (promoted > 0) currentStep = 1
+      }
+      const resolved = yield* models.resolve(session)
       const model = resolved.model
-      const context = prepared.context
-      const isLastStep = prepared.isLastStep
-      const toolMaterialization = prepared.toolMaterialization
-      const request = prepared.request
+      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
+      const context = entries.map((entry) => entry.message)
+      const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
+      const toolMaterialization = isLastStep
+        ? undefined
+        : yield* tools.materialize({ permissions: agentInfo.permissions, model })
+      const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const request = LLM.request({
+        model,
+        providerOptions: { openai: { promptCacheKey } },
+        system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), checkpoint.baseline]
+          .filter((part): part is string => part !== undefined && part.length > 0)
+          .map(SystemPart.make),
+        messages: [
+          ...toLLMMessages(context, resolved.ref, providerMetadataKey),
+          ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
+        ],
+        tools: toolMaterialization?.definitions ?? [],
+        toolChoice: isLastStep ? "none" : undefined,
+      })
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | UserInterruptedError>()
       const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error | UserInterruptedError>> = []
       let needsContinuation = false

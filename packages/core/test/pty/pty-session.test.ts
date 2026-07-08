@@ -17,7 +17,7 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/tmp") })),
 )
-const configLayer = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+const configLayer = Layer.mock(Config.Service)({ revision: () => 0, entries: () => Effect.succeed([]) })
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
     [Config.node, configLayer],
@@ -210,6 +210,7 @@ const configuredIt = testEffect(
     [
       Config.node,
       Layer.mock(Config.Service)({
+        revision: () => 0,
         entries: () =>
           Effect.succeed(
             configuredShell

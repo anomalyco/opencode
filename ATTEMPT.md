@@ -2,7 +2,7 @@
 
 ## Recommendation
 
-Revise draft PR #35755 to expose one fixed-target readiness barrier. When Session execution reaches the barrier, it captures the current requested activation revision, waits until the Location has applied at least that revision, then continues without retaining an activation lock.
+Revise draft PR #35755 to expose one fixed-target readiness barrier. When Session execution reaches the barrier, it captures the current Config and SDK plugin revisions, waits until the Location has applied at least that revision pair, then continues without retaining an activation lock.
 
 Immediately afterward, the runner resolves the selected agent and fails closed with `Session.AgentNotFoundError` if it is absent. This closes the empty-generation tool leak without claiming that a complete model step or request preparation is an immutable plugin snapshot.
 
@@ -28,7 +28,7 @@ The original failure looked like this:
 
 Location eviction makes this more than a process-start race. Reopening an evicted Location reconstructs Location-scoped agent, catalog, hook, and tool state asynchronously.
 
-SDK registration and Config updates add an ordering requirement: if update publication completes before Session execution begins synchronization, the barrier must apply at least that update's revision before returning.
+SDK registration and Config updates add an ordering requirement: if an update commits before Session execution begins a flush, the barrier must apply at least the source revisions visible at that point before returning.
 
 ## Required Semantics
 
@@ -38,7 +38,7 @@ Location acquisition and TUI bootstrap must remain non-blocking. Plugin imports,
 
 ### Session readiness
 
-Before constructing a model request, Session execution captures the current requested activation revision and waits until the Location has applied at least that revision.
+Before constructing a model request, Session execution captures the current Config and SDK plugin revisions and waits until the Location has applied at least that pair.
 
 Readiness includes:
 
@@ -70,50 +70,38 @@ After readiness settles, a missing selected agent must produce typed `Session.Ag
 
 The barrier must not hang forever on network-dependent activation. Existing optional-plugin import/setup failures may still be logged and skipped; selected agents and models fail closed if their required contribution is absent after the barrier.
 
-## Current Implementation
+## Implemented Design
 
-`PluginSupervisor` maintains two process-local counters per Location:
-
-```text
-requested = number of observed initial/config/SDK activation requests
-applied   = latest request boundary completed by activation
-```
-
-Its activation loop snapshots `requested`, plans and activates a generation, assigns the snapshot to `applied`, and repeats if another update arrived during activation.
+Config and SDK plugin stores own their monotonic revisions:
 
 ```text
-requested = 1
-activate generation 1
-SDK update -> requested = 2
-finish generation 1 -> applied = 1
-activate generation 2
-finish generation 2 -> applied = 2
-return
+Config.revision()     increases when a discovered config snapshot commits
+SdkPlugins.revision() increases when an SDK registration commits
 ```
 
-`SessionRunnerLLM` wraps each complete model-step attempt in:
+State mutation and revision increment happen synchronously before the corresponding ephemeral event publishes. The event is only a wake-up notification for background activation.
 
-```ts
-plugins.withGeneration(attemptStep(...))
+`PluginSupervisor.flush` captures the source revision pair directly:
+
+```text
+target = {
+  config: Config.revision(),
+  sdk: SdkPlugins.revision(),
+}
 ```
 
-`withGeneration` currently:
+The supervisor serializes activation, applies current source state if its last applied pair does not cover the target, then returns. A delayed or missed Stream notification cannot make `flush` return early because correctness does not depend on event-consumer timing.
 
-1. acquires a Location-wide semaphore
-2. drains pending activation requests
-3. runs the complete model step while retaining the semaphore
-4. releases the semaphore after provider streaming and owned tool settlement
+`SessionRunnerLLM` calls `plugins.flush` immediately before selected-agent resolution. It does not retain the activation semaphore during model resolution, hooks, streaming, or tool execution.
 
-This prevents plugin scope replacement from invalidating tool identities during a step.
+The OpenAI and OpenCode provider plugins await their initial refresh because completed initial activation must include its first catalog-discovery attempt. The complete OpenCode discovery operation, including credential resolution, has a 10-second timeout and no retry. Errors are logged and remote providers remain absent until a later connection refresh.
 
-The OpenAI and OpenCode provider plugins now await their initial refresh because a completed generation must contain the initial catalog required for Session model resolution. The OpenCode config request has a 10-second timeout and no retry. Errors are logged and remote providers remain absent.
-
-`PluginSupervisorNode` is not a new runtime module. The existing node definition was moved out of `location-services.ts` so both the Location graph and `SessionRunnerLLM.node` can depend on it without a module import cycle.
+`PluginSupervisorNode` is not a new runtime module. The existing node definition moved out of `location-services.ts` so both the Location graph and `SessionRunnerLLM.node` can depend on it without a module import cycle.
 
 ## Current Strengths
 
 - The initial empty-generation race is closed.
-- Config and SDK updates ordered before synchronization begins are applied.
+- Config and SDK revisions visible when `flush` begins are applied.
 - Missing selected agents fail before model execution.
 - Location acquisition and TUI startup remain progressive.
 - The revision accounting is localized in the supervisor.
@@ -279,14 +267,14 @@ The supervisor interface has one operation:
 ```ts
 export interface PluginSupervisor {
   /** Apply at least every activation request observed when this Effect begins. */
-  readonly synchronize: Effect.Effect<void>
+  readonly flush: Effect.Effect<void>
 }
 ```
 
 Session execution uses it immediately before authoritative agent resolution:
 
 ```ts
-yield * plugins.synchronize
+yield * plugins.flush
 
 const agent = yield * agents.select(session.agent)
 if (!agent.info) {
@@ -302,34 +290,34 @@ if (!agent.info) {
 // Existing live state and reload semantics apply from here onward.
 ```
 
-Each call to `synchronize`:
+Each call to `flush`:
 
-1. Captures `target = requested` when the Effect begins, before waiting for the semaphore.
+1. Captures `{ config: Config.revision(), sdk: SdkPlugins.revision() }` when the Effect begins.
 2. Acquires the per-Location activation semaphore.
-3. If `applied < target`, plans and activates from the current stores once, recording the target covered by that activation.
-4. Releases the semaphore when `applied >= target`.
+3. If the applied revision pair does not cover the target, plans and activates from the current stores once.
+4. Records the target pair and releases the semaphore.
 
-The implementation may activate a source state newer than `target` because Config and SDK stores mutate before publishing their update event. That is valid: `target` is a minimum required revision, not an exact generation.
+The activation may include source state newer than the captured target. That is valid: `flush` promises a minimum revision pair, not an exact snapshot.
 
-Background activation follows the same fixed-target rule. Each event handler captures one target before waiting for the permit, applies through that target, and releases. It must not use a moving `while (applied < requested)` drain that can monopolize the semaphore indefinitely.
+Background activation consumes the public event Stream only as a wake-up signal. Each event handler captures the current source revisions and applies through that fixed pair. Correctness never depends on Stream delivery timing.
 
 ### Readiness linearization
 
 ```text
-update publication    -> requested increments synchronously
-synchronize begins    -> target = requested
-activation commit     -> applied advances to that activation's target
-barrier returns       -> applied >= target
+source commit       -> mutate source and increment its revision
+flush begins        -> capture Config and SDK revision pair
+activation commit   -> record the pair covered by activation
+barrier returns     -> applied pair covers captured pair
 ```
 
-Updates ordered before target capture are required. Updates ordered afterward are not required for that wait, but may be coalesced because Config and SDK stores mutate before their update events publish. The barrier promises a minimum revision, not an exact snapshot.
+Updates committed before target capture are required. Updates committed afterward are not required for that wait, but may be coalesced by reading current source state.
 
 This closes the issue's ordering paths:
 
-- A fresh Location has initial `requested = 1`; the first Session waits for activation.
+- A fresh Location has no applied pair, so the first Session activates before resolving its agent.
 - A reopened Location after eviction has a new supervisor and the same initial barrier.
-- SDK or Config publication increments `requested` synchronously before the publisher returns, so a later barrier captures it.
-- Continuous later updates cannot move an already captured completion target.
+- SDK registration and Config snapshot commits increment their source revision before publishing wake-up events.
+- Continuous later updates cannot move an already captured target pair.
 
 ### No protected preparation callback
 
@@ -436,10 +424,10 @@ Architecturally simple, but removes existing live SDK/plugin-topology reload and
 ## Migration From PR #35755
 
 1. Remove `withGeneration` and the whole-attempt wrapper.
-2. Keep `synchronize` as the V2 interface; retain `ready` only as a deprecated V1 compatibility alias until V1 is removed.
+2. Keep `flush` as the sole interface operation.
 3. Capture a fixed target when each synchronization or background reload Effect begins.
 4. Change activation to apply through that target rather than drain a moving `requested` value.
-5. Await `plugins.synchronize` immediately before selected-agent resolution in each model request path.
+5. Await `plugins.flush` immediately before selected-agent resolution in each model request path.
 6. Keep typed missing-agent failure.
 7. Bound the complete initial OpenCode provider discovery operation.
 8. Revert runner changes added only to accommodate unavailable-tool continuation if they are unrelated to readiness.

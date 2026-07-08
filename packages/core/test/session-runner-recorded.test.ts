@@ -77,11 +77,11 @@ const instructionContext = Layer.mock(InstructionDiscovery.Service, { load: () =
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
-const pluginSupervisor = Layer.succeed(
-  PluginSupervisor.Service,
-  PluginSupervisor.Service.of({ synchronize: Effect.void, ready: Effect.void }),
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({ revision: () => 0, entries: () => Effect.succeed([]) }),
 )
+const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],

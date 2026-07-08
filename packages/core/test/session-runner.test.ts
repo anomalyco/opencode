@@ -295,6 +295,7 @@ const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
+    revision: () => 0,
     entries: () =>
       Effect.succeed([
         new Config.Document({
@@ -309,12 +310,11 @@ const config = Layer.succeed(
       ]),
   }),
 )
-let pluginSyncHook = Effect.void
+let pluginFlushHook = Effect.void
 const pluginSupervisor = Layer.succeed(
   PluginSupervisor.Service,
   PluginSupervisor.Service.of({
-    synchronize: Effect.suspend(() => pluginSyncHook),
-    ready: Effect.suspend(() => pluginSyncHook),
+    flush: Effect.suspend(() => pluginFlushHook),
   }),
 )
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
@@ -423,7 +423,7 @@ const setup = Effect.gen(function* () {
   systemUnavailable = false
   systemLoadHook = Effect.void
   modelResolveHook = Effect.void
-  pluginSyncHook = Effect.void
+  pluginFlushHook = Effect.void
   currentModel = model
   skillBaselines.clear()
   responses = undefined
@@ -1129,7 +1129,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const release = yield* Deferred.make<void>()
-      pluginSyncHook = Deferred.await(release)
+      pluginFlushHook = Deferred.await(release)
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Wait for plugins" }), resume: false })
 

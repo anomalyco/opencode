@@ -54,7 +54,7 @@ describe("LocationServiceMap", () => {
           const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           const read = Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.synchronize
+            yield* supervisor.flush
             const agents = yield* AgentV2.Service
             return yield* agents.get(id)
           })
@@ -88,13 +88,13 @@ describe("LocationServiceMap", () => {
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(started)
 
-          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
             Effect.forkChild,
           )
-          expect(synchronized.pollUnsafe()).toBeUndefined()
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(release, undefined)
-          yield* Fiber.join(synchronized)
+          yield* Fiber.join(flushFiber)
 
           const explorer = yield* Effect.gen(function* () {
             const agents = yield* AgentV2.Service
@@ -108,7 +108,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("does not extend synchronization for SDK plugins registered after target capture", () =>
+  itWithSdk.live("does not extend flush for SDK plugins registered after target capture", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -132,7 +132,7 @@ describe("LocationServiceMap", () => {
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(firstStarted)
 
-          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
             Effect.forkChild({ startImmediately: true }),
           )
@@ -147,17 +147,17 @@ describe("LocationServiceMap", () => {
 
           yield* Deferred.succeed(releaseFirst, undefined)
           yield* Deferred.await(secondStarted)
-          expect(synchronized.pollUnsafe()).toBeDefined()
+          expect(flushFiber.pollUnsafe()).toBeDefined()
 
           yield* Deferred.succeed(releaseSecond, undefined)
-          yield* Fiber.join(synchronized)
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(Effect.provide(context))
+          yield* Fiber.join(flushFiber)
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
         }),
       ),
     ),
   )
 
-  itWithSdk.live("includes SDK plugins registered before synchronization begins", () =>
+  itWithSdk.live("includes SDK plugins registered before flush begins", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -193,15 +193,15 @@ describe("LocationServiceMap", () => {
             }),
           )
 
-          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
             Effect.forkChild,
           )
           yield* Deferred.succeed(releaseFirst, undefined)
           yield* Deferred.await(secondStarted)
-          expect(synchronized.pollUnsafe()).toBeUndefined()
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(releaseSecond, undefined)
-          yield* Fiber.join(synchronized)
+          yield* Fiber.join(flushFiber)
 
           const second = yield* AgentV2.Service.use((agents) => agents.get(AgentV2.ID.make("second-sdk-agent"))).pipe(
             Effect.provide(context),
@@ -212,7 +212,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("includes config updates published before synchronization begins", () =>
+  itWithSdk.live("includes config updates published before flush begins", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -220,6 +220,8 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const activations = { count: 0 }
+          const file = path.join(dir.path, "opencode.json")
+          yield* Effect.promise(() => fs.writeFile(file, "{}"))
           const firstStarted = yield* Deferred.make<void>()
           const releaseFirst = yield* Deferred.make<void>()
           const secondStarted = yield* Deferred.make<void>()
@@ -244,22 +246,23 @@ describe("LocationServiceMap", () => {
           yield* Deferred.await(firstStarted)
 
           const events = yield* EventV2.Service
-          yield* events.publish(
-            Config.Event.Updated,
-            {},
-            {
-              location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
-            },
+          const updated = yield* events.subscribe(Config.Event.Updated).pipe(
+            Stream.filter((event) => event.location?.directory === dir.path),
+            Stream.runHead,
+            Effect.forkChild({ startImmediately: true }),
           )
-          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+          yield* Effect.promise(() => fs.writeFile(file, '{"model":"test/model"}'))
+          yield* Fiber.join(updated)
+
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
             Effect.forkChild,
           )
           yield* Deferred.succeed(releaseFirst, undefined)
           yield* Deferred.await(secondStarted)
-          expect(synchronized.pollUnsafe()).toBeUndefined()
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(releaseSecond, undefined)
-          yield* Fiber.join(synchronized)
+          yield* Fiber.join(flushFiber)
           expect(activations.count).toBe(2)
         }),
       ),
@@ -278,7 +281,7 @@ describe("LocationServiceMap", () => {
           )
           const plugins = yield* Effect.gen(function* () {
             const plugins = yield* PluginV2.Service
-            yield* (yield* PluginSupervisor.Service).synchronize
+            yield* (yield* PluginSupervisor.Service).flush
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
@@ -305,7 +308,7 @@ describe("LocationServiceMap", () => {
           yield* Effect.gen(function* () {
             const registry = yield* PluginV2.Service
             const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.synchronize
+            yield* supervisor.flush
             expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
 
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.command"] })))

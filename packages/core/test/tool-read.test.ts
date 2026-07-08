@@ -101,7 +101,10 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({ revision: () => 0, entries: () => Effect.succeed(configEntries) }),
+)
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 const testFileSystem = Layer.effect(
   FSUtil.Service,

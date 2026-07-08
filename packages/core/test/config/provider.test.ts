@@ -55,6 +55,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = ProviderV2.ID.opencode
       const modelID = ModelV2.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
+        revision: () => 0,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -107,6 +108,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = ProviderV2.ID.opencode
       const modelID = ModelV2.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
+        revision: () => 0,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -155,6 +157,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         const providerID = ProviderV2.ID.make("custom")
         const modelID = ModelV2.ID.make("chat")
         const config = Config.Service.of({
+          revision: () => 0,
           entries: () =>
             Effect.succeed([
               new Config.Document({

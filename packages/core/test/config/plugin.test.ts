@@ -229,7 +229,7 @@ describe("PluginSupervisor config", () => {
 
 const ready = Effect.fnUntraced(function* () {
   const supervisor = yield* PluginSupervisor.Service
-  yield* supervisor.synchronize
+  yield* supervisor.flush
 })
 
 function withLocation<A, E, R>(
