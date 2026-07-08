@@ -309,9 +309,11 @@ describe("Project.fromDirectory with worktrees", () => {
 
       const result = yield* project.fromDirectory(worktreePath)
 
-      expect(result.project.worktree).toBe(worktreePath)
+      // The opened directory stays the instance sandbox, but the project is
+      // rooted at the main checkout derived from the git common dir.
+      expect(result.project.worktree).toBe(tmp)
       expect(result.sandbox).toBe(worktreePath)
-      expect(result.project.sandboxes).not.toContain(worktreePath)
+      expect(result.project.sandboxes).toContain(worktreePath)
       expect(result.project.sandboxes).not.toContain(tmp)
     }),
   )
@@ -395,7 +397,8 @@ describe("Project.fromDirectory with worktrees", () => {
       yield* project.fromDirectory(worktree1)
       const result = yield* project.fromDirectory(worktree2)
 
-      expect(result.project.worktree).toBe(worktree1)
+      expect(result.project.worktree).toBe(tmp)
+      expect(result.project.sandboxes).toContain(worktree1)
       expect(result.project.sandboxes).toContain(worktree2)
       expect(result.project.sandboxes).not.toContain(tmp)
     }),

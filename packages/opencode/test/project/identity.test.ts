@@ -19,6 +19,7 @@ import { testEffect } from "../lib/effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/core/global"
 
 const projectTestNode = LayerNode.group([Project.node, Database.node, CrossSpawnSpawner.node])
 const it = testEffect(AppNodeBuilder.build(projectTestNode))
@@ -79,13 +80,19 @@ function seedSession(opts: { id: SessionID; dir: string; project: ProjectV2.ID }
   )
 }
 
-function seedWorkspace(opts: { id: WorkspaceV2.ID; project: ProjectV2.ID }) {
+function seedWorkspace(opts: { id: WorkspaceV2.ID; project: ProjectV2.ID; dir?: string }) {
   return Database.Service.use(({ db }) =>
     db
       .insert(WorkspaceTable)
-      .values({ id: opts.id, type: "local", name: "test", project_id: opts.project })
+      .values({ id: opts.id, type: "local", name: "test", project_id: opts.project, directory: opts.dir })
       .run()
       .pipe(Effect.orDie),
+  )
+}
+
+function workspaceRow(id: WorkspaceV2.ID) {
+  return Database.Service.use(({ db }) =>
+    db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie),
   )
 }
 
@@ -211,6 +218,34 @@ describe("Project identity minting", () => {
     }),
   )
 
+  it.live("repo first contacted through a linked worktree roots at the main checkout", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      yield* addRemote(tmp)
+      const worktreePath = path.join(tmp, "..", path.basename(tmp) + "-first-wt")
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`git worktree remove --force ${worktreePath}`.cwd(tmp).quiet().catch(() => {})),
+      )
+      yield* Effect.promise(() => $`git worktree add ${worktreePath} -b first-contact-${Date.now()}`.cwd(tmp).quiet())
+
+      // First contact via the worktree, never the root: the project must be
+      // rooted at the main checkout, not at the worktree path.
+      const viaWorktree = yield* project.fromDirectory(worktreePath)
+
+      expect(viaWorktree.project.id).toMatch(UUID_RE)
+      expect(viaWorktree.project.worktree).toBe(tmp)
+      expect(viaWorktree.project.sandboxes).toContain(viaWorktree.sandbox)
+      expect(viaWorktree.project.sandboxes).not.toContain(tmp)
+
+      const viaRoot = yield* project.fromDirectory(tmp)
+
+      expect(viaRoot.project.id).toBe(viaWorktree.project.id)
+      expect(viaRoot.project.worktree).toBe(tmp)
+      expect(yield* projectCount()).toBe(1)
+    }),
+  )
+
   it.live("empty repo without a remote stays global", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
@@ -238,6 +273,12 @@ describe("Project identity migration", () => {
       const workspaceID = WorkspaceV2.ID.ascending()
       yield* seedWorkspace({ id: workspaceID, project: legacyRemoteID })
 
+      // A session running inside a managed worktree references the storage
+      // path keyed by the legacy id; it must follow the storage re-key.
+      const managedID = crypto.randomUUID() as SessionID
+      const managedDir = path.join(Global.Path.data, "worktree", legacyRemoteID, "wt1")
+      yield* seedSession({ id: managedID, dir: managedDir, project: legacyRemoteID })
+
       const result = yield* project.fromDirectory(tmp)
 
       expect(result.project.id).toMatch(UUID_RE)
@@ -247,6 +288,10 @@ describe("Project identity migration", () => {
         db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie),
       )
       expect(workspace?.project_id).toBe(result.project.id)
+      const managed = yield* Database.Service.use(({ db }) =>
+        db.select().from(SessionTable).where(eq(SessionTable.id, managedID)).get().pipe(Effect.orDie),
+      )
+      expect(managed?.directory).toBe(path.join(Global.Path.data, "worktree", result.project.id, "wt1"))
       const file = yield* readIdentityFile(tmp)
       expect(file).toEqual({ version: 1, repoID: result.project.id })
 
@@ -272,6 +317,8 @@ describe("Project identity migration", () => {
       const sessionB = crypto.randomUUID() as SessionID
       yield* seedSession({ id: sessionA, dir: a, project: legacyRemoteID })
       yield* seedSession({ id: sessionB, dir: b, project: legacyRemoteID })
+      const workspaceB = WorkspaceV2.ID.ascending()
+      yield* seedWorkspace({ id: workspaceB, project: legacyRemoteID, dir: b })
 
       const first = yield* project.fromDirectory(a)
 
@@ -287,6 +334,9 @@ describe("Project identity migration", () => {
       expect(second.project.worktree).toBe(b)
       expect(yield* sessionProject(sessionA)).toBe(first.project.id)
       expect(yield* sessionProject(sessionB)).toBe(second.project.id)
+      // Workspaces recorded at the sibling's directory follow it too, not
+      // just sessions.
+      expect((yield* workspaceRow(workspaceB))?.project_id).toBe(second.project.id)
       expect(yield* projectCount()).toBe(2)
     }),
   )

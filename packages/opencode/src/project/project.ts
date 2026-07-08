@@ -213,17 +213,22 @@ const layer = Layer.effect(
             .rename(path.join(Global.Path.data, store, oldID), path.join(Global.Path.data, store, newID))
             .pipe(Effect.ignore)
         }
+        // Sessions and workspaces that run inside managed worktrees reference
+        // the renamed storage path in their directory column; rewrite them or
+        // they point at a dead path after the move above.
+        yield* rewriteDirectories(
+          newID,
+          path.join(Global.Path.data, "worktree", oldID),
+          path.join(Global.Path.data, "worktree", newID),
+        )
       }
     })
 
-    // When a project's worktree moved on disk (old path dead), sessions and
-    // workspaces recorded at or under the old path follow it: their directory
-    // doubles as the runtime cwd, so leaving the dead path makes them fail
-    // every prompt with ENOENT. The snapshot store is keyed by a hash of the
-    // worktree path and is carried over for the same reason. Copies and
-    // sibling clones never reach this path — it only runs when the previous
-    // worktree no longer exists.
-    const rehomeDirectories = Effect.fn("Project.rehomeDirectories")(function* (
+    // Rewrites session and workspace directories recorded at or under `from`
+    // to the corresponding path under `to`, scoped to one project. The
+    // directory column doubles as the runtime cwd, so rows left pointing at a
+    // dead path fail every prompt with ENOENT.
+    const rewriteDirectories = Effect.fn("Project.rewriteDirectories")(function* (
       id: ProjectV2.ID,
       from: string,
       to: string,
@@ -265,6 +270,19 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }
+    })
+
+    // When a project's worktree moved on disk (old path dead), everything
+    // recorded at or under the old path follows it. The snapshot store is
+    // keyed by a hash of the worktree path and is carried over for the same
+    // reason. Copies and sibling clones never reach this path — it only runs
+    // when the previous worktree no longer exists.
+    const rehomeDirectories = Effect.fn("Project.rehomeDirectories")(function* (
+      id: ProjectV2.ID,
+      from: string,
+      to: string,
+    ) {
+      yield* rewriteDirectories(id, from, to)
 
       yield* fs
         .rename(
@@ -296,7 +314,16 @@ const layer = Layer.effect(
       yield* Effect.logInfo("fromDirectory", { directory })
 
       const data = yield* projectV2.resolve(AbsolutePath.make(directory))
-      const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
+      // A linked worktree's project is rooted at the main checkout, derived
+      // from the git common dir. Without this, a repo first contacted through
+      // one of its worktrees (e.g. a managed workspace reclaimed after the
+      // legacy-id split) would adopt the worktree path as its permanent
+      // worktree and later file its real root as a sandbox of itself.
+      const mainRoot =
+        data.vcs?.type === "git" && path.basename(data.vcs.store) === ".git"
+          ? path.dirname(data.vcs.store)
+          : data.directory
+      const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : mainRoot
 
       // Phase 2: upsert
       const resolvedID = ProjectV2.ID.make(data.id)
@@ -316,7 +343,7 @@ const layer = Layer.effect(
           // identity landed in the cache file.
           const settled = yield* projectV2.resolve(AbsolutePath.make(directory))
           projectID = ProjectV2.isStableID(settled.id) ? ProjectV2.ID.make(settled.id) : minted
-          yield* migrateProjectId(resolvedID, projectID, data.directory)
+          yield* migrateProjectId(resolvedID, projectID, mainRoot)
         }
       }
       if (projectID === resolvedID) {
@@ -329,7 +356,7 @@ const layer = Layer.effect(
         )
       } else if (data.previous && data.previous !== resolvedID) {
         // Stale cached ids from older schemes follow the mint as well.
-        yield* migrateProjectId(ProjectV2.ID.make(data.previous), projectID, data.directory)
+        yield* migrateProjectId(ProjectV2.ID.make(data.previous), projectID, mainRoot)
       }
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
@@ -413,15 +440,23 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
 
       if (projectID !== ProjectV2.ID.global) {
-        // Adopt sessions recorded against this exact directory, wherever they
-        // are currently parented: global sessions created before the project
-        // existed, and sessions carried off by a sibling clone that shared a
-        // legacy id (whole-project migration moves them in bulk; each clone
-        // reclaims its own directory's sessions when it is next opened).
+        // Adopt sessions and workspaces recorded against this exact
+        // directory, wherever they are currently parented: global sessions
+        // created before the project existed, and rows carried off by a
+        // sibling clone that shared a legacy id (whole-project migration
+        // moves them in bulk; each clone reclaims its own directory's rows
+        // when it is next opened). Exact match only — a nested checkout's
+        // rows must stay with the nested project.
         yield* db
           .update(SessionTable)
           .set({ project_id: projectID })
           .where(and(ne(SessionTable.project_id, projectID), eq(SessionTable.directory, data.directory)))
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(WorkspaceTable)
+          .set({ project_id: projectID })
+          .where(and(ne(WorkspaceTable.project_id, projectID), eq(WorkspaceTable.directory, data.directory)))
           .run()
           .pipe(Effect.orDie)
       }
