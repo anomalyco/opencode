@@ -1143,10 +1143,16 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean }) {
         href={language.route(`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`)}
         data-active={props.active ? "true" : undefined}
       >
-        <span>{String(props.peer.rank).padStart(2, "0")}</span>
-        <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
-        <strong>{props.peer.model}</strong>
-        <em>{props.peer.author}</em>
+        <span data-slot="model-peer-rank" aria-label={props.active ? `Rank ${props.peer.rank}` : undefined}>
+          <Show when={!props.active}>{String(props.peer.rank).padStart(2, "0")}</Show>
+        </span>
+        <span data-slot="model-peer-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
+        </span>
+        <span data-slot="model-peer-copy">
+          <strong>{props.peer.model}</strong>
+          <em>{props.peer.author}</em>
+        </span>
         <b>{formatTokens(props.peer.tokens)}</b>
       </a>
     </li>
