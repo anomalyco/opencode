@@ -117,7 +117,6 @@ function resourceMcpLayer(url: string) {
         Layer.succeed(
           Config.Service,
           Config.Service.of({
-            revision: () => 0,
             entries: () =>
               Effect.succeed([
                 new Config.Document({

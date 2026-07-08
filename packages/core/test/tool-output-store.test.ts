@@ -26,7 +26,6 @@ const withStore = <A, E, R>(
         ? Layer.succeed(
             Config.Service,
             Config.Service.of({
-              revision: () => 0,
               entries: () => Effect.succeed([new Config.Document({ type: "document", info: config })]),
             }),
           )

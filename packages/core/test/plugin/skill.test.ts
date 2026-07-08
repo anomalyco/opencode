@@ -28,10 +28,7 @@ describe("SkillPlugin.Plugin", () => {
           },
         }),
       ).pipe(
-        Effect.provideService(
-          Config.Service,
-          Config.Service.of({ revision: () => 0, entries: () => Effect.succeed([]) }),
-        ),
+        Effect.provideService(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) })),
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),

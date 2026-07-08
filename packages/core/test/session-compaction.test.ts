@@ -37,7 +37,7 @@ const client = Layer.mock(LLMClient.Service)({
   },
   generate: () => Effect.die("unused"),
 })
-const config = Layer.mock(Config.Service)({ revision: () => 0, entries: () => Effect.succeed([]) })
+const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () => Effect.succeed(SessionRunnerModel.resolved(model)),
 })

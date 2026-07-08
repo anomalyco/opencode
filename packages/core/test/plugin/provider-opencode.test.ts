@@ -31,6 +31,20 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
+function eventually<A>(
+  effect: Effect.Effect<A>,
+  predicate: (value: A) => boolean,
+  remaining = 1000,
+): Effect.Effect<A, Error> {
+  return Effect.gen(function* () {
+    const value = yield* effect
+    if (predicate(value)) return value
+    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
+    yield* Effect.promise(() => Bun.sleep(1))
+    return yield* eventually(effect, predicate, remaining - 1)
+  })
+}
+
 function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
@@ -155,10 +169,16 @@ describe("OpencodePlugin", () => {
             }),
           })
 
-          release()
           yield* addPlugin()
+          expect(authorization).toEqual([])
+          release()
 
-          const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("remote")))
+          const provider = required(
+            yield* eventually(
+              catalog.provider.get(ProviderV2.ID.make("remote")),
+              (item) => item?.integrationID === Integration.ID.make("opencode"),
+            ),
+          )
           expect(provider).toMatchObject({
             name: "Remote",
             integrationID: "opencode",

@@ -86,15 +86,12 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
       connected = connection !== undefined
-      providers = connection
-        ? yield* Effect.gen(function* () {
-            const credential = yield* ctx.integration.connection
-              .resolve(connection)
-              .pipe(Effect.catch(() => Effect.succeed(undefined)))
-            return credential ? yield* fetchProviders(http, credential) : undefined
-          }).pipe(
-            Effect.timeout("10 seconds"),
+      providers = credential
+        ? yield* fetchProviders(http, credential).pipe(
             Effect.catch((cause) =>
               Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
             ),
@@ -190,7 +187,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh()
+    yield* refresh().pipe(Effect.forkScoped)
   }),
 })
 

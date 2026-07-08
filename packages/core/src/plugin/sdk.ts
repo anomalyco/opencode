@@ -21,7 +21,6 @@ export const Updated = EventV2.ephemeral({ type: "sdk.plugin.updated", schema: {
 export interface Interface {
   readonly register: (plugin: Plugin) => Effect.Effect<void>
   readonly all: () => readonly Plugin[]
-  readonly revision: () => number
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SdkPlugins") {}
@@ -31,15 +30,12 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const plugins = new Map<string, Plugin>()
-    let revision = 0
     return Service.of({
       register: (plugin) =>
         Effect.sync(() => {
           plugins.set(plugin.id, plugin)
-          revision++
         }).pipe(Effect.andThen(events.publish(Updated, {})), Effect.asVoid),
       all: () => [...plugins.values()],
-      revision: () => revision,
     })
   }),
 )

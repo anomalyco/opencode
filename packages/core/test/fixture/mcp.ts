@@ -19,10 +19,7 @@ export const emptyMcpLayer = Layer.succeed(
   }),
 )
 
-export const emptyConfigLayer = Layer.succeed(
-  Config.Service,
-  Config.Service.of({ revision: () => 0, entries: () => Effect.succeed([]) }),
-)
+export const emptyConfigLayer = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 
 export const testLocationLayer = Layer.succeed(
   Location.Service,

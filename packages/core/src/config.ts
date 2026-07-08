@@ -130,8 +130,6 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and supplemental directories from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
-  /** Monotonically increases whenever entries commit a new discovered snapshot. */
-  readonly revision: () => number
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Config") {}
@@ -210,7 +208,6 @@ const layer = Layer.effect(
 
     const initial = yield* discover()
     let configs = initial.entries
-    let revision = 0
     const updates = yield* PubSub.unbounded<Watcher.Update>()
     const subscriptions = new Map<string, Effect.Effect<unknown>>()
     const targets = (snapshot: typeof initial) => [
@@ -241,11 +238,8 @@ const layer = Layer.effect(
       Stream.runForEach((update) =>
         Effect.gen(function* () {
           const next = yield* discover()
+          configs = next.entries
           yield* reconcile(next)
-          yield* Effect.sync(() => {
-            configs = next.entries
-            revision++
-          })
           yield* events.publish(ConfigSchema.Event.Updated, {})
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload config", { path: update.path, cause }))),
       ),
@@ -257,7 +251,6 @@ const layer = Layer.effect(
       entries: Effect.fn("Config.entries")(function* () {
         return configs
       }),
-      revision: () => revision,
     })
   }),
 )

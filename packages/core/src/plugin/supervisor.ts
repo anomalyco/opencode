@@ -2,7 +2,7 @@ export * as PluginSupervisor from "./supervisor"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Effect, Fiber, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Config } from "../config"
@@ -245,13 +245,8 @@ const resolvePackageEntrypoint = Effect.fnUntraced(function* (fs: FSUtil.Interfa
   }).pipe(Effect.map((items) => items.find((item): item is string => item !== undefined)))
 })
 
-type Revision = {
-  readonly config: number
-  readonly sdk: number
-}
-
 export interface Interface {
-  /** Apply at least every Config and SDK plugin revision observed when this Effect begins. */
+  /** Wait for the initial plugin generation and startup updates to settle. */
   readonly flush: Effect.Effect<void>
 }
 
@@ -264,41 +259,57 @@ const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
     const events = yield* EventV2.Service
-    const runActivation = yield* FiberSet.makeRuntime<never, void>()
     const lock = Semaphore.makeUnsafe(1)
-    const target = (): Revision => ({ config: config.revision(), sdk: sdk.revision() })
-    let applied: Revision | undefined
-    const activateThrough = Effect.fn("PluginSupervisor.activateThrough")(function* (target: Revision) {
-      if (applied && applied.config >= target.config && applied.sdk >= target.sdk) return
-      // Resolve OpenCode's internal plugins with their privileged Location services.
-      const internal = yield* PluginInternal.list()
-      // Combine internal plugins with host-contributed SDK plugins in boot order.
-      const pre = [...internal.pre, ...sdk.all()]
-      const operations = yield* scan(yield* config.entries())
-      // Apply config operations and load enabled package plugins into one ordered generation.
-      const plugins = yield* resolve(pre, internal.post, operations)
-      // Replace the active generation in one scoped, batched activation.
-      yield* registry.activate(plugins, { force: applied !== undefined })
-      applied = target
+    const ready = yield* Deferred.make<void>()
+    let observed = 0
+    let applied = -1
+
+    const activate = Effect.fn("PluginSupervisor.activate")(function* (target: number) {
+      yield* lock.withPermit(
+        Effect.gen(function* () {
+          if (applied >= target) return
+          // Resolve OpenCode's internal plugins with their privileged Location services.
+          const internal = yield* PluginInternal.list()
+          // Combine internal plugins with host-contributed SDK plugins in boot order.
+          const pre = [...internal.pre, ...sdk.all()]
+          const operations = yield* scan(yield* config.entries())
+          // Apply config operations and load enabled package plugins into one ordered generation.
+          const plugins = yield* resolve(pre, internal.post, operations)
+          // Replace the active generation in one scoped, batched activation.
+          yield* registry.activate(plugins)
+          applied = target
+        }),
+      )
     })
-    const activateTarget = Effect.fn("PluginSupervisor.activateTarget")((target: Revision) =>
-      lock.withPermit(activateThrough(target)),
-    )
-    const reload = Effect.suspend(() => activateTarget(target()))
-    yield* events.subscribe([Event.Updated, SdkPlugins.Updated]).pipe(
-      Stream.runForEach(() =>
-        reload.pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
+    const updates = yield* events
+      .subscribe([Event.Updated, SdkPlugins.Updated])
+      .pipe(Stream.toQueue({ capacity: "unbounded" }))
+    const signals = yield* Stream.concat(
+      Stream.succeed(0),
+      Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
+    ).pipe(Stream.broadcast({ capacity: "unbounded", replay: 1 }))
+    const attempt = (target: number) =>
+      activate(target).pipe(
+        Effect.map(() => observed === target),
+        Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }).pipe(Effect.as(false))),
+      )
+
+    yield* signals.pipe(
+      Stream.runForEach((target) =>
+        activate(target).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* reload.pipe(Effect.withSpan("PluginSupervisor.boot"), Effect.forkScoped({ startImmediately: true }))
-    const context = yield* Effect.context<Effect.Services<ReturnType<typeof activateTarget>>>()
-    const flush = Effect.suspend(() => {
-      const revision = target()
-      const activation = activateTarget(revision).pipe(Effect.provideContext(context))
-      return Fiber.join(runActivation(activation))
-    })
-    return Service.of({ flush })
+    yield* signals.pipe(
+      Stream.debounce("100 millis"),
+      Stream.mapEffect(attempt),
+      Stream.filter((settled) => settled),
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.andThen(Deferred.succeed(ready, undefined)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    return Service.of({ flush: Deferred.await(ready) })
   }),
 )
 

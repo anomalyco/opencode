@@ -108,7 +108,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("does not extend flush for SDK plugins registered after target capture", () =>
+  itWithSdk.live("reruns activation for SDK plugins registered during startup", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -147,17 +147,16 @@ describe("LocationServiceMap", () => {
 
           yield* Deferred.succeed(releaseFirst, undefined)
           yield* Deferred.await(secondStarted)
-          expect(flushFiber.pollUnsafe()).toBeDefined()
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
 
           yield* Deferred.succeed(releaseSecond, undefined)
           yield* Fiber.join(flushFiber)
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
         }),
       ),
     ),
   )
 
-  itWithSdk.live("includes SDK plugins registered before flush begins", () =>
+  itWithSdk.live("keeps flush open after initial readiness completes", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -202,6 +201,10 @@ describe("LocationServiceMap", () => {
           expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(releaseSecond, undefined)
           yield* Fiber.join(flushFiber)
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+            Effect.provide(context),
+            Effect.timeout("1 second"),
+          )
 
           const second = yield* AgentV2.Service.use((agents) => agents.get(AgentV2.ID.make("second-sdk-agent"))).pipe(
             Effect.provide(context),
@@ -212,7 +215,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("includes config updates published before flush begins", () =>
+  itWithSdk.live("reruns activation for Config updates during startup", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -251,7 +254,12 @@ describe("LocationServiceMap", () => {
             Stream.runHead,
             Effect.forkChild({ startImmediately: true }),
           )
-          yield* Effect.promise(() => fs.writeFile(file, '{"model":"test/model"}'))
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              file,
+              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect-plugin.ts")] }),
+            ),
+          )
           yield* Fiber.join(updated)
 
           const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
@@ -264,6 +272,113 @@ describe("LocationServiceMap", () => {
           yield* Deferred.succeed(releaseSecond, undefined)
           yield* Fiber.join(flushFiber)
           expect(activations.count).toBe(2)
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("keeps flush pending while startup updates continue", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+            Effect.provide(context),
+            Effect.forkChild({ startImmediately: true }),
+          )
+          const events = yield* EventV2.Service
+
+          yield* Effect.forEach(
+            Array.from({ length: 5 }),
+            () => events.publish(SdkPlugins.Updated, {}).pipe(Effect.andThen(Effect.sleep("50 millis"))),
+            { discard: true },
+          )
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
+          yield* Fiber.join(flushFiber)
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("keeps flush open while later hot reload runs", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
+
+          const started = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const completed = yield* Deferred.make<void>()
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "post-ready-plugin",
+              effect: () =>
+                Deferred.succeed(started, undefined).pipe(
+                  Effect.andThen(Deferred.await(release)),
+                  Effect.andThen(Deferred.succeed(completed, undefined)),
+                ),
+            }),
+          )
+          yield* Deferred.await(started)
+
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+            Effect.provide(context),
+            Effect.timeout("1 second"),
+          )
+          yield* Deferred.succeed(release, undefined)
+          yield* Deferred.await(completed)
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("does not cancel activation when a flush waiter is interrupted", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const started = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const completed = yield* Deferred.make<void>()
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "interrupted-waiter-plugin",
+              effect: () =>
+                Deferred.succeed(started, undefined).pipe(
+                  Effect.andThen(Deferred.await(release)),
+                  Effect.andThen(Deferred.succeed(completed, undefined)),
+                ),
+            }),
+          )
+
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+          yield* Deferred.await(started)
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+            Effect.provide(context),
+            Effect.forkChild({ startImmediately: true }),
+          )
+          yield* Fiber.interrupt(flushFiber)
+
+          yield* Deferred.succeed(release, undefined)
+          yield* Deferred.await(completed)
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+            Effect.provide(context),
+            Effect.timeout("500 millis"),
+          )
         }),
       ),
     ),

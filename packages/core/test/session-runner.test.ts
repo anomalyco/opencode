@@ -295,7 +295,6 @@ const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
-    revision: () => 0,
     entries: () =>
       Effect.succeed([
         new Config.Document({
@@ -1125,7 +1124,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("waits for plugin synchronization before constructing the model request", () =>
+  it.effect("waits for initial plugin readiness before constructing the model request", () =>
     Effect.gen(function* () {
       yield* setup
       const release = yield* Deferred.make<void>()

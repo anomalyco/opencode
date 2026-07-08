@@ -209,7 +209,7 @@ export const OpenAIPlugin = define({
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh()
+    yield* refresh().pipe(Effect.forkScoped)
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
