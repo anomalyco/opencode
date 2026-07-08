@@ -6,7 +6,6 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { NewSessionDesignView } from "@/components/session"
 import { PromptInput } from "@/components/prompt-input"
 import { StatusPopoverV2 } from "@/components/status-popover"
-import { useSettingsCommand } from "@/components/settings-dialog"
 import {
   PromptProjectAddButton,
   PromptProjectSelector,
@@ -45,7 +44,6 @@ export default function NewSessionPage() {
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
 
   useComposerCommands()
-  useSettingsCommand()
 
   let inputRef: HTMLDivElement | undefined
 
