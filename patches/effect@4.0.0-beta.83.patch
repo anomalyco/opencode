@@ -1,3 +1,23 @@
+diff --git a/node_modules/effect/.bun-tag-5b59820d26c13f3c b/.bun-tag-5b59820d26c13f3c
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/internal/effect.js b/dist/internal/effect.js
+index 052c8e0ad2ff8007f4fc828dd577ff78e0129b10..89e9390d67c11ffa5e14b377b81e28c9e5b1b6f7 100644
+--- a/dist/internal/effect.js
++++ b/dist/internal/effect.js
+@@ -720,7 +720,11 @@ const callbackOptions = /*#__PURE__*/makePrimitive({
+       if (resumed) return;
+       resumed = true;
+       if (yielded) {
+-        fiber.evaluate(effect);
++        // fix(run-init-deadlock): resume via the fiber's own dispatcher instead of
++        // re-entering runLoop inline on the completer's stack. Inline resume builds a
++        // nested tower under startImmediately forks; a second re-entry then strands the
++        // re-parked fiber via the runLoop re-entrancy guard (a lost wakeup).
++        fiber.currentDispatcher.scheduleTask(() => fiber.evaluate(effect), 0);
+       } else {
+         yielded = effect;
+       }
 diff --git a/dist/unstable/httpapi/HttpApiSchema.js b/dist/unstable/httpapi/HttpApiSchema.js
 index ecb6603d1ee4e89e92174b3a1100e8c9c720b3f3..08b832b6b3e9e4d10df156eca36b16f571f67f6e 100644
 --- a/dist/unstable/httpapi/HttpApiSchema.js
