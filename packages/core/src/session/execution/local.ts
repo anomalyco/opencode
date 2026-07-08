@@ -1,11 +1,15 @@
+import { sql } from "drizzle-orm"
 import { Cause, Effect, Exit, Layer } from "effect"
+import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { EventTable } from "../../event/sql"
 import { LocationServiceMap } from "../../location-service-map"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionEvent } from "../event"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
 import { SessionSchema } from "../schema"
+import { SessionExecutionRecoveryTable, SessionTable } from "../sql"
 import { SessionStore } from "../store"
 import { SessionExecution } from "../execution"
 import { toSessionError } from "../to-session-error"
@@ -19,6 +23,35 @@ export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?:
   return { type: "failed" as const, error: toSessionError(failure) }
 }
 
+export const claimSessionsInterruptedByShutdown = Effect.fn("SessionExecutionLocal.claimSessionsInterruptedByShutdown")(
+  function* (db: Database.Interface["db"]) {
+    const claimed = yield* db.all<{ sessionID: string }>(sql`
+      INSERT INTO ${SessionExecutionRecoveryTable} (session_id, interrupted_seq)
+      SELECT lifecycle.aggregate_id, lifecycle.seq
+      FROM (
+        SELECT aggregate_id, type, data,
+          seq,
+          row_number() OVER (PARTITION BY aggregate_id ORDER BY seq DESC) AS rank
+        FROM ${EventTable}
+        WHERE type IN (
+          ${EventV2.versionedType(SessionEvent.Execution.Started.type, 1)},
+          ${EventV2.versionedType(SessionEvent.Execution.Succeeded.type, 1)},
+          ${EventV2.versionedType(SessionEvent.Execution.Failed.type, 1)},
+          ${EventV2.versionedType(SessionEvent.Execution.Interrupted.type, 1)}
+        )
+      ) AS lifecycle
+      INNER JOIN ${SessionTable} ON ${SessionTable.id} = lifecycle.aggregate_id
+      WHERE lifecycle.rank = 1
+        AND lifecycle.type = ${EventV2.versionedType(SessionEvent.Execution.Interrupted.type, 1)}
+        AND json_extract(lifecycle.data, '$.reason') = 'shutdown'
+      ON CONFLICT (session_id) DO UPDATE SET interrupted_seq = excluded.interrupted_seq
+        WHERE interrupted_seq < excluded.interrupted_seq
+      RETURNING session_id AS sessionID
+    `)
+    return claimed.map((event) => SessionSchema.ID.make(event.sessionID))
+  },
+)
+
 /** Current-process routing for implicit-local Locations. Future remote placement belongs here. */
 const layer = Layer.effect(
   SessionExecution.Service,
@@ -26,6 +59,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
     const events = yield* EventV2.Service
+    const { db } = yield* Database.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -77,6 +111,20 @@ const layer = Layer.effect(
         ),
     })
 
+    const interrupted = yield* claimSessionsInterruptedByShutdown(db)
+    yield* Effect.forEach(
+      interrupted,
+      (sessionID) =>
+        coordinator.run(sessionID).pipe(
+          Effect.tapCause((cause) =>
+            Effect.logError("Failed to recover Session after shutdown", cause).pipe(Effect.annotateLogs({ sessionID })),
+          ),
+          Effect.ignore,
+          Effect.forkScoped,
+        ),
+      { discard: true },
+    )
+
     return SessionExecution.Service.of({
       active: coordinator.active,
       interrupt: (sessionID) => coordinator.interrupt(sessionID, "user"),
@@ -90,7 +138,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: SessionExecution.Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, EventV2.node],
+  deps: [SessionStore.node, LocationServiceMap.node, EventV2.node, Database.node],
 })
 
 export * as SessionExecutionLocal from "./local"
