@@ -106,7 +106,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 
 export const use = serviceUse(Service)
 
-export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const auth = yield* Auth.Service
@@ -222,10 +222,6 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
 
     return Service.of({ methods, authorize, callback })
   }),
-)
-
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Auth.node, Plugin.node] })

@@ -28,7 +28,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fo
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -192,12 +192,6 @@ export const layer = Layer.effect(
 
     return Service.of({ init, status, file })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
-  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export const node = LayerNode.make({

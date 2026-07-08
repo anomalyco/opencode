@@ -6,11 +6,13 @@ import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { useSettingsCommand } from "@/components/settings-dialog"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
   const navigate = useNavigate()
   setNavigate(navigate)
+  useSettingsCommand()
 
   createEffect(() => setV2Toast(true))
 
@@ -36,7 +38,7 @@ export default function NewLayout(props: ParentProps) {
       <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
         <Suspense>{props.children}</Suspense>
       </main>
-      {import.meta.env.DEV && <DebugBar />}
+      {import.meta.env.DEV && <DebugBar inline />}
       <HelpButton />
       <ToastRegion v2 />
     </div>

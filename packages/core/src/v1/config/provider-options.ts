@@ -42,6 +42,15 @@ const openai: Lowerer = {
   },
   request(options) {
     const result = snake(options)
+    if (options.reasoningEffort !== undefined || options.reasoningSummary !== undefined) {
+      result.reasoning = {
+        ...(isRecord(result.reasoning) ? result.reasoning : {}),
+        ...(options.reasoningEffort !== undefined ? { effort: options.reasoningEffort } : {}),
+        ...(options.reasoningSummary !== undefined ? { summary: options.reasoningSummary } : {}),
+      }
+      delete result.reasoning_effort
+      delete result.reasoning_summary
+    }
     if (options.textVerbosity !== undefined) {
       result.text = { ...(isRecord(result.text) ? result.text : {}), verbosity: options.textVerbosity }
       delete result.text_verbosity

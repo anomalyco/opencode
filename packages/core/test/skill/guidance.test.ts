@@ -2,6 +2,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SystemContext } from "@opencode-ai/core/system-context"
@@ -28,7 +29,9 @@ const denied = SkillV2.Info.make({
 })
 
 const layer = (list: () => SkillV2.Info[]) =>
-  SkillGuidance.layer.pipe(Layer.provide(Layer.mock(SkillV2.Service, { list: () => Effect.succeed(list()) })))
+  AppNodeBuilder.build(SkillGuidance.node, [
+    [SkillV2.node, Layer.mock(SkillV2.Service, { list: () => Effect.succeed(list()) })],
+  ])
 
 describe("SkillGuidance", () => {
   it.effect("renders described agent skills and reconciles the complete available list", () => {
