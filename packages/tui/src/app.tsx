@@ -48,7 +48,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogWorkspaceList } from "./component/dialog-workspace-list"
+
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -605,16 +605,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             .then(() => toast.show({ message: "Copied worktree path", variant: "info" }))
             .catch(toast.error)
           dialog.clear()
-        },
-      },
-      {
-        name: "workspace.list",
-        title: "Manage workspaces",
-        category: "Workspace",
-        hidden: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
-        slashName: "workspaces",
-        run: () => {
-          dialog.replace(() => <DialogWorkspaceList />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
