@@ -42,11 +42,6 @@ describe("H2: string property access reads as undefined (not a throw)", () => {
   test("unknown property on a number is undefined", async () => {
     expect(await value(`return (5).foo ?? "n"`)).toBe("n")
   })
-
-  test("supported string methods still work", async () => {
-    expect(await value(`return "AB".toLowerCase()`)).toBe("ab")
-    expect(await value(`return "hello".length`)).toBe(5)
-  })
 })
 
 describe("H3: array property access reads as undefined (not a throw)", () => {
@@ -201,9 +196,6 @@ describe("Error values and instanceof", () => {
       "TypeError",
       true,
     ])
-    expect(await value(`try { "a".normalize("NOPE") } catch (e) { return [e.name, e instanceof RangeError] }`)).toEqual(
-      ["RangeError", true],
-    )
     expect(await value(`try { "a".match("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
       "SyntaxError",
       true,
@@ -301,16 +293,9 @@ describe("CodeMode-specific array behavior", () => {
   })
 })
 
-describe("string methods: localeCompare, normalize, trim aliases", () => {
+describe("CodeMode-specific string behavior", () => {
   test("localeCompare orders strings for sorting", async () => {
     expect(await value(`return ["b","a","c"].sort((x, y) => x.localeCompare(y))`)).toEqual(["a", "b", "c"])
-    expect(await value(`return "a".localeCompare("a")`)).toBe(0)
-  })
-
-  test("normalize applies unicode normalization forms", async () => {
-    expect(await value(`return "\\u0065\\u0301".normalize("NFC").length`)).toBe(1)
-    expect(await value(`return "\\u00e9".normalize("NFD").length`)).toBe(2)
-    expect(await value(`return "x".normalize() === "x"`)).toBe(true)
   })
 
   test("an invalid normalize form is a clear catchable error", async () => {

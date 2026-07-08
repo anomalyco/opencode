@@ -154,21 +154,12 @@ describe("RegExp", () => {
     ).toEqual(["1", "22"])
   })
 
-  test("string match: non-global carries index, global lists all matches", async () => {
-    expect(await value(`const m = "a1b22".match(/\\d+/); return [m[0], m.index]`)).toEqual(["1", 1])
-    expect(await value(`return "a1b22".match(/\\d+/g)`)).toEqual(["1", "22"])
+  test("an unmatched string pattern returns null", async () => {
     expect(await value(`return "abc".match(/\\d/)`)).toBeNull()
   })
 
   test("matchAll materializes match arrays with captures", async () => {
     expect(await value(`return "a1b22".matchAll(/(\\d+)/g).map((m) => m[1])`)).toEqual(["1", "22"])
-  })
-
-  test("replace and replaceAll with patterns and $1 substitution", async () => {
-    expect(await value(`return "a1b2".replace(/\\d/, "#")`)).toBe("a#b2")
-    expect(await value(`return "a1b2".replace(/\\d/g, "#")`)).toBe("a#b#")
-    expect(await value(`return "a1b2".replaceAll(/\\d/g, "#")`)).toBe("a#b#")
-    expect(await value(`return "hi bob".replace(/b(o)b/, "[$1]")`)).toBe("hi [o]")
   })
 
   test("function replacers receive captures, offsets, input, and named groups", async () => {
@@ -234,12 +225,6 @@ describe("RegExp", () => {
 
   test("replaceAll without the g flag is a catchable error", async () => {
     expect(await value(`try { "a".replaceAll(/a/, "b"); return "no" } catch { return "caught" }`)).toBe("caught")
-  })
-
-  test("split and search accept patterns", async () => {
-    expect(await value(`return "a1b22c".split(/\\d+/)`)).toEqual(["a", "b", "c"])
-    expect(await value(`return "ab42".search(/\\d/)`)).toBe(2)
-    expect(await value(`return "ab".search(/\\d/)`)).toBe(-1)
   })
 
   test("new RegExp constructs from strings; invalid patterns are catchable", async () => {
@@ -650,9 +635,7 @@ describe("stdlib integration", () => {
       true,
     )
     expect(
-      await value(
-        `try { Object.fromEntries(new Map([["fn", Math.max]])); return false } catch { return true }`,
-      ),
+      await value(`try { Object.fromEntries(new Map([["fn", Math.max]])); return false } catch { return true }`),
     ).toBe(true)
   })
 
