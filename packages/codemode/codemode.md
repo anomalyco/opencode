@@ -38,10 +38,6 @@ The generic runtime lives in `packages/codemode` and is host-neutral:
 5. Execution returns `CodeMode.Result`. Expected program and tool failures are diagnostic data; host interruption
    remains Effect interruption.
 
-Direct `let` and `const` declarations are instantiated when their program or block scope is entered and remain in the
-temporal dead zone until execution reaches the declaration. Classic `for` initializer scopes use the same rule, and
-loop iteration bindings remain fresh per iteration.
-
 Effect Schemas validate and transform tool inputs and outputs. JSON Schemas render model-facing signatures but do not
 validate values; adapter-provided values still cross the plain-data boundary. A tool without an output schema is
 advertised as `Promise<unknown>`.

@@ -679,7 +679,7 @@ class Interpreter<R> {
     // JS module scope, instead of colliding with the seeded globals.
     this.pushScope()
     return Effect.gen(function* () {
-      self.instantiateDeclarations(program.body)
+      self.hoistFunctions(program.body)
       let value: unknown = undefined
       for (const [index, statement] of program.body.entries()) {
         if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
@@ -835,7 +835,7 @@ class Interpreter<R> {
     const self = this
     return Effect.gen(function* () {
       const body = getArray(node, "body")
-      self.instantiateDeclarations(body)
+      self.hoistFunctions(body)
 
       for (const statementValue of body) {
         const statement = asNode(statementValue, "body")
@@ -874,29 +874,6 @@ class Interpreter<R> {
       if (!isRecord(statementValue) || statementValue.type !== "FunctionDeclaration") continue
       const node = statementValue as AstNode
       this.declare(getString(getNode(node, "id"), "name"), this.createFunction(node), true, node)
-    }
-  }
-
-  // Lexical declarations exist for the scope's entire lifetime but remain uninitialized
-  // until execution reaches them. Installing their TDZ slots up front ensures an inner
-  // binding shadows an outer binding even before its declaration runs.
-  private instantiateDeclarations(statements: Array<unknown>): void {
-    this.hoistFunctions(statements)
-    const scope = this.currentScope()
-    for (const statementValue of statements) {
-      if (!isRecord(statementValue) || statementValue.type !== "VariableDeclaration") continue
-      const statement = statementValue as AstNode
-      const kind = getString(statement, "kind")
-      if (kind === "var") continue
-      for (const declarationValue of getArray(statement, "declarations")) {
-        const declaration = asNode(declarationValue, "declarations")
-        for (const name of collectPatternNames(getNode(declaration, "id"))) {
-          if (scope.has(name)) {
-            throw new InterpreterRuntimeError(`Identifier '${name}' has already been declared.`, declaration)
-          }
-          scope.set(name, { mutable: kind === "let", value: undefined, initialized: false })
-        }
-      }
     }
   }
 
@@ -1026,7 +1003,6 @@ class Interpreter<R> {
 
       if (initNode) {
         if (initNode.type === "VariableDeclaration") {
-          self.instantiateDeclarations([initNode])
           yield* self.evaluateVariableDeclaration(initNode)
         } else {
           yield* self.evaluateExpression(initNode)
@@ -3420,7 +3396,7 @@ class Interpreter<R> {
   private declare(name: string, value: unknown, mutable: boolean, node: AstNode): void {
     const scope = this.currentScope()
 
-    // A pre-seeded parameter or lexical TDZ slot is being bound for the first time;
+    // A pre-seeded parameter slot (initialized === false) is being bound for the first time;
     // anything else already present is a genuine duplicate declaration.
     const existing = scope.get(name)
     if (existing && existing.initialized !== false) {
