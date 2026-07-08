@@ -293,6 +293,13 @@ export function Session() {
 
       if (result.data.workspaceID !== previousWorkspace) {
         project.workspace.set(result.data.workspaceID)
+        const targetWorkspace = result.data.workspaceID
+          ? project.workspace.get(result.data.workspaceID)
+          : undefined
+        if (targetWorkspace?.branch) {
+          sync.set("vcs", { branch: targetWorkspace.branch })
+        }
+        await sdk.client.vcs.get({ workspace: result.data.workspaceID ?? undefined }).then((x) => sync.set("vcs", x.data)).catch(() => undefined)
 
         // Sync all the data for this workspace. Note that this
         // workspace may not exist anymore which is why this is not
