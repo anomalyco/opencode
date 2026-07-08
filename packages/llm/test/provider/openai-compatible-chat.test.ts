@@ -235,4 +235,46 @@ describe("OpenAI-compatible Chat route", () => {
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
+
+  it.effect("maps DeepSeek prompt cache hit and miss usage", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(
+                sseEvents(
+                  deltaChunk({ role: "assistant", content: "Hello" }),
+                  deltaChunk({}, "stop"),
+                  usageChunk({
+                    prompt_tokens: 5,
+                    prompt_cache_hit_tokens: 3,
+                    prompt_cache_miss_tokens: 2,
+                    completion_tokens: 1,
+                    total_tokens: 6,
+                  }),
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 5,
+        nonCachedInputTokens: 0,
+        cacheReadInputTokens: 3,
+        cacheWriteInputTokens: 2,
+        outputTokens: 1,
+        totalTokens: 6,
+        providerMetadata: {
+          openai: {
+            prompt_cache_hit_tokens: 3,
+            prompt_cache_miss_tokens: 2,
+          },
+        },
+      })
+    }),
+  )
 })
