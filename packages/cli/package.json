@@ -46,6 +46,7 @@
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "jsonc-parser": "3.3.1",
+    "open": "10.1.2",
     "opentui-spinner": "catalog:",
     "semver": "catalog:",
     "solid-js": "catalog:",

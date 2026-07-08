@@ -75,6 +75,17 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Debugging and troubleshooting tools",
       commands: [Spec.make("agents", { description: "List all agents" })],
     }),
+    Spec.make("console", {
+      description: "Manage OpenCode Console access",
+      commands: [
+        Spec.make("login", {
+          description: "Log in to OpenCode Console",
+          params: {
+            url: Argument.string("url").pipe(Argument.withDescription("Console server URL"), Argument.optional),
+          },
+        }),
+      ],
+    }),
     Spec.make("mcp", {
       description: "Manage MCP (Model Context Protocol) servers",
       commands: [

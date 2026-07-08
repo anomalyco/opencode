@@ -43,14 +43,21 @@ function oauth(http: HttpClient.HttpClient) {
       type: "oauth",
       label: "OpenCode Console account",
     },
-    authorize: () =>
+    authorize: (inputs) =>
       Effect.gen(function* () {
-        const device = yield* post(http, `${defaultServer}/auth/device/code`, { client_id: clientID }, Device)
+        const server = yield* normalizeServer(inputs.server ?? defaultServer)
+        const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
+        const verification = URL.canParse(device.verification_uri_complete)
+          ? new URL(device.verification_uri_complete)
+          : undefined
+        if (verification && verification.protocol !== "http:" && verification.protocol !== "https:") {
+          return yield* Effect.fail(new Error("Invalid device verification URL: expected HTTP(S)"))
+        }
         return {
           mode: "auto" as const,
-          url: `${defaultServer}${device.verification_uri_complete}`,
+          url: verification?.href ?? `${server}/${device.verification_uri_complete.replace(/^\/+/, "")}`,
           instructions: `Enter code: ${device.user_code}`,
-          callback: poll(http, defaultServer, device.device_code, Duration.seconds(device.interval)),
+          callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),
         }
       }),
     refresh: (credential) =>
@@ -217,6 +224,18 @@ function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
 
 function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined) {
   return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
+}
+
+function normalizeServer(input: string) {
+  return Effect.try({
+    try: () => {
+      const url = new URL(input)
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
+    },
+    catch: (cause) =>
+      new Error(`Invalid OpenCode server URL: ${cause instanceof Error ? cause.message : String(cause)}`),
+  })
 }
 
 function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cost"]>) {

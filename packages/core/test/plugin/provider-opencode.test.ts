@@ -92,6 +92,73 @@ describe("OpencodePlugin", () => {
     }),
   )
 
+  it.live("uses a canonical custom server throughout device authorization", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: string[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            requests.push(`${request.method} ${url.pathname}`)
+            if (url.pathname.endsWith("/auth/device/code")) {
+              return Response.json({
+                device_code: "device",
+                user_code: "user",
+                verification_uri_complete: `${url.origin}/verify`,
+                expires_in: 60,
+                interval: 0,
+              })
+            }
+            if (url.pathname.endsWith("/auth/device/token")) {
+              return Response.json({ access_token: "access", refresh_token: "refresh", expires_in: 600 })
+            }
+            if (url.pathname.endsWith("/api/user")) return Response.json({ id: "user", email: "user@example.com" })
+            if (url.pathname.endsWith("/api/orgs")) return Response.json([{ id: "org", name: "Org" }])
+            return new Response("Not found", { status: 404 })
+          },
+        })
+        return { requests, server }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          yield* addPlugin()
+          const integrations = yield* Integration.Service
+          const attempt = yield* integrations.connection.oauth({
+            integrationID: Integration.ID.make("opencode"),
+            methodID: Integration.MethodID.make("device"),
+            inputs: { server: `${server.url.origin}/console///?ignored=true#ignored` },
+          })
+          expect(attempt.url).toBe(`${server.url.origin}/verify`)
+          yield* eventually(integrations.attempt.status(attempt.attemptID), (status) => status.status === "complete")
+
+          expect(requests).toContain("POST /console/auth/device/code")
+          expect(requests).toContain("POST /console/auth/device/token")
+          expect(requests).toContain("GET /console/api/user")
+          expect(requests).toContain("GET /console/api/orgs")
+          expect((yield* (yield* Credential.Service).list(Integration.ID.make("opencode")))[0]?.value).toMatchObject({
+            metadata: { server: `${server.url.origin}/console` },
+          })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("rejects non-HTTP OpenCode servers", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const error = yield* (yield* Integration.Service).connection
+        .oauth({
+          integrationID: Integration.ID.make("opencode"),
+          methodID: Integration.MethodID.make("device"),
+          inputs: { server: "ftp://console.example.com" },
+        })
+        .pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Integration.AuthorizationError)
+      expect(String(error.cause)).toContain("Invalid OpenCode server URL: expected HTTP(S)")
+    }),
+  )
+
   it.live("loads providers and models from the connected OpenCode server", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
