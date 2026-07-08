@@ -21,45 +21,43 @@ const media = (file: FileAttachment): ContentPart => ({
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
-const textAttachment = (file: FileAttachment) =>
-  Message.make({
-    role: "user",
-    content: [
-      `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
-      file.description === undefined ? undefined : `Description: ${file.description}`,
-      "",
-      Buffer.from(file.data, "base64").toString("utf8"),
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join("\n"),
-    metadata: {
-      attachment: {
-        source: file.source,
-        name: file.name,
-        description: file.description,
-      },
+const textAttachment = (file: FileAttachment): ContentPart => ({
+  type: "text",
+  text: [
+    `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
+    file.description === undefined ? undefined : `Description: ${file.description}`,
+    "",
+    Buffer.from(file.data, "base64").toString("utf8"),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n"),
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
     },
-  })
+  },
+})
 
-const directoryAttachment = (file: FileAttachment) =>
-  Message.make({
-    role: "user",
-    content: [
-      `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
-      file.description === undefined ? undefined : `Description: ${file.description}`,
-      file.data.length === 0 ? undefined : "",
-      file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join("\n"),
-    metadata: {
-      attachment: {
-        source: file.source,
-        name: file.name,
-        description: file.description,
-      },
+const directoryAttachment = (file: FileAttachment): ContentPart => ({
+  type: "text",
+  text: [
+    `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
+    file.description === undefined ? undefined : `Description: ${file.description}`,
+    file.data.length === 0 ? undefined : "",
+    file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n"),
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
     },
-  })
+  },
+})
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
@@ -176,14 +174,17 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, provider
     case "user":
       const files = message.files ?? []
       return [
-        ...files.filter((file) => file.mime === "text/plain").map(textAttachment),
-        ...files.filter((file) => file.mime === "application/x-directory").map(directoryAttachment),
         Message.make({
           id: message.id,
           role: "user",
           content: [
             { type: "text", text: message.text },
-            ...files.filter((file) => imageMimes.has(file.mime)).map(media),
+            ...files.flatMap((file): ContentPart[] => {
+              if (file.mime === "text/plain") return [textAttachment(file)]
+              if (file.mime === "application/x-directory") return [directoryAttachment(file)]
+              if (imageMimes.has(file.mime)) return [media(file)]
+              return []
+            }),
           ],
           metadata: {
             ...message.metadata,
