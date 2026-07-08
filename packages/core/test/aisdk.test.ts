@@ -2,7 +2,7 @@ import type { LanguageModelV3CallOptions } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { LLM } from "@opencode-ai/llm"
+import { LLM, Message } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import { expect } from "bun:test"
 import { Effect } from "effect"
@@ -65,5 +65,55 @@ it.effect("projects request settings, headers, and body overlays", () =>
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
+  }),
+)
+
+it.effect("projects replay metadata onto AI SDK prompt parts", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.assistant([
+            { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
+            {
+              type: "tool-call",
+              id: "hosted",
+              name: "web_search",
+              input: { query: "Effect" },
+              providerExecuted: true,
+              providerMetadata: { anthropic: { blockType: "server_tool_use" } },
+            },
+          ]),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Think",
+            providerOptions: { anthropic: { signature: "signed" } },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "hosted",
+            toolName: "web_search",
+            input: { query: "Effect" },
+            providerExecuted: true,
+            providerOptions: { anthropic: { blockType: "server_tool_use" } },
+          },
+        ],
+      },
+    ])
   }),
 )

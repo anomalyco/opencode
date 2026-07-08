@@ -45,9 +45,8 @@ const capture = () => {
       agent: AgentV2.ID.make("build"),
       model: {
         id: ModelV2.ID.make("model"),
-        providerID: ProviderV2.ID.make("provider"),
+        providerID: ProviderV2.ID.opencode,
       },
-      provider: "openai",
     }),
   }
 }
@@ -99,35 +98,79 @@ test("provider-executed success retains its raw provider result", async () => {
   expect(success?.data).toHaveProperty("result")
 })
 
-test("provider state uses the route provider instead of the catalog provider", async () => {
+test("provider metadata is retained independently of the catalog provider", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
     publisher.publish(
-      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { openai: { itemId: "reasoning" } } }),
+      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { anthropic: { signature: "signed" } } }),
     ),
   )
 
   expect(published.find((event) => event.type === "session.reasoning.started.1")?.data).toMatchObject({
-    state: { itemId: "reasoning" },
+    state: { anthropic: { signature: "signed" } },
   })
 })
 
-test("reasoning state from an empty delta is retained at reasoning end", async () => {
+test("reasoning metadata from start, empty delta, and end is merged by provider", async () => {
   const { published, publisher } = capture()
-  await Effect.runPromise(publisher.publish(LLMEvent.reasoningStart({ id: "reasoning" })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { anthropic: { blockType: "thinking" } } }),
+    ),
+  )
   await Effect.runPromise(
     publisher.publish(
       LLMEvent.reasoningDelta({
         id: "reasoning",
         text: "",
-        providerMetadata: { openai: { signature: "signed" } },
+        providerMetadata: { anthropic: { signature: "signed" }, gateway: { traceID: "trace" } },
       }),
     ),
   )
-  await Effect.runPromise(publisher.publish(LLMEvent.reasoningEnd({ id: "reasoning" })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.reasoningEnd({ id: "reasoning", providerMetadata: { anthropic: { stopReason: "tool_use" } } }),
+    ),
+  )
 
   expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
-    state: { signature: "signed" },
+    state: {
+      anthropic: { blockType: "thinking", signature: "signed", stopReason: "tool_use" },
+      gateway: { traceID: "trace" },
+    },
+  })
+})
+
+test("provider-executed tool metadata is retained independently of the catalog provider", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.toolCall({
+        id: "hosted",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: { openai: { itemId: "call" } },
+      }),
+    ),
+  )
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.toolResult({
+        id: "hosted",
+        name: "web_search",
+        result: { type: "json", value: { found: true } },
+        providerExecuted: true,
+        providerMetadata: { openai: { itemId: "result" } },
+      }),
+    ),
+  )
+
+  expect(published.find((event) => event.type === "session.tool.called.1")?.data).toMatchObject({
+    state: { openai: { itemId: "call" } },
+  })
+  expect(published.find((event) => event.type === "session.tool.success.1")?.data).toMatchObject({
+    resultState: { openai: { itemId: "result" } },
   })
 })
 

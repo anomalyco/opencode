@@ -4,7 +4,7 @@ import {
   ToolOutput,
   ToolResultPart,
   type ContentPart,
-  type ProviderMetadata,
+  ProviderMetadata,
 } from "@opencode-ai/llm"
 import { Option, Schema } from "effect"
 import type { ModelV2 } from "../../model"
@@ -63,10 +63,14 @@ const directoryAttachment = (file: FileAttachment) =>
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
-const providerMetadata = (
+const providerMetadataFromState = (
   provider: string,
   state: Record<string, unknown> | undefined,
-): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
+): ProviderMetadata | undefined => {
+  if (state === undefined) return undefined
+  if (Schema.is(ProviderMetadata)(state)) return state
+  return { [provider]: state }
+}
 
 const toolInput = (tool: SessionMessage.AssistantTool) =>
   tool.state.status === "streaming"
@@ -125,7 +129,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: providerMetadata(model.providerID, item.state),
+              providerMetadata: providerMetadataFromState(model.providerID, item.state),
             },
           ]
         : item.text.length > 0
@@ -133,13 +137,13 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
           : []
     const call = toolCall(
       item,
-      reuseProviderMetadata ? providerMetadata(model.providerID, item.providerState) : undefined,
+      reuseProviderMetadata ? providerMetadataFromState(model.providerID, item.providerState) : undefined,
     )
     if (item.executed !== true) return [call]
     const result = toolResult(
       item,
       reuseProviderMetadata
-        ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
+        ? providerMetadataFromState(model.providerID, item.providerResultState ?? item.providerState)
         : undefined,
     )
     return result ? [call, result] : [call]
@@ -155,7 +159,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
       toolResult(
         item,
         reuseProviderMetadata
-          ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
+          ? providerMetadataFromState(model.providerID, item.providerResultState ?? item.providerState)
           : undefined,
       ),
     )

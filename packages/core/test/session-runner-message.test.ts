@@ -454,6 +454,33 @@ Recent work
     ])
   })
 
+  test("replays namespaced metadata for an OpenCode hosted model", () => {
+    const opencode = ModelV2.Ref.make({ id: ModelV2.ID.make("claude-fable-5"), providerID: ProviderV2.ID.opencode })
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-opencode-reasoning"),
+          type: "assistant",
+          agent: "build",
+          model: opencode,
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Think",
+              state: { anthropic: { signature: "signed" } },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      opencode,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
+    ])
+  })
+
   test("lowers failed assistant reasoning to text", () => {
     const messages = toLLMMessages(
       [
