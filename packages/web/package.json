@@ -32,6 +32,7 @@
     "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
+    "starlight-llms-txt": "0.11.0",
     "toolbeam-docs-theme": "0.4.8",
     "vscode-languageserver-types": "3.17.5"
   },

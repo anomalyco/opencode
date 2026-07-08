@@ -8,6 +8,7 @@ import config from "./config.mjs"
 import { rehypeHeadingIds, unified } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
+import starlightLlmsTxt from "starlight-llms-txt"
 
 // https://astro.build/config
 export default defineConfig({
@@ -305,6 +306,7 @@ export default defineConfig({
         SiteTitle: "./src/components/SiteTitle.astro",
       },
       plugins: [
+        starlightLlmsTxt(),
         theme({
           headerLinks: config.headerLinks,
         }),
