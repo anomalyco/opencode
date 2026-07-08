@@ -1,48 +1,50 @@
 import type { ExperimentalWorkspaceAdapterListResponse, Workspace } from "@opencode-ai/sdk/v2"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
+import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
 import { useProject } from "../context/project"
 import { useRoute } from "../context/route"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { errorMessage } from "../util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 import { DialogAlert } from "../ui/dialog-alert"
+import { DialogConfirm } from "../ui/dialog-confirm"
+import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 
 type Adapter = ExperimentalWorkspaceAdapterListResponse[number]
 
 export type WorkspaceSelection =
-  | {
-      type: "none"
-    }
-  | {
-      type: "new"
-      workspaceType: string
-      workspaceName: string
-    }
-  | {
-      type: "existing"
-      workspaceID: string
-      workspaceType: string
-      workspaceName: string
-    }
+  | { type: "none" }
+  | { type: "new"; workspaceType: string; workspaceName: string; name?: string }
+  | { type: "existing"; workspaceID: string; workspaceType: string; workspaceName: string }
 
-type WorkspaceSelectValue = WorkspaceSelection | { type: "existing-list" }
-type ExistingWorkspaceSelectValue = { workspace: Workspace }
+type WorkspaceSelectValue = WorkspaceSelection
 
-export function recentConnectedWorkspaces<WorkspaceInfo extends { id: string; timeUsed: number | string }>(input: {
-  workspaces: readonly WorkspaceInfo[]
-  status: (workspaceID: string) => string | undefined
-  limit?: number
-  omitWorkspaceID?: string
-}) {
-  const allWorkspaces = input.workspaces.filter((workspace) => input.status(workspace.id) === "connected")
-  const workspaces = allWorkspaces.toSorted((a, b) => Number(b.timeUsed) - Number(a.timeUsed))
-  const recent = workspaces.slice(0, input.limit ?? 3)
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts
+  const secs = Math.floor(diff / 1000)
+  if (secs < 60) return "now"
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d`
+  const months = Math.floor(days / 30)
+  return `${months}mo`
+}
 
-  return { recent, hasMore: recent.length < workspaces.length }
+export function buildDetails(workspace: Workspace): string[] | undefined {
+  const lines: string[] = []
+  if (workspace.directory) lines.push(workspace.directory)
+  if (workspace.branch) lines.push(`branch: ${workspace.branch}`)
+  if (workspace.timeUsed && typeof workspace.timeUsed === "number") {
+    lines.push(`used ${relativeTime(workspace.timeUsed)} ago`)
+  }
+  return lines.length ? lines : undefined
 }
 
 export function warpReminderText(dir: string) {
@@ -132,6 +134,17 @@ export async function warpWorkspaceSession(input: {
 
   input.project.workspace.set(input.workspaceID)
 
+  const targetWorkspace = input.workspaceID
+    ? input.project.workspace.get(input.workspaceID)
+    : undefined
+  if (targetWorkspace?.branch) {
+    input.sync.set("vcs", { branch: targetWorkspace.branch })
+  }
+
+  await Promise.all([
+    input.project.sync().catch(() => undefined),
+    input.sdk.client.vcs.get({ workspace: input.workspaceID ?? undefined }).then((x) => input.sync.set("vcs", x.data)).catch(() => undefined),
+  ])
   await input.sync.bootstrap({ fatal: false }).catch(() => undefined)
 
   const dir = input.project.instance.directory() || input.sync.path.directory
@@ -152,7 +165,7 @@ export async function warpWorkspaceSession(input: {
       .catch(() => undefined)
   }
 
-  await Promise.all([input.project.workspace.sync(), input.sync.session.refresh()])
+  await Promise.all([input.project.workspace.syncKeepCurrent(), input.sync.session.refresh()])
 
   if (input.done) {
     input.done()
@@ -179,6 +192,7 @@ export function DialogWorkspaceSelect(props: {
   adapters?: Adapter[]
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
 }) {
+  const { theme } = useTheme()
   const dialog = useDialog()
   const project = useProject()
   const route = useRoute()
@@ -186,10 +200,10 @@ export function DialogWorkspaceSelect(props: {
   const sdk = useSDK()
   const toast = useToast()
   const [adapters, setAdapters] = createSignal<Adapter[] | undefined>(props.adapters)
-  const omittedWorkspaceID = createMemo(() => (route.data.type === "session" ? project.workspace.current() : undefined))
+  const [removing, setRemoving] = createSignal<string>()
 
   onMount(() => {
-    dialog.setSize("medium")
+    dialog.setSize("large")
     void (async () => {
       if (adapters()) return
       const res = await loadWorkspaceAdapters({ sdk, sync, toast })
@@ -198,111 +212,123 @@ export function DialogWorkspaceSelect(props: {
     })()
   })
 
+  async function remove(workspace: Workspace) {
+    if (removing()) return
+
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Delete workspace",
+      `Are you sure you want to delete "${workspace.name}"?`,
+      "delete",
+    )
+    if (confirmed !== true) return
+
+    setRemoving(workspace.id)
+    const result = await sdk.client.experimental.workspace.remove({ id: workspace.id }).catch((err) => ({
+      error: err,
+    }))
+    if (result?.error) {
+      setRemoving(undefined)
+      toast.show({
+        variant: "error",
+        title: "Failed to delete workspace",
+        message: errorMessage(result.error),
+      })
+      return
+    }
+
+    if (project.workspace.current() === workspace.id) {
+      project.workspace.set(undefined)
+      await project.sync().catch(() => undefined)
+      route.navigate({ type: "home" })
+    }
+    await project.workspace.sync()
+    await project.sync().catch(() => undefined)
+    setRemoving(undefined)
+  }
+
   const options = createMemo<DialogSelectOption<WorkspaceSelectValue>[]>(() => {
     const list = adapters()
     if (!list) return []
-    const { recent, hasMore } = recentConnectedWorkspaces({
-      workspaces: project.workspace.list(),
-      status: project.workspace.status,
-      omitWorkspaceID: omittedWorkspaceID(),
-    })
+
+    const workspaces = project
+      .workspace.list()
+      .toSorted((a, b) => Number(b.timeUsed) - Number(a.timeUsed))
+
     return [
-      ...list.map((adapter) => ({
-        title: adapter.name,
-        value: { type: "new" as const, workspaceType: adapter.type, workspaceName: adapter.name },
-        description: adapter.description,
-        category: "New workspace",
-      })),
       {
-        title: "None",
+        title: "Workspace root",
         value: { type: "none" as const },
-        description: "Use the local project",
-        category: "Choose workspace",
+        description: "Use project root directory",
+        category: "Switch to",
       },
-      ...recent.map((workspace: Workspace) => ({
-        title: workspace.name,
-        description: `(${workspace.type})`,
+      ...workspaces.map((workspace: Workspace) => {
+        const isCurrent = workspace.id === project.workspace.current()
+        return {
+        title:
+          removing() === workspace.id
+            ? "Deleting..."
+            : isCurrent
+              ? `${workspace.name} (current)`
+              : workspace.name,
         value: {
           type: "existing" as const,
           workspaceID: workspace.id,
           workspaceType: workspace.type,
           workspaceName: workspace.name,
         },
-        category: "Choose workspace",
+        category: "Workspaces",
+        footer: workspace.type === "worktree" ? "linked" : workspace.type,
+        gutter: () => {
+          const status = project.workspace.status(workspace.id)
+          return (
+            <box alignItems="center" justifyContent="center" height={1}>
+              <text fg={status === "connected" ? theme.success : theme.error}>?</text>
+            </box>
+          )
+        },
+        details: buildDetails(workspace),
+      }
+    }),
+      ...list.map((adapter) => ({
+        title: adapter.name,
+        value: { type: "new" as const, workspaceType: adapter.type, workspaceName: adapter.name },
+        description: adapter.description,
+        category: "Create new",
       })),
-      ...(hasMore
-        ? [
-            {
-              title: "View all workspaces",
-              value: { type: "existing-list" as const },
-              description: "Choose from all workspaces",
-              category: "Choose workspace",
-            },
-          ]
-        : []),
     ]
   })
 
   if (!adapters()) return null
   return (
     <DialogSelect<WorkspaceSelectValue>
-      title="Warp"
-      skipFilter={true}
-      renderFilter={false}
+      title="Move session to..."
+      renderFilter={true}
       options={options()}
-      onSelect={(option) => {
+      onSelect={async (option) => {
         if (!option.value) return
-        if (option.value.type === "none") {
-          void props.onSelect(option.value)
-          return
-        }
         if (option.value.type === "new") {
-          void props.onSelect(option.value)
-          return
+          const name = await DialogPrompt.show(dialog, "Worktree name (optional)", {
+            placeholder: "leave empty for random name",
+          })
+          if (name === null) return
+          option.value.name = name || undefined
         }
-        if (option.value.type === "existing") {
-          void props.onSelect(option.value)
-          return
-        }
-
-        dialog.replace(() => (
-          <DialogExistingWorkspaceSelect omitWorkspaceID={omittedWorkspaceID()} onSelect={props.onSelect} />
-        ))
+        void props.onSelect(option.value)
       }}
-    />
-  )
-}
-
-function DialogExistingWorkspaceSelect(props: {
-  omitWorkspaceID?: string
-  onSelect: (selection: WorkspaceSelection) => Promise<void> | void
-}) {
-  const project = useProject()
-
-  const options = createMemo<DialogSelectOption<ExistingWorkspaceSelectValue>[]>(() =>
-    project.workspace
-      .list()
-      .filter((workspace) => project.workspace.status(workspace.id) === "connected")
-      .filter((workspace) => workspace.id !== props.omitWorkspaceID)
-      .map((workspace: Workspace) => ({
-        title: workspace.name,
-        description: `(${workspace.type})`,
-        value: { workspace },
-      })),
-  )
-
-  return (
-    <DialogSelect<ExistingWorkspaceSelectValue>
-      title="Existing Workspace"
-      options={options()}
-      onSelect={(option) => {
-        void props.onSelect({
-          type: "existing",
-          workspaceID: option.value.workspace.id,
-          workspaceType: option.value.workspace.type,
-          workspaceName: option.value.workspace.name,
-        })
-      }}
+      actions={[
+        {
+          command: "session.delete",
+          title: "delete",
+          disabled: (option) => !option?.value || option.value.type !== "existing",
+          onTrigger: (option) => {
+            const val = option.value
+            if (val?.type !== "existing") return
+            const ws = project.workspace.list().find((w) => w.id === val.workspaceID)
+            if (ws) void remove(ws)
+          },
+        },
+      ]}
     />
   )
 }
