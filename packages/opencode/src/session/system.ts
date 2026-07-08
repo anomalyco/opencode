@@ -42,7 +42,7 @@ export function provider(model: Provider.Model) {
 }
 
 export interface Interface {
-  readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
+  readonly environment: (model: Provider.Model, agent?: Agent.Info) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
   readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
 }
@@ -57,12 +57,12 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
 
     return Service.of({
-      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
+      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model, agent?: Agent.Info) {
         const ctx = yield* InstanceState.context
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
-        return [
+        const env = [
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
             `Here is some useful information about the environment you are running in:`,
@@ -93,6 +93,23 @@ const layer = Layer.effect(
                 "</available_references>",
               ].join("\n"),
         ].filter((part): part is string => part !== undefined)
+
+        // OpenWork context: only injected when the active agent is `work`. Reads
+        // the canonical global + per-folder instructions synchronously (no Effect
+        // requirement) so the surrounding environment() stays R: never.
+        if (agent?.name === "work") {
+          const mod = yield* Effect.promise(() => import("@opencode-ai/core/work"))
+          const docs = mod.Instructions.read(ctx.directory as AbsolutePath)
+          if (docs.global || docs.folder) {
+            const parts = ["<work_instructions>"]
+            if (docs.global) parts.push("  <global>", ...docs.global.split("\n").map((l) => `    ${l}`), "  </global>")
+            if (docs.folder) parts.push("  <folder>", ...docs.folder.split("\n").map((l) => `    ${l}`), "  </folder>")
+            parts.push("</work_instructions>")
+            env.push(parts.join("\n"))
+          }
+        }
+
+        return env
       }),
 
       skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {

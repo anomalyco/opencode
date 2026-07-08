@@ -12,6 +12,7 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
+import { WorkModeSync } from "@/context/work-mode-sync"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -66,7 +67,9 @@ export function DirectoryDataProvider(
           onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
           onSessionHref={href}
         >
-          <LocalProvider>{props.children}</LocalProvider>
+          <LocalProvider>
+            <WorkModeSync>{props.children}</WorkModeSync>
+          </LocalProvider>
         </DataProvider>
       )}
     </Show>

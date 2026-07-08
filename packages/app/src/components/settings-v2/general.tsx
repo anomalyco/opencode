@@ -193,6 +193,11 @@ export const SettingsGeneralV2: Component<{
     })),
   )
 
+  const workPermissionOptions = createMemo(() => [
+    { value: "ask", label: language.t("settings.general.row.workPermissionMode.ask") },
+    { value: "auto", label: language.t("settings.general.row.workPermissionMode.auto") },
+  ])
+
   const noneSound = { id: "none", label: "sound.option.none" } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
   const mono = () => monoInput(settings.appearance.font())
@@ -329,6 +334,37 @@ export const SettingsGeneralV2: Component<{
             />
           </div>
         </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.workMode.title")}
+          description={language.t("settings.general.row.workMode.description")}
+        >
+          <div data-action="settings-work-mode">
+            <Switch
+              checked={settings.general.workMode()}
+              onChange={(checked) => settings.general.setWorkMode(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <Show when={settings.general.workMode()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.workPermissionMode.title")}
+            description={language.t("settings.general.row.workPermissionMode.description")}
+          >
+            <SelectV2
+              appearance="inline"
+              data-action="settings-work-permission-mode"
+              placement="bottom-end"
+              gutter={6}
+              options={workPermissionOptions()}
+              current={workPermissionOptions().find((o) => o.value === settings.general.workPermissionMode())}
+              value={(o) => o.value}
+              label={(o) => o.label}
+              onSelect={(o) => o && settings.general.setWorkPermissionMode(o.value as "ask" | "auto")}
+            />
+          </SettingsRowV2>
+        </Show>
 
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRowV2

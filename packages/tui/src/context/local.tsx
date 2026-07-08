@@ -317,9 +317,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setModelStore("recent", recentModels(next, modelStore.recent))
           save()
         },
-        set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
+        set(model: { providerID: string; modelID: string }, options?: { recent?: boolean; validate?: boolean }) {
           batch(() => {
-            if (!isModelValid(model)) {
+            if (options?.validate !== false && !isModelValid(model)) {
               toast.show({
                 message: `Model ${model.providerID}/${model.modelID} is not valid`,
                 variant: "warning",

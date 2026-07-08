@@ -6,6 +6,8 @@ import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
 import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { normalizedHeaders, rateLimitDetails } from "../executor"
+import { rateLimitCache } from "../../rate-limit-cache"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -132,6 +134,12 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       runtime.http
         .execute(prepared.request)
         .pipe(
+          Effect.map((response) => {
+            const headers = normalizedHeaders(response.headers)
+            const rl = rateLimitDetails(headers, undefined)
+            if (rl) rateLimitCache.set(String(request.model.provider), rl)
+            return response
+          }),
           Effect.map((response) =>
             prepared.framing.frame(
               response.stream.pipe(

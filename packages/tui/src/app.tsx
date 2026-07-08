@@ -44,6 +44,7 @@ import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogDebug } from "./component/dialog-debug"
+import { DialogUsage } from "./component/dialog-usage"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -768,6 +769,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogStatus />)
         },
         category: "System",
+      },
+      {
+        name: "session.usage",
+        title: "View session usage & cost",
+        suggested: true,
+        slashName: "usage",
+        run: () => {
+          dialog.setSize("large")
+          dialog.replace(() => <DialogUsage />)
+        },
+        category: "Session",
       },
       {
         name: "opencode.debug",

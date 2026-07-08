@@ -314,7 +314,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       },
       visible(item: ModelKey) {
-        return models.visible(item)
+        return models.visible(item, agent.current()?.name)
       },
       setVisibility(item: ModelKey, visible: boolean) {
         models.setVisibility(item, visible)

@@ -901,6 +901,12 @@ export const dict = {
     "Show edit, write, and patch tool parts expanded by default in the timeline",
   "settings.general.row.newLayoutDesigns.title": "New layout and designs",
   "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
+  "settings.general.row.workMode.title": "Work Mode (OpenWork)",
+  "settings.general.row.workMode.description": "Simplify the session UI for knowledge work: hide terminal and file tree, default to the work agent, and filter models to tool-calling-capable ones",
+  "settings.general.row.workPermissionMode.title": "Work permission mode",
+  "settings.general.row.workPermissionMode.description": "Control how the work agent acts on your files. Deletes always ask, regardless of this setting",
+  "settings.general.row.workPermissionMode.ask": "Ask before acting (recommended)",
+  "settings.general.row.workPermissionMode.auto": "Act without asking",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 

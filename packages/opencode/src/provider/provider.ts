@@ -1341,6 +1341,79 @@ const layer = Layer.effect(
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const database = mapValues(catalog, toPublicInfo)
 
+        // Inject built-in local providers not present in models.dev
+        if (!database["huawei"]) {
+          database["huawei"] = {
+            id: ProviderV2.ID.make("huawei"),
+            source: "custom",
+            name: "Huawei Cloud",
+            env: ["HUAWEI_MAAS_API_KEY"],
+            options: {},
+            models: {
+              "deepseek-v4-flash": {
+                id: ModelV2.ID.make("deepseek-v4-flash"),
+                providerID: ProviderV2.ID.make("huawei"),
+                name: "DeepSeek V4 Flash",
+                family: "deepseek",
+                api: { id: "deepseek-v4-flash", url: "https://api-ap-southeast-1.modelarts-maas.com/openai/v1", npm: "@ai-sdk/openai-compatible" },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 1048576, output: 131072 },
+                capabilities: { temperature: true, reasoning: true, attachment: false, toolcall: true, input: { text: true, audio: false, image: false, video: false, pdf: false }, output: { text: true, audio: false, image: false, video: false, pdf: false }, interleaved: { field: "reasoning_content" } },
+                release_date: "",
+                variants: {},
+              },
+              "deepseek-v4-pro": {
+                id: ModelV2.ID.make("deepseek-v4-pro"),
+                providerID: ProviderV2.ID.make("huawei"),
+                name: "DeepSeek V4 Pro",
+                family: "deepseek",
+                api: { id: "deepseek-v4-pro", url: "https://api-ap-southeast-1.modelarts-maas.com/openai/v1", npm: "@ai-sdk/openai-compatible" },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 1048576, output: 131072 },
+                capabilities: { temperature: true, reasoning: true, attachment: false, toolcall: true, input: { text: true, audio: false, image: false, video: false, pdf: false }, output: { text: true, audio: false, image: false, video: false, pdf: false }, interleaved: { field: "reasoning_content" } },
+                release_date: "",
+                variants: {},
+              },
+              "glm-5.2": {
+                id: ModelV2.ID.make("glm-5.2"),
+                providerID: ProviderV2.ID.make("huawei"),
+                name: "GLM 5.2",
+                family: "glm",
+                api: { id: "glm-5.2", url: "https://api-ap-southeast-1.modelarts-maas.com/openai/v1", npm: "@ai-sdk/openai-compatible" },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 198000, output: 131072 },
+                capabilities: { temperature: true, reasoning: true, attachment: false, toolcall: true, input: { text: true, audio: false, image: false, video: false, pdf: false }, output: { text: true, audio: false, image: false, video: false, pdf: false }, interleaved: false },
+                release_date: "",
+                variants: {},
+              },
+              "deepseek-r1-250528": {
+                id: ModelV2.ID.make("deepseek-r1-250528"),
+                providerID: ProviderV2.ID.make("huawei"),
+                name: "DeepSeek R1",
+                family: "deepseek",
+                api: { id: "deepseek-r1-250528", url: "https://api-ap-southeast-1.modelarts-maas.com/openai/v1", npm: "@ai-sdk/openai-compatible" },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 128000, output: 32768 },
+                capabilities: { temperature: true, reasoning: true, attachment: false, toolcall: true, input: { text: true, audio: false, image: false, video: false, pdf: false }, output: { text: true, audio: false, image: false, video: false, pdf: false }, interleaved: { field: "reasoning_content" } },
+                release_date: "",
+                variants: {},
+              },
+            },
+          }
+        }
+
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()
         const modelLoaders: {

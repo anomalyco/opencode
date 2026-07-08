@@ -74,7 +74,7 @@ const redactUrl = (value: string) => {
   return url.toString()
 }
 
-const normalizedHeaders = (headers: Headers.Headers) =>
+export const normalizedHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
 
 const requestId = (headers: Record<string, string>) => {
@@ -109,7 +109,7 @@ const addRateLimitValue = (target: Record<string, string>, key: string, value: s
   if (key.length > 0) target[key] = value
 }
 
-const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | undefined) => {
+export const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | undefined) => {
   const limit: Record<string, string> = {}
   const remaining: Record<string, string> = {}
   const reset: Record<string, string> = {}
