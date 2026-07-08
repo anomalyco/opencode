@@ -3,6 +3,7 @@ import { LLMEvent, ToolFailure } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor, type LLMClientShape } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
 import { Effect, Fiber, Layer, Stream } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
@@ -73,7 +74,11 @@ const providerInfo: Provider.Info = {
 }
 
 const it = testEffect(
-  LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
+  LLMClient.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(FetchHttpClient.layer)), WebSocketExecutor.layer),
+    ),
+  ),
 )
 
 function responsesStream(chunks: unknown[]) {

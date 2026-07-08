@@ -94,7 +94,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AC
 
 type State = Map<string, Info>
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sessions = yield* Ref.make<State>(new Map())
@@ -200,8 +200,6 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const defaultLayer = layer
 
 export const node = LayerNode.make({ service: Service, layer, deps: [] })
 

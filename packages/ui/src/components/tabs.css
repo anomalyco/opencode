@@ -135,7 +135,8 @@
     }
   }
 
-  #review-panel &[data-variant="normal"][data-orientation="horizontal"] {
+  #review-panel &[data-variant="normal"][data-orientation="horizontal"],
+  #terminal-panel &[data-variant="normal"][data-orientation="horizontal"] {
     background-color: var(--background-stronger);
 
     [data-slot="tabs-list"] {
@@ -264,6 +265,51 @@
           }
         }
       }
+    }
+  }
+
+  #terminal-panel &[data-variant="normal"][data-orientation="horizontal"] {
+    [data-slot="tabs-list"] {
+      height: 52px;
+      padding-right: 12px;
+      gap: 8px;
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      height: 28px;
+      padding-inline: 8px;
+      border: 0;
+      background-color: transparent;
+      box-shadow: none;
+
+      &::after {
+        display: none;
+      }
+
+      [data-slot="tabs-trigger"] {
+        padding: 0 !important;
+      }
+
+      &:has([data-slot="tabs-trigger-close-button"]) {
+        padding-right: 8px;
+      }
+
+      &:has([data-selected]) {
+        background-color: var(--v2-background-bg-layer-01);
+        box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+      }
+    }
+
+    [data-slot="terminal-tab-title"] {
+      font-family: Inter, sans-serif;
+      font-style: normal;
+      font-weight: 440;
+      font-size: 13px;
+      line-height: 16px;
+      letter-spacing: -0.04px;
+      color: var(--v2-text-text-base);
+      font-variation-settings: "slnt" 0;
+      font-variant-numeric: tabular-nums;
     }
   }
 
