@@ -273,9 +273,9 @@ function withLocation<A, E, R>(
 function mutablePlugin(description: string) {
   const plugin = pathToFileURL(path.join(import.meta.dir, "../../../plugin/src/v2/promise/index.ts")).href
   return `
-import { define } from ${JSON.stringify(plugin)}
+import { Plugin } from ${JSON.stringify(plugin)}
 
-export default EffectPlugin.define({
+export default Plugin.define({
   id: "mutable-plugin",
   setup: async (ctx) => {
     await ctx.agent.transform((agents) => {

@@ -339,6 +339,15 @@ const layer = Layer.effect(
               return
             }
             needsContinuation = true
+            if (!advertisedTools.has(event.name)) {
+              yield* serialized(
+                publisher.failUnsettledTools({
+                  type: "tool.execution",
+                  message: `Tool is not available for this request: ${event.name}`,
+                }),
+              )
+              return
+            }
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             ownedToolFibers.push(
               yield* Effect.uninterruptibleMask((restore) =>

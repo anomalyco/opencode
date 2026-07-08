@@ -1731,8 +1731,8 @@ describe("SessionRunnerLLM", () => {
               id: "call-provider",
               name: "web_search",
               executed: true,
-              providerState: { source: "provider" },
-              providerResultState: { source: "provider" },
+              providerState: { fake: { source: "provider" } },
+              providerResultState: { fake: { source: "provider" } },
               state: {
                 status: "completed",
                 input: { query: "hello" },
@@ -1862,11 +1862,18 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           content: [
-            { type: "reasoning", text: "Signed thought", state: { signature: "sig_1" } },
+            {
+              type: "reasoning",
+              text: "Signed thought",
+              state: { fake: { signature: "sig_1" }, anthropic: { ignored: true } },
+            },
             {
               type: "reasoning",
               text: "Encrypted thought",
-              state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+              state: {
+                fake: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+                openai: { ignored: true },
+              },
             },
           ],
         },
@@ -1877,11 +1884,18 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests[1]?.messages[1]?.content).toEqual([
-        { type: "reasoning", text: "Signed thought", providerMetadata: { fake: { signature: "sig_1" } } },
+        {
+          type: "reasoning",
+          text: "Signed thought",
+          providerMetadata: { fake: { signature: "sig_1" }, anthropic: { ignored: true } },
+        },
         {
           type: "reasoning",
           text: "Encrypted thought",
-          providerMetadata: { fake: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            fake: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+            openai: { ignored: true },
+          },
         },
       ])
     }),
@@ -2670,7 +2684,10 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-missing",
-              state: { status: "error", error: { message: "Unknown tool: missing" } },
+              state: {
+                status: "error",
+                error: { type: "tool.execution", message: "Tool is not available for this request: missing" },
+              },
             },
           ],
         },
