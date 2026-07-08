@@ -2,7 +2,7 @@ export * as PluginSupervisor from "./supervisor"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Effect, Fiber, Layer, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Config } from "../config"
@@ -262,7 +262,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const events = yield* EventV2.Service
     const location = yield* Location.Service
-    const scope = yield* Scope.Scope
+    const runActivation = yield* FiberSet.makeRuntime<never, void>()
     const lock = Semaphore.makeUnsafe(1)
     let requested = 1
     let applied = 0
@@ -291,25 +291,23 @@ const layer = Layer.effect(
       yield* registry.activate(plugins, { force: applied > 0 })
       applied = target
     })
-    const reload = Effect.fn("PluginSupervisor.reload")(() =>
-      Effect.suspend(() => {
-        const target = requested
-        return lock.withPermit(activateThrough(target))
-      }),
+    const activateTarget = Effect.fn("PluginSupervisor.activateTarget")((target: number) =>
+      lock.withPermit(activateThrough(target)),
     )
+    const reload = Effect.suspend(() => activateTarget(requested))
     yield* events.subscribe([Event.Updated, SdkPlugins.Updated]).pipe(
       Stream.runForEach(() =>
-        reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
+        reload.pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* reload().pipe(Effect.withSpan("PluginSupervisor.boot"), Effect.forkScoped({ startImmediately: true }))
-    const context = yield* Effect.context<Effect.Services<ReturnType<typeof reload>>>()
-    const synchronize = reload().pipe(
-      Effect.provideContext(context),
-      Effect.forkIn(scope, { startImmediately: true }),
-      Effect.flatMap(Fiber.join),
-    )
+    yield* reload.pipe(Effect.withSpan("PluginSupervisor.boot"), Effect.forkScoped({ startImmediately: true }))
+    const context = yield* Effect.context<Effect.Services<ReturnType<typeof activateTarget>>>()
+    const synchronize = Effect.suspend(() => {
+      const target = requested
+      const activation = activateTarget(target).pipe(Effect.provideContext(context))
+      return Fiber.join(runActivation(activation))
+    })
     return Service.of({ synchronize, ready: synchronize })
   }),
 )

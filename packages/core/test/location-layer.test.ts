@@ -151,6 +151,7 @@ describe("LocationServiceMap", () => {
 
           yield* Deferred.succeed(releaseSecond, undefined)
           yield* Fiber.join(synchronized)
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(Effect.provide(context))
         }),
       ),
     ),

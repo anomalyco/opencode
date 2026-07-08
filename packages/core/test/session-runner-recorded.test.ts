@@ -36,6 +36,8 @@ import { Instructions } from "@opencode-ai/core/instructions"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { PluginSupervisorNode } from "@opencode-ai/core/plugin/supervisor-node"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -76,6 +78,10 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.suc
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const pluginSupervisor = Layer.succeed(
+  PluginSupervisor.Service,
+  PluginSupervisor.Service.of({ synchronize: Effect.void, ready: Effect.void }),
+)
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
@@ -89,6 +95,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Config.node, config],
   [PermissionV2.node, permission],
   [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+  [PluginSupervisorNode.node, pluginSupervisor],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -137,6 +144,7 @@ const it = testEffect(
       [ReferenceGuidance.node, referenceGuidance],
       [Config.node, config],
       [Snapshot.node, Snapshot.noopLayer],
+      [PluginSupervisorNode.node, pluginSupervisor],
       [SessionExecution.node, execution],
     ],
   ),
@@ -146,6 +154,12 @@ const sessionID = SessionV2.ID.make("ses_runner_recorded")
 describe("SessionRunnerLLM recorded", () => {
   it.effect("executes one recorded V2 prompt through the recorded HTTP transport", () =>
     Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      yield* agents.transform((draft) =>
+        draft.update(AgentV2.ID.make("build"), (agent) => {
+          agent.mode = "primary"
+        }),
+      )
       const { db } = yield* Database.Service
       yield* db
         .insert(ProjectTable)
