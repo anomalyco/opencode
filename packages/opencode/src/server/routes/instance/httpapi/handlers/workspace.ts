@@ -67,6 +67,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
           workspaceID: ctx.payload.id,
           sessionID: ctx.payload.sessionID,
           copyChanges: ctx.payload.copyChanges,
+          directory: ctx.payload.directory,
         })
         .pipe(
           Effect.mapError((error) => {

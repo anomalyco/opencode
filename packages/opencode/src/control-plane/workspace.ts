@@ -64,6 +64,7 @@ export const CreateInput = Schema.Struct({
   type: Info.fields.type,
   branch: Info.fields.branch,
   projectID: ProjectV2.ID,
+  name: Schema.optional(Info.fields.name),
   extra: Schema.optional(Info.fields.extra),
 })
 export type CreateInput = Schema.Schema.Type<typeof CreateInput>
@@ -72,6 +73,7 @@ export const SessionWarpInput = Schema.Struct({
   workspaceID: Schema.NullOr(WorkspaceV2.ID),
   sessionID: SessionID,
   copyChanges: Schema.optional(Schema.Boolean),
+  directory: Schema.optional(Schema.String),
 })
 export type SessionWarpInput = Schema.Schema.Type<typeof SessionWarpInput>
 
@@ -495,7 +497,7 @@ const layer = Layer.effect(
       const config = yield* WorkspaceAdapterRuntime.configure(adapter, {
         ...input,
         id,
-        name: Slug.create(),
+        name: input.name || Slug.create(),
         directory: null,
         extra: input.extra ?? null,
       })

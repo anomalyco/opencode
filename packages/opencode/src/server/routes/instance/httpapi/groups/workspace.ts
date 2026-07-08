@@ -15,6 +15,7 @@ export const WarpPayload = Schema.Struct({
   id: Schema.NullOr(Workspace.Info.fields.id),
   sessionID: Workspace.SessionWarpInput.fields.sessionID,
   copyChanges: Workspace.SessionWarpInput.fields.copyChanges,
+  directory: Workspace.SessionWarpInput.fields.directory,
 })
 
 export class ApiWorkspaceWarpError extends Schema.ErrorClass<ApiWorkspaceWarpError>("WorkspaceWarpError")(

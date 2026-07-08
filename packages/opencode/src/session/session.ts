@@ -816,10 +816,13 @@ const layer: Layer.Layer<
     const setWorkspace = Effect.fn("Session.setWorkspace")(function* (input: {
       sessionID: SessionID
       workspaceID: Info["workspaceID"]
+      directory?: string
     }) {
-      yield* patch(input.sessionID, { workspaceID: input.workspaceID, time: { updated: Date.now() } }).pipe(
-        Effect.orDie,
-      )
+      yield* patch(input.sessionID, {
+        workspaceID: input.workspaceID,
+        ...(input.directory !== undefined ? { directory: input.directory } : {}),
+        time: { updated: Date.now() },
+      }).pipe(Effect.orDie)
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
