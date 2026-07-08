@@ -106,33 +106,9 @@ function Probe(props: {
 }
 
 describe("useEvent", () => {
-  test("logs event stream connection changes", async () => {
-    const logs: Array<{ message: string; tags: Readonly<Record<string, unknown>> }> = []
-    const { app, events, sdk } = await mount(undefined, (_level, message, tags) => logs.push({ message, tags }))
-
-    try {
-      await wait(() => sdk.connection.status() === "connected")
-      events.disconnect()
-      await wait(() => sdk.connection.status() === "reconnecting")
-
-      expect(logs.slice(0, 3)).toEqual([
-        { message: "event stream connecting", tags: { component: "sdk", attempt: 0 } },
-        { message: "event stream connected", tags: { component: "sdk" } },
-        {
-          message: "event stream disconnected",
-          tags: { component: "sdk", attempt: 1, error: "Event stream disconnected" },
-        },
-      ])
-    } finally {
-      app.renderer.destroy()
-    }
-  })
-
   test("logs only durable events", async () => {
     const logs: Array<{ message: string; tags: Readonly<Record<string, unknown>> }> = []
-    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => {
-      if (message === "event") logs.push({ message, tags })
-    })
+    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => logs.push({ message, tags }))
     const durable = event(
       {
         id: "evt_renamed",
@@ -152,7 +128,7 @@ describe("useEvent", () => {
       expect(logs).toEqual([
         {
           message: "event",
-          tags: { component: "sdk", type: "session.renamed", aggregateID: "ses_test", seq: 1 },
+          tags: { type: "session.renamed", aggregateID: "ses_test", seq: 1 },
         },
       ])
     } finally {
