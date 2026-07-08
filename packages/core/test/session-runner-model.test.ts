@@ -537,26 +537,6 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("preserves provider package construction diagnostics", () =>
-    Effect.gen(function* () {
-      const failure = yield* SessionRunnerModel.fromCatalogModel(
-        model("@opencode-ai/llm/providers/custom"),
-        undefined,
-        {
-          loadPackage: () =>
-            Effect.succeed({
-              model: () => {
-                throw new Error("invalid custom provider settings")
-              },
-            }),
-        },
-      ).pipe(Effect.flip)
-
-      expect(failure.cause).toBeInstanceOf(Error)
-      expect(failure.message).toContain("invalid custom provider settings")
-    }),
-  )
-
   it.effect("loads arbitrary AISDK packages through the injected AISDK loader", () =>
     Effect.gen(function* () {
       const native = yield* SessionRunnerModel.fromCatalogModel(

@@ -490,12 +490,12 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
     Stream.unwrap(
       Effect.tryPromise({
         try: () => language.doStream(options),
-        catch: (error) => providerError("doStream", error),
+        catch: (error) => llmError("doStream", error),
       }).pipe(
         Effect.map((result) =>
           Stream.fromReadableStream({
             evaluate: () => result.stream,
-            onError: (error) => providerError("readStream", error),
+            onError: (error) => llmError("readStream", error),
           }).pipe(
             Stream.mapEffect((event) => streamPartEvents(state, event)),
             Stream.flatMap((events) => Stream.fromIterable(events)),
@@ -608,7 +608,7 @@ function streamPartEvents(
         }),
       ])
     case "error":
-      return Effect.fail(invalidProviderOutput(event.error))
+      return Effect.fail(llmError("stream", event.error))
   }
 }
 
@@ -666,21 +666,15 @@ function messageValue(input: unknown) {
   }
 }
 
-function providerError(method: "doStream" | "readStream", error: unknown) {
-  if (error instanceof LLMError) return error
+function llmError(method: string, error: unknown) {
+  const reason =
+    error instanceof LLMError
+      ? new InvalidProviderOutputReason({ message: error.message })
+      : new UnknownProviderReason({ message: error instanceof Error ? error.message : String(error) })
   return new LLMError({
     module: "AISDK",
     method,
-    reason: new UnknownProviderReason({ message: error instanceof Error ? error.message : String(error) }),
-  })
-}
-
-function invalidProviderOutput(error: unknown) {
-  if (error instanceof LLMError) return error
-  return new LLMError({
-    module: "AISDK",
-    method: "stream",
-    reason: new InvalidProviderOutputReason({ message: error instanceof Error ? error.message : String(error) }),
+    reason,
   })
 }
 
