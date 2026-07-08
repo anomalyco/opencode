@@ -108,7 +108,9 @@ function Probe(props: {
 describe("useEvent", () => {
   test("logs only durable events", async () => {
     const logs: Array<{ message: string; tags: Readonly<Record<string, unknown>> }> = []
-    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => logs.push({ message, tags }))
+    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => {
+      if (message === "event") logs.push({ message, tags })
+    })
     const durable = event(
       {
         id: "evt_renamed",
@@ -128,7 +130,7 @@ describe("useEvent", () => {
       expect(logs).toEqual([
         {
           message: "event",
-          tags: { type: "session.renamed", aggregateID: "ses_test", seq: 1 },
+          tags: { component: "sdk", type: "session.renamed", aggregateID: "ses_test", seq: 1 },
         },
       ])
     } finally {
