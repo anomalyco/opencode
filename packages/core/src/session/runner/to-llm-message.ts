@@ -59,6 +59,26 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
   },
 })
 
+const attachmentContent = (file: FileAttachment): ContentPart[] => {
+  if (file.mime === "text/plain") return [textAttachment(file)]
+  if (file.mime === "application/x-directory") return [directoryAttachment(file)]
+  if (imageMimes.has(file.mime)) return [media(file)]
+  return []
+}
+
+function separateTextParts(parts: ContentPart[]) {
+  let seenText = false
+  return parts.map((part) => {
+    if (part.type !== "text") return part
+    if (!seenText) {
+      seenText = true
+      return part
+    }
+    // OpenAI Chat flattens text-only content without adding a delimiter.
+    return { ...part, text: `\n\n${part.text}` }
+  })
+}
+
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 const providerMetadata = (
@@ -172,20 +192,10 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, provider
     case "model-switched":
       return []
     case "user":
-      const files = message.files ?? []
-      const attachments = files.flatMap((file): ContentPart[] => {
-        if (file.mime === "text/plain") return [textAttachment(file)]
-        if (file.mime === "application/x-directory") return [directoryAttachment(file)]
-        if (imageMimes.has(file.mime)) return [media(file)]
-        return []
-      })
-      const firstTextAttachment = message.text === "" ? attachments.findIndex((part) => part.type === "text") : -1
-      const content: ContentPart[] = [
-        ...(message.text === "" ? [] : [{ type: "text" as const, text: message.text }]),
-        ...attachments.map((part, index) =>
-          part.type === "text" && index !== firstTextAttachment ? { ...part, text: `\n\n${part.text}` } : part,
-        ),
-      ]
+      const content = separateTextParts([
+        ...(message.text === "" ? [] : [Message.text(message.text)]),
+        ...(message.files ?? []).flatMap(attachmentContent),
+      ])
       if (content.length === 0) return []
       return [
         Message.make({
