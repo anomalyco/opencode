@@ -92,6 +92,7 @@ const configuredPlugins = Effect.fn("SkillPlugin.configuredPlugins")(function* (
         }),
       )
     }
+    if (entry.type !== "directory") return Effect.succeed([])
     return fs
       .glob("{plugin,plugins}/*.{ts,js}", {
         cwd: entry.path,

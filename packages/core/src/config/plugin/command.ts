@@ -19,6 +19,7 @@ export const Plugin = define({
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), (entry) => {
         if (entry.type === "document") return Effect.succeed([{ commands: entry.info.commands }])
+        if (entry.type !== "directory") return Effect.succeed([])
         return loadDirectory(fs, entry.path).pipe(
           Effect.map((commands) => [
             { commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) },

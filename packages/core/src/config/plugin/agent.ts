@@ -40,6 +40,7 @@ export const Plugin = define({
     const load = Effect.fn("ConfigAgentPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), (entry) => {
         if (entry.type === "document") return Effect.succeed([entry])
+        if (entry.type !== "directory") return Effect.succeed([])
         return Effect.gen(function* () {
           const files = yield* discover(fs, entry.path)
           return yield* Effect.forEach(files, (file) =>
