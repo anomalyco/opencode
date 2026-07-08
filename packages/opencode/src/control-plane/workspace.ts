@@ -441,8 +441,6 @@ const layer = Layer.effect(
     })
 
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
-      if (!flags.experimentalWorkspaces) return
-
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catch((error) =>
           Effect.gen(function* () {
@@ -461,6 +459,8 @@ const layer = Layer.effect(
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
+
+      if (!flags.experimentalWorkspaces) return
 
       const exists = yield* FiberMap.has(syncFibers, space.id)
       if (exists && connections.get(space.id)?.status !== "error") return
@@ -623,7 +623,7 @@ const layer = Layer.effect(
         }
 
         if (input.workspaceID === null) {
-          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined })
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined, directory: input.directory })
 
           return
         }
@@ -785,19 +785,12 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceV2.ID) {
-      const sessions = yield* db
-        .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
-        .from(SessionTable)
+      yield* db
+        .update(SessionTable)
+        .set({ workspace_id: null, directory: "" })
         .where(eq(SessionTable.workspace_id, id))
-        .all()
+        .run()
         .pipe(Effect.orDie)
-      const sessionIDs = new Set(sessions.map((sessionInfo) => sessionInfo.id))
-      yield* Effect.forEach(
-        sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
-        (sessionInfo) =>
-          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
-        { discard: true },
-      )
 
       const row = yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return
