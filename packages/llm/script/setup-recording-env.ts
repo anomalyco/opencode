@@ -97,7 +97,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
   },
   {
     id: "xai",
-    label: "xAI",
+    label: "SpaceXAI",
     tier: "canary",
     note: "OpenAI-compatible xAI chat endpoint",
     vars: [{ name: "XAI_API_KEY" }],

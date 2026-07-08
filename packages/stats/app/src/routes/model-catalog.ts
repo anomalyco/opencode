@@ -96,7 +96,7 @@ export function formatCatalogLabName(lab: string) {
     perplexity: "Perplexity",
     stepfun: "StepFun",
     tencent: "Tencent",
-    xai: "xAI",
+    xai: "SpaceXAI",
     xiaomi: "Xiaomi",
     zai: "Z.ai",
     qwen: "Qwen",

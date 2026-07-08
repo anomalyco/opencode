@@ -156,7 +156,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "これらに加えて、",
   "home.faq.a3.p2.afterZen": " アカウントを作成することで、人気のコーディングモデルを利用できます。",
   "home.faq.a3.p3":
-    "Zenの利用を推奨していますが、OpenCodeはOpenAI、Anthropic、xAIなどの主要プロバイダーにも対応しています。",
+    "Zenの利用を推奨していますが、OpenCodeはOpenAI、Anthropic、SpaceXAIなどの主要プロバイダーにも対応しています。",
   "home.faq.a3.p4.beforeLocal": "さらに、",
   "home.faq.a3.p4.localLink": "ローカルモデル",
   "home.faq.q4": "既存のAIサブスクリプションをOpenCodeで使えますか？",
@@ -729,7 +729,7 @@ export const dict = {
   "download.faq.a3.localLink": "ローカルモデル",
   "download.faq.a3.afterLocal.beforeZen": "であれば無料で利用できます。ユーザーには",
   "download.faq.a3.afterZen":
-    "の利用をお勧めしていますが、OpenCodeはOpenAI、Anthropic、xAIなどの主要なプロバイダーに対応しています。",
+    "の利用をお勧めしていますが、OpenCodeはOpenAI、Anthropic、SpaceXAIなどの主要なプロバイダーに対応しています。",
 
   "download.faq.a5.p1": "OpenCodeは100%無料で利用できます。",
   "download.faq.a5.p2.beforeZen":

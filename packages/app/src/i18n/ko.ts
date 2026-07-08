@@ -184,7 +184,7 @@ export const dict = {
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
-  "model.provider.xai": "xAI",
+  "model.provider.xai": "SpaceXAI",
   "model.provider.meta": "Meta",
   "model.input.text": "텍스트",
   "model.input.image": "이미지",

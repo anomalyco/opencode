@@ -155,7 +155,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "นอกจากนี้ คุณสามารถใช้โมเดลยอดนิยมใดก็ได้โดยการสร้างบัญชี",
   "home.faq.a3.p2.afterZen": "",
   "home.faq.a3.p3":
-    "แม้เราจะแนะนำให้ใช้ Zen แต่ OpenCode ก็ทำงานร่วมกับผู้ให้บริการยอดนิยมทั้งหมด เช่น OpenAI, Anthropic, xAI เป็นต้น",
+    "แม้เราจะแนะนำให้ใช้ Zen แต่ OpenCode ก็ทำงานร่วมกับผู้ให้บริการยอดนิยมทั้งหมด เช่น OpenAI, Anthropic, SpaceXAI เป็นต้น",
   "home.faq.a3.p4.beforeLocal": "คุณยังสามารถเชื่อมต่อกับ",
   "home.faq.a3.p4.localLink": "โมเดล Local ของคุณ",
   "home.faq.q4": "ฉันสามารถใช้การสมัครสมาชิก AI ที่มีอยู่กับ OpenCode ได้หรือไม่?",
@@ -723,7 +723,7 @@ export const dict = {
     "ไม่จำเป็นเสมอไป แต่อาจจะต้องมี คุณจะต้องมีการสมัครสมาชิก AI หากต้องการเชื่อมต่อ OpenCode กับผู้ให้บริการที่มีค่าใช้จ่าย แม้ว่าคุณจะสามารถทำงานกับ",
   "download.faq.a3.localLink": "โมเดล Local",
   "download.faq.a3.afterLocal.beforeZen": "ได้ฟรี แม้ว่าเราจะแนะนำให้ผู้ใช้ใช้งาน",
-  "download.faq.a3.afterZen": ", OpenCode ก็ทำงานร่วมกับผู้ให้บริการยอดนิยมทั้งหมด เช่น OpenAI, Anthropic, xAI เป็นต้น",
+  "download.faq.a3.afterZen": ", OpenCode ก็ทำงานร่วมกับผู้ให้บริการยอดนิยมทั้งหมด เช่น OpenAI, Anthropic, SpaceXAI เป็นต้น",
 
   "download.faq.a5.p1": "OpenCode ใช้งานได้ฟรี 100%",
   "download.faq.a5.p2.beforeZen":

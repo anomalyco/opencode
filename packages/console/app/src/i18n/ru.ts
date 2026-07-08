@@ -158,7 +158,7 @@ export const dict = {
     "Помимо этого, вы можете использовать любые популярные модели для кодинга, создав аккаунт",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Хотя мы рекомендуем использовать Zen, OpenCode также работает со всеми популярными провайдерами, такими как OpenAI, Anthropic, xAI и др.",
+    "Хотя мы рекомендуем использовать Zen, OpenCode также работает со всеми популярными провайдерами, такими как OpenAI, Anthropic, SpaceXAI и др.",
   "home.faq.a3.p4.beforeLocal": "Вы даже можете подключить ваши",
   "home.faq.a3.p4.localLink": "локальные модели",
   "home.faq.q4": "Могу ли я использовать мои существующие AI-подписки с OpenCode?",
@@ -737,7 +737,7 @@ export const dict = {
   "download.faq.a3.localLink": "локальными моделями",
   "download.faq.a3.afterLocal.beforeZen": "бесплатно. Хотя мы рекомендуем использовать",
   "download.faq.a3.afterZen":
-    ", OpenCode работает со всеми популярными провайдерами, такими как OpenAI, Anthropic, xAI и др.",
+    ", OpenCode работает со всеми популярными провайдерами, такими как OpenAI, Anthropic, SpaceXAI и др.",
 
   "download.faq.a5.p1": "OpenCode на 100% бесплатен.",
   "download.faq.a5.p2.beforeZen":

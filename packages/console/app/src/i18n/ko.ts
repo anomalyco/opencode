@@ -155,7 +155,7 @@ export const dict = {
   "home.faq.a3.p1": "꼭 그렇지는 않습니다. OpenCode에는 계정 없이도 사용할 수 있는 무료 모델 세트가 포함되어 있습니다.",
   "home.faq.a3.p2.beforeZen": "이 외에도,",
   "home.faq.a3.p2.afterZen": " 계정을 생성하여 인기 있는 코딩 모델들을 사용할 수 있습니다.",
-  "home.faq.a3.p3": "Zen 사용을 권장하지만, OpenCode는 OpenAI, Anthropic, xAI 등 모든 인기 제공자와도 작동합니다.",
+  "home.faq.a3.p3": "Zen 사용을 권장하지만, OpenCode는 OpenAI, Anthropic, SpaceXAI 등 모든 인기 제공자와도 작동합니다.",
   "home.faq.a3.p4.beforeLocal": "또한",
   "home.faq.a3.p4.localLink": "로컬 모델",
   "home.faq.q4": "기존 AI 구독을 OpenCode에서 사용할 수 있나요?",
@@ -720,7 +720,7 @@ export const dict = {
     "꼭 그렇지는 않지만, 아마도 필요할 것입니다. OpenCode를 유료 제공자에 연결하려면 AI 구독이 필요할 수 있습니다. 하지만",
   "download.faq.a3.localLink": "로컬 모델",
   "download.faq.a3.afterLocal.beforeZen": "은 무료로 사용할 수 있습니다. 우리는",
-  "download.faq.a3.afterZen": " 사용을 권장하지만, OpenCode는 OpenAI, Anthropic, xAI 등 모든 인기 제공자와 작동합니다.",
+  "download.faq.a3.afterZen": " 사용을 권장하지만, OpenCode는 OpenAI, Anthropic, SpaceXAI 등 모든 인기 제공자와 작동합니다.",
 
   "download.faq.a5.p1": "OpenCode는 100% 무료로 사용할 수 있습니다.",
   "download.faq.a5.p2.beforeZen":

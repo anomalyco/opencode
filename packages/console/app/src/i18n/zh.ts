@@ -153,7 +153,7 @@ export const dict = {
   "home.faq.a3.p1": "不一定。OpenCode 自带一组免费模型，无需创建账户即可使用。",
   "home.faq.a3.p2.beforeZen": "此外，您可以通过创建",
   "home.faq.a3.p2.afterZen": "账户来使用流行的编程模型。",
-  "home.faq.a3.p3": "虽然我们鼓励使用 Zen，但 OpenCode 也支持所有主流提供商，如 OpenAI, Anthropic, xAI 等。",
+  "home.faq.a3.p3": "虽然我们鼓励使用 Zen，但 OpenCode 也支持所有主流提供商，如 OpenAI, Anthropic, SpaceXAI 等。",
   "home.faq.a3.p4.beforeLocal": "您甚至可以连接您的",
   "home.faq.a3.p4.localLink": "本地模型",
   "home.faq.q4": "我可以使用现有的 AI 订阅吗？",
@@ -702,7 +702,7 @@ export const dict = {
     "不一定，但可能需要。如果您想将 OpenCode 连接到付费提供商，您需要 AI 订阅，尽管您可以配合",
   "download.faq.a3.localLink": "本地模型",
   "download.faq.a3.afterLocal.beforeZen": "免费使用。虽然我们鼓励用户使用",
-  "download.faq.a3.afterZen": "，但 OpenCode 支持所有主流提供商，如 OpenAI, Anthropic, xAI 等。",
+  "download.faq.a3.afterZen": "，但 OpenCode 支持所有主流提供商，如 OpenAI, Anthropic, SpaceXAI 等。",
 
   "download.faq.a5.p1": "OpenCode 是 100% 免费使用的。",
   "download.faq.a5.p2.beforeZen":

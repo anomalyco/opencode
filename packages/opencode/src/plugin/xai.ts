@@ -335,7 +335,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
+        res.end(OauthCallbackPage.error(errorMsg, { provider: "SpaceXAI" }))
         return
       }
 
@@ -344,7 +344,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
+        res.end(OauthCallbackPage.error(errorMsg, { provider: "SpaceXAI" }))
         return
       }
 
@@ -353,7 +353,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
+        res.end(OauthCallbackPage.error(errorMsg, { provider: "SpaceXAI" }))
         return
       }
 
@@ -365,7 +365,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         .catch((err) => current.reject(err))
 
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.success({ provider: "xAI" }))
+      res.end(OauthCallbackPage.success({ provider: "SpaceXAI" }))
       return
     }
 
@@ -549,7 +549,7 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
       },
       methods: [
         {
-          label: "xAI Grok OAuth (SuperGrok Subscription)",
+          label: "SpaceXAI Grok OAuth (SuperGrok Subscription)",
           type: "oauth",
           authorize: async () => {
             await startOAuthServer()
@@ -591,7 +591,7 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
           // user's browser. Defends the only attack surface (the polling
           // loop) with the standard authorization_pending / slow_down
           // backoff and a hard deadline from xAI's `expires_in`.
-          label: "xAI Grok OAuth (Headless / Remote / VPS)",
+          label: "SpaceXAI Grok OAuth (Headless / Remote / VPS)",
           type: "oauth",
           authorize: async () => {
             const device = await requestDeviceCode(options)

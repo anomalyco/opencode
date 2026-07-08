@@ -157,7 +157,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "Derudover kan du bruge populære kodningsmodeller ved at oprette en",
   "home.faq.a3.p2.afterZen": " konto.",
   "home.faq.a3.p3":
-    "Vi opfordrer til at bruge Zen, men OpenCode virker også med populære udbydere som OpenAI, Anthropic, xAI osv.",
+    "Vi opfordrer til at bruge Zen, men OpenCode virker også med populære udbydere som OpenAI, Anthropic, SpaceXAI osv.",
   "home.faq.a3.p4.beforeLocal": "Du kan endda forbinde dine",
   "home.faq.a3.p4.localLink": "lokale modeller",
   "home.faq.q4": "Kan jeg bruge mine eksisterende AI-abonnementer med OpenCode?",
@@ -726,7 +726,7 @@ export const dict = {
     "Ikke nødvendigvis, men sandsynligvis. Du skal bruge et AI-abonnement hvis du vil forbinde OpenCode til en betalt udbyder, men du kan arbejde med",
   "download.faq.a3.localLink": "lokale modeller",
   "download.faq.a3.afterLocal.beforeZen": "gratis. Selvom vi opfordrer brugere til at bruge",
-  "download.faq.a3.afterZen": ", fungerer OpenCode med alle populære udbydere som OpenAI, Anthropic, xAI osv.",
+  "download.faq.a3.afterZen": ", fungerer OpenCode med alle populære udbydere som OpenAI, Anthropic, SpaceXAI osv.",
 
   "download.faq.a5.p1": "OpenCode er 100% gratis at bruge.",
   "download.faq.a5.p2.beforeZen":

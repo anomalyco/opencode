@@ -155,7 +155,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "وبخلاف ذلك، يمكنك استخدام أي من نماذج البرمجة الشائعة بإنشاء حساب",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "مع أننا نشجّع المستخدمين على استخدام Zen، فإن OpenCode يعمل أيضًا مع كل المزودين الشائعين مثل OpenAI، Anthropic، xAI إلخ.",
+    "مع أننا نشجّع المستخدمين على استخدام Zen، فإن OpenCode يعمل أيضًا مع كل المزودين الشائعين مثل OpenAI، Anthropic، SpaceXAI إلخ.",
   "home.faq.a3.p4.beforeLocal": "ويمكنك أيضًا ربط",
   "home.faq.a3.p4.localLink": "النماذج المحلية",
   "home.faq.q4": "هل يمكنني استخدام اشتراكاتي الحالية مع OpenCode؟",
@@ -720,7 +720,7 @@ export const dict = {
     "ليس بالضرورة، ولكن على الأرجح. ستحتاج إلى اشتراك ذكاء اصطناعي إذا كنت تريد ربط OpenCode بمزوّد مدفوع، رغم أنه يمكنك العمل مع",
   "download.faq.a3.localLink": "النماذج المحلية",
   "download.faq.a3.afterLocal.beforeZen": "مجانًا. بينما نشجع المستخدمين على استخدام",
-  "download.faq.a3.afterZen": "، فإن OpenCode يعمل مع جميع المزودين الشائعين مثل OpenAI، Anthropic، xAI إلخ.",
+  "download.faq.a3.afterZen": "، فإن OpenCode يعمل مع جميع المزودين الشائعين مثل OpenAI، Anthropic، SpaceXAI إلخ.",
 
   "download.faq.a5.p1": "OpenCode مجاني 100% للاستخدام.",
   "download.faq.a5.p2.beforeZen":

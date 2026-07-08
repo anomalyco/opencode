@@ -156,7 +156,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "En plus, vous pouvez utiliser des modèles populaires pour le code en créant un compte",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Nous encourageons l'utilisation de Zen, mais OpenCode fonctionne aussi avec les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
+    "Nous encourageons l'utilisation de Zen, mais OpenCode fonctionne aussi avec les fournisseurs populaires comme OpenAI, Anthropic, SpaceXAI, etc.",
   "home.faq.a3.p4.beforeLocal": "Vous pouvez même connecter vos",
   "home.faq.a3.p4.localLink": "modèles locaux",
   "home.faq.q4": "Puis-je utiliser mes abonnements IA existants avec OpenCode ?",
@@ -739,7 +739,7 @@ export const dict = {
   "download.faq.a3.localLink": "modèles locaux",
   "download.faq.a3.afterLocal.beforeZen": "gratuitement. Même si nous encourageons les utilisateurs à utiliser",
   "download.faq.a3.afterZen":
-    ", OpenCode fonctionne avec tous les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
+    ", OpenCode fonctionne avec tous les fournisseurs populaires comme OpenAI, Anthropic, SpaceXAI, etc.",
 
   "download.faq.a5.p1": "OpenCode est 100% gratuit à utiliser.",
   "download.faq.a5.p2.beforeZen":

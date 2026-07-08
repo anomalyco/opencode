@@ -155,7 +155,7 @@ export const dict = {
   "home.faq.a3.p1": "Şart değil. OpenCode, hesap açmadan kullanabileceğiniz ücretsiz modellerle gelir.",
   "home.faq.a3.p2.beforeZen": "Bunun dışında, popüler kodlama modellerini kullanmak için bir",
   "home.faq.a3.p2.afterZen": " hesabı oluşturabilirsiniz.",
-  "home.faq.a3.p3": "Zen'i öneriyoruz, ancak OpenCode OpenAI, Anthropic, xAI gibi popüler sağlayıcılarla da çalışır.",
+  "home.faq.a3.p3": "Zen'i öneriyoruz, ancak OpenCode OpenAI, Anthropic, SpaceXAI gibi popüler sağlayıcılarla da çalışır.",
   "home.faq.a3.p4.beforeLocal": "Hatta",
   "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
@@ -732,7 +732,7 @@ export const dict = {
   "download.faq.a3.localLink": "yerel modeller",
   "download.faq.a3.afterLocal.beforeZen": "ile ücretsiz çalışabilirsiniz. Kullanıcıları",
   "download.faq.a3.afterZen":
-    " kullanmaya teşvik ediyoruz, ancak OpenCode OpenAI, Anthropic, xAI vb. gibi tüm popüler sağlayıcılarla çalışır.",
+    " kullanmaya teşvik ediyoruz, ancak OpenCode OpenAI, Anthropic, SpaceXAI vb. gibi tüm popüler sağlayıcılarla çalışır.",
 
   "download.faq.a5.p1": "OpenCode %100 ücretsizdir.",
   "download.faq.a5.p2.beforeZen":

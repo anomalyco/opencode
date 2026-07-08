@@ -157,7 +157,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "Abgesehen davon kannst du jedes beliebige Coding-Modell nutzen, indem du einen",
   "home.faq.a3.p2.afterZen": " Account erstellst.",
   "home.faq.a3.p3":
-    "Während wir dazu raten, Zen zu nutzen, funktioniert OpenCode auch mit allen beliebten Anbietern wie OpenAI, Anthropic, xAI etc.",
+    "Während wir dazu raten, Zen zu nutzen, funktioniert OpenCode auch mit allen beliebten Anbietern wie OpenAI, Anthropic, SpaceXAI etc.",
   "home.faq.a3.p4.beforeLocal": "Du kannst sogar deine",
   "home.faq.a3.p4.localLink": "lokalen Modelle verbinden",
   "home.faq.q4": "Kann ich meine bestehenden AI-Abos mit OpenCode nutzen?",
@@ -732,7 +732,7 @@ export const dict = {
   "download.faq.a3.localLink": "lokalen Modellen",
   "download.faq.a3.afterLocal.beforeZen": "kostenlos arbeiten kannst. Während wir Nutzern raten,",
   "download.faq.a3.afterZen":
-    " zu nutzen, funktioniert OpenCode mit allen populären Anbietern wie OpenAI, Anthropic, xAI etc.",
+    " zu nutzen, funktioniert OpenCode mit allen populären Anbietern wie OpenAI, Anthropic, SpaceXAI etc.",
 
   "download.faq.a5.p1": "OpenCode ist 100% kostenlos.",
   "download.faq.a5.p2.beforeZen":
