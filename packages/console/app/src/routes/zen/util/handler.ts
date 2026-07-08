@@ -268,6 +268,7 @@ export async function handler(
 
       // Try another provider => stop retrying if using fallback provider
       if (
+        //!isNewInference &&
         res.status !== 200 &&
         // ie. 400 error is usually provider error like malformed request
         res.status !== 400 &&
