@@ -37,17 +37,19 @@ describe("SkillPlugin.Plugin", () => {
         Effect.provide(NodeFileSystem.layer),
       )
       const skills = yield* skill.list()
-      const report = skills.find((item) => item.name === "report")
+      const report = skills.find((item) => item.id === "report")
 
       expect(skills).toContainEqual(
         expect.objectContaining({
-          name: "opencode",
+          id: "opencode",
+          name: "OpenCode",
           description: expect.stringContaining("any question about OpenCode itself"),
         }),
       )
       expect(skills).toContainEqual(
         expect.objectContaining({
-          name: "report",
+          id: "report",
+          name: "Report",
           description: expect.stringContaining("opencode issue"),
         }),
       )
