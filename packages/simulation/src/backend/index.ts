@@ -1,10 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { filesystem, httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { DriveManifest } from "../manifest"
 import { SimulationControl } from "./control"
-import { SimulationFileSystem } from "./filesystem"
-import { SimulationFSUtil } from "./fs-util"
 import { SimulationNetwork } from "./network"
 import { SimulationOpenAI } from "./openai"
 
@@ -14,8 +11,6 @@ import { SimulationOpenAI } from "./openai"
  * The server merges these into the app node build when `OPENCODE_SIMULATE`
  * is enabled, via a dynamic import so this module is never loaded eagerly.
  *
- * - Filesystem: in-memory tree rooted at the current working directory.
- *   Everything under the root lives in memory; paths outside it fail loudly.
  * - Network: all outbound HTTP resolves against the simulated route table;
  *   unknown destinations are denied. The driver-answered OpenAI endpoint is
  *   registered here as the first route.
@@ -32,8 +27,6 @@ export function startDriveServer() {
 }
 
 export const simulationReplacements: LayerNode.Replacements = [
-  [filesystem, SimulationFileSystem.layer()],
-  [FSUtil.node, SimulationFSUtil.node],
   [httpClient, SimulationNetwork.layer],
 ]
 
