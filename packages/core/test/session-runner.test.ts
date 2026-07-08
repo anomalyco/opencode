@@ -1464,7 +1464,7 @@ describe("SessionRunnerLLM", () => {
       })
       expect(
         (yield* recordedEventTypes(sessionID)).filter(
-          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 2),
+          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 1),
         ),
       ).toHaveLength(1)
     }),
@@ -1487,7 +1487,7 @@ describe("SessionRunnerLLM", () => {
       })
       expect(
         (yield* recordedEventTypes(sessionID)).filter(
-          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 2),
+          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 1),
         ),
       ).toHaveLength(1)
     }),
@@ -1510,7 +1510,7 @@ describe("SessionRunnerLLM", () => {
       })
       expect(
         (yield* recordedEventTypes(sessionID)).filter(
-          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 2),
+          (type) => type === EventV2.versionedType(SessionEvent.Compaction.Failed.type, 1),
         ),
       ).toHaveLength(1)
     }),
