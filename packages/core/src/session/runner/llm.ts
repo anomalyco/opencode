@@ -250,6 +250,7 @@ const layer = Layer.effect(
           agentInfo,
           currentStep,
           resolved,
+          providerMetadataKey,
           context,
           isLastStep,
           toolMaterialization,
@@ -275,6 +276,7 @@ const layer = Layer.effect(
       const agentInfo = prepared.agentInfo
       const currentStep = prepared.currentStep
       const resolved = prepared.resolved
+      const providerMetadataKey = prepared.providerMetadataKey
       const model = resolved.model
       const context = prepared.context
       const isLastStep = prepared.isLastStep
