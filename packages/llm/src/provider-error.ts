@@ -6,6 +6,7 @@ const patterns = [
   /input is too long for requested model/i,
   /exceeds the context window/i,
   /input token count.*exceeds the maximum/i,
+  /tokens in request more than max tokens allowed/i,
   /maximum prompt length is \d+/i,
   /reduce the length of the messages/i,
   /maximum context length is \d+ tokens/i,
