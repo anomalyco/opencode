@@ -109,14 +109,7 @@ const reply = {
     LLMEvent.stepFinish({ index: 0, reason: "stop" }),
     LLMEvent.finish({ reason: "stop" }),
   ],
-  text: (text: string, id: string) => [
-    LLMEvent.stepStart({ index: 0 }),
-    LLMEvent.textStart({ id }),
-    LLMEvent.textDelta({ id, text }),
-    LLMEvent.textEnd({ id }),
-    LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-    LLMEvent.finish({ reason: "stop" }),
-  ],
+  text: (text: string, id: string) => fragmentFixture("text", id, [text]).completeEvents,
   tool: (id: string, name: string, input: unknown) => [
     LLMEvent.stepStart({ index: 0 }),
     LLMEvent.toolCall({ id, name, input }),
@@ -436,8 +429,7 @@ const rateLimited = (retryAfterMs?: number) =>
   })
 
 const setupOverflowRecovery = Effect.gen(function* () {
-  yield* setup
-  const session = yield* SessionV2.Service
+  const session = yield* setup
   response = reply.text("Earlier answer", "text-earlier")
   yield* admit(session, "Earlier question ".repeat(700))
   yield* session.resume(sessionID)
@@ -489,9 +481,6 @@ const recordedStepSettlementEvents = (id: SessionV2.ID, assistantMessageID: Sess
       (event) => settlementTypes.has(event.type) && event.data.assistantMessageID === assistantMessageID,
     )
   })
-
-const recordedSettlementTypes = (id: SessionV2.ID, assistantMessageID: SessionMessage.ID) =>
-  recordedStepSettlementEvents(id, assistantMessageID).pipe(Effect.map((events) => events.map((event) => event.type)))
 
 const hostedCall = (id: string, query: string) =>
   LLMEvent.toolCall({ id, name: "web_search", input: { query }, providerExecuted: true })
@@ -1717,7 +1706,7 @@ describe("SessionRunnerLLM", () => {
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Done" }] },
       ])
       const assistant = requireAssistant(context)
-      expect(yield* recordedSettlementTypes(sessionID, assistant.id)).toEqual([
+      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.1",
@@ -2585,15 +2574,15 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("durably rejects tools unavailable for the request", () =>
+  it.effect("durably settles local tool failures before continuing", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Call missing")
 
-      response = reply.tool("call-missing", "missing", {})
+      responses = [reply.tool("call-missing", "missing", {}), reply.text("Recovered", "text-after-error")]
       yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(1)
+      expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Call missing" },
         {
@@ -2602,10 +2591,11 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-missing",
-              state: { status: "error", error: { message: "Tool is not available for this request: missing" } },
+              state: { status: "error", error: { message: "Unknown tool: missing" } },
             },
           ],
         },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
     }),
   )
@@ -2640,7 +2630,7 @@ describe("SessionRunnerLLM", () => {
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
       const assistant = requireAssistant(context)
-      expect(yield* recordedSettlementTypes(sessionID, assistant.id)).toEqual([
+      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.1",
@@ -2919,7 +2909,7 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const assistant = requireAssistant(context)
-      expect(yield* recordedSettlementTypes(sessionID, assistant.id)).toEqual([
+      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.1",
@@ -2963,7 +2953,7 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const assistant = requireAssistant(context)
-      expect(yield* recordedSettlementTypes(sessionID, assistant.id)).toEqual([
+      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.1",
@@ -3387,7 +3377,6 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Do not continue failed provider")
 
-      const executionCount = executions.length
       toolExecutionGate = yield* Deferred.make<void>()
       toolExecutionsStarted = yield* Deferred.make<void>()
       toolExecutionsReady = 1
@@ -3405,10 +3394,10 @@ describe("SessionRunnerLLM", () => {
       toolExecutionsStarted = undefined
 
       expect(requests).toHaveLength(1)
-      expect(executions.slice(executionCount)).toEqual(["settled"])
+      expect(executions).toEqual(["settled"])
       const context = yield* session.context(sessionID)
       const assistant = requireAssistant(context)
-      expect(yield* recordedSettlementTypes(sessionID, assistant.id)).toEqual([
+      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.1",
@@ -3440,7 +3429,7 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const assistant = requireAssistant(context)
-      expect(yield* recordedSettlementTypes(sessionID, assistant.id)).toEqual([
+      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.1",
