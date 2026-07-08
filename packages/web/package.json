@@ -12,16 +12,16 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "12.6.3",
-    "@astrojs/markdown-remark": "6.3.1",
-    "@astrojs/solid-js": "5.1.0",
-    "@astrojs/starlight": "0.34.3",
+    "@astrojs/cloudflare": "14.1.1",
+    "@astrojs/markdown-remark": "7.2.1",
+    "@astrojs/solid-js": "7.0.1",
+    "@astrojs/starlight": "0.41.3",
     "@fontsource/ibm-plex-mono": "5.2.5",
     "@shikijs/transformers": "3.20.0",
     "@solid-primitives/resize-observer": "2.1.5",
     "@types/luxon": "catalog:",
     "ai": "catalog:",
-    "astro": "5.7.13",
+    "astro": "7.0.6",
     "diff": "catalog:",
     "js-base64": "3.7.7",
     "lang-map": "0.4.0",
@@ -38,7 +38,7 @@
   "devDependencies": {
     "opencode": "workspace:*",
     "@types/node": "catalog:",
-    "@astrojs/check": "0.9.6",
+    "@astrojs/check": "0.9.9",
     "typescript": "catalog:"
   }
 }

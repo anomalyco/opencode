@@ -5,7 +5,7 @@ import solidJs from "@astrojs/solid-js"
 import cloudflare from "@astrojs/cloudflare"
 import theme from "toolbeam-docs-theme"
 import config from "./config.mjs"
-import { rehypeHeadingIds } from "@astrojs/markdown-remark"
+import { rehypeHeadingIds, unified } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
 
@@ -16,6 +16,7 @@ export default defineConfig({
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",
+    prerenderEnvironment: "node",
   }),
   devToolbar: {
     enabled: false,
@@ -24,6 +25,7 @@ export default defineConfig({
     host: "0.0.0.0",
   },
   markdown: {
+    processor: unified(),
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },
   build: {},
