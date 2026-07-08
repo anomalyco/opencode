@@ -461,7 +461,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-opencode-reasoning"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: opencode,
           content: [
             SessionMessage.AssistantReasoning.make({
