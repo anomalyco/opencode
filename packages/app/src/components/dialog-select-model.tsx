@@ -155,8 +155,8 @@ export function ModelSelectorPopover(props: {
 
   const handleConnectProvider = () => {
     close("provider")
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
+    void import("./dialog-connect-provider").then((x) => {
+      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
     })
   }
   const language = useLanguage()
@@ -503,8 +503,8 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   const directory = () => decode64(local.slug())
 
   const provider = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={directory} />)
+    void import("./dialog-connect-provider").then((x) => {
+      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
     })
   }
 
