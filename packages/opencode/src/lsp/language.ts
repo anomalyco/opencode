@@ -65,6 +65,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".pm": "perl",
   ".pm6": "perl6",
   ".php": "php",
+  ".pkl": "pkl",
   ".ps1": "powershell",
   ".psm1": "powershell",
   ".pug": "jade",

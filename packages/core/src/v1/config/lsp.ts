@@ -55,6 +55,7 @@ export const builtinServerIds = [
   "gleam",
   "clojure-lsp",
   "nixd",
+  "pkl",
   "tinymist",
   "haskell-language-server",
   "julials",

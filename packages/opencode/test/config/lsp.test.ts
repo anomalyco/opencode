@@ -22,6 +22,11 @@ describe("ConfigLSPV1.Info refinement", () => {
       expect(decodeEffect(input)).toEqual(input)
     })
 
+    test("pkl builtin with no extensions passes", () => {
+      const input = { pkl: { command: ["pkl-lsp", "--stdio"] } }
+      expect(decodeEffect(input)).toEqual(input)
+    })
+
     test("custom server WITH extensions passes", () => {
       const input = {
         "my-lsp": { command: ["my-lsp-bin"], extensions: [".ml"] },

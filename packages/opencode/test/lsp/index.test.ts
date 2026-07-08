@@ -7,6 +7,7 @@ import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
+import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
@@ -26,6 +27,12 @@ const disabledDownloadIt = testEffect(
 )
 
 describe("lsp.spawn", () => {
+  it.effect("maps PKL files to the pkl language id", () =>
+    Effect.sync(() => {
+      expect(LANGUAGE_EXTENSIONS[".pkl"]).toBe("pkl")
+    }),
+  )
+
   it.instance(
     "does not spawn builtin LSP for files outside instance",
     () =>
@@ -223,6 +230,29 @@ describe("lsp.spawn", () => {
             expect(pyright.mock.calls[0]?.[2]).toMatchObject({ disableLspDownload: true })
           } finally {
             pyright.mockRestore()
+          }
+        }),
+      ),
+    { config: { lsp: true } },
+  )
+
+  it.instance(
+    "would spawn builtin PKL LSP for PKL files when lsp is true",
+    () =>
+      LSP.Service.use((lsp) =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const spy = spyOn(LSPServer.Pkl, "spawn").mockResolvedValue(undefined)
+
+          try {
+            yield* lsp.hover({
+              file: path.join(dir, "config.pkl"),
+              line: 0,
+              character: 0,
+            })
+            expect(spy).toHaveBeenCalledTimes(1)
+          } finally {
+            spy.mockRestore()
           }
         }),
       ),

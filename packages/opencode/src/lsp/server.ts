@@ -1864,6 +1864,26 @@ export const Nixd: Info = {
   },
 }
 
+export const Pkl: Info = {
+  id: "pkl",
+  extensions: [".pkl"],
+  root: NearestRoot(["PklProject", "pkl.project", "pkl.toml", "flake.nix", ".git"]),
+  async spawn(root) {
+    const pklLsp = which("pkl-lsp")
+    if (!pklLsp) {
+      return
+    }
+    return {
+      process: spawn(pklLsp, ["--stdio"], {
+        cwd: root,
+        env: {
+          ...process.env,
+        },
+      }),
+    }
+  },
+}
+
 export const Tinymist: Info = {
   id: "tinymist",
   extensions: [".typ", ".typc"],
