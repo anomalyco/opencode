@@ -1,0 +1,24 @@
+# Control a real web browser
+
+Runs a Python script against a live browser via the browser-use CLI. Helpers are pre-imported; arbitrary Python is allowed (variables, loops, imports, multiple statements), and anything written to stdout with print() becomes the tool result. The daemon, browser, and tabs persist across calls within a session, so later calls continue from the current page state. Nothing needs to be installed: if browser-use is missing it is provisioned automatically, so the first call may take longer.
+
+Use this tool when the task needs a live, rendered page:
+- Verifying UI changes end-to-end, or testing a local dev server.
+- Reproducing a reported bug in a web app.
+- Filling forms or completing multi-step interactions.
+- Pages that require JavaScript to render, or an existing logged-in session.
+- The user asks you to look at, click through, or test a website.
+
+Do not use it for content that merely needs to be read: prefer `webfetch` for static pages, articles, and documentation. Do not enter credentials: on login walls, stop and ask the user.
+
+Pre-imported helpers:
+  - new_tab(url) - open a URL in a new tab (use this for the first navigation)
+  - goto_url(url) - navigate the current tab
+  - page_info() - current URL, title, and tab list
+  - wait_for_load() - wait for the page to finish loading after navigation
+  - capture_screenshot() - capture a screenshot to understand visible state
+  - click_at_xy(x, y) - click at pixel coordinates from the latest screenshot
+  - js(code) - run JavaScript in the page for DOM inspection or extraction
+  - ensure_real_tab() - make sure a regular tab is focused before acting
+
+Screenshot first to understand visible state, act (click/type/navigate), then screenshot again to verify. Keep scripts short and check the result between steps rather than scripting long sequences blindly.

@@ -118,6 +118,15 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("exposes browser", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("browser")
+    }),
+  )
+
   withCodeMode.instance("exposes execute when code mode is enabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

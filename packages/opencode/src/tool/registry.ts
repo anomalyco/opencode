@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { UvBinary } from "@opencode-ai/core/uv"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
@@ -26,6 +27,7 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { BrowserTool } from "./browser"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -102,6 +104,7 @@ const layer = Layer.effect(
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
+    const browser = yield* BrowserTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
@@ -213,6 +216,7 @@ const layer = Layer.effect(
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
+          browser: Tool.init(browser),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
@@ -236,6 +240,7 @@ const layer = Layer.effect(
             tool.fetch,
             tool.todo,
             tool.search,
+            tool.browser,
             tool.skill,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
@@ -444,6 +449,7 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    UvBinary.node,
   ],
 })
 
