@@ -314,7 +314,6 @@ const pluginSupervisor = Layer.succeed(
   PluginSupervisor.Service,
   PluginSupervisor.Service.of({
     synchronize: Effect.suspend(() => pluginSyncHook),
-    withGeneration: (effect) => Effect.suspend(() => pluginSyncHook).pipe(Effect.andThen(effect)),
     ready: Effect.suspend(() => pluginSyncHook),
   }),
 )

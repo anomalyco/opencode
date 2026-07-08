@@ -54,7 +54,7 @@ describe("LocationServiceMap", () => {
           const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           const read = Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.ready
+            yield* supervisor.synchronize
             const agents = yield* AgentV2.Service
             return yield* agents.get(id)
           })
@@ -108,7 +108,55 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("drains SDK plugins registered during synchronization", () =>
+  itWithSdk.live("does not extend synchronization for SDK plugins registered after target capture", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const firstStarted = yield* Deferred.make<void>()
+          const releaseFirst = yield* Deferred.make<void>()
+          const secondStarted = yield* Deferred.make<void>()
+          const releaseSecond = yield* Deferred.make<void>()
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "fixed-target-first-plugin",
+              effect: () =>
+                Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+            }),
+          )
+
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+          yield* Deferred.await(firstStarted)
+
+          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+            Effect.provide(context),
+            Effect.forkChild({ startImmediately: true }),
+          )
+          yield* Effect.yieldNow
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "fixed-target-second-plugin",
+              effect: () =>
+                Deferred.succeed(secondStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseSecond))),
+            }),
+          )
+
+          yield* Deferred.succeed(releaseFirst, undefined)
+          yield* Deferred.await(secondStarted)
+          expect(synchronized.pollUnsafe()).toBeDefined()
+
+          yield* Deferred.succeed(releaseSecond, undefined)
+          yield* Fiber.join(synchronized)
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("includes SDK plugins registered before synchronization begins", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -163,7 +211,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("drains config updates published during synchronization", () =>
+  itWithSdk.live("includes config updates published before synchronization begins", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -229,7 +277,7 @@ describe("LocationServiceMap", () => {
           )
           const plugins = yield* Effect.gen(function* () {
             const plugins = yield* PluginV2.Service
-            yield* (yield* PluginSupervisor.Service).ready
+            yield* (yield* PluginSupervisor.Service).synchronize
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
@@ -256,7 +304,7 @@ describe("LocationServiceMap", () => {
           yield* Effect.gen(function* () {
             const registry = yield* PluginV2.Service
             const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.ready
+            yield* supervisor.synchronize
             expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
 
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.command"] })))

@@ -212,6 +212,7 @@ const layer = Layer.effect(
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
+      yield* plugins.synchronize
       const prepared = yield* Effect.gen(function* () {
         const agent = yield* agents.select(session.agent)
         const agentInfo = agent.info
@@ -580,33 +581,29 @@ const layer = Layer.effect(
       let currentStep = step
       let assistantMessageID: SessionMessage.ID | undefined
       while (true) {
-        const attempt = yield* plugins
-          .withGeneration(
-            Effect.suspend(() =>
-              attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
-            ),
-          )
-          .pipe(
-            Effect.tapError((error) =>
-              error instanceof SessionRunnerRetry.RetryableFailure
-                ? Effect.sync(() => {
-                    currentStep = error.step + 1
-                    assistantMessageID = error.assistantMessageID
-                    currentPromotion = undefined
-                  })
-                : Effect.void,
-            ),
-            Effect.retryOrElse(SessionRunnerRetry.schedule(events, sessionID), (error) => {
-              if (!(error instanceof SessionRunnerRetry.RetryableFailure)) return Effect.fail(error)
-              return events
-                .publish(SessionEvent.Step.Failed, {
-                  sessionID,
-                  assistantMessageID: error.assistantMessageID,
-                  error: error.error,
+        const attempt = yield* Effect.suspend(() =>
+          attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
+        ).pipe(
+          Effect.tapError((error) =>
+            error instanceof SessionRunnerRetry.RetryableFailure
+              ? Effect.sync(() => {
+                  currentStep = error.step + 1
+                  assistantMessageID = error.assistantMessageID
+                  currentPromotion = undefined
                 })
-                .pipe(Effect.andThen(Effect.fail(error.cause)))
-            }),
-          )
+              : Effect.void,
+          ),
+          Effect.retryOrElse(SessionRunnerRetry.schedule(events, sessionID), (error) => {
+            if (!(error instanceof SessionRunnerRetry.RetryableFailure)) return Effect.fail(error)
+            return events
+              .publish(SessionEvent.Step.Failed, {
+                sessionID,
+                assistantMessageID: error.assistantMessageID,
+                error: error.error,
+              })
+              .pipe(Effect.andThen(Effect.fail(error.cause)))
+          }),
+        )
         if (attempt._tag === "Completed") return { needsContinuation: attempt.needsContinuation, step: attempt.step }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
         yield* Effect.yieldNow

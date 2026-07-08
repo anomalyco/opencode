@@ -2,7 +2,7 @@ export * as PluginSupervisor from "./supervisor"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Config } from "../config"
@@ -246,10 +246,8 @@ const resolvePackageEntrypoint = Effect.fnUntraced(function* (fs: FSUtil.Interfa
 })
 
 export interface Interface {
-  /** Activate every Config and SDK plugin update requested before this wait settles. */
+  /** Apply at least every Config and SDK plugin update observed when this Effect begins. */
   readonly synchronize: Effect.Effect<void>
-  /** Run a read against one settled plugin generation. */
-  readonly withGeneration: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   /** @deprecated Use synchronize. */
   readonly ready: Effect.Effect<void>
 }
@@ -264,6 +262,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const events = yield* EventV2.Service
     const location = yield* Location.Service
+    const scope = yield* Scope.Scope
     const lock = Semaphore.makeUnsafe(1)
     let requested = 1
     let applied = 0
@@ -279,22 +278,25 @@ const layer = Layer.effect(
       }),
     )
     yield* Effect.addFinalizer(() => unsubscribe)
-    const activatePending = Effect.fn("PluginSupervisor.activatePending")(function* () {
-      while (applied < requested) {
-        const target = requested
-        // Resolve OpenCode's internal plugins with their privileged Location services.
-        const internal = yield* PluginInternal.list()
-        // Combine internal plugins with host-contributed SDK plugins in boot order.
-        const pre = [...internal.pre, ...sdk.all()]
-        const operations = yield* scan(yield* config.entries())
-        // Apply config operations and load enabled package plugins into one ordered generation.
-        const plugins = yield* resolve(pre, internal.post, operations)
-        // Replace the active generation in one scoped, batched activation.
-        yield* registry.activate(plugins, { force: applied > 0 })
-        applied = target
-      }
+    const activateThrough = Effect.fn("PluginSupervisor.activateThrough")(function* (target: number) {
+      if (applied >= target) return
+      // Resolve OpenCode's internal plugins with their privileged Location services.
+      const internal = yield* PluginInternal.list()
+      // Combine internal plugins with host-contributed SDK plugins in boot order.
+      const pre = [...internal.pre, ...sdk.all()]
+      const operations = yield* scan(yield* config.entries())
+      // Apply config operations and load enabled package plugins into one ordered generation.
+      const plugins = yield* resolve(pre, internal.post, operations)
+      // Replace the active generation in one scoped, batched activation.
+      yield* registry.activate(plugins, { force: applied > 0 })
+      applied = target
     })
-    const reload = Effect.fn("PluginSupervisor.reload")(() => lock.withPermit(activatePending()))
+    const reload = Effect.fn("PluginSupervisor.reload")(() =>
+      Effect.suspend(() => {
+        const target = requested
+        return lock.withPermit(activateThrough(target))
+      }),
+    )
     yield* events.subscribe([Event.Updated, SdkPlugins.Updated]).pipe(
       Stream.runForEach(() =>
         reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
@@ -302,12 +304,13 @@ const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* reload().pipe(Effect.withSpan("PluginSupervisor.boot"), Effect.forkScoped({ startImmediately: true }))
-    const context = yield* Effect.context<Effect.Services<ReturnType<typeof activatePending>>>()
-    const activate = activatePending().pipe(Effect.provideContext(context))
-    const synchronize = lock.withPermit(activate)
-    const withGeneration = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      lock.withPermit(activate.pipe(Effect.andThen(effect)))
-    return Service.of({ synchronize, withGeneration, ready: synchronize })
+    const context = yield* Effect.context<Effect.Services<ReturnType<typeof reload>>>()
+    const synchronize = reload().pipe(
+      Effect.provideContext(context),
+      Effect.forkIn(scope, { startImmediately: true }),
+      Effect.flatMap(Fiber.join),
+    )
+    return Service.of({ synchronize, ready: synchronize })
   }),
 )
 

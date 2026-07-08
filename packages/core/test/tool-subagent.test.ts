@@ -20,6 +20,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SubagentTool } from "@opencode-ai/core/tool/subagent"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -106,6 +107,9 @@ const it = testEffect(layer)
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
+    yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+      Effect.provide(locations.get(location)),
+    )
     yield* AgentV2.Service.use((agents) =>
       agents.transform((draft) => {
         // The caller identity used by executeTool; subagent permission asserts against it.
