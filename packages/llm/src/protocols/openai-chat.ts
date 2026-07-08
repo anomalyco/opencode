@@ -493,6 +493,7 @@ export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
+  providerMetadataKey: "openai",
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,

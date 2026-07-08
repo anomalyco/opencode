@@ -990,6 +990,7 @@ export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
+  providerMetadataKey: "openai",
   protocol,
   endpoint,
   auth,
@@ -1018,6 +1019,7 @@ export const webSocketTransport = WebSocketTransport.jsonTransport.with<
 export const webSocketRoute = Route.make({
   id: `${ADAPTER}-websocket`,
   provider: "openai",
+  providerMetadataKey: "openai",
   protocol,
   endpoint,
   auth,

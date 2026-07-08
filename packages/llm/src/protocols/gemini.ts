@@ -500,6 +500,7 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   provider: "google",
+  providerMetadataKey: "google",
   protocol,
   // Gemini's path embeds the model id and pins SSE framing at the URL level.
   endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`, {

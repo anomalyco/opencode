@@ -36,6 +36,8 @@ export interface RouteBody<Body> {
 export interface Route<Body, Prepared = unknown> {
   readonly id: string
   readonly provider?: ProviderID
+  /** ProviderMetadata namespace emitted and consumed by this route. */
+  readonly providerMetadataKey?: string
   readonly protocol: ProtocolID
   readonly endpoint: Endpoint<Body>
   readonly auth: AuthDef
@@ -184,6 +186,8 @@ export interface MakeInput<Body, Frame, Event, State> {
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
+  /** ProviderMetadata namespace emitted and consumed by this route. */
+  readonly providerMetadataKey?: string
   /** Semantic API contract — owns body construction, body schema, and parsing. */
   readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
@@ -203,6 +207,8 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
+  /** ProviderMetadata namespace emitted and consumed by this route. */
+  readonly providerMetadataKey?: string
   /** Semantic API contract — owns body construction, body schema, and parsing. */
   readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
@@ -248,6 +254,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
     const route: Route<Body, Prepared> = {
       id: routeInput.id,
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
+      providerMetadataKey: routeInput.providerMetadataKey,
       protocol: protocol.id,
       endpoint: routeInput.endpoint,
       auth: routeInput.auth ?? Auth.none,
@@ -329,6 +336,7 @@ export function make<Body, Prepared, Frame, Event, State>(
   return makeFromTransport({
     id: input.id,
     provider: input.provider,
+    providerMetadataKey: input.providerMetadataKey,
     protocol,
     endpoint: input.endpoint,
     auth: input.auth,

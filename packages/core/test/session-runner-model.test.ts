@@ -53,6 +53,7 @@ describe("SessionRunnerModel", () => {
       expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
       expect(resolved.route).toMatchObject({
         id: "openai-responses",
+        providerMetadataKey: "openai",
         endpoint: { baseURL: "https://openai.example/v1" },
         defaults: {
           headers: { "x-test": "header" },
@@ -264,6 +265,7 @@ describe("SessionRunnerModel", () => {
 
       expect(resolved.route).toMatchObject({
         id: "anthropic-messages",
+        providerMetadataKey: "anthropic",
         endpoint: { baseURL: "https://anthropic.example/v1" },
       })
     }),

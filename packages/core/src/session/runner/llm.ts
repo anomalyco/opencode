@@ -233,6 +233,7 @@ const layer = Layer.effect(
       }
       const resolved = yield* models.resolve(session)
       const model = resolved.model
+      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -250,7 +251,7 @@ const layer = Layer.effect(
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [
-          ...toLLMMessages(context, resolved.ref),
+          ...toLLMMessages(context, resolved.ref, providerMetadataKey),
           ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
         ],
         tools: toolMaterialization?.definitions ?? [],
@@ -293,6 +294,7 @@ const layer = Layer.effect(
         // The selected catalog identity, not model.id: route-level ids are provider API
         // model ids (for example gpt-5.5-fast resolves to api id gpt-5.5).
         model: resolved.ref,
+        providerMetadataKey,
         snapshot: startSnapshot,
         assistantMessageID,
       })

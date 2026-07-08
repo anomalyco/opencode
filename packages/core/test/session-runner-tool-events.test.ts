@@ -14,7 +14,7 @@ import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publis
 const sessionID = SessionV2.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
-const capture = () => {
+const capture = (providerMetadataKey = "anthropic") => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
   const events = EventV2.Service.of({
     publish: (definition, data) =>
@@ -47,6 +47,7 @@ const capture = () => {
         id: ModelV2.ID.make("model"),
         providerID: ProviderV2.ID.opencode,
       },
+      providerMetadataKey,
     }),
   }
 }
@@ -98,7 +99,7 @@ test("provider-executed success retains its raw provider result", async () => {
   expect(success?.data).toHaveProperty("result")
 })
 
-test("provider metadata is retained independently of the catalog provider", async () => {
+test("provider metadata is flattened using the route key", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
     publisher.publish(
@@ -107,11 +108,11 @@ test("provider metadata is retained independently of the catalog provider", asyn
   )
 
   expect(published.find((event) => event.type === "session.reasoning.started.1")?.data).toMatchObject({
-    state: { anthropic: { signature: "signed" } },
+    state: { signature: "signed" },
   })
 })
 
-test("reasoning metadata from start, empty delta, and end is merged by provider", async () => {
+test("reasoning state from start, empty delta, and end is merged", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
     publisher.publish(
@@ -134,15 +135,12 @@ test("reasoning metadata from start, empty delta, and end is merged by provider"
   )
 
   expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
-    state: {
-      anthropic: { blockType: "thinking", signature: "signed", stopReason: "tool_use" },
-      gateway: { traceID: "trace" },
-    },
+    state: { blockType: "thinking", signature: "signed", stopReason: "tool_use" },
   })
 })
 
-test("provider-executed tool metadata is retained independently of the catalog provider", async () => {
-  const { published, publisher } = capture()
+test("provider-executed tool metadata is flattened using the route key", async () => {
+  const { published, publisher } = capture("openai")
   await Effect.runPromise(
     publisher.publish(
       LLMEvent.toolCall({
@@ -167,10 +165,10 @@ test("provider-executed tool metadata is retained independently of the catalog p
   )
 
   expect(published.find((event) => event.type === "session.tool.called.1")?.data).toMatchObject({
-    state: { openai: { itemId: "call" } },
+    state: { itemId: "call" },
   })
   expect(published.find((event) => event.type === "session.tool.success.1")?.data).toMatchObject({
-    resultState: { openai: { itemId: "result" } },
+    resultState: { itemId: "result" },
   })
 })
 

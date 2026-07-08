@@ -454,7 +454,7 @@ Recent work
     ])
   })
 
-  test("replays namespaced metadata for an OpenCode hosted model", () => {
+  test("replays flat state under an OpenCode hosted model's route key", () => {
     const opencode = ModelV2.Ref.make({ id: ModelV2.ID.make("claude-fable-5"), providerID: ProviderV2.ID.opencode })
     const messages = toLLMMessages(
       [
@@ -467,13 +467,14 @@ Recent work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Think",
-              state: { anthropic: { signature: "signed" } },
+              state: { signature: "signed" },
             }),
           ],
           time: { created, completed: created },
         }),
       ],
       opencode,
+      "anthropic",
     )
 
     expect(messages[0]?.content).toEqual([

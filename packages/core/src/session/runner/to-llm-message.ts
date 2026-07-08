@@ -4,7 +4,7 @@ import {
   ToolOutput,
   ToolResultPart,
   type ContentPart,
-  ProviderMetadata,
+  type ProviderMetadata,
 } from "@opencode-ai/llm"
 import { Option, Schema } from "effect"
 import type { ModelV2 } from "../../model"
@@ -63,14 +63,10 @@ const directoryAttachment = (file: FileAttachment) =>
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
-const providerMetadataFromState = (
+const providerMetadata = (
   provider: string,
   state: Record<string, unknown> | undefined,
-): ProviderMetadata | undefined => {
-  if (state === undefined) return undefined
-  if (Schema.is(ProviderMetadata)(state)) return state
-  return { [provider]: state }
-}
+): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
 const toolInput = (tool: SessionMessage.AssistantTool) =>
   tool.state.status === "streaming"
@@ -117,7 +113,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
+const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, providerMetadataKey: string) => {
   const sameModel =
     String(message.model.providerID) === String(model.providerID) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
@@ -129,7 +125,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: providerMetadataFromState(model.providerID, item.state),
+              providerMetadata: providerMetadata(providerMetadataKey, item.state),
             },
           ]
         : item.text.length > 0
@@ -137,13 +133,13 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
           : []
     const call = toolCall(
       item,
-      reuseProviderMetadata ? providerMetadataFromState(model.providerID, item.providerState) : undefined,
+      reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,
     )
     if (item.executed !== true) return [call]
     const result = toolResult(
       item,
       reuseProviderMetadata
-        ? providerMetadataFromState(model.providerID, item.providerResultState ?? item.providerState)
+        ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
         : undefined,
     )
     return result ? [call, result] : [call]
@@ -159,7 +155,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
       toolResult(
         item,
         reuseProviderMetadata
-          ? providerMetadataFromState(model.providerID, item.providerResultState ?? item.providerState)
+          ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
           : undefined,
       ),
     )
@@ -172,7 +168,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -211,7 +207,7 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref): Message
         }),
       ]
     case "assistant":
-      return assistant(message, model)
+      return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
       return [
@@ -236,5 +232,8 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Info[], model: ModelV2.Ref) =>
-  messages.flatMap((message) => toLLMMessage(message, model))
+export const toLLMMessages = (
+  messages: readonly SessionMessage.Info[],
+  model: ModelV2.Ref,
+  providerMetadataKey: string = model.providerID,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

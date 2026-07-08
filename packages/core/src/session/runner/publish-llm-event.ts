@@ -14,6 +14,7 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: AgentV2.ID
   readonly model: ModelV2.Ref
+  readonly providerMetadataKey: string
   readonly snapshot?: Snapshot.ID
   readonly assistantMessageID?: SessionMessage.ID
 }
@@ -55,17 +56,6 @@ const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): 
   return { structured: record(settled.structured), content: settled.content }
 }
 
-const mergeProviderMetadata = (left: ProviderMetadata | undefined, right: ProviderMetadata | undefined) => {
-  if (left === undefined) return right
-  if (right === undefined) return left
-  return Object.fromEntries(
-    Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).map((provider) => [
-      provider,
-      { ...left[provider], ...right[provider] },
-    ]),
-  )
-}
-
 /** Persist one step without executing tools or starting a continuation step. */
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
   const tools = new Map<
@@ -97,7 +87,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantMessageID ??= SessionMessage.ID.create()
     stepStarted = true
     yield* events.publish(SessionEvent.Step.Started, {
-      ...input,
+      sessionID: input.sessionID,
+      agent: input.agent,
+      model: input.model,
       assistantMessageID,
       snapshot: input.snapshot,
     })
@@ -107,17 +99,18 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantMessageID === undefined
       ? Effect.die(new Error("Tool event before assistant step start"))
       : Effect.succeed(assistantMessageID)
+  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
   const fragments = (
     name: string,
-    ended: (id: string, value: string, ordinal: number, state?: ProviderMetadata) => Effect.Effect<void>,
+    ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
     single = false,
   ) => {
     const chunks = new Map<
       string,
-      { readonly ordinal: number; readonly values: string[]; state?: ProviderMetadata }
+      { readonly ordinal: number; readonly values: string[]; state?: Record<string, unknown> }
     >()
     let nextOrdinal = 0
-    const start = (id: string, state?: ProviderMetadata) =>
+    const start = (id: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
         if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
@@ -125,18 +118,23 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         chunks.set(id, { ordinal, values: [], state })
         return Effect.succeed(ordinal)
       })
-    const append = (id: string, value: string, state?: ProviderMetadata) =>
+    const append = (id: string, value: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         const current = chunks.get(id)
         if (!current) return Effect.die(new Error(`${name} delta before start: ${id}`))
         current.values.push(value)
-        current.state = mergeProviderMetadata(current.state, state)
+        if (state !== undefined) current.state = { ...current.state, ...state }
         return Effect.succeed(current.ordinal)
       })
-    const end = Effect.fnUntraced(function* (id: string, state?: ProviderMetadata) {
+    const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* ended(id, current.values.join(""), current.ordinal, mergeProviderMetadata(current.state, state))
+      yield* ended(
+        id,
+        current.values.join(""),
+        current.ordinal,
+        state === undefined ? current.state : { ...current.state, ...state },
+      )
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -299,19 +297,19 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "reasoning-start":
         retryEvidence = true
-        const startedReasoningOrdinal = yield* reasoning.start(event.id, event.providerMetadata)
+        const startedReasoningOrdinal = yield* reasoning.start(event.id, providerState(event.providerMetadata))
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
           ordinal: startedReasoningOrdinal,
-          state: event.providerMetadata,
+          state: providerState(event.providerMetadata),
         })
         return
       case "reasoning-delta":
         const deltaReasoningOrdinal = yield* reasoning.append(
           event.id,
           event.text,
-          event.providerMetadata,
+          providerState(event.providerMetadata),
         )
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
@@ -321,7 +319,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         })
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, event.providerMetadata)
+        yield* reasoning.end(event.id, providerState(event.providerMetadata))
         return
       case "tool-input-start":
         retryEvidence = true
@@ -361,7 +359,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           callID: event.id,
           input: record(event.input),
           executed: tool.providerExecuted,
-          state: event.providerMetadata,
+          state: providerState(event.providerMetadata),
         })
         return
       }
@@ -378,7 +376,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         tool.settled = true
         const result = error ? { error } : settledOutput(event.output, event.result)
         const executed = event.providerExecuted === true || tool.providerExecuted
-        const resultState = event.providerMetadata
+        const resultState = providerState(event.providerMetadata)
         if ("error" in result) {
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
@@ -419,7 +417,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
               ? { type: "tool.unknown", message: event.message }
               : { type: "tool.execution", message: event.message },
           executed: tool.providerExecuted,
-          resultState: event.providerMetadata,
+          resultState: providerState(event.providerMetadata),
         })
         return
       }

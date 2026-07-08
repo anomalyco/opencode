@@ -76,6 +76,7 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
     })
 
     const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    expect(resolved.route.providerMetadataKey).toBe("anthropic")
     const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
       LLM.request({
         model: resolved,
