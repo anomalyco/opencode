@@ -35,7 +35,7 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
@@ -56,7 +56,6 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
-import { useSettingsCommand } from "@/components/settings-dialog"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import {
   createPromptInputController,
@@ -153,7 +152,7 @@ export function TargetSessionRouteContent() {
   )
 }
 
-function SessionRouteErrorBoundary(
+export function SessionRouteErrorBoundary(
   props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
 ) {
   const settings = useSettings()
@@ -221,7 +220,6 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 
 function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
-  const settings = useSettings()
   const tabs = useTabs()
   const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
@@ -248,16 +246,11 @@ function ResolvedTargetSessionRoute() {
           the terminal. Same-workspace tab switches keep it open because warm
           targets resolve synchronously from the sync cache. */}
       <Show when={directory()}>
-        <Show
-          when={settings.general.newLayoutDesigns()}
-          fallback={<Navigate href={legacySessionHref(directory()!, params.id)} />}
-        >
-          <SDKProvider directory={targetDirectory}>
-            <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-              <TargetSessionPage />
-            </DirectoryDataProvider>
-          </SDKProvider>
-        </Show>
+        <SDKProvider directory={targetDirectory}>
+          <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
+            <TargetSessionPage />
+          </DirectoryDataProvider>
+        </SDKProvider>
       </Show>
     </TargetServerScopedProviders>
   )
@@ -1021,7 +1014,6 @@ export default function Page() {
   }
 
   useComposerCommands()
-  useSettingsCommand()
   useSessionCommands({
     navigateMessageByOffset,
     setActiveMessage,

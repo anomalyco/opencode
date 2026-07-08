@@ -1,5 +1,5 @@
 import { HttpClient } from "effect/unstable/http"
-import { Tool, type Definition } from "../tool.js"
+import { make, type Definition } from "../tool.js"
 import { invoke } from "./runtime.js"
 import {
   componentDefinitions,
@@ -102,7 +102,7 @@ export const fromSpec = (options: Options): Result => {
       setTool(
         tools,
         segments,
-        Tool.make({
+        make({
           description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
           input: inputSchema(input.fields, definitions),
           output: output.value,

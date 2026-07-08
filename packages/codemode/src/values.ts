@@ -27,8 +27,23 @@ export class SandboxSet {
   readonly set = new Set<unknown>()
 }
 
-export const isSandboxValue = (value: unknown): value is SandboxDate | SandboxRegExp | SandboxMap | SandboxSet =>
+export class SandboxURLSearchParams {
+  constructor(readonly params: URLSearchParams) {}
+}
+
+export class SandboxURL {
+  readonly searchParams: SandboxURLSearchParams
+  constructor(readonly url: URL) {
+    this.searchParams = new SandboxURLSearchParams(url.searchParams)
+  }
+}
+
+export const isSandboxValue = (
+  value: unknown,
+): value is SandboxDate | SandboxRegExp | SandboxMap | SandboxSet | SandboxURL | SandboxURLSearchParams =>
   value instanceof SandboxDate ||
   value instanceof SandboxRegExp ||
   value instanceof SandboxMap ||
-  value instanceof SandboxSet
+  value instanceof SandboxSet ||
+  value instanceof SandboxURL ||
+  value instanceof SandboxURLSearchParams
