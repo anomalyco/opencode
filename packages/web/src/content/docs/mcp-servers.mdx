@@ -110,6 +110,23 @@ And to use it I can add `use the mcp_everything tool` to my prompts.
 use the mcp_everything tool to add the number 3 and 4
 ```
 
+Or add [`Vestige`](https://github.com/samvallad33/vestige) to give opencode persistent memory that lives across sessions, stored locally on your machine.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "vestige": {
+      "type": "local",
+      "command": ["npx", "-y", "-p", "vestige-mcp-server@latest", "vestige-mcp"],
+      "enabled": true,
+    },
+  },
+}
+```
+
+It exposes tools for saving and recalling decisions, preferences, and past fixes, so opencode does not start from scratch each session.
+
 ---
 
 #### Options
