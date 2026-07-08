@@ -17,10 +17,9 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
   const show = createMemo(() => !has() && !done())
   const path = createMemo(() => {
-    const session = props.api.state.session.get(props.sessionID)
-    const dir = session?.directory || props.api.state.path.directory || paths.cwd
+    const dir = props.api.state.path.directory || paths.cwd
     const out = abbreviateHome(dir, paths.home)
-    const branch = session?.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
+    const branch = props.api.state.vcs?.branch
     const text = branch ? out + ":" + branch : out
     const list = text.split("/")
     return {
