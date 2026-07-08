@@ -3556,7 +3556,7 @@ export type FormMultiselectField = {
 export type FormFormInfo = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata
   mode: "form"
   fields: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
@@ -3565,7 +3565,7 @@ export type FormFormInfo = {
 export type FormUrlInfo = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata
   mode: "url"
   url: string
@@ -5832,7 +5832,7 @@ export type ProjectCurrent = {
 
 export type FormCreatePayload = {
   id?: string
-  title?: string
+  title: string
   metadata?: FormMetadata
   mode: "form" | "url"
   fields?: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
@@ -9878,7 +9878,7 @@ export type FormMultiselectFieldV2 = {
 export type FormFormInfoV2 = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata
   mode: "form"
   fields: Array<FormStringFieldV2 | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectFieldV2>
@@ -9887,7 +9887,7 @@ export type FormFormInfoV2 = {
 export type FormUrlInfoV2 = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata
   mode: "url"
   url: string
@@ -9895,7 +9895,7 @@ export type FormUrlInfoV2 = {
 
 export type FormCreatePayloadV2 = {
   id?: string | null
-  title?: string
+  title: string
   metadata?: FormMetadata
   mode: "form" | "url"
   fields?: Array<
@@ -10613,7 +10613,7 @@ export type FormMultiselectField1 = {
 export type FormFormInfo1 = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata1
   mode: "form"
   fields: Array<FormStringField1 | FormNumberField1 | FormIntegerField1 | FormBooleanField1 | FormMultiselectField1>
@@ -10622,7 +10622,7 @@ export type FormFormInfo1 = {
 export type FormUrlInfo1 = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata1
   mode: "url"
   url: string
