@@ -2598,7 +2598,7 @@ export type FormRequestListOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "form"
         readonly fields: ReadonlyArray<
@@ -2695,7 +2695,7 @@ export type FormRequestListOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "url"
         readonly url: string
@@ -2710,7 +2710,7 @@ export type FormListOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "form"
         readonly fields: ReadonlyArray<
@@ -2807,7 +2807,7 @@ export type FormListOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "url"
         readonly url: string
@@ -2819,7 +2819,7 @@ export type FormCreateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
     readonly id?: string | null
-    readonly title?: string
+    readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly mode: "form" | "url"
     readonly fields?: ReadonlyArray<
@@ -2914,9 +2914,9 @@ export type FormCreateInput = {
     > | null
     readonly url?: string | null
   }["id"]
-  readonly title?: {
+  readonly title: {
     readonly id?: string | null
-    readonly title?: string
+    readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly mode: "form" | "url"
     readonly fields?: ReadonlyArray<
@@ -3013,7 +3013,7 @@ export type FormCreateInput = {
   }["title"]
   readonly metadata?: {
     readonly id?: string | null
-    readonly title?: string
+    readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly mode: "form" | "url"
     readonly fields?: ReadonlyArray<
@@ -3110,7 +3110,7 @@ export type FormCreateInput = {
   }["metadata"]
   readonly mode: {
     readonly id?: string | null
-    readonly title?: string
+    readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly mode: "form" | "url"
     readonly fields?: ReadonlyArray<
@@ -3207,7 +3207,7 @@ export type FormCreateInput = {
   }["mode"]
   readonly fields?: {
     readonly id?: string | null
-    readonly title?: string
+    readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly mode: "form" | "url"
     readonly fields?: ReadonlyArray<
@@ -3304,7 +3304,7 @@ export type FormCreateInput = {
   }["fields"]
   readonly url?: {
     readonly id?: string | null
-    readonly title?: string
+    readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly mode: "form" | "url"
     readonly fields?: ReadonlyArray<
@@ -3406,7 +3406,7 @@ export type FormCreateOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "form"
         readonly fields: ReadonlyArray<
@@ -3503,7 +3503,7 @@ export type FormCreateOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "url"
         readonly url: string
@@ -3520,7 +3520,7 @@ export type FormGetOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "form"
         readonly fields: ReadonlyArray<
@@ -3617,7 +3617,7 @@ export type FormGetOutput = {
     | {
         readonly id: string
         readonly sessionID: string
-        readonly title?: string
+        readonly title: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly mode: "url"
         readonly url: string
@@ -5339,7 +5339,7 @@ export type EventSubscribeOutput =
           | {
               readonly id: string
               readonly sessionID: string
-              readonly title?: string
+              readonly title: string
               readonly metadata?: { readonly [x: string]: unknown }
               readonly mode: "form"
               readonly fields: ReadonlyArray<
@@ -5436,7 +5436,7 @@ export type EventSubscribeOutput =
           | {
               readonly id: string
               readonly sessionID: string
-              readonly title?: string
+              readonly title: string
               readonly metadata?: { readonly [x: string]: unknown }
               readonly mode: "url"
               readonly url: string

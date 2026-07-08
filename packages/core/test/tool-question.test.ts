@@ -156,6 +156,7 @@ describe("QuestionTool", () => {
       expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
       expect(capturedInput()).toEqual({
         sessionID,
+        title: "Questions",
         metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
         mode: "form",
         fields: [
@@ -202,6 +203,7 @@ describe("QuestionTool", () => {
       })
       expect(capturedInput()).toEqual({
         sessionID,
+        title: "Questions",
         metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
         mode: "form",
         fields: [],

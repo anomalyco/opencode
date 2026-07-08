@@ -81,6 +81,7 @@ export const Plugin = {
                     forms
                       .ask({
                         sessionID: context.sessionID,
+                        title: "Questions",
                         metadata: {
                           kind: "question",
                           tool: { messageID: context.assistantMessageID, callID: context.toolCallID },

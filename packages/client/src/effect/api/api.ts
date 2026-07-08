@@ -526,7 +526,7 @@ type Endpoint13_2Request = Parameters<RawClient["server.form"]["session.form.cre
 export type Endpoint13_2Input = {
   readonly sessionID: Endpoint13_2Request["params"]["sessionID"]
   readonly id?: Endpoint13_2Request["payload"]["id"]
-  readonly title?: Endpoint13_2Request["payload"]["title"]
+  readonly title: Endpoint13_2Request["payload"]["title"]
   readonly metadata?: Endpoint13_2Request["payload"]["metadata"]
   readonly mode: Endpoint13_2Request["payload"]["mode"]
   readonly fields?: Endpoint13_2Request["payload"]["fields"]
