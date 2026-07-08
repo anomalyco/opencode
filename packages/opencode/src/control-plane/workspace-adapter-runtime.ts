@@ -32,7 +32,8 @@ export const create = (
 ) =>
   Effect.gen(function* () {
     const ctx = yield* context
-    return yield* EffectBridge.fromPromise(() => adapter.create(info, env, from, ctx))
+    const workspaceID = ctx.workspaceID ?? info.id
+    return yield* EffectBridge.fromPromise(() => adapter.create(info, env, from, { ...ctx, workspaceID }))
   })
 
 export const list = (adapter: WorkspaceAdapter) =>
