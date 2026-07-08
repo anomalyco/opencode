@@ -204,6 +204,15 @@ describe("useEvent", () => {
 
       expect(sdk.client).toBe(replacement.client)
       expect(sdk.api).toBe(replacement.api)
+      const history = sdk.connection.history()
+      expect(history.map((event) => [event.data.status, event.data.attempt])).toEqual([
+        ["connecting", 0],
+        ["connected", 0],
+        ["disconnected", 1],
+        ["reconnecting", 1],
+        ["connected", 1],
+      ])
+      expect(history.every((event) => Number.isFinite(event.created))).toBe(true)
     } finally {
       app.renderer.destroy()
     }

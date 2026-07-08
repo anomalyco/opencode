@@ -777,10 +777,12 @@ export function Session() {
                 )
               : await (async () => {
                   if (options.debug) {
-                    const events: unknown[] = []
+                    const events: { readonly created: number }[] = []
                     for await (const event of sdk.api.session.log({ sessionID: sessionData.id, follow: false })) {
                       if (event.type !== "log.synced") events.push(event)
                     }
+                    events.push(...sdk.connection.history())
+                    events.sort((a, b) => a.created - b.created)
                     return JSON.stringify({ info: sessionData, events }, null, 2) + EOL
                   }
 
