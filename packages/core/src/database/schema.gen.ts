@@ -167,13 +167,6 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_execution_recovery\` (
-          \`session_id\` text PRIMARY KEY,
-          \`interrupted_seq\` integer NOT NULL,
-          CONSTRAINT \`fk_session_execution_recovery_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`session_input\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,

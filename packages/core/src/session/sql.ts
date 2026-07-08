@@ -173,14 +173,6 @@ export const SessionInputTable = sqliteTable(
   ],
 )
 
-export const SessionExecutionRecoveryTable = sqliteTable("session_execution_recovery", {
-  session_id: text()
-    .$type<SessionSchema.ID>()
-    .primaryKey()
-    .references(() => SessionTable.id, { onDelete: "cascade" }),
-  interrupted_seq: integer().notNull(),
-})
-
 export const InstructionEntryTable = sqliteTable(
   "instruction_entry",
   {
