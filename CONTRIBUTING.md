@@ -92,6 +92,10 @@ opencode --help          # Show all available commands
 opencode serve           # Start headless API server
 opencode web             # Start server + open web interface
 opencode <directory>     # Start TUI in specific directory
+
+# Both web and serve accept --dir to set the working directory
+opencode web --dir /path/to/project
+opencode serve --dir ./my-project
 ```
 
 ### Running the API Server
