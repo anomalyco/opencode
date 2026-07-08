@@ -512,12 +512,19 @@ export function MessageTimeline(props: {
   }
 
   let measuredSessionKey = sessionKey()
+  let measuredRowCount = timelineRows().length
   createEffect(() => {
     const key = sessionKey()
-    timelineRows().length
-    if (measuredSessionKey !== key) {
+    const rowCount = timelineRows().length
+    const sessionChanged = measuredSessionKey !== key
+    const firstRowsLoaded = measuredRowCount === 0 && rowCount > 0
+
+    if (sessionChanged || firstRowsLoaded) {
       measuredSessionKey = key
+      measuredRowCount = rowCount
       virtualizer.measure()
+    } else {
+      measuredRowCount = rowCount
     }
     maybeAnchorBottom()
   })

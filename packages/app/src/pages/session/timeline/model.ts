@@ -1,11 +1,14 @@
 import type { Message, UserMessage } from "@opencode-ai/sdk/v2"
-import { createMemo, createResource, onCleanup, untrack, type Accessor } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, untrack, type Accessor } from "solid-js"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { same } from "@/utils/same"
 
 const emptyUserMessages: UserMessage[] = []
 const sessionFreshness = 15_000
+const coldLoadMessageLimit = 200
+const coldLoadHistoryAttempts = 10
+const coldLoadHistoryRetryDelay = 25
 
 export function createTimelineModel(input: {
   sessionID: Accessor<string | undefined>
@@ -44,9 +47,11 @@ export function createTimelineModel(input: {
       // and re-drive it until the session's messages are in the store (or the view
       // moves on).
       for (let attempt = 0; attempt < 5; attempt++) {
-        await sync().session.sync(id, { force: true })
+        await sync().session.sync(id, { force: true, messageLimit: coldLoadMessageLimit })
         if (input.sessionID() !== id) return
-        if (untrack(() => sync().data.message[id] !== undefined)) return
+        const loaded = await ensureRenderableHistory(id)
+        if (input.sessionID() !== id) return
+        if (loaded) return
       }
     },
   )
@@ -73,6 +78,11 @@ export function createTimelineModel(input: {
   const loading = createMemo(() => {
     const id = input.sessionID()
     return id ? sync().session.history.loading(id) : false
+  })
+  createEffect(() => {
+    const id = input.sessionID()
+    if (!id || userMessages().length > 0 || !more() || loading()) return
+    void ensureRenderableHistory(id)
   })
   const loadOlder = async (options?: { before?: () => void; after?: (done: boolean) => void }) => {
     return loadOlderTimeline({
@@ -102,6 +112,24 @@ export function createTimelineModel(input: {
     if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
     refreshFrame = undefined
     refreshTimer = undefined
+  }
+
+  async function ensureRenderableHistory(id: string) {
+    for (let attempt = 0; attempt < coldLoadHistoryAttempts; attempt++) {
+      const messages = untrack(() => sync().data.message[id])
+      if (messages === undefined) return false
+      if (selectUserMessages(messages).length > 0) return true
+      if (sync().session.history.loading(id)) {
+        await new Promise((resolve) => window.setTimeout(resolve, coldLoadHistoryRetryDelay))
+        if (input.sessionID() !== id) return false
+        continue
+      }
+      if (!sync().session.history.more(id)) return true
+
+      await sync().session.history.loadMore(id)
+      if (input.sessionID() !== id) return false
+    }
+    return true
   }
 }
 
