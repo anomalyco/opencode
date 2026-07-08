@@ -112,7 +112,7 @@ Every field is optional.
       "type": "local",
       "command": ["npx", "-y", "@playwright/mcp"],
       "enabled": true,
-      "env": {}
+      "environment": {}
     },
     "remote-thing": {
       "type": "remote",
@@ -371,7 +371,7 @@ Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
       "type": "local",
       "command": ["npx", "-y", "@playwright/mcp"],
       "enabled": true,
-      "env": { "BROWSER": "chromium" }
+      "environment": { "BROWSER": "chromium" }
     },
     "github": {
       "type": "remote",
