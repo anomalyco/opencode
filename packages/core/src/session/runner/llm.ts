@@ -54,7 +54,6 @@ import { SessionRunnerRetry } from "./retry"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import { PluginHooks } from "../../plugin/hooks"
 import { PluginSupervisor } from "../../plugin/supervisor"
-import { PluginSupervisorNode } from "../../plugin/supervisor-node"
 
 type StepTokens = {
   readonly input: number
@@ -703,6 +702,6 @@ export const node = makeLocationNode({
     Config.node,
     Snapshot.node,
     Database.node,
-    PluginSupervisorNode.node,
+    PluginSupervisor.node,
   ],
 })

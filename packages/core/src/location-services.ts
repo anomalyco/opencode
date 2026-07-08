@@ -21,7 +21,7 @@ import { LocationServiceMap } from "./location-service-map"
 import { MCP } from "./mcp/index"
 import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
-import { PluginSupervisorNode } from "./plugin/supervisor-node"
+import { PluginSupervisor } from "./plugin/supervisor"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
 import { QuestionV2 } from "./question"
@@ -58,7 +58,7 @@ const locationServiceNodes = [
   Catalog.node,
   AISDK.node,
   PluginV2.node,
-  PluginSupervisorNode.node,
+  PluginSupervisor.node,
   ProjectCopy.node,
   ProjectCopy.refreshNode,
   FileSystemSearch.node,

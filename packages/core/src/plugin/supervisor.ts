@@ -5,15 +5,39 @@ import { Event } from "@opencode-ai/schema/config"
 import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
+import { AgentV2 } from "../agent"
+import { Catalog } from "../catalog"
+import { CommandV2 } from "../command"
 import { Config } from "../config"
 import { ConfigPlugin } from "../config/plugin"
+import { makeLocationNode } from "../effect/app-node"
+import { httpClient } from "../effect/app-node-platform"
 import { EventV2 } from "../event"
+import { FileMutation } from "../file-mutation"
+import { FileSystem } from "../filesystem"
+import { Form } from "../form"
 import { FSUtil } from "../fs-util"
+import { Global } from "../global"
+import { Image } from "../image"
+import { Integration } from "../integration"
 import { Location } from "../location"
+import { LocationMutation } from "../location-mutation"
+import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
+import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 import { PluginPromise } from "../plugin/promise"
+import { Reference } from "../reference"
+import { Ripgrep } from "../ripgrep"
+import { SessionInstructions } from "../session/instructions"
+import { SessionTodo } from "../session/todo"
+import { Shell } from "../shell"
+import { SkillV2 } from "../skill"
+import { ReadToolFileSystem } from "../tool/read-filesystem"
+import { ToolRegistry } from "../tool/registry"
+import { WebSearchTool } from "../tool/websearch"
 import { PluginInternal } from "./internal"
+import { PluginRuntime } from "./runtime"
 import { SdkPlugins } from "./sdk"
 
 const PluginModule = Schema.Struct({
@@ -312,5 +336,44 @@ const layer = Layer.effect(
     return Service.of({ flush: Deferred.await(ready) })
   }),
 )
+
+const nodeLayer = layer as Layer.Layer<Service, never, PluginInternal.Requirements>
+
+export const node = makeLocationNode({
+  service: Service,
+  layer: nodeLayer,
+  deps: [
+    PluginV2.node,
+    SdkPlugins.node,
+    AgentV2.node,
+    Catalog.node,
+    CommandV2.node,
+    Config.node,
+    EventV2.node,
+    FileMutation.node,
+    FileSystem.node,
+    FSUtil.node,
+    Global.node,
+    httpClient,
+    Image.node,
+    Integration.node,
+    Location.node,
+    LocationMutation.node,
+    ModelsDev.node,
+    Npm.node,
+    PermissionV2.node,
+    PluginRuntime.node,
+    Form.node,
+    ReadToolFileSystem.node,
+    Reference.node,
+    Ripgrep.node,
+    SessionInstructions.node,
+    SessionTodo.node,
+    Shell.node,
+    SkillV2.node,
+    ToolRegistry.toolsNode,
+    WebSearchTool.configNode,
+  ],
+})
 
 export { layer }

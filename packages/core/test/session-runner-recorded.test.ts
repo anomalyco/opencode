@@ -37,7 +37,6 @@ import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { PluginSupervisorNode } from "@opencode-ai/core/plugin/supervisor-node"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -92,7 +91,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Config.node, config],
   [PermissionV2.node, permission],
   [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-  [PluginSupervisorNode.node, pluginSupervisor],
+  [PluginSupervisor.node, pluginSupervisor],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -141,7 +140,7 @@ const it = testEffect(
       [ReferenceGuidance.node, referenceGuidance],
       [Config.node, config],
       [Snapshot.node, Snapshot.noopLayer],
-      [PluginSupervisorNode.node, pluginSupervisor],
+      [PluginSupervisor.node, pluginSupervisor],
       [SessionExecution.node, execution],
     ],
   ),

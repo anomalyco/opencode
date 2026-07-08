@@ -95,6 +95,10 @@ describe("LocationServiceMap", () => {
           expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(release, undefined)
           yield* Fiber.join(flushFiber)
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+            Effect.provide(context),
+            Effect.timeout("1 second"),
+          )
 
           const explorer = yield* Effect.gen(function* () {
             const agents = yield* AgentV2.Service
@@ -151,65 +155,6 @@ describe("LocationServiceMap", () => {
 
           yield* Deferred.succeed(releaseSecond, undefined)
           yield* Fiber.join(flushFiber)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("keeps flush open after initial readiness completes", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const firstStarted = yield* Deferred.make<void>()
-          const releaseFirst = yield* Deferred.make<void>()
-          const secondStarted = yield* Deferred.make<void>()
-          const releaseSecond = yield* Deferred.make<void>()
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "blocked-first-plugin",
-              effect: () =>
-                Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
-            }),
-          )
-
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* Deferred.await(firstStarted)
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "blocked-second-plugin",
-              effect: (ctx) =>
-                Deferred.succeed(secondStarted, undefined).pipe(
-                  Effect.andThen(Deferred.await(releaseSecond)),
-                  Effect.andThen(
-                    ctx.agent.transform((agents) => agents.update(AgentV2.ID.make("second-sdk-agent"), () => {})),
-                  ),
-                ),
-            }),
-          )
-
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild,
-          )
-          yield* Deferred.succeed(releaseFirst, undefined)
-          yield* Deferred.await(secondStarted)
-          expect(flushFiber.pollUnsafe()).toBeUndefined()
-          yield* Deferred.succeed(releaseSecond, undefined)
-          yield* Fiber.join(flushFiber)
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.timeout("1 second"),
-          )
-
-          const second = yield* AgentV2.Service.use((agents) => agents.get(AgentV2.ID.make("second-sdk-agent"))).pipe(
-            Effect.provide(context),
-          )
-          expect(second).toBeDefined()
         }),
       ),
     ),

@@ -40,7 +40,6 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionRunnerSystemPrompt } from "@opencode-ai/core/session/runner/system-prompt"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { PluginSupervisorNode } from "@opencode-ai/core/plugin/supervisor-node"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -329,7 +328,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Config.node, config],
   [McpGuidance.node, mcpGuidance],
   [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-  [PluginSupervisorNode.node, pluginSupervisor],
+  [PluginSupervisor.node, pluginSupervisor],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -384,7 +383,7 @@ const it = testEffect(
       [SessionExecution.node, execution],
       [Config.node, config],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-      [PluginSupervisorNode.node, pluginSupervisor],
+      [PluginSupervisor.node, pluginSupervisor],
     ],
   ),
 )
