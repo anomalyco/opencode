@@ -141,7 +141,13 @@ export namespace Backend {
   export const Item = Schema.Union([
     Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
-    Schema.Struct({ type: Schema.Literal("toolCall"), id: Schema.String, name: Schema.String, input: Schema.Json }),
+    Schema.Struct({
+      type: Schema.Literal("toolCall"),
+      index: Schema.Number,
+      id: Schema.String,
+      name: Schema.String,
+      input: Schema.Json,
+    }),
     Schema.Struct({ type: Schema.Literal("raw"), chunk: Schema.Json }),
   ])
   export type Item = Schema.Schema.Type<typeof Item>

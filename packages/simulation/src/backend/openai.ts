@@ -30,7 +30,11 @@ function chunkOf(item: SimulationLLMExchange.Item): OpenAIChatEvent | unknown {
         {
           delta: {
             tool_calls: [
-              { index: 0, id: item.id, function: { name: item.name, arguments: JSON.stringify(item.input) } },
+              {
+                index: item.index,
+                id: item.id,
+                function: { name: item.name, arguments: JSON.stringify(item.input) },
+              },
             ],
           },
         },

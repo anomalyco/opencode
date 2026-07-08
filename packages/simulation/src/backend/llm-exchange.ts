@@ -18,7 +18,13 @@ import { Effect, Queue } from "effect"
 export type Item =
   | { readonly type: "textDelta"; readonly text: string }
   | { readonly type: "reasoningDelta"; readonly text: string }
-  | { readonly type: "toolCall"; readonly id: string; readonly name: string; readonly input: unknown }
+  | {
+      readonly type: "toolCall"
+      readonly index: number
+      readonly id: string
+      readonly name: string
+      readonly input: unknown
+    }
   | { readonly type: "raw"; readonly chunk: unknown }
 
 export type FinishReason = "stop" | "tool-calls" | "length" | "content-filter"
