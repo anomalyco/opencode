@@ -223,7 +223,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/AgentV2.Info"
+                        "$ref": "#/components/schemas/Agent.Info"
                       }
                     }
                   },
@@ -595,7 +595,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionV2.Info"
+                      "$ref": "#/components/schemas/Session.Info"
                     }
                   },
                   "required": [
@@ -778,7 +778,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionV2.Info"
+                      "$ref": "#/components/schemas/Session.Info"
                     }
                   },
                   "required": [
@@ -928,7 +928,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionV2.Info"
+                      "$ref": "#/components/schemas/Session.Info"
                     }
                   },
                   "required": [
@@ -2317,7 +2317,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Revert.State"
+                      "$ref": "#/components/schemas/Session.Revert"
                     }
                   },
                   "required": [
@@ -2624,7 +2624,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Session.Message"
+                        "$ref": "#/components/schemas/Session.Message.Info"
                       }
                     }
                   },
@@ -3331,7 +3331,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Session.Message"
+                      "$ref": "#/components/schemas/Session.Message.Info"
                     }
                   },
                   "required": [
@@ -3594,7 +3594,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/ModelV2.Info"
+                        "$ref": "#/components/schemas/Model.Info"
                       }
                     }
                   },
@@ -3705,7 +3705,7 @@
                     "data": {
                       "anyOf": [
                         {
-                          "$ref": "#/components/schemas/ModelV2.Info"
+                          "$ref": "#/components/schemas/Model.Info"
                         },
                         {
                           "type": "null"
@@ -7312,7 +7312,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/CommandV2.Info"
+                        "$ref": "#/components/schemas/Command.Info"
                       }
                     }
                   },
@@ -7413,7 +7413,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/SkillV2.Info"
+                        "$ref": "#/components/schemas/Skill.Info"
                       }
                     }
                   },
@@ -8508,7 +8508,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Shell"
+                        "$ref": "#/components/schemas/Shell1"
                       }
                     }
                   },
@@ -8605,7 +8605,7 @@
                       "$ref": "#/components/schemas/Location.Info"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/Shell"
+                      "$ref": "#/components/schemas/Shell1"
                     }
                   },
                   "required": [
@@ -8750,7 +8750,7 @@
                       "$ref": "#/components/schemas/Location.Info"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/Shell"
+                      "$ref": "#/components/schemas/Shell1"
                     }
                   },
                   "required": [
@@ -8970,7 +8970,7 @@
                       "$ref": "#/components/schemas/Location.Info"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/Shell"
+                      "$ref": "#/components/schemas/Shell1"
                     }
                   },
                   "required": [
@@ -10200,7 +10200,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/SnapshotFileDiff"
+                        "$ref": "#/components/schemas/FileDiff.Info"
                       }
                     }
                   },
@@ -10562,10 +10562,13 @@
           "$ref": "#/components/schemas/PermissionV2.Rule"
         }
       },
-      "AgentV2.Info": {
+      "Agent.Info": {
         "type": "object",
         "properties": {
           "id": {
+            "type": "string"
+          },
+          "name": {
             "type": "string"
           },
           "model": {
@@ -10608,6 +10611,7 @@
         },
         "required": [
           "id",
+          "name",
           "request",
           "mode",
           "hidden",
@@ -10624,6 +10628,46 @@
         },
         "required": [
           "id"
+        ],
+        "additionalProperties": false
+      },
+      "Money.USD": {
+        "type": "number"
+      },
+      "TokenUsage.Info": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number"
+          },
+          "reasoning": {
+            "type": "number"
+          },
+          "cache": {
+            "type": "object",
+            "properties": {
+              "read": {
+                "type": "number"
+              },
+              "write": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "read",
+              "write"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "input",
+          "output",
+          "reasoning",
+          "cache"
         ],
         "additionalProperties": false
       },
@@ -10647,19 +10691,14 @@
         ],
         "additionalProperties": false
       },
-      "File.Diff": {
+      "FileDiff.Info": {
         "type": "object",
         "properties": {
-          "path": {
+          "file": {
             "type": "string"
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "added",
-              "modified",
-              "deleted"
-            ]
+          "patch": {
+            "type": "string"
           },
           "additions": {
             "type": "integer",
@@ -10677,20 +10716,25 @@
               }
             ]
           },
-          "patch": {
-            "type": "string"
+          "status": {
+            "type": "string",
+            "enum": [
+              "added",
+              "deleted",
+              "modified"
+            ]
           }
         },
         "required": [
-          "path",
-          "status",
+          "file",
+          "patch",
           "additions",
           "deletions",
-          "patch"
+          "status"
         ],
         "additionalProperties": false
       },
-      "Revert.State": {
+      "Session.Revert": {
         "type": "object",
         "properties": {
           "messageID": {
@@ -10707,13 +10751,10 @@
           "snapshot": {
             "type": "string"
           },
-          "diff": {
-            "type": "string"
-          },
           "files": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/File.Diff"
+              "$ref": "#/components/schemas/FileDiff.Info"
             }
           }
         },
@@ -10722,7 +10763,7 @@
         ],
         "additionalProperties": false
       },
-      "SessionV2.Info": {
+      "Session.Info": {
         "type": "object",
         "properties": {
           "id": {
@@ -10776,44 +10817,10 @@
             "$ref": "#/components/schemas/Model.Ref"
           },
           "cost": {
-            "type": "number"
+            "$ref": "#/components/schemas/Money.USD"
           },
           "tokens": {
-            "type": "object",
-            "properties": {
-              "input": {
-                "type": "number"
-              },
-              "output": {
-                "type": "number"
-              },
-              "reasoning": {
-                "type": "number"
-              },
-              "cache": {
-                "type": "object",
-                "properties": {
-                  "read": {
-                    "type": "number"
-                  },
-                  "write": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "read",
-                  "write"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "input",
-              "output",
-              "reasoning",
-              "cache"
-            ],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/TokenUsage.Info"
           },
           "time": {
             "type": "object",
@@ -10844,7 +10851,7 @@
             "type": "string"
           },
           "revert": {
-            "$ref": "#/components/schemas/Revert.State"
+            "$ref": "#/components/schemas/Session.Revert"
           }
         },
         "required": [
@@ -10864,7 +10871,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SessionV2.Info"
+              "$ref": "#/components/schemas/Session.Info"
             }
           },
           "cursor": {
@@ -11667,14 +11674,6 @@
             ],
             "additionalProperties": false
           },
-          "sessionID": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
-          },
           "text": {
             "type": "string"
           },
@@ -11691,7 +11690,6 @@
         "required": [
           "id",
           "time",
-          "sessionID",
           "text",
           "type"
         ],
@@ -11773,6 +11771,9 @@
               "skill"
             ]
           },
+          "skill": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -11784,184 +11785,9 @@
           "id",
           "time",
           "type",
+          "skill",
           "name",
           "text"
-        ],
-        "additionalProperties": false
-      },
-      "Shell": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^sh_"
-              }
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "running",
-              "exited",
-              "timeout",
-              "killed"
-            ]
-          },
-          "command": {
-            "type": "string"
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "shell": {
-            "type": "string"
-          },
-          "file": {
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "exit": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": [
-                      "NaN"
-                    ]
-                  },
-                  {
-                    "type": "string",
-                    "enum": [
-                      "Infinity"
-                    ]
-                  },
-                  {
-                    "type": "string",
-                    "enum": [
-                      "-Infinity"
-                    ]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": [
-                  "Infinity",
-                  "-Infinity",
-                  "NaN"
-                ]
-              }
-            ]
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "started": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "NaN"
-                        ]
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "Infinity"
-                        ]
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "-Infinity"
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "string",
-                    "enum": [
-                      "Infinity",
-                      "-Infinity",
-                      "NaN"
-                    ]
-                  }
-                ]
-              },
-              "completed": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "NaN"
-                        ]
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "Infinity"
-                        ]
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "-Infinity"
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "string",
-                    "enum": [
-                      "Infinity",
-                      "-Infinity",
-                      "NaN"
-                    ]
-                  }
-                ]
-              }
-            },
-            "required": [
-              "started"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "id",
-          "status",
-          "command",
-          "cwd",
-          "shell",
-          "file",
-          "metadata",
-          "time"
         ],
         "additionalProperties": false
       },
@@ -12000,8 +11826,62 @@
               "shell"
             ]
           },
-          "shell": {
-            "$ref": "#/components/schemas/Shell"
+          "shellID": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^sh_"
+              }
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "exited",
+              "timeout",
+              "killed"
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "NaN"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "-Infinity"
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
           },
           "output": {
             "type": "object",
@@ -12042,7 +11922,9 @@
           "id",
           "time",
           "type",
-          "shell"
+          "shellID",
+          "command",
+          "status"
         ],
         "additionalProperties": false
       },
@@ -12105,13 +11987,13 @@
         ],
         "additionalProperties": false
       },
-      "Session.Message.ToolState.Pending": {
+      "Session.Message.ToolState.Streaming": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
             "enum": [
-              "pending"
+              "streaming"
             ]
           },
           "input": {
@@ -12221,22 +12103,10 @@
           "input": {
             "type": "object"
           },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Prompt.FileAttachment"
-            }
-          },
           "content": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/LLM.ToolContent"
-            }
-          },
-          "outputPaths": {
-            "type": "array",
-            "items": {
-              "type": "string"
             }
           },
           "structured": {
@@ -12330,7 +12200,7 @@
           "state": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Session.Message.ToolState.Pending"
+                "$ref": "#/components/schemas/Session.Message.ToolState.Streaming"
               },
               {
                 "$ref": "#/components/schemas/Session.Message.ToolState.Running"
@@ -12353,9 +12223,6 @@
                 "type": "number"
               },
               "completed": {
-                "type": "number"
-              },
-              "pruned": {
                 "type": "number"
               }
             },
@@ -12486,44 +12353,10 @@
             ]
           },
           "cost": {
-            "type": "number"
+            "$ref": "#/components/schemas/Money.USD"
           },
           "tokens": {
-            "type": "object",
-            "properties": {
-              "input": {
-                "type": "number"
-              },
-              "output": {
-                "type": "number"
-              },
-              "reasoning": {
-                "type": "number"
-              },
-              "cache": {
-                "type": "object",
-                "properties": {
-                  "read": {
-                    "type": "number"
-                  },
-                  "write": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "read",
-                  "write"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "input",
-              "output",
-              "reasoning",
-              "cache"
-            ],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/TokenUsage.Info"
           },
           "error": {
             "$ref": "#/components/schemas/Session.StructuredError"
@@ -12542,7 +12375,7 @@
         ],
         "additionalProperties": false
       },
-      "Session.Message.Compaction": {
+      "Session.Message.Compaction.Running": {
         "type": "object",
         "properties": {
           "type": {
@@ -12550,28 +12383,6 @@
             "enum": [
               "compaction"
             ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "running",
-              "completed",
-              "failed"
-            ]
-          },
-          "reason": {
-            "type": "string",
-            "enum": [
-              "auto",
-              "manual"
-            ]
-          },
-          "summary": {
-            "type": "string"
-          },
-          "recent": {
-            "type": "string"
           },
           "id": {
             "type": "string",
@@ -12595,20 +12406,174 @@
               "created"
             ],
             "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "recent": {
+            "type": "string"
           }
         },
         "required": [
           "type",
+          "id",
+          "time",
           "status",
           "reason",
           "summary",
-          "recent",
-          "id",
-          "time"
+          "recent"
         ],
         "additionalProperties": false
       },
-      "Session.Message": {
+      "Session.Message.Compaction.Completed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "compaction"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "created"
+            ],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "recent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "time",
+          "status",
+          "reason",
+          "summary",
+          "recent"
+        ],
+        "additionalProperties": false
+      },
+      "Session.Message.Compaction.Failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "compaction"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "created"
+            ],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "failed"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/Session.StructuredError"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "time",
+          "status",
+          "reason",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "Session.Message.Compaction": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Message.Compaction.Running"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Compaction.Completed"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Compaction.Failed"
+          }
+        ]
+      },
+      "Session.Message.Info": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/Session.Message.AgentSelected"
@@ -12700,11 +12665,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -12787,11 +12750,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -12874,11 +12835,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -12964,11 +12923,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13051,11 +13008,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  2
                 ]
               }
             },
@@ -13134,11 +13089,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13234,11 +13187,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13326,11 +13277,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13430,11 +13379,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13513,11 +13460,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13596,11 +13541,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13683,11 +13626,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13775,11 +13716,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13862,11 +13801,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13955,11 +13892,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -13984,6 +13919,9 @@
                   }
                 ]
               },
+              "id": {
+                "type": "string"
+              },
               "name": {
                 "type": "string"
               },
@@ -13993,6 +13931,7 @@
             },
             "required": [
               "sessionID",
+              "id",
               "name",
               "text"
             ],
@@ -14008,7 +13947,7 @@
         ],
         "additionalProperties": false
       },
-      "Shell1": {
+      "Shell": {
         "type": "object",
         "properties": {
           "id": {
@@ -14186,11 +14125,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14216,7 +14153,7 @@
                 ]
               },
               "shell": {
-                "$ref": "#/components/schemas/Shell1"
+                "$ref": "#/components/schemas/Shell"
               }
             },
             "required": [
@@ -14273,11 +14210,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14303,7 +14238,7 @@
                 ]
               },
               "shell": {
-                "$ref": "#/components/schemas/Shell1"
+                "$ref": "#/components/schemas/Shell"
               },
               "output": {
                 "type": "object",
@@ -14395,11 +14330,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14498,11 +14431,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14547,44 +14478,10 @@
                 ]
               },
               "cost": {
-                "type": "number"
+                "$ref": "#/components/schemas/Money.USD"
               },
               "tokens": {
-                "type": "object",
-                "properties": {
-                  "input": {
-                    "type": "number"
-                  },
-                  "output": {
-                    "type": "number"
-                  },
-                  "reasoning": {
-                    "type": "number"
-                  },
-                  "cache": {
-                    "type": "object",
-                    "properties": {
-                      "read": {
-                        "type": "number"
-                      },
-                      "write": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "read",
-                      "write"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "input",
-                  "output",
-                  "reasoning",
-                  "cache"
-                ],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/TokenUsage.Info"
               },
               "snapshot": {
                 "type": "string"
@@ -14653,11 +14550,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14694,44 +14589,10 @@
                 "$ref": "#/components/schemas/Session.StructuredError"
               },
               "cost": {
-                "type": "number"
+                "$ref": "#/components/schemas/Money.USD"
               },
               "tokens": {
-                "type": "object",
-                "properties": {
-                  "input": {
-                    "type": "number"
-                  },
-                  "output": {
-                    "type": "number"
-                  },
-                  "reasoning": {
-                    "type": "number"
-                  },
-                  "cache": {
-                    "type": "object",
-                    "properties": {
-                      "read": {
-                        "type": "number"
-                      },
-                      "write": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "read",
-                      "write"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "input",
-                  "output",
-                  "reasoning",
-                  "cache"
-                ],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/TokenUsage.Info"
               }
             },
             "required": [
@@ -14789,11 +14650,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14890,11 +14749,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -14998,11 +14855,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15105,11 +14960,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15213,11 +15066,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15313,11 +15164,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15416,11 +15265,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15523,11 +15370,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15633,11 +15478,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15680,12 +15523,6 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/LLM.ToolContent"
-                }
-              },
-              "outputPaths": {
-                "type": "array",
-                "items": {
-                  "type": "string"
                 }
               },
               "result": {},
@@ -15757,11 +15594,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15865,11 +15700,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -15979,11 +15812,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16071,11 +15902,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16106,11 +15935,23 @@
                   "auto",
                   "manual"
                 ]
+              },
+              "recent": {
+                "type": "string"
+              },
+              "inputID": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^msg_"
+                  }
+                ]
               }
             },
             "required": [
               "sessionID",
-              "reason"
+              "reason",
+              "recent"
             ],
             "additionalProperties": false
           }
@@ -16162,11 +16003,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16261,11 +16100,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16289,10 +16126,30 @@
                     "pattern": "^ses"
                   }
                 ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "manual"
+                ]
+              },
+              "error": {
+                "$ref": "#/components/schemas/Session.StructuredError"
+              },
+              "inputID": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^msg_"
+                  }
+                ]
               }
             },
             "required": [
-              "sessionID"
+              "sessionID",
+              "reason",
+              "error"
             ],
             "additionalProperties": false
           }
@@ -16344,11 +16201,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16374,7 +16229,7 @@
                 ]
               },
               "revert": {
-                "$ref": "#/components/schemas/Revert.State"
+                "$ref": "#/components/schemas/Session.Revert"
               }
             },
             "required": [
@@ -16431,11 +16286,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16514,11 +16367,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -16568,7 +16419,7 @@
         ],
         "additionalProperties": false
       },
-      "SessionDurableEvent": {
+      "Session.Event.Durable": {
         "oneOf": [
           {
             "$ref": "#/components/schemas/session.agent.selected"
@@ -16717,7 +16568,7 @@
       "SessionLogItem": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/SessionDurableEvent"
+            "$ref": "#/components/schemas/Session.Event.Durable"
           },
           {
             "$ref": "#/components/schemas/EventLog.Synced"
@@ -16737,7 +16588,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Session.Message"
+              "$ref": "#/components/schemas/Session.Message.Info"
             }
           },
           "cursor": {
@@ -16823,6 +16674,9 @@
         ],
         "additionalProperties": false
       },
+      "Money.USDPerMillionTokens": {
+        "type": "number"
+      },
       "Model.Cost": {
         "type": "object",
         "properties": {
@@ -16846,19 +16700,19 @@
             "additionalProperties": false
           },
           "input": {
-            "type": "number"
+            "$ref": "#/components/schemas/Money.USDPerMillionTokens"
           },
           "output": {
-            "type": "number"
+            "$ref": "#/components/schemas/Money.USDPerMillionTokens"
           },
           "cache": {
             "type": "object",
             "properties": {
               "read": {
-                "type": "number"
+                "$ref": "#/components/schemas/Money.USDPerMillionTokens"
               },
               "write": {
-                "type": "number"
+                "$ref": "#/components/schemas/Money.USDPerMillionTokens"
               }
             },
             "required": [
@@ -16875,7 +16729,7 @@
         ],
         "additionalProperties": false
       },
-      "ModelV2.Info": {
+      "Model.Info": {
         "type": "object",
         "properties": {
           "id": {
@@ -19285,7 +19139,7 @@
         ],
         "additionalProperties": false
       },
-      "CommandV2.Info": {
+      "Command.Info": {
         "type": "object",
         "properties": {
           "name": {
@@ -19313,9 +19167,12 @@
         ],
         "additionalProperties": false
       },
-      "SkillV2.Info": {
+      "Skill.Info": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -19336,6 +19193,7 @@
           }
         },
         "required": [
+          "id",
           "name",
           "location",
           "content"
@@ -19569,7 +19427,7 @@
         ],
         "additionalProperties": false
       },
-      "SnapshotFileDiff": {
+      "FileDiff.LegacyInfo": {
         "type": "object",
         "properties": {
           "file": {
@@ -19633,7 +19491,7 @@
           "$ref": "#/components/schemas/PermissionRule"
         }
       },
-      "Session": {
+      "SessionV1.Info": {
         "type": "object",
         "properties": {
           "id": {
@@ -19687,7 +19545,7 @@
               "diffs": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/SnapshotFileDiff"
+                  "$ref": "#/components/schemas/FileDiff.LegacyInfo"
                 }
               }
             },
@@ -19902,11 +19760,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -19932,7 +19788,7 @@
                 ]
               },
               "info": {
-                "$ref": "#/components/schemas/Session"
+                "$ref": "#/components/schemas/SessionV1.Info"
               }
             },
             "required": [
@@ -19989,11 +19845,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -20019,7 +19873,7 @@
                 ]
               },
               "info": {
-                "$ref": "#/components/schemas/Session"
+                "$ref": "#/components/schemas/SessionV1.Info"
               }
             },
             "required": [
@@ -20076,11 +19930,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -20106,7 +19958,7 @@
                 ]
               },
               "info": {
-                "$ref": "#/components/schemas/Session"
+                "$ref": "#/components/schemas/SessionV1.Info"
               }
             },
             "required": [
@@ -20268,7 +20120,7 @@
                   "diffs": {
                     "type": "array",
                     "items": {
-                      "$ref": "#/components/schemas/SnapshotFileDiff"
+                      "$ref": "#/components/schemas/FileDiff.LegacyInfo"
                     }
                   }
                 },
@@ -20936,11 +20788,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -21023,11 +20873,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -22493,11 +22341,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -22584,11 +22430,9 @@
                 ]
               },
               "version": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 1
-                  }
+                "type": "number",
+                "enum": [
+                  1
                 ]
               }
             },
@@ -22685,44 +22529,10 @@
                 ]
               },
               "cost": {
-                "type": "number"
+                "$ref": "#/components/schemas/Money.USD"
               },
               "tokens": {
-                "type": "object",
-                "properties": {
-                  "input": {
-                    "type": "number"
-                  },
-                  "output": {
-                    "type": "number"
-                  },
-                  "reasoning": {
-                    "type": "number"
-                  },
-                  "cache": {
-                    "type": "object",
-                    "properties": {
-                      "read": {
-                        "type": "number"
-                      },
-                      "write": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "read",
-                      "write"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "input",
-                  "output",
-                  "reasoning",
-                  "cache"
-                ],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/TokenUsage.Info"
               }
             },
             "required": [
@@ -23836,7 +23646,7 @@
             "type": "object",
             "properties": {
               "info": {
-                "$ref": "#/components/schemas/Shell1"
+                "$ref": "#/components/schemas/Shell"
               }
             },
             "required": [
@@ -26791,6 +26601,182 @@
         "required": [
           "_tag",
           "message"
+        ],
+        "additionalProperties": false
+      },
+      "Shell1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^sh_"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "exited",
+              "timeout",
+              "killed"
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "shell": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "NaN"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "-Infinity"
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "started": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "NaN"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "-Infinity"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "completed": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "NaN"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "-Infinity"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "started"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "command",
+          "cwd",
+          "shell",
+          "file",
+          "metadata",
+          "time"
         ],
         "additionalProperties": false
       },
