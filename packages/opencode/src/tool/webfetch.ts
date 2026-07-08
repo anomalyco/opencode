@@ -3,6 +3,7 @@ import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
 import TurndownService from "turndown"
+import iconv from "iconv-lite"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
 
@@ -123,7 +124,7 @@ export const WebFetchTool = Tool.define(
             }
           }
 
-          const content = new TextDecoder().decode(arrayBuffer)
+          const content = decodeBody(arrayBuffer, contentType)
 
           // Handle content based on requested format and actual content type
           switch (params.format) {
@@ -154,6 +155,40 @@ export const WebFetchTool = Tool.define(
     }
   }),
 )
+
+// Parse the `charset` parameter from a Content-Type header value, e.g.
+// "text/html; charset=windows-1251" -> "windows-1251". Returns undefined when
+// no charset is declared so callers can fall back to UTF-8. (#35752)
+function charsetFromContentType(contentType: string): string | undefined {
+  const match = /charset\s*=\s*"?([^\s;"]+)/i.exec(contentType)
+  return match?.[1]
+}
+
+// Decode a response body honouring the charset declared in Content-Type.
+// `TextDecoder` defaults to UTF-8 and Bun's build only supports a handful of
+// labels (utf-8, shift_jis, gb18030, big5, euc-kr) — it throws on common
+// legacy encodings like windows-1251 (Russian legal sites such as
+// garant.ru/consultant.ru), so without this those pages come back garbled.
+// iconv-lite covers the long tail Bun's TextDecoder can't. (#35752)
+function decodeBody(body: BufferSource, contentType: string): string {
+  const charset = charsetFromContentType(contentType)
+  if (charset) {
+    // UTF-8 is the hot path and Bun's native TextDecoder handles it directly.
+    if (/^utf-?8$/i.test(charset)) {
+      return new TextDecoder("utf-8").decode(body)
+    }
+    if (iconv.encodingExists(charset)) {
+      return iconv.decode(Buffer.from(body as ArrayBuffer), charset)
+    }
+    // Unknown/unsupported label — best-effort native attempt, then UTF-8.
+    try {
+      return new TextDecoder(charset).decode(body)
+    } catch {
+      // fall through to UTF-8
+    }
+  }
+  return new TextDecoder().decode(body)
+}
 
 function extractTextFromHTML(html: string) {
   let text = ""

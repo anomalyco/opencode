@@ -116,4 +116,34 @@ describe("tool.webfetch", () => {
         }),
     ),
   )
+
+  it.instance("decodes non-UTF-8 charset declared in Content-Type", () =>
+    withFetch(
+      () =>
+        // "Привет" encoded in windows-1251 (Cyrillic А-я occupy 0xC0-0xFF).
+        // Under the previous UTF-8-only decode this byte sequence is invalid
+        // and yields replacement characters. (#35752)
+        new Response(new Uint8Array([0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2]), {
+          status: 200,
+          headers: { "content-type": "text/plain; charset=windows-1251" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/win1251.txt", url).toString(), format: "text" })
+          expect(result.output).toBe("Привет")
+        }),
+    ),
+  )
+
+  it.instance("falls back to UTF-8 for unsupported charset labels", () =>
+    withFetch(
+      () =>
+        new Response("hello", { status: 200, headers: { "content-type": "text/plain; charset=x-not-real" } }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/unknown.txt", url).toString(), format: "text" })
+          expect(result.output).toBe("hello")
+        }),
+    ),
+  )
 })
