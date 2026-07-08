@@ -4,6 +4,7 @@ import type { PluginContext as Interface } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
+import { ApplicationTools } from "../tool/application-tools"
 import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
 import { Credential } from "../credential"
@@ -14,6 +15,7 @@ import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
 import type { DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
+import { Tool } from "../tool/tool"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 
@@ -25,6 +27,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const integration = yield* Integration.Service
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
+  const appTools = yield* ApplicationTools.Service
 
   return {
     options: {},
@@ -214,6 +217,46 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             list: draft.list,
           }),
         ),
+    },
+    tool: {
+      reload: () => Effect.void,
+      transform: (callback) =>
+        Effect.gen(function* () {
+          const pendingRegister: Array<[string, {
+            description: string
+            inputSchema: Record<string, unknown>
+            outputSchema?: Record<string, unknown>
+            execute: (input: unknown, context: { sessionID: string }) => Promise<unknown>
+          }]> = []
+          const pendingUnregister: string[] = []
+          yield* callback({
+            register: (tools) => {
+              for (const [name, def] of Object.entries(tools)) {
+                pendingRegister.push([name, def])
+              }
+            },
+            unregister: (...names) => { pendingUnregister.push(...names) },
+          })
+          if (pendingUnregister.length > 0) {
+            yield* appTools.remove(...pendingUnregister)
+          }
+          if (pendingRegister.length > 0) {
+            const coreTools: Record<string, Tool.AnyTool> = {}
+            for (const [name, def] of pendingRegister) {
+              coreTools[name] = Tool.make({
+                description: def.description,
+                jsonSchema: (def.inputSchema ?? { type: "object", properties: {} }) as any,
+                outputSchema: def.outputSchema as any,
+                execute: (params) =>
+                  Effect.tryPromise({
+                    try: () => def.execute(params, { sessionID: "" }),
+                    catch: (error) => new Tool.Failure({ message: (error as Error).message }),
+                  }),
+              })
+            }
+            yield* appTools.register(coreTools)
+          }
+        }),
     },
   } satisfies Interface
 })

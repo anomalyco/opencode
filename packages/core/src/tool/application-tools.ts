@@ -11,6 +11,7 @@ type Data = {
 
 type Draft = {
   readonly set: (name: string, entry: Entry) => void
+  readonly remove: (name: string) => void
 }
 
 export interface Entry {
@@ -22,6 +23,7 @@ export interface Interface {
   readonly register: (
     tools: Readonly<Record<string, Tool.AnyTool>>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
+  readonly remove: (...names: string[]) => Effect.Effect<void>
   readonly entries: () => ReadonlyMap<string, Entry>
 }
 
@@ -36,6 +38,9 @@ const layer = Layer.effect(
         set: (name, tool) => {
           draft.entries.set(name, tool)
         },
+        remove: (name) => {
+          draft.entries.delete(name)
+        },
       }),
     })
 
@@ -47,6 +52,12 @@ const layer = Layer.effect(
         const registrations = entries.map(([name, tool]) => [name, { identity: {}, tool }] as const)
         yield* state.transform((draft) => {
           for (const [name, entry] of registrations) draft.set(name, entry)
+        })
+      }),
+      remove: Effect.fn("ApplicationTools.remove")(function* (...names) {
+        if (names.length === 0) return
+        yield* state.transform((draft) => {
+          for (const name of names) draft.remove(name)
         })
       }),
       entries: () => state.get().entries,
