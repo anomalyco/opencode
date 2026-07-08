@@ -13,16 +13,16 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ApplyPatchTool } from "@opencode-ai/core/tool/apply-patch"
+import { PatchTool } from "@opencode-ai/core/tool/patch"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
 
-const applyPatchToolNode = makeLocationNode({
-  name: "test/apply-patch-tool-plugin",
-  layer: Layer.effectDiscard(registerToolPlugin(ApplyPatchTool.Plugin)),
+const patchToolNode = makeLocationNode({
+  name: "test/patch-tool-plugin",
+  layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [ToolRegistry.toolsNode, LocationMutation.node, FileMutation.node, FSUtil.node, PermissionV2.node],
 })
 
@@ -116,7 +116,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
           ToolRegistry.toolsNode,
           LocationMutation.node,
           FileMutation.node,
-          applyPatchToolNode,
+          patchToolNode,
         ]),
         [
           [FSUtil.node, filesystem],
@@ -129,7 +129,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   )
 }
 
-const call = (patchText: string, id = "call-apply-patch") => ({
+const call = (patchText: string, id = "call-patch") => ({
   sessionID,
   ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "patch", input: { patchText } },
@@ -147,7 +147,7 @@ const exists = (target: string) =>
   )
 const it = testEffect(Layer.empty)
 
-describe("ApplyPatchTool", () => {
+describe("PatchTool", () => {
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

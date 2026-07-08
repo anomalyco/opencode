@@ -315,10 +315,25 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            if (!toolMaterialization || !advertisedTools.has(event.name)) {
+            if (!toolMaterialization) {
               yield* serialized(
                 publisher.failUnsettledTools({
                   type: "tool.execution",
+                  message: "Tools are disabled after the maximum agent steps",
+                }),
+              )
+              return
+            }
+            // A request hook hid this registered tool from the current request. Fail only
+            // this call durably and continue so the model can react, instead of executing
+            // a tool that was not advertised. Unregistered tools flow through settle, which
+            // durably fails them as unknown.
+            if (!advertisedTools.has(event.name) && availableTools.has(event.name)) {
+              needsContinuation = true
+              yield* publish(
+                LLMEvent.toolError({
+                  id: event.id,
+                  name: event.name,
                   message: `Tool is not available for this request: ${event.name}`,
                 }),
               )

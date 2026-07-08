@@ -108,6 +108,11 @@ const withSubagent = (location: Location.Ref) =>
     const locations = yield* LocationServiceMap.Service
     yield* AgentV2.Service.use((agents) =>
       agents.transform((draft) => {
+        // The caller identity used by executeTool; subagent permission asserts against it.
+        draft.update(toolIdentity.agent, (agent) => {
+          agent.mode = "primary"
+          agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
+        })
         draft.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.mode = "subagent"
           agent.model = childModel

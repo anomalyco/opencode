@@ -31,7 +31,7 @@ import { SessionInstructions } from "../session/instructions"
 import { SessionTodo } from "../session/todo"
 import { Shell } from "../shell"
 import { SkillV2 } from "../skill"
-import { ApplyPatchTool } from "../tool/apply-patch"
+import { PatchTool } from "../tool/patch"
 import { EditTool } from "../tool/edit"
 import { GlobTool } from "../tool/glob"
 import { GrepTool } from "../tool/grep"
@@ -127,7 +127,7 @@ const pre = [
   SkillPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,
-  ApplyPatchTool.Plugin,
+  PatchTool.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,
   GrepTool.Plugin,
