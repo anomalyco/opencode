@@ -62,12 +62,13 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
     })
 
     const warp = Effect.fn("WorkspaceHttpApi.warp")(function* (ctx: { payload: typeof WarpPayload.Type }) {
+      const instance = yield* InstanceState.context
       yield* workspace
         .sessionWarp({
           workspaceID: ctx.payload.id,
           sessionID: ctx.payload.sessionID,
           copyChanges: ctx.payload.copyChanges,
-          directory: ctx.payload.directory,
+          directory: ctx.payload.id === null ? instance.directory : undefined,
         })
         .pipe(
           Effect.mapError((error) => {
