@@ -160,8 +160,10 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {props.diffs.length} {language.t("ui.sessionTurn.diffs.changed")}{" "}
-          {language.t(props.diffs.length === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+          {language.t(
+            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
+            { count: String(props.diffs.length) },
+          )}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
@@ -598,8 +600,12 @@ export function MessageTimeline(props: {
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
-    if (event.target !== event.currentTarget) return
-    props.onMarkScrollGesture(event.currentTarget)
+    props.onMarkScrollGesture(event.target)
+  }
+
+  const handleListPointerMove = (event: PointerEvent) => {
+    if (event.buttons !== 1) return
+    props.onMarkScrollGesture(event.target)
   }
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
@@ -1356,6 +1362,7 @@ export function MessageTimeline(props: {
         onTouchEnd={handleListTouchEnd}
         onTouchCancel={handleListTouchEnd}
         onPointerDown={handleListPointerDown}
+        onPointerMove={handleListPointerMove}
         onKeyDown={handleListKeyDown}
         onScroll={handleListScroll}
         onClick={props.onAutoScrollInteraction}

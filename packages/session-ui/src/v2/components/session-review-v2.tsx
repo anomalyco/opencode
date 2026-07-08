@@ -11,6 +11,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
+import { getWorkerPool } from "../../pierre/worker"
 import "./session-review-v2.css"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
@@ -48,6 +49,7 @@ export type SessionReviewV2SidebarProps = {
   onWidthChange?: (width: number) => void
   minWidth?: number
   maxWidth?: number
+  viewportRef?: (element: HTMLDivElement) => void
   children?: JSX.Element
 }
 
@@ -74,44 +76,47 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
         inert={!props.open}
         style={{ width: props.open ? `${width()}px` : "0px" }}
       >
-        <Show when={props.open}>
-          <div data-slot="session-review-v2-sidebar-header">
-            <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
-            {props.stats}
-          </div>
-          <div data-slot="session-review-v2-sidebar-filter">
-            <TextInputV2
-              type="search"
-              value={props.filter}
-              onInput={(event) => props.onFilterChange(event.currentTarget.value)}
-              onKeyDown={props.onFilterKeyDown}
-              showClearButton={props.filter.length > 0}
-              clearLabel={i18n.t("ui.list.clearFilter")}
-              onClearClick={() => props.onFilterChange("")}
-              placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
-              aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
-              leadingIcon={
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
-                    stroke="currentColor"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              }
-            />
-          </div>
-          <ScrollView data-slot="session-review-v2-sidebar-tree" class="group/file-tree-v2" thumbVisibility="scroll">
-            {props.children}
-          </ScrollView>
-        </Show>
+        <div data-slot="session-review-v2-sidebar-header">
+          <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
+          {props.stats}
+        </div>
+        <div data-slot="session-review-v2-sidebar-filter">
+          <TextInputV2
+            type="search"
+            value={props.filter}
+            onInput={(event) => props.onFilterChange(event.currentTarget.value)}
+            onKeyDown={props.onFilterKeyDown}
+            showClearButton={props.filter.length > 0}
+            clearLabel={i18n.t("ui.list.clearFilter")}
+            onClearClick={() => props.onFilterChange("")}
+            placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
+            aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
+            leadingIcon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
+                  stroke="currentColor"
+                  stroke-linecap="square"
+                />
+              </svg>
+            }
+          />
+        </div>
+        <ScrollView
+          data-slot="session-review-v2-sidebar-tree"
+          class="group/file-tree-v2"
+          thumbVisibility="scroll"
+          viewportRef={props.viewportRef}
+        >
+          {props.children}
+        </ScrollView>
       </aside>
       <Show when={props.open && props.onWidthChange}>
         <div data-slot="session-review-v2-sidebar-resize" onPointerDown={() => setResizing(true)}>
@@ -130,6 +135,10 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 
 export function SessionReviewV2(props: SessionReviewV2Props) {
   const i18n = useI18n()
+
+  createEffect(() => {
+    getWorkerPool(props.diffStyle)
+  })
 
   const fileIndex = () => {
     const files = props.files
