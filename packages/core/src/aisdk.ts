@@ -404,7 +404,8 @@ function text(part: ContentPart) {
 }
 
 function userPart(part: ContentPart): UserContent {
-  if (part.type === "text") return [{ type: "text", text: part.text }]
+  if (part.type === "text")
+    return [{ type: "text", text: part.text, providerOptions: providerOptions(part.providerMetadata) }]
   if (part.type === "media")
     return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
   return []
@@ -413,11 +414,11 @@ function userPart(part: ContentPart): UserContent {
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
     case "text":
-      return [{ type: "text", text: part.text }]
+      return [{ type: "text", text: part.text, providerOptions: providerOptions(part.providerMetadata) }]
     case "media":
       return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
     case "reasoning":
-      return [{ type: "reasoning", text: part.text }]
+      return [{ type: "reasoning", text: part.text, providerOptions: providerOptions(part.providerMetadata) }]
     case "tool-call":
       return [
         {
@@ -426,6 +427,7 @@ function assistantPart(part: ContentPart): AssistantContent {
           toolName: part.name,
           input: part.input,
           providerExecuted: part.providerExecuted,
+          providerOptions: providerOptions(part.providerMetadata),
         },
       ]
     case "tool-result":
@@ -441,6 +443,7 @@ function toolResultPart(part: ContentPart): ToolResultContent[] {
       toolCallId: part.id,
       toolName: part.name,
       output: toolOutput(part.result),
+      providerOptions: providerOptions(part.providerMetadata),
     },
   ]
 }
@@ -664,9 +667,10 @@ function messageValue(input: unknown) {
 }
 
 function llmError(method: string, error: unknown) {
+  if (error instanceof LLMError) return error
   const reason =
-    error instanceof LLMError
-      ? new InvalidProviderOutputReason({ message: error.message })
+    method === "stream"
+      ? new InvalidProviderOutputReason({ message: error instanceof Error ? error.message : String(error) })
       : new UnknownProviderReason({ message: error instanceof Error ? error.message : String(error) })
   return new LLMError({
     module: "AISDK",

@@ -1,11 +1,11 @@
-import type { LanguageModelV3CallOptions } from "@ai-sdk/provider"
+import type { LanguageModelV3, LanguageModelV3CallOptions } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { LLM } from "@opencode-ai/llm"
-import { LLMClient } from "@opencode-ai/llm/route"
+import { LLM, LLMError, Message, RateLimitReason } from "@opencode-ai/llm"
+import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -65,5 +65,92 @@ it.effect("projects request settings, headers, and body overlays", () =>
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
+  }),
+)
+
+it.effect("preserves content provider metadata when lowering requests", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/google"))
+    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.assistant([
+            {
+              type: "reasoning",
+              text: "thinking",
+              providerMetadata: { google: { thoughtSignature: "signature" } },
+            },
+            {
+              type: "tool-call",
+              id: "call-1",
+              name: "bash",
+              input: { command: "pwd" },
+              providerMetadata: { google: { itemId: "item-1" } },
+            },
+          ]),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toMatchObject([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerOptions: { google: { thoughtSignature: "signature" } },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { command: "pwd" },
+            providerOptions: { google: { itemId: "item-1" } },
+          },
+        ],
+      },
+    ])
+  }),
+)
+
+it.effect("preserves classified failures from AI SDK language models", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const failure = new LLMError({
+      module: "Provider",
+      method: "stream",
+      reason: new RateLimitReason({ message: "slow down", retryAfterMs: 2_000 }),
+    })
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          ({
+            specificationVersion: "v3",
+            provider: "test-provider",
+            modelId: "api-model",
+            supportedUrls: {},
+            doGenerate: () => Promise.reject(new Error("not used")),
+            doStream: () => Promise.reject(failure),
+          }) satisfies LanguageModelV3,
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/google"))
+    const actual = yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Stream.runCollect,
+      Effect.flip,
+      Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.fetchLayer))),
+    )
+
+    expect(actual).toMatchObject({
+      reason: { _tag: "RateLimit", retryAfterMs: 2_000 },
+    })
   }),
 )

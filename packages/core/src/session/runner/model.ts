@@ -63,10 +63,12 @@ export class UnsupportedPackageError extends Schema.TaggedErrorClass<Unsupported
     providerID: ProviderV2.ID,
     modelID: ModelV2.ID,
     package: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {
   override get message() {
-    return `Unsupported package for ${this.providerID}/${this.modelID}: ${this.package}`
+    const detail = this.cause instanceof Error ? `: ${this.cause.message}` : ""
+    return `Unsupported package for ${this.providerID}/${this.modelID}: ${this.package}${detail}`
   }
 }
 
@@ -234,14 +236,14 @@ export const fromCatalogModel = (
         ...credential?.metadata,
       })
     })
-    return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
+    return dependencies.loadAISDK(runtime).pipe(Effect.mapError((cause) => unsupported(resolved, cause)))
   }
   if (!resolved.package) return Effect.fail(unsupported(resolved))
 
   const specifier = resolved.package
   return Effect.gen(function* () {
     const module = yield* (dependencies.loadPackage ?? ProviderV2.loadPackage)(specifier).pipe(
-      Effect.mapError(() => unsupported(resolved)),
+      Effect.mapError((cause) => unsupported(resolved, cause)),
     )
     const settings = {
       ...resolved.settings,
@@ -255,7 +257,7 @@ export const fromCatalogModel = (
     return yield* Effect.try({
       try: () =>
         Model.update(module.model(resolved.modelID ?? resolved.id, settings), { provider: resolved.providerID }),
-      catch: () => unsupported(resolved),
+      catch: (cause) => unsupported(resolved, cause),
     })
   })
 }
@@ -280,11 +282,12 @@ const codexModel = (
     .model({ id: model.modelID ?? model.id })
 }
 
-const unsupported = (model: ModelV2.Info) =>
+const unsupported = (model: ModelV2.Info, cause?: unknown) =>
   new UnsupportedPackageError({
     providerID: model.providerID,
     modelID: model.id,
     package: model.package ?? "unknown",
+    cause,
   })
 
 export const resolve = (
