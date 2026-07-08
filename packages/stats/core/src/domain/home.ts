@@ -1,8 +1,9 @@
 import { Client } from "@planetscale/database"
 import { Effect } from "effect"
 import { Resource } from "sst/resource"
+import { DatabaseError } from "../database"
 import type { GeoStatMetric } from "./geo"
-import type { ModelStatMetric } from "./model"
+import { ModelStatRepo, type ModelStatMetric } from "./model"
 import type { ProviderStatMetric } from "./provider"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
@@ -80,6 +81,23 @@ export type StatsLabData = {
   }
   usage: ModelUsagePoint[]
   models: LabUsageModelEntry[]
+}
+export type StatsModelComparisonEntry = {
+  updatedAt: string | null
+  model: string
+  slug: string
+  provider: string
+  author: string
+  rank: number | null
+  previousRank: number | null
+  totalModels: number
+  tokenShare: number
+  tokenChange: number
+  totals: StatsModelData["totals"]
+}
+export type StatsModelComparisonData = {
+  updatedAt: string | null
+  models: [StatsModelComparisonEntry | null, StatsModelComparisonEntry | null]
 }
 export type StatsHomeData = {
   updatedAt: string | null
@@ -271,6 +289,27 @@ function dateValue(value: unknown) {
   return value instanceof Date ? value : new Date(stringValue(value))
 }
 
+export const getStatsModelComparisonData: (
+  firstProvider: string,
+  firstModel: string,
+  secondProvider: string,
+  secondModel: string,
+) => Effect.Effect<StatsModelComparisonData, DatabaseError, ModelStatRepo> = Effect.fn("StatsModelComparison.getData")(
+  function* (firstProvider, firstModel, secondProvider, secondModel) {
+    const modelStats = yield* ModelStatRepo
+    const rows = yield* modelStats.listDaily()
+    const first = toComparisonEntry(buildStatsModelData(firstModel, rows, [], firstProvider))
+    const second = toComparisonEntry(buildStatsModelData(secondModel, rows, [], secondProvider))
+    const latest = [first?.updatedAt, second?.updatedAt]
+      .flatMap((value) => (value ? [dateTime(value)] : []))
+      .toSorted((a, b) => b - a)[0]
+    return {
+      updatedAt: latest === undefined ? null : new Date(latest).toISOString(),
+      models: [first, second],
+    }
+  },
+)
+
 function buildStatsHomeData(
   modelRows: ModelStatMetric[],
   providerRows: ProviderStatMetric[],
@@ -445,6 +484,23 @@ function buildStatsLabData(providerParam: string, modelRows: ModelStatMetric[]):
       share: current.totalTokens > 0 ? round((item.totalTokens / current.totalTokens) * 100, 2) : 0,
       slug: modelSlug(item.model),
     })),
+  }
+}
+
+function toComparisonEntry(data: StatsModelData | null): StatsModelComparisonEntry | null {
+  if (!data) return null
+  return {
+    updatedAt: data.updatedAt,
+    model: data.model,
+    slug: data.slug,
+    provider: data.provider,
+    author: data.author,
+    rank: data.rank,
+    previousRank: data.previousRank,
+    totalModels: data.totalModels,
+    tokenShare: data.tokenShare,
+    tokenChange: data.tokenChange,
+    totals: data.totals,
   }
 }
 
