@@ -47,6 +47,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     CommandV2.node,
     Integration.node,
     PluginRuntime.node,
+    PluginHooks.node,
     Reference.node,
     SkillV2.node,
     ToolHooks.node,
