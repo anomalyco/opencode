@@ -48,6 +48,8 @@ export const InstancePaths = {
   vcsDiff: "/vcs/diff",
   vcsDiffRaw: "/vcs/diff/raw",
   vcsApply: "/vcs/apply",
+  vcsStash: "/vcs/stash",
+  vcsStashPop: "/vcs/stash-pop",
   command: "/command",
   agent: "/agent",
   skill: "/skill",
@@ -134,6 +136,28 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "vcs.apply",
             summary: "Apply VCS patch",
             description: "Apply a raw patch to the current working tree.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsStash", InstancePaths.vcsStash, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.StashInput,
+          success: described(HttpApiSchema.NoContent, "Changes stashed"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.stash",
+            summary: "Stash changes",
+            description: "Stash uncommitted changes with a message.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsStashPop", InstancePaths.vcsStashPop, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.StashInput,
+          success: described(Schema.Boolean, "Stash popped"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.stashPop",
+            summary: "Pop stashed changes",
+            description: "Pop a stash with a matching message.",
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {

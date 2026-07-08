@@ -73,6 +73,14 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       )
     })
 
+    const stashVcs = Effect.fn("InstanceHttpApi.vcsStash")(function* (ctx: { payload: Vcs.StashInput }) {
+      yield* vcs.stash(ctx.payload)
+    })
+
+    const stashPopVcs = Effect.fn("InstanceHttpApi.vcsStashPop")(function* (ctx: { payload: Vcs.StashInput }) {
+      return yield* vcs.stashPop(ctx.payload)
+    })
+
     const getCommand = Effect.fn("InstanceHttpApi.command")(function* () {
       return yield* command.list()
     })
@@ -101,6 +109,8 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("vcsDiff", getVcsDiff)
       .handle("vcsDiffRaw", getVcsDiffRaw)
       .handle("vcsApply", applyVcs)
+      .handle("vcsStash", stashVcs)
+      .handle("vcsStashPop", stashPopVcs)
       .handle("command", getCommand)
       .handle("agent", getAgent)
       .handle("skill", getSkill)

@@ -278,6 +278,11 @@ export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()(
   reason: Schema.Literals(["non-git", "not-clean"]),
 }) {}
 
+export const StashInput = Schema.Struct({
+  message: Schema.String,
+})
+export type StashInput = Schema.Schema.Type<typeof StashInput>
+
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly branch: () => Effect.Effect<string | undefined>
@@ -286,6 +291,8 @@ export interface Interface {
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff[]>
   readonly diffRaw: () => Effect.Effect<string>
   readonly apply: (input: ApplyInput) => Effect.Effect<ApplyResult, PatchApplyError>
+  readonly stash: (input: StashInput) => Effect.Effect<void>
+  readonly stashPop: (input: StashInput) => Effect.Effect<boolean>
 }
 
 interface State {
@@ -413,6 +420,24 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
           })
         }
         return { applied: true }
+      }),
+      stash: Effect.fn("Vcs.stash")(function* (input: StashInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return
+        yield* git.run(["stash", "push", "-m", input.message], { cwd: ctx.directory })
+      }),
+      stashPop: Effect.fn("Vcs.stashPop")(function* (input: StashInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return false
+        const list = yield* git.run(["stash", "list"], { cwd: ctx.directory })
+        const ref = list
+          .text()
+          .split(/\r?\n/)
+          .find((line) => line.includes(input.message))
+          ?.split(":")[0]
+        if (!ref) return false
+        yield* git.run(["stash", "pop", ref], { cwd: ctx.directory })
+        return true
       }),
     })
   }),
