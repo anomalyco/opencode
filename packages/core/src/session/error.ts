@@ -12,6 +12,15 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
   }
 }
 
+export class AgentNotFoundError extends Schema.TaggedErrorClass<AgentNotFoundError>()("Session.AgentNotFoundError", {
+  sessionID: SessionSchema.ID,
+  agent: Schema.String,
+}) {
+  override get message() {
+    return `Agent not found: "${this.agent}"`
+  }
+}
+
 export class StepFailedError extends Schema.TaggedErrorClass<StepFailedError>()("Session.StepFailedError", {
   error: SessionError.Error,
 }) {

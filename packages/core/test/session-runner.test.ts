@@ -39,6 +39,8 @@ import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionRunnerSystemPrompt } from "@opencode-ai/core/session/runner/system-prompt"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { PluginSupervisorNode } from "@opencode-ai/core/plugin/supervisor-node"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -307,6 +309,15 @@ const config = Layer.succeed(
       ]),
   }),
 )
+let pluginSyncHook = Effect.void
+const pluginSupervisor = Layer.succeed(
+  PluginSupervisor.Service,
+  PluginSupervisor.Service.of({
+    synchronize: Effect.suspend(() => pluginSyncHook),
+    withGeneration: (effect) => Effect.suspend(() => pluginSyncHook).pipe(Effect.andThen(effect)),
+    ready: Effect.suspend(() => pluginSyncHook),
+  }),
+)
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
@@ -320,6 +331,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Config.node, config],
   [McpGuidance.node, mcpGuidance],
   [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+  [PluginSupervisorNode.node, pluginSupervisor],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -374,6 +386,7 @@ const it = testEffect(
       [SessionExecution.node, execution],
       [Config.node, config],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+      [PluginSupervisorNode.node, pluginSupervisor],
     ],
   ),
 )
@@ -411,6 +424,7 @@ const setup = Effect.gen(function* () {
   systemUnavailable = false
   systemLoadHook = Effect.void
   modelResolveHook = Effect.void
+  pluginSyncHook = Effect.void
   currentModel = model
   skillBaselines.clear()
   responses = undefined
@@ -423,6 +437,12 @@ const setup = Effect.gen(function* () {
   toolExecutionsReady = 5
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
+  const agents = yield* AgentV2.Service
+  yield* agents.transform((draft) =>
+    draft.update(AgentV2.ID.make("build"), (agent) => {
+      agent.mode = "primary"
+    }),
+  )
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -1071,7 +1091,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("does not advertise unrestricted tools while the selected agent is unavailable", () =>
+  it.effect("fails before the model request when the selected agent is unavailable", () =>
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
@@ -1095,10 +1115,36 @@ describe("SessionRunnerLLM", () => {
 
       requests.length = 0
       response = []
-      yield* session.resume(sessionID)
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
 
+      expect(failure).toMatchObject({
+        _tag: "Session.AgentNotFoundError",
+        sessionID,
+        agent: "explore",
+      })
+      expect(requests).toHaveLength(0)
+    }),
+  )
+
+  it.effect("waits for plugin synchronization before constructing the model request", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const release = yield* Deferred.make<void>()
+      pluginSyncHook = Deferred.await(release)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Wait for plugins" }), resume: false })
+
+      requests.length = 0
+      response = []
+      const running = yield* session.resume(sessionID).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
+
+      expect(requests).toHaveLength(0)
+      expect(running.pollUnsafe()).toBeUndefined()
+
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(running)
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("shell")
     }),
   )
 
@@ -1106,6 +1152,12 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const events = yield* EventV2.Service
+      const agents = yield* AgentV2.Service
+      yield* agents.transform((draft) =>
+        draft.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.mode = "primary"
+        }),
+      )
       skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
       yield* admit(session, "First")
 

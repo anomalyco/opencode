@@ -4,7 +4,7 @@ import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Money } from "@opencode-ai/schema/money"
-import { Context, DateTime, Deferred, Effect, Equal, Hash, RcMap, Schema, Stream } from "effect"
+import { Context, DateTime, Deferred, Effect, Equal, Fiber, Hash, RcMap, Schema, Stream } from "effect"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -67,7 +67,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("does not advertise shell before explorer activation completes", () =>
+  itWithSdk.live("waits for explorer activation to complete", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -85,19 +85,133 @@ describe("LocationServiceMap", () => {
           )
 
           const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(
-            Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
-          )
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(started)
 
-          const tools = yield* Effect.gen(function* () {
-            const agents = yield* AgentV2.Service
-            const registry = yield* ToolRegistry.Service
-            const explorer = yield* agents.select("explore")
-            return yield* toolDefinitions(registry, explorer.info?.permissions)
-          }).pipe(Effect.provide(context), Effect.ensuring(Deferred.succeed(release, undefined)))
+          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+            Effect.provide(context),
+            Effect.forkChild,
+          )
+          expect(synchronized.pollUnsafe()).toBeUndefined()
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(synchronized)
 
-          expect(tools.map((tool) => tool.name)).not.toContain("shell")
+          const explorer = yield* Effect.gen(function* () {
+            const agents = yield* AgentV2.Service
+            return yield* agents.resolve("explore")
+          }).pipe(Effect.provide(context))
+
+          expect(explorer).toBeDefined()
+          expect(explorer?.permissions.length).toBeGreaterThan(0)
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("drains SDK plugins registered during synchronization", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const firstStarted = yield* Deferred.make<void>()
+          const releaseFirst = yield* Deferred.make<void>()
+          const secondStarted = yield* Deferred.make<void>()
+          const releaseSecond = yield* Deferred.make<void>()
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "blocked-first-plugin",
+              effect: () =>
+                Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+            }),
+          )
+
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+          yield* Deferred.await(firstStarted)
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "blocked-second-plugin",
+              effect: (ctx) =>
+                Deferred.succeed(secondStarted, undefined).pipe(
+                  Effect.andThen(Deferred.await(releaseSecond)),
+                  Effect.andThen(
+                    ctx.agent.transform((agents) => agents.update(AgentV2.ID.make("second-sdk-agent"), () => {})),
+                  ),
+                ),
+            }),
+          )
+
+          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+            Effect.provide(context),
+            Effect.forkChild,
+          )
+          yield* Deferred.succeed(releaseFirst, undefined)
+          yield* Deferred.await(secondStarted)
+          expect(synchronized.pollUnsafe()).toBeUndefined()
+          yield* Deferred.succeed(releaseSecond, undefined)
+          yield* Fiber.join(synchronized)
+
+          const second = yield* AgentV2.Service.use((agents) => agents.get(AgentV2.ID.make("second-sdk-agent"))).pipe(
+            Effect.provide(context),
+          )
+          expect(second).toBeDefined()
+        }),
+      ),
+    ),
+  )
+
+  itWithSdk.live("drains config updates published during synchronization", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const activations = { count: 0 }
+          const firstStarted = yield* Deferred.make<void>()
+          const releaseFirst = yield* Deferred.make<void>()
+          const secondStarted = yield* Deferred.make<void>()
+          const releaseSecond = yield* Deferred.make<void>()
+          const sdk = yield* SdkPlugins.Service
+          yield* sdk.register(
+            EffectPlugin.define({
+              id: "blocked-config-reload",
+              effect: () =>
+                Effect.sync(() => ++activations.count).pipe(
+                  Effect.flatMap((activation) =>
+                    activation === 1
+                      ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst)))
+                      : Deferred.succeed(secondStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseSecond))),
+                  ),
+                ),
+            }),
+          )
+
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+          yield* Deferred.await(firstStarted)
+
+          const events = yield* EventV2.Service
+          yield* events.publish(
+            Config.Event.Updated,
+            {},
+            {
+              location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            },
+          )
+          const synchronized = yield* PluginSupervisor.Service.use((supervisor) => supervisor.synchronize).pipe(
+            Effect.provide(context),
+            Effect.forkChild,
+          )
+          yield* Deferred.succeed(releaseFirst, undefined)
+          yield* Deferred.await(secondStarted)
+          expect(synchronized.pollUnsafe()).toBeUndefined()
+          yield* Deferred.succeed(releaseSecond, undefined)
+          yield* Fiber.join(synchronized)
+          expect(activations.count).toBe(2)
         }),
       ),
     ),

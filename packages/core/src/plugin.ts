@@ -21,7 +21,10 @@ import { ToolHooks } from "./tool/hooks"
 import { PluginHooks } from "./plugin/hooks"
 
 export interface Interface {
-  readonly activate: (plugins: readonly { readonly plugin: Plugin; readonly version?: string }[]) => Effect.Effect<void>
+  readonly activate: (
+    plugins: readonly { readonly plugin: Plugin; readonly version?: string }[],
+    options?: { readonly force?: boolean },
+  ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -39,6 +42,7 @@ const layer = Layer.effect(
 
     const activate = Effect.fn("Plugin.activate")(function* (
       plugins: readonly { readonly plugin: Plugin; readonly version?: string }[],
+      options?: { readonly force?: boolean },
     ) {
       const definitions = plugins.map((entry) => ({
         ...entry.plugin,
@@ -54,6 +58,7 @@ const layer = Layer.effect(
       yield* lock.withPermit(
         Effect.gen(function* () {
           if (
+            !options?.force &&
             generation !== undefined &&
             generation.length === definitions.length &&
             generation.every(

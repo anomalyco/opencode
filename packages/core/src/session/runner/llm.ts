@@ -48,11 +48,13 @@ import { SessionRunnerSystemPrompt } from "./system-prompt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
-import { StepFailedError, UserInterruptedError } from "../error"
+import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import { PluginHooks } from "../../plugin/hooks"
+import { PluginSupervisor } from "../../plugin/supervisor"
+import { PluginSupervisorNode } from "../../plugin/supervisor-node"
 
 type StepTokens = {
   readonly input: number
@@ -149,6 +151,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
+    const plugins = yield* PluginSupervisor.Service
     // Title generation is a side effect of the first step; it must not delay step continuation.
     // Tracked per process so repeated wakes before the second user message arrives don't
     // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
@@ -209,54 +212,76 @@ const layer = Layer.effect(
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
-      const agent = yield* agents.select(session.agent)
-      // Establish what the model knows before admitting what the user said, so
-      // a blocked first step leaves pending inputs untouched.
-      const checkpoint = yield* InstructionCheckpoint.prepare(
-        db,
-        events,
-        loadInstructions(agent, session.id),
-        session.id,
-      )
+      const prepared = yield* Effect.gen(function* () {
+        const agent = yield* agents.select(session.agent)
+        const agentInfo = agent.info
+        if (!agentInfo)
+          return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+        // Establish what the model knows before admitting what the user said, so
+        // a blocked first step leaves pending inputs untouched.
+        const checkpoint = yield* InstructionCheckpoint.prepare(
+          db,
+          events,
+          loadInstructions(agent, session.id),
+          session.id,
+        )
+        let currentStep = step
+        if (promotion) {
+          let promoted = 0
+          if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
+          if (promotion === "queue") {
+            promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
+            promoted += yield* SessionInput.promoteSteers(db, events, session.id)
+          }
+          if (promoted > 0) currentStep = 1
+        }
+        const resolved = yield* models.resolve(session)
+        const providerMetadataKey = resolved.model.route.providerMetadataKey ?? resolved.model.provider
+        const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
+        const context = entries.map((entry) => entry.message)
+        const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
+        const toolMaterialization = isLastStep
+          ? undefined
+          : yield* tools.materialize({ permissions: agentInfo.permissions, model: resolved.model })
+        const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+        return {
+          agent,
+          agentInfo,
+          currentStep,
+          resolved,
+          context,
+          isLastStep,
+          toolMaterialization,
+          request: LLM.request({
+            model: resolved.model,
+            providerOptions: { openai: { promptCacheKey } },
+            system: [
+              agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(resolved.model),
+              checkpoint.baseline,
+            ]
+              .filter((part): part is string => part !== undefined && part.length > 0)
+              .map(SystemPart.make),
+            messages: [
+              ...toLLMMessages(context, resolved.ref, providerMetadataKey),
+              ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
+            ],
+            tools: toolMaterialization?.definitions ?? [],
+            toolChoice: isLastStep ? "none" : undefined,
+          }),
+        }
+      })
+      const agent = prepared.agent
+      const agentInfo = prepared.agentInfo
+      const currentStep = prepared.currentStep
+      const resolved = prepared.resolved
+      const model = resolved.model
+      const context = prepared.context
+      const isLastStep = prepared.isLastStep
+      const toolMaterialization = prepared.toolMaterialization
+      const request = prepared.request
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | UserInterruptedError>()
       const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error | UserInterruptedError>> = []
       let needsContinuation = false
-      let currentStep = step
-      if (promotion) {
-        let promoted = 0
-        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
-        if (promotion === "queue") {
-          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
-          promoted += yield* SessionInput.promoteSteers(db, events, session.id)
-        }
-        if (promoted > 0) currentStep = 1
-      }
-      const resolved = yield* models.resolve(session)
-      const model = resolved.model
-      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
-      const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
-      const context = entries.map((entry) => entry.message)
-      const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
-      const toolMaterialization = isLastStep
-        ? undefined
-        : yield* tools.materialize({ permissions: agent.info?.permissions, model })
-      const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
-      const request = LLM.request({
-        model,
-        providerOptions: { openai: { promptCacheKey } },
-        system: [
-          agent.info?.system ? agent.info.system : SessionRunnerSystemPrompt.provider(model),
-          checkpoint.baseline,
-        ]
-          .filter((part): part is string => part !== undefined && part.length > 0)
-          .map(SystemPart.make),
-        messages: [
-          ...toLLMMessages(context, resolved.ref, providerMetadataKey),
-          ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
-        ],
-        tools: toolMaterialization?.definitions ?? [],
-        toolChoice: isLastStep ? "none" : undefined,
-      })
       const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
       const requestEvent: SessionHooks["request"] = {
         sessionID: session.id,
@@ -436,7 +461,7 @@ const layer = Layer.effect(
             if (
               SessionRunnerRetry.isRetryable(llmFailure) &&
               !publisher.hasRetryEvidence() &&
-              (agent.info?.steps === undefined || currentStep < agent.info.steps)
+              (agentInfo.steps === undefined || currentStep < agentInfo.steps)
             ) {
               return yield* new SessionRunnerRetry.RetryableFailure({
                 cause: llmFailure,
@@ -555,29 +580,33 @@ const layer = Layer.effect(
       let currentStep = step
       let assistantMessageID: SessionMessage.ID | undefined
       while (true) {
-        const attempt = yield* Effect.suspend(() =>
-          attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
-        ).pipe(
-          Effect.tapError((error) =>
-            error instanceof SessionRunnerRetry.RetryableFailure
-              ? Effect.sync(() => {
-                  currentStep = error.step + 1
-                  assistantMessageID = error.assistantMessageID
-                  currentPromotion = undefined
+        const attempt = yield* plugins
+          .withGeneration(
+            Effect.suspend(() =>
+              attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
+            ),
+          )
+          .pipe(
+            Effect.tapError((error) =>
+              error instanceof SessionRunnerRetry.RetryableFailure
+                ? Effect.sync(() => {
+                    currentStep = error.step + 1
+                    assistantMessageID = error.assistantMessageID
+                    currentPromotion = undefined
+                  })
+                : Effect.void,
+            ),
+            Effect.retryOrElse(SessionRunnerRetry.schedule(events, sessionID), (error) => {
+              if (!(error instanceof SessionRunnerRetry.RetryableFailure)) return Effect.fail(error)
+              return events
+                .publish(SessionEvent.Step.Failed, {
+                  sessionID,
+                  assistantMessageID: error.assistantMessageID,
+                  error: error.error,
                 })
-              : Effect.void,
-          ),
-          Effect.retryOrElse(SessionRunnerRetry.schedule(events, sessionID), (error) => {
-            if (!(error instanceof SessionRunnerRetry.RetryableFailure)) return Effect.fail(error)
-            return events
-              .publish(SessionEvent.Step.Failed, {
-                sessionID,
-                assistantMessageID: error.assistantMessageID,
-                error: error.error,
-              })
-              .pipe(Effect.andThen(Effect.fail(error.cause)))
-          }),
-        )
+                .pipe(Effect.andThen(Effect.fail(error.cause)))
+            }),
+          )
         if (attempt._tag === "Completed") return { needsContinuation: attempt.needsContinuation, step: attempt.step }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
         yield* Effect.yieldNow
@@ -700,5 +729,6 @@ export const node = makeLocationNode({
     Config.node,
     Snapshot.node,
     Database.node,
+    PluginSupervisorNode.node,
   ],
 })

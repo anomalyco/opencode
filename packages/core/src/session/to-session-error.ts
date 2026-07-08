@@ -4,7 +4,7 @@ import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
 import { Integration } from "../integration"
 import { ToolOutputStore } from "../tool-output-store"
-import { StepFailedError, UserInterruptedError } from "./error"
+import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error"
 import { SessionRunnerModel } from "./runner/model"
 
 export function toSessionError(cause: unknown): SessionError.Error {
@@ -41,6 +41,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof ToolFailure)
     return cause.error === undefined ? { type: "tool.execution", message: cause.message } : toSessionError(cause.error)
   if (cause instanceof StepFailedError) return cause.error
+  if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
   if (cause instanceof UserInterruptedError) return { type: "aborted", message: cause.message }
   if (
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||

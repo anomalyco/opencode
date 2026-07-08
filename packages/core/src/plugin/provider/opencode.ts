@@ -92,6 +92,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       connected = connection !== undefined
       providers = credential
         ? yield* fetchProviders(http, credential).pipe(
+            Effect.timeout("10 seconds"),
             Effect.catch((cause) =>
               Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
             ),
@@ -187,7 +188,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh().pipe(Effect.forkScoped)
+    yield* refresh()
   }),
 })
 
