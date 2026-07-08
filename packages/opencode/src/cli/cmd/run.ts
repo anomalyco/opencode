@@ -37,6 +37,28 @@ function pick(value: string | undefined): ModelInput | undefined {
   } as ModelInput
 }
 
+/**
+ * Whether `targetID` is `rootID` itself or one of its descendant sessions.
+ *
+ * Sync/background subagents run in child sessions (linked to their parent via `parentID`) with no
+ * human attached. Their permission asks must still be answered by the headless responder, so it
+ * needs to recognize asks originating anywhere in the current session tree — not just the top-level
+ * session. Walks the `parentID` chain of `targetID` upward looking for `rootID`.
+ */
+export async function isSessionInTree(client: OpencodeClient, targetID: string, rootID: string): Promise<boolean> {
+  if (targetID === rootID) return true
+  const sessions = (await client.session.list()).data ?? []
+  const parent = new Map(sessions.map((item) => [item.id, item.parentID]))
+  const seen = new Set<string>([targetID])
+  let current = parent.get(targetID)
+  while (current && !seen.has(current)) {
+    if (current === rootID) return true
+    seen.add(current)
+    current = parent.get(current)
+  }
+  return false
+}
+
 function resolveRunInput(value?: string, piped?: string): string | undefined {
   if (!value) {
     return piped
@@ -795,7 +817,14 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (permission.sessionID !== sessionID) continue
+              // Answer asks for the top-level session and any descendant subagent session. Subagents
+              // have no attached human, so if the responder ignored their asks they would hang
+              // forever waiting for a reply that never comes.
+              if (
+                permission.sessionID !== sessionID &&
+                !(await isSessionInTree(client, permission.sessionID, sessionID))
+              )
+                continue
 
               if (auto) {
                 await client.permission.reply({
