@@ -14,12 +14,12 @@ export function useSettingsDialog() {
     dead = true
   })
 
-  return () => {
+  return (defaultValue?: string) => {
     const current = ++run
     const sessionID = params.id
     void import("@/components/settings-v2").then((module) => {
       if (dead || run !== current) return
-      void dialog.show(() => <module.DialogSettings sessionID={sessionID} />)
+      void dialog.show(() => <module.DialogSettings sessionID={sessionID} defaultValue={defaultValue} />)
     })
   }
 }
