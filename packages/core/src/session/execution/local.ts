@@ -25,28 +25,38 @@ export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?:
 
 export const sessionsInterruptedByShutdown = Effect.fn("SessionExecutionLocal.sessionsInterruptedByShutdown")(
   function* (db: Database.Interface["db"]) {
-    const latest = yield* db.all<{ sessionID: string; type: string; reason: string | null }>(sql`
-      SELECT aggregate_id AS sessionID, type, json_extract(data, '$.reason') AS reason
+    const started = EventV2.versionedType(
+      SessionEvent.Execution.Started.type,
+      SessionEvent.Execution.Started.durable.version,
+    )
+    const succeeded = EventV2.versionedType(
+      SessionEvent.Execution.Succeeded.type,
+      SessionEvent.Execution.Succeeded.durable.version,
+    )
+    const failed = EventV2.versionedType(
+      SessionEvent.Execution.Failed.type,
+      SessionEvent.Execution.Failed.durable.version,
+    )
+    const interrupted = EventV2.versionedType(
+      SessionEvent.Execution.Interrupted.type,
+      SessionEvent.Execution.Interrupted.durable.version,
+    )
+    const latest = yield* db.all<{ sessionID: string }>(sql`
+      SELECT aggregate_id AS sessionID
       FROM (
         SELECT aggregate_id, type, data,
           row_number() OVER (PARTITION BY aggregate_id ORDER BY seq DESC) AS rank
         FROM ${EventTable}
         WHERE type IN (
-          ${EventV2.versionedType(SessionEvent.Execution.Started.type, 1)},
-          ${EventV2.versionedType(SessionEvent.Execution.Succeeded.type, 1)},
-          ${EventV2.versionedType(SessionEvent.Execution.Failed.type, 1)},
-          ${EventV2.versionedType(SessionEvent.Execution.Interrupted.type, 1)}
+          ${started},
+          ${succeeded},
+          ${failed},
+          ${interrupted}
         )
       )
-      WHERE rank = 1
+      WHERE rank = 1 AND type = ${interrupted} AND json_extract(data, '$.reason') = 'shutdown'
     `)
-    return latest
-      .filter(
-        (event) =>
-          event.type === EventV2.versionedType(SessionEvent.Execution.Interrupted.type, 1) &&
-          event.reason === "shutdown",
-      )
-      .map((event) => SessionSchema.ID.make(event.sessionID))
+    return latest.map((event) => SessionSchema.ID.make(event.sessionID))
   },
 )
 
@@ -128,10 +138,10 @@ const layer = Layer.effect(
             { concurrency: "unbounded", discard: true },
           )
         }),
-        "session-shutdown-recovery",
+        `session-shutdown-recovery:${Database.path()}`,
       )
       .pipe(
-        Effect.tapCause((cause) => Effect.logError("Failed to acquire Session recovery ownership", cause)),
+        Effect.tapCause((cause) => Effect.logError("Failed to recover Sessions after shutdown", cause)),
         Effect.ignore,
         Effect.forkScoped,
       )
