@@ -307,11 +307,11 @@ const layer = Layer.effect(
     })
     const updates = yield* events
       .subscribe([Event.Updated, SdkPlugins.Updated])
-      .pipe(Stream.toQueue({ capacity: "unbounded" }))
+      .pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
     const signals = yield* Stream.concat(
       Stream.succeed(0),
       Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
-    ).pipe(Stream.broadcast({ capacity: "unbounded", replay: 1 }))
+    ).pipe(Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }))
     const attempt = (target: number) =>
       activate(target).pipe(
         Effect.map(() => observed === target),

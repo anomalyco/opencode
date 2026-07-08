@@ -1092,15 +1092,6 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
-      const registry = yield* ToolRegistry.Service
-      yield* registry.register({
-        shell: Tool.make({
-          description: "Execute a shell command",
-          input: Schema.Struct({ command: Schema.String }),
-          output: Schema.Struct({}),
-          execute: () => Effect.succeed({}),
-        }),
-      })
       yield* db
         .update(SessionTable)
         .set({ agent: "explore" })
