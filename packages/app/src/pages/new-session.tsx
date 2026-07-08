@@ -48,7 +48,7 @@ export default function NewSessionPage() {
   const language = useLanguage()
   const settings = useSettings()
   const providers = useProviders(() => sdk().directory)
-  const openSettings = useSettingsDialog()
+  const openProviderSettings = useSettingsDialog("providers")
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
 
@@ -126,8 +126,8 @@ export default function NewSessionPage() {
               footer={
                 <ProviderTip
                   ready={() => serverSync().child(sdk().directory)[0].provider_ready}
-                  connected={() => providers.connected().length > 0}
-                  openProviders={() => openSettings("providers")}
+                  connected={() => providers.paid().length > 0}
+                  openProviders={openProviderSettings}
                 />
               }
             >
@@ -208,10 +208,11 @@ function ProviderTip(props: { ready: () => boolean; connected: () => boolean; op
   let dismissTimer: ReturnType<typeof setTimeout> | undefined
   const visible = createMemo(
     () =>
-      props.ready() &&
-      persistedReady() &&
-      !props.connected() &&
-      state.now - persistedState.dismissedAt >= providerTipDismissalDuration,
+      state.dismissing ||
+      (props.ready() &&
+        persistedReady() &&
+        !props.connected() &&
+        state.now - persistedState.dismissedAt >= providerTipDismissalDuration),
   )
 
   createEffect(() => {
@@ -229,6 +230,7 @@ function ProviderTip(props: { ready: () => boolean; connected: () => boolean; op
   function dismiss() {
     if (state.dismissing) return
     setState("dismissing", true)
+    setPersistedState("dismissedAt", Date.now())
     dismissTimer = setTimeout(completeDismissal, providerTipExitDuration + 50)
   }
 
@@ -236,7 +238,7 @@ function ProviderTip(props: { ready: () => boolean; connected: () => boolean; op
     if (!state.dismissing) return
     if (dismissTimer) clearTimeout(dismissTimer)
     dismissTimer = undefined
-    setPersistedState("dismissedAt", Date.now())
+    setState("dismissing", false)
   }
 
   return (
