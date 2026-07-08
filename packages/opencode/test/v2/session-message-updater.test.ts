@@ -254,7 +254,6 @@ test("compaction events reduce to a compaction message through completion", () =
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
       type: "session.compaction.delta",
-      durable: durable(sessionID, 1),
       data: {
         sessionID,
         text: "hello ",
@@ -267,7 +266,6 @@ test("compaction events reduce to a compaction message through completion", () =
       id: EventV2.ID.create(),
       created: DateTime.makeUnsafe(0),
       type: "session.compaction.delta",
-      durable: durable(sessionID, 2),
       data: {
         sessionID,
         text: "summary",

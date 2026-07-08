@@ -25,7 +25,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Persisted)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
 
     return Service.of({
       get: Effect.fn("SessionStore.get")(function* (sessionID) {

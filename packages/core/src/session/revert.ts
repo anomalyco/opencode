@@ -1,7 +1,7 @@
 export * as SessionRevert from "./revert"
 
 import { and, asc, eq, gt } from "drizzle-orm"
-import { DateTime, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { RelativePath } from "../schema"
@@ -46,7 +46,7 @@ const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const decode = Schema.decodeUnknownEffect(SessionMessage.Persisted)
+  const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
   const files = new Map<RelativePath, Snapshot.ID>()
   for (const row of rows) {
     const message = yield* decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie)

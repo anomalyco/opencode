@@ -395,7 +395,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       id: "evt_revert_staged",
       created: 5,
       type: "session.revert.staged",
-      durable: durable(sessionID, 5, 2),
+      durable: durable(sessionID, 5),
       data: { sessionID, revert: { messageID: "msg_revert_later" } },
     })
     await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_later")
@@ -529,7 +529,6 @@ test("restores running manual compaction before applying live deltas", async () 
       id: "evt_compaction_delta",
       created: 2,
       type: "session.compaction.delta",
-      durable: durable("session-compaction", 1),
       data: { sessionID: "session-compaction", text: "summary" },
     })
 
@@ -1114,14 +1113,13 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_manual_compaction_started",
       created: 1,
       type: "session.compaction.started",
-      durable: durable("session-manual", 2, 2),
+      durable: durable("session-manual", 2),
       data: { sessionID: "session-manual", reason: "manual", recent: "", inputID: "message-compaction" },
     })
     emitEvent(events, {
       id: "evt_manual_compaction_delta",
       created: 2,
       type: "session.compaction.delta",
-      durable: durable("session-manual", 3),
       data: { sessionID: "session-manual", text: "Streamed summary" },
     })
     await wait(() => {
@@ -1147,21 +1145,19 @@ test("tracks session status from active sessions and execution events", async ()
       id: "evt_compaction_started",
       created: 0,
       type: "session.compaction.started",
-      durable: durable("session-live", 2, 2),
+      durable: durable("session-live", 2),
       data: { sessionID: "session-live", reason: "auto", recent: "" },
     })
     emitEvent(events, {
       id: "evt_compaction_delta_1",
       created: 0,
       type: "session.compaction.delta",
-      durable: durable("session-live", 3),
       data: { sessionID: "session-live", text: "Live " },
     })
     emitEvent(events, {
       id: "evt_compaction_delta_2",
       created: 0,
       type: "session.compaction.delta",
-      durable: durable("session-live", 4),
       data: { sessionID: "session-live", text: "summary" },
     })
     await wait(() => {

@@ -10,12 +10,10 @@ import { Pty } from "../src/pty.js"
 import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
 import { SessionMessage } from "../src/session-message.js"
-import { SessionEvent } from "../src/session-event.js"
 import { SessionInput } from "../src/session-input.js"
 import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
-import { Snapshot } from "../src/snapshot.js"
 import { Shell } from "../src/shell.js"
 import { PersistedRevert } from "../src/session-revert.js"
 import { SessionTodo } from "../src/session-todo.js"
@@ -173,95 +171,7 @@ describe("contract hygiene", () => {
     ).not.toHaveProperty("summary")
   })
 
-  test("decodes persisted compaction events recorded before projected status details", () => {
-    const sessionID = Session.ID.make("ses_test")
-    expect(Schema.decodeUnknownSync(SessionEvent.Compaction.StartedV1.data)({ sessionID, reason: "manual" })).toEqual({
-      sessionID,
-      reason: "manual",
-    })
-    expect(Schema.decodeUnknownSync(SessionEvent.Compaction.FailedV1.data)({ sessionID })).toEqual({ sessionID })
-  })
-
-  test("normalizes persisted Session messages without changing current encoding", () => {
-    const base = { id: "msg_legacy", time: { created: 0 } }
-    const decode = Schema.decodeUnknownSync(SessionMessage.Persisted)
-    const encode = Schema.encodeSync(SessionMessage.Persisted)
-
-    const skill = decode({ ...base, type: "skill", name: "effect", text: "Use Effect" })
-    expect(skill).toMatchObject({ type: "skill", skill: "effect", name: "effect" })
-    expect(encode(skill)).toEqual({
-      ...base,
-      type: "skill",
-      skill: "effect",
-      name: "effect",
-      text: "Use Effect",
-    })
-
-    const shell = decode({
-      ...base,
-      type: "shell",
-      shell: {
-        id: "sh_legacy",
-        status: "exited",
-        command: "pwd",
-        cwd: "/project",
-        shell: "/bin/sh",
-        file: "/tmp/output",
-        exit: 0,
-        metadata: {},
-        time: { started: 0, completed: 1 },
-      },
-      output: { output: "/project", cursor: 8, size: 8, truncated: false },
-      time: { created: 0, completed: 1 },
-    })
-    expect(shell).toMatchObject({ type: "shell", shellID: "sh_legacy", command: "pwd", status: "exited", exit: 0 })
-    expect(encode(shell)).not.toHaveProperty("shell")
-
-    const assistant = decode({
-      ...base,
-      type: "assistant",
-      agent: "build",
-      model: { id: "model", providerID: "provider" },
-      content: [
-        {
-          type: "tool",
-          id: "call_legacy",
-          name: "read",
-          state: { status: "pending", input: '{"path":"README.md"}' },
-          time: { created: 0 },
-        },
-      ],
-    })
-    expect(assistant).toMatchObject({
-      type: "assistant",
-      content: [{ type: "tool", state: { status: "streaming", input: '{"path":"README.md"}' } }],
-    })
-    expect(encode(assistant)).toMatchObject({ content: [{ state: { status: "streaming" } }] })
-
-    const failed = decode({
-      ...base,
-      type: "compaction",
-      status: "failed",
-      reason: "manual",
-      summary: "",
-      recent: "",
-    })
-    expect(failed).toMatchObject({ status: "failed", error: { type: "compaction.failed" } })
-    expect(encode(failed)).not.toHaveProperty("summary")
-    const queued = decode({
-      ...base,
-      type: "compaction",
-      status: "queued",
-      reason: "manual",
-      summary: "",
-      recent: "",
-    })
-    expect(queued).toMatchObject({ status: "failed", error: { type: "compaction.queued" } })
-    expect(encode(queued)).toMatchObject({ status: "failed", error: { type: "compaction.queued" } })
-    expect(decode({ ...base, type: "synthetic", sessionID: "ses_legacy", text: "context" })).not.toHaveProperty(
-      "sessionID",
-    )
-
+  test("keeps shared persisted revert compatibility", () => {
     expect(
       Schema.decodeUnknownSync(Session.Revert)({
         messageID: "msg_legacy",

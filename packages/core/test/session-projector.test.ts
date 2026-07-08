@@ -90,7 +90,7 @@ describe("SessionProjector", () => {
     }),
   )
 
-  it.effect("loads and replays legacy revert storage into canonical state", () =>
+  it.effect("loads legacy revert storage into canonical state", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       yield* db
@@ -123,140 +123,10 @@ describe("SessionProjector", () => {
       expect(storedRevert?.files).toEqual([
         { file: "src/old.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" },
       ])
-
-      yield* (yield* EventV2.Service).replay({
-        id: EventV2.ID.make("evt_legacy_revert"),
-        type: EventV2.versionedType(SessionEvent.RevertEvent.Staged.type, 1),
-        created,
-        seq: 0,
-        aggregateID: sessionID,
-        data: {
-          sessionID,
-          revert: {
-            messageID: "msg_boundary",
-            snapshot: "tree",
-            diff: "legacy patch",
-            files: [{ path: "src/new.ts", status: "added", additions: 2, deletions: 0, patch: "@@" }],
-          },
-        },
-      })
-
-      const projected = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
-      if (!projected) return yield* Effect.die("Projected Session row missing")
-      const projectedRevert = fromRow(projected).revert
-      expect(String(projectedRevert?.messageID)).toBe("msg_boundary")
-      expect(String(projectedRevert?.snapshot)).toBe("tree")
-      expect(projectedRevert?.files).toEqual([
-        { file: "src/new.ts", status: "added", additions: 2, deletions: 0, patch: "@@" },
-      ])
-      expect(projected.revert).not.toHaveProperty("diff")
     }),
   )
 
-  it.effect("completes a persisted legacy running shell", () =>
-    Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-      const messageID = SessionMessage.ID.make("msg_legacy_shell")
-      const shellID = Shell.ID.make("sh_legacy")
-      const data = JSON.stringify({
-        shell: {
-          id: shellID,
-          status: "running",
-          command: "pwd",
-          cwd: "/project",
-          shell: "/bin/sh",
-          file: "/tmp/output",
-          metadata: {},
-          time: { started: 0 },
-        },
-        time: { created: 0 },
-      })
-      yield* db.run(
-        sql`insert into session_message (id, session_id, type, seq, time_created, time_updated, data) values (${messageID}, ${sessionID}, 'shell', 0, 0, 0, ${data})`,
-      )
-
-      yield* (yield* EventV2.Service).publish(SessionEvent.Shell.Ended, {
-        sessionID,
-        shell: Shell.Info.make({
-          id: shellID,
-          status: "exited",
-          command: "pwd",
-          cwd: "/project",
-          shell: "/bin/sh",
-          file: "/tmp/output",
-          exit: 0,
-          metadata: {},
-          time: { started: 0, completed: 1 },
-        }),
-        output: { output: "/project", cursor: 8, size: 8, truncated: false },
-      })
-
-      const row = yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, messageID)).get()
-      expect(
-        row && Schema.decodeUnknownSync(SessionMessage.Info)({ ...row.data, id: row.id, type: row.type }),
-      ).toMatchObject({
-        type: "shell",
-        shellID,
-        command: "pwd",
-        status: "exited",
-        exit: 0,
-        output: { output: "/project" },
-      })
-      expect(row?.data).not.toHaveProperty("shell")
-    }),
-  )
-
-  it.effect("replays v1 skill activation with a derived Skill ID", () =>
-    Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-
-      yield* (yield* EventV2.Service).replay({
-        id: EventV2.ID.make("evt_skill_legacy"),
-        type: EventV2.versionedType(SessionEvent.Skill.Activated.type, 1),
-        created,
-        seq: 0,
-        aggregateID: sessionID,
-        data: { sessionID, name: "effect", text: "Use Effect" },
-      })
-
-      const row = yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.type, "skill")).get()
-      expect(
-        row && Schema.decodeUnknownSync(SessionMessage.Info)({ ...row.data, id: row.id, type: row.type }),
-      ).toMatchObject({ type: "skill", skill: "effect", name: "effect", text: "Use Effect" })
-    }),
-  )
-
-  it.effect("projects compaction deltas into running summary state", () =>
+  it.effect("folds live compaction deltas into running memory state", () =>
     Effect.gen(function* () {
       const state = {
         messages: [
@@ -277,11 +147,6 @@ describe("SessionProjector", () => {
           id: EventV2.ID.make("evt_delta"),
           type: "session.compaction.delta",
           created,
-          durable: {
-            aggregateID: sessionID,
-            seq: EventV2.Seq.make(0),
-            version: EventV2.Version.make(1),
-          },
           data: { sessionID, text: "summary" },
         }),
       )
@@ -572,10 +437,10 @@ describe("SessionProjector", () => {
         yield* db
           .select({ id: EventTable.id })
           .from(EventTable)
-          .where(eq(EventTable.type, EventV2.versionedType(SessionEvent.Compaction.Delta.type, 1)))
+          .where(sql`${EventTable.type} like 'session.compaction.delta.%'`)
           .all()
           .pipe(Effect.orDie),
-      ).toHaveLength(1)
+      ).toHaveLength(0)
       expect(
         yield* db
           .select({ data: SessionMessageTable.data })
@@ -583,9 +448,7 @@ describe("SessionProjector", () => {
           .where(eq(SessionMessageTable.type, "compaction"))
           .all()
           .pipe(Effect.orDie),
-      ).toEqual([
-        { data: expect.objectContaining({ status: "running", summary: "partial", recent: "recent context" }) },
-      ])
+      ).toEqual([{ data: expect.objectContaining({ status: "running", summary: "", recent: "recent context" }) }])
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
         reason: "manual",

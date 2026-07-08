@@ -1166,57 +1166,6 @@ export type SessionLogOutput =
           readonly id: string
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.skill.activated"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly name: string; readonly text: string }
-        }
-      | {
-          readonly id: string
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.compaction.started"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly reason: "auto" | "manual" }
-        }
-      | {
-          readonly id: string
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.compaction.failed"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string }
-        }
-      | {
-          readonly id: string
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.revert.staged"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: {
-            readonly sessionID: string
-            readonly revert: {
-              readonly messageID: string
-              readonly partID?: string
-              readonly snapshot?: string
-              readonly diff?: string
-              readonly files?: ReadonlyArray<{
-                readonly path: string
-                readonly status: "added" | "modified" | "deleted"
-                readonly additions: number
-                readonly deletions: number
-                readonly patch: string
-              }>
-            }
-          }
-        }
-      | {
-          readonly id: string
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown }
           readonly type: "session.agent.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -1378,7 +1327,7 @@ export type SessionLogOutput =
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
           readonly type: "session.skill.activated"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
@@ -1677,7 +1626,7 @@ export type SessionLogOutput =
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
           readonly type: "session.compaction.started"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
@@ -1685,15 +1634,6 @@ export type SessionLogOutput =
             readonly recent: string
             readonly inputID?: string
           }
-        }
-      | {
-          readonly id: string
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.compaction.delta"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-          readonly location?: { readonly directory: string; readonly workspaceID?: string }
-          readonly data: { readonly sessionID: string; readonly text: string }
         }
       | {
           readonly id: string
@@ -1714,7 +1654,7 @@ export type SessionLogOutput =
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
           readonly type: "session.compaction.failed"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
@@ -1728,7 +1668,7 @@ export type SessionLogOutput =
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
           readonly type: "session.revert.staged"
-          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+          readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
@@ -4038,11 +3978,11 @@ export type EventSubscribeOutput =
             readonly deletions: number
             readonly files: number
             readonly diffs?: ReadonlyArray<{
-              readonly file?: string
-              readonly patch?: string
+              readonly file?: string | undefined
+              readonly patch?: string | undefined
               readonly additions: number
               readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified"
+              readonly status?: "added" | "deleted" | "modified" | undefined
             }>
           }
           readonly cost?: number
@@ -4100,11 +4040,11 @@ export type EventSubscribeOutput =
             readonly deletions: number
             readonly files: number
             readonly diffs?: ReadonlyArray<{
-              readonly file?: string
-              readonly patch?: string
+              readonly file?: string | undefined
+              readonly patch?: string | undefined
               readonly additions: number
               readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified"
+              readonly status?: "added" | "deleted" | "modified" | undefined
             }>
           }
           readonly cost?: number
@@ -4162,11 +4102,11 @@ export type EventSubscribeOutput =
             readonly deletions: number
             readonly files: number
             readonly diffs?: ReadonlyArray<{
-              readonly file?: string
-              readonly patch?: string
+              readonly file?: string | undefined
+              readonly patch?: string | undefined
               readonly additions: number
               readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified"
+              readonly status?: "added" | "deleted" | "modified" | undefined
             }>
           }
           readonly cost?: number
@@ -4232,11 +4172,11 @@ export type EventSubscribeOutput =
                     readonly title?: string | undefined
                     readonly body?: string | undefined
                     readonly diffs: ReadonlyArray<{
-                      readonly file?: string
-                      readonly patch?: string
+                      readonly file?: string | undefined
+                      readonly patch?: string | undefined
                       readonly additions: number
                       readonly deletions: number
-                      readonly status?: "added" | "deleted" | "modified"
+                      readonly status?: "added" | "deleted" | "modified" | undefined
                     }>
                   }
                 | undefined
@@ -4568,57 +4508,6 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.skill.activated"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly name: string; readonly text: string }
-    }
-  | {
-      readonly id: string
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.compaction.started"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string; readonly reason: "auto" | "manual" }
-    }
-  | {
-      readonly id: string
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.compaction.failed"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: { readonly sessionID: string }
-    }
-  | {
-      readonly id: string
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.revert.staged"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly revert: {
-          readonly messageID: string
-          readonly partID?: string
-          readonly snapshot?: string
-          readonly diff?: string
-          readonly files?: ReadonlyArray<{
-            readonly path: string
-            readonly status: "added" | "modified" | "deleted"
-            readonly additions: number
-            readonly deletions: number
-            readonly patch: string
-          }>
-        }
-      }
-    }
-  | {
-      readonly id: string
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.agent.selected"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -4794,7 +4683,7 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.skill.activated"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly sessionID: string; readonly id: string; readonly name: string; readonly text: string }
     }
@@ -5127,7 +5016,7 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.compaction.started"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {
         readonly sessionID: string
@@ -5141,7 +5030,6 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.compaction.delta"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly sessionID: string; readonly text: string }
     }
@@ -5164,7 +5052,7 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.compaction.failed"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {
         readonly sessionID: string
@@ -5178,7 +5066,7 @@ export type EventSubscribeOutput =
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.revert.staged"
-      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 2 }
+      readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {
         readonly sessionID: string

@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
@@ -17,6 +17,7 @@ import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
 import resetSessionEventsMigration from "@opencode-ai/core/database/migration/20260703200000_reset_v2_session_events"
 import durableSessionInboxMigration from "@opencode-ai/core/database/migration/20260707010146_durable_session_inbox"
+import migratePrelaunchV2StateMigration from "@opencode-ai/core/database/migration/20260707120000_migrate_prelaunch_v2_state"
 import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import addSessionForkMigration from "@opencode-ai/core/database/migration/20260706223930_add-session-fork"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -26,6 +27,7 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import sessionMetadataMigration from "@opencode-ai/core/database/migration/20260511173437_session-metadata"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
@@ -42,6 +44,256 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("migrates pre-launch V2 state in place", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE session_input (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, prompt text, delivery text, admitted_seq integer NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, created integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL, owner_id text)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE instruction_checkpoint (session_id text PRIMARY KEY, baseline text NOT NULL, snapshot text NOT NULL, baseline_seq integer NOT NULL)`,
+        )
+        const messages = [
+          ["msg_skill", "skill", { name: "effect", text: "Use Effect", time: { created: 1 } }],
+          [
+            "msg_shell",
+            "shell",
+            {
+              shell: { id: "sh_old", command: "pwd", status: "exited", exit: 0, cwd: "/tmp" },
+              output: { output: "/tmp", cursor: 4, size: 4, truncated: false },
+              time: { created: 2, completed: 3 },
+            },
+          ],
+          [
+            "msg_assistant",
+            "assistant",
+            {
+              agent: "build",
+              model: { id: "model", providerID: "provider" },
+              content: [
+                {
+                  type: "tool",
+                  id: "call_old",
+                  name: "read",
+                  provider: "removed",
+                  state: { status: "pending", input: '{"path":"README.md"}', title: "removed" },
+                  time: { created: 3 },
+                },
+              ],
+              time: { created: 3 },
+            },
+          ],
+          [
+            "msg_failed",
+            "compaction",
+            {
+              status: "failed",
+              reason: "manual",
+              summary: "removed",
+              recent: "removed",
+              time: { created: 4 },
+            },
+          ],
+          [
+            "msg_queued",
+            "compaction",
+            { status: "queued", reason: "manual", summary: "", recent: "", time: { created: 5 } },
+          ],
+          [
+            "msg_synthetic",
+            "synthetic",
+            { sessionID: "ses_test", text: "context", description: "source", time: { created: 6 } },
+          ],
+          [
+            "msg_running",
+            "compaction",
+            { status: "running", reason: "auto", summary: "partial", recent: "recent", time: { created: 7 } },
+          ],
+          [
+            "msg_completed",
+            "compaction",
+            { status: "completed", reason: "auto", summary: "summary", recent: "recent", time: { created: 8 } },
+          ],
+        ] as const
+        for (const [id, type, data] of messages)
+          yield* db.run(
+            sql`INSERT INTO session_message VALUES (${id}, 'ses_test', ${type}, 1, 10, 11, ${JSON.stringify(data)})`,
+          )
+        yield* db.run(
+          sql`INSERT INTO session_input VALUES ('msg_queued', 'ses_test', 'compaction', NULL, NULL, 4, NULL, 5)`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence VALUES ('ses_test', 9, 'owner')`)
+        yield* db.run(sql`INSERT INTO instruction_checkpoint VALUES ('ses_test', 'baseline', '{"source":"value"}', 7)`)
+        const events = [
+          ["evt_skill", 1, 101, "session.skill.activated.1", { sessionID: "ses_test", name: "effect", text: "Use" }],
+          ["evt_started", 2, 102, "session.compaction.started.1", { sessionID: "ses_test", reason: "auto" }],
+          ["evt_delta", 3, 103, "session.compaction.delta.1", { sessionID: "ses_test", text: "partial" }],
+          ["evt_failed", 4, 104, "session.compaction.failed.1", { sessionID: "ses_test" }],
+          [
+            "evt_revert",
+            5,
+            105,
+            "session.revert.staged.1",
+            {
+              sessionID: "ses_test",
+              revert: {
+                messageID: "msg_skill",
+                snapshot: "tree",
+                diff: "removed",
+                files: [{ path: "src/a.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" }],
+              },
+            },
+          ],
+          [
+            "evt_skill_current",
+            6,
+            106,
+            "session.skill.activated.2",
+            { sessionID: "ses_test", id: "effect-id", name: "Effect", text: "Use" },
+          ],
+        ] as const
+        for (const [id, seq, created, type, data] of events)
+          yield* db.run(
+            sql`INSERT INTO event VALUES (${id}, 'ses_test', ${seq}, ${created}, ${type}, ${JSON.stringify(data)})`,
+          )
+
+        yield* DatabaseMigration.applyOnly(db, [migratePrelaunchV2StateMigration])
+
+        const rows = yield* db.all<{
+          id: string
+          type: string
+          seq: number
+          time_created: number
+          time_updated: number
+          data: string
+        }>(sql`SELECT id, type, seq, time_created, time_updated, data FROM session_message ORDER BY id`)
+        for (const row of rows)
+          Schema.decodeUnknownSync(SessionMessage.Info)({ ...JSON.parse(row.data), id: row.id, type: row.type })
+        expect(rows.every((row) => row.seq === 1 && row.time_created === 10 && row.time_updated === 11)).toBe(true)
+        expect(rows.map((row) => [row.id, JSON.parse(row.data)])).toEqual([
+          [
+            "msg_assistant",
+            expect.objectContaining({
+              content: [expect.objectContaining({ state: { status: "streaming", input: '{"path":"README.md"}' } })],
+            }),
+          ],
+          ["msg_completed", expect.objectContaining({ status: "completed", summary: "summary", recent: "recent" })],
+          [
+            "msg_failed",
+            {
+              time: { created: 4 },
+              status: "failed",
+              reason: "manual",
+              error: {
+                type: "compaction.failed",
+                message: "Compaction failed before recording an error",
+              },
+            },
+          ],
+          ["msg_running", expect.objectContaining({ status: "running", summary: "partial", recent: "recent" })],
+          ["msg_shell", expect.objectContaining({ shellID: "sh_old", command: "pwd", status: "exited", exit: 0 })],
+          ["msg_skill", { time: { created: 1 }, skill: "effect", name: "effect", text: "Use Effect" }],
+          ["msg_synthetic", { time: { created: 6 }, text: "context", description: "source" }],
+        ])
+        expect(yield* db.get(sql`SELECT * FROM session_input`)).toEqual({
+          id: "msg_queued",
+          session_id: "ses_test",
+          type: "compaction",
+          prompt: null,
+          delivery: null,
+          admitted_seq: 4,
+          promoted_seq: null,
+          time_created: 5,
+        })
+        const migratedEvents = yield* db.all<{
+          id: string
+          aggregate_id: string
+          seq: number
+          created: number
+          type: string
+          data: string
+        }>(sql`SELECT * FROM event ORDER BY seq`)
+        expect(migratedEvents.map((event) => ({ ...event, data: JSON.parse(event.data) }))).toEqual([
+          {
+            id: "evt_skill",
+            aggregate_id: "ses_test",
+            seq: 1,
+            created: 101,
+            type: "session.skill.activated.1",
+            data: { sessionID: "ses_test", id: "effect", name: "effect", text: "Use" },
+          },
+          {
+            id: "evt_started",
+            aggregate_id: "ses_test",
+            seq: 2,
+            created: 102,
+            type: "session.compaction.started.1",
+            data: { sessionID: "ses_test", reason: "auto", recent: "" },
+          },
+          {
+            id: "evt_failed",
+            aggregate_id: "ses_test",
+            seq: 4,
+            created: 104,
+            type: "session.compaction.failed.1",
+            data: {
+              sessionID: "ses_test",
+              reason: "auto",
+              error: {
+                type: "compaction.failed",
+                message: "Compaction failed before recording an error",
+              },
+            },
+          },
+          {
+            id: "evt_revert",
+            aggregate_id: "ses_test",
+            seq: 5,
+            created: 105,
+            type: "session.revert.staged.1",
+            data: {
+              sessionID: "ses_test",
+              revert: {
+                messageID: "msg_skill",
+                snapshot: "tree",
+                files: [{ file: "src/a.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" }],
+              },
+            },
+          },
+          {
+            id: "evt_skill_current",
+            aggregate_id: "ses_test",
+            seq: 6,
+            created: 106,
+            type: "session.skill.activated.1",
+            data: { sessionID: "ses_test", id: "effect-id", name: "Effect", text: "Use" },
+          },
+        ])
+        expect(yield* db.get(sql`SELECT * FROM event_sequence`)).toEqual({
+          aggregate_id: "ses_test",
+          seq: 9,
+          owner_id: "owner",
+        })
+        expect(yield* db.get(sql`SELECT * FROM instruction_checkpoint`)).toEqual({
+          session_id: "ses_test",
+          baseline: "baseline",
+          snapshot: '{"source":"value"}',
+          baseline_seq: 7,
+        })
+      }),
+    )
+  })
+
   test("resets incompatible V2 Session event history", async () => {
     await run(
       Effect.gen(function* () {

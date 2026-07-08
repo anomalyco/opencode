@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
+import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
@@ -277,7 +277,7 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Persisted)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(

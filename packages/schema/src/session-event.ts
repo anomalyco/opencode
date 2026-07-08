@@ -12,7 +12,7 @@ import { FileAttachment, Prompt } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
-import { LegacyRevert, Revert } from "./session-revert.js"
+import { Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
 import { Agent } from "./agent.js"
@@ -46,12 +46,6 @@ const options = {
   durable: {
     aggregate: "sessionID",
     version: 1,
-  },
-} as const
-const optionsV2 = {
-  durable: {
-    aggregate: "sessionID",
-    version: 2,
   },
 } as const
 export const AgentSelected = Event.durable({
@@ -188,21 +182,9 @@ export const Synthetic = Event.durable({
 export type Synthetic = typeof Synthetic.Type
 
 export namespace Skill {
-  /** Persisted before Skill IDs and display names were separated. */
-  export const ActivatedV1 = Event.durable({
-    type: "session.skill.activated",
-    identifier: "Session.Skill.ActivatedV1",
-    ...options,
-    schema: {
-      ...Base,
-      name: Schema.String,
-      text: Schema.String,
-    },
-  })
-
   export const Activated = Event.durable({
     type: "session.skill.activated",
-    ...optionsV2,
+    ...options,
     schema: {
       ...Base,
       id: SkillSchema.ID,
@@ -473,32 +455,20 @@ export namespace Compaction {
   })
   export type Admitted = typeof Admitted.Type
 
-  /** Persisted before running compactions projected recent context and manual input identity. */
-  export const StartedV1 = Event.durable({
+  export const Started = Event.durable({
     type: "session.compaction.started",
-    identifier: "Session.Compaction.StartedV1",
     ...options,
     schema: {
       ...Base,
       reason: Schema.Literals(["auto", "manual"]),
-    },
-  })
-
-  export const Started = Event.durable({
-    type: "session.compaction.started",
-    ...optionsV2,
-    schema: {
-      ...Base,
-      reason: StartedV1.data.fields.reason,
       recent: Schema.String,
       inputID: SessionMessage.ID.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
 
-  export const Delta = Event.durable({
+  export const Delta = Event.ephemeral({
     type: "session.compaction.delta",
-    ...options,
     schema: {
       ...Base,
       text: Schema.String,
@@ -518,17 +488,9 @@ export namespace Compaction {
   })
   export type Ended = typeof Ended.Type
 
-  /** Persisted before failures recorded their reason, error, and manual input identity. */
-  export const FailedV1 = Event.durable({
-    type: "session.compaction.failed",
-    identifier: "Session.Compaction.FailedV1",
-    ...options,
-    schema: Base,
-  })
-
   export const Failed = Event.durable({
     type: "session.compaction.failed",
-    ...optionsV2,
+    ...options,
     schema: {
       ...Base,
       reason: Started.data.fields.reason,
@@ -540,17 +502,9 @@ export namespace Compaction {
 }
 
 export namespace RevertEvent {
-  /** Persisted before revert files adopted canonical FileDiff.Info. */
-  export const StagedV1 = Event.durable({
-    type: "session.revert.staged",
-    identifier: "Session.Revert.StagedV1",
-    ...options,
-    schema: { ...Base, revert: LegacyRevert },
-  })
-
   export const Staged = Event.durable({
     type: "session.revert.staged",
-    ...optionsV2,
+    ...options,
     schema: { ...Base, revert: Revert },
   })
   export const Cleared = Event.durable({ type: "session.revert.cleared", ...options, schema: Base })
@@ -607,13 +561,7 @@ export const CurrentDefinitions = Event.inventory(
   RevertEvent.Committed,
 )
 
-export const Definitions = Event.inventory(
-  Skill.ActivatedV1,
-  Compaction.StartedV1,
-  Compaction.FailedV1,
-  RevertEvent.StagedV1,
-  ...CurrentDefinitions,
-)
+export const Definitions = CurrentDefinitions
 
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),

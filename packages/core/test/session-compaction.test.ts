@@ -164,8 +164,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         .all()
         .pipe(Effect.orDie),
     ).toEqual([
-      { type: EventV2.versionedType(SessionEvent.Compaction.Started.type, 2) },
-      { type: EventV2.versionedType(SessionEvent.Compaction.Delta.type, 1) },
+      { type: EventV2.versionedType(SessionEvent.Compaction.Started.type, 1) },
       { type: EventV2.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
   }),

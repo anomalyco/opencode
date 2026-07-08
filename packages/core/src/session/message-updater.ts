@@ -2,7 +2,6 @@ import { castDraft, produce, type WritableDraft } from "immer"
 import { DateTime, Effect } from "effect"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
-import { Skill } from "@opencode-ai/schema/skill"
 
 export type MemoryState = {
   messages: SessionMessage.Info[]
@@ -202,13 +201,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         )
       },
       "session.skill.activated": (event) => {
-        const identity = Skill.normalizeIdentity(event.data)
         return adapter.appendMessage(
           SessionMessage.Skill.make({
             id: SessionMessage.ID.fromEvent(event.id),
             type: "skill",
-            skill: identity.id,
-            name: identity.name,
+            skill: event.data.id,
+            name: event.data.name,
             text: event.data.text,
             metadata: event.metadata,
             time: { created: event.created },
@@ -508,11 +506,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             type: "compaction",
             status: "failed",
             metadata: current?.metadata ?? event.metadata,
-            reason: current?.reason ?? event.data.reason ?? "manual",
-            error: event.data.error ?? {
-              type: "compaction.failed",
-              message: "Compaction failed before recording an error",
-            },
+            reason: event.data.reason,
+            error: event.data.error,
             time: current?.time ?? { created: event.created },
           })
           if (current?.status === "running") return yield* adapter.updateCompaction(failed)

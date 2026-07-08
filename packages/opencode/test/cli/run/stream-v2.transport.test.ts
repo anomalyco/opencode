@@ -1543,6 +1543,7 @@ describe("V2 mini transport", () => {
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
+            id: input.skill ?? "tigerstyle",
             name: input.skill ?? "tigerstyle",
             text: "skill instructions",
           },
@@ -1625,6 +1626,7 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
+        id: "other",
         name: "other",
         text: "other instructions",
       },
@@ -1647,6 +1649,7 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
+        id: "tigerstyle",
         name: "tigerstyle",
         text: "skill instructions",
       },
@@ -1738,6 +1741,7 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
+        id: "tigerstyle",
         name: "tigerstyle",
         text: "skill instructions",
       },

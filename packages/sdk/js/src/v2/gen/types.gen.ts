@@ -17,10 +17,6 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
-  | EventSessionSkillActivated
-  | EventSessionCompactionStarted
-  | EventSessionCompactionFailed
-  | EventSessionRevertStaged
   | EventSessionAgentSelected
   | EventSessionModelSelected
   | EventSessionMoved
@@ -35,6 +31,7 @@ export type Event =
   | EventSessionExecutionInterrupted
   | EventSessionInstructionsUpdated
   | EventSessionSynthetic
+  | EventSessionSkillActivated
   | EventSessionShellStarted
   | EventSessionShellEnded
   | EventSessionStepStarted
@@ -55,8 +52,11 @@ export type Event =
   | EventSessionToolFailed
   | EventSessionRetryScheduled
   | EventSessionCompactionAdmitted
+  | EventSessionCompactionStarted
   | EventSessionCompactionDelta
   | EventSessionCompactionEnded
+  | EventSessionCompactionFailed
+  | EventSessionRevertStaged
   | EventSessionRevertCleared
   | EventSessionRevertCommitted
   | EventMessagePartDelta
@@ -805,44 +805,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.skill.activated"
-        properties: {
-          sessionID: string
-          id: string
-          name: string
-          text: string
-        }
-      }
-    | {
-        id: string
-        type: "session.compaction.started"
-        properties: {
-          sessionID: string
-          reason: "auto" | "manual"
-          recent: string
-          inputID?: string
-        }
-      }
-    | {
-        id: string
-        type: "session.compaction.failed"
-        properties: {
-          sessionID: string
-          reason: "auto" | "manual"
-          error: SessionStructuredError
-          inputID?: string
-        }
-      }
-    | {
-        id: string
-        type: "session.revert.staged"
-        properties: {
-          sessionID: string
-          revert: SessionRevert
-        }
-      }
-    | {
-        id: string
         type: "session.agent.selected"
         properties: {
           sessionID: string
@@ -958,6 +920,16 @@ export type GlobalEvent = {
           metadata?: {
             [key: string]: unknown
           }
+        }
+      }
+    | {
+        id: string
+        type: "session.skill.activated"
+        properties: {
+          sessionID: string
+          id: string
+          name: string
+          text: string
         }
       }
     | {
@@ -1184,6 +1156,16 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.compaction.started"
+        properties: {
+          sessionID: string
+          reason: "auto" | "manual"
+          recent: string
+          inputID?: string
+        }
+      }
+    | {
+        id: string
         type: "session.compaction.delta"
         properties: {
           sessionID: string
@@ -1198,6 +1180,24 @@ export type GlobalEvent = {
           reason: "auto" | "manual"
           text: string
           recent: string
+        }
+      }
+    | {
+        id: string
+        type: "session.compaction.failed"
+        properties: {
+          sessionID: string
+          reason: "auto" | "manual"
+          error: SessionStructuredError
+          inputID?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.revert.staged"
+        properties: {
+          sessionID: string
+          revert: SessionRevert
         }
       }
     | {
@@ -1715,10 +1715,6 @@ export type GlobalEvent = {
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
     | SyncEventMessagePartRemoved
-    | SyncEventSessionSkillActivated
-    | SyncEventSessionCompactionStarted
-    | SyncEventSessionCompactionFailed
-    | SyncEventSessionRevertStaged
     | SyncEventSessionAgentSelected
     | SyncEventSessionModelSelected
     | SyncEventSessionMoved
@@ -1732,6 +1728,7 @@ export type GlobalEvent = {
     | SyncEventSessionExecutionInterrupted
     | SyncEventSessionInstructionsUpdated
     | SyncEventSessionSynthetic
+    | SyncEventSessionSkillActivated
     | SyncEventSessionShellStarted
     | SyncEventSessionShellEnded
     | SyncEventSessionStepStarted
@@ -1749,8 +1746,10 @@ export type GlobalEvent = {
     | SyncEventSessionToolFailed
     | SyncEventSessionRetryScheduled
     | SyncEventSessionCompactionAdmitted
-    | SyncEventSessionCompactionDelta
+    | SyncEventSessionCompactionStarted
     | SyncEventSessionCompactionEnded
+    | SyncEventSessionCompactionFailed
+    | SyncEventSessionRevertStaged
     | SyncEventSessionRevertCleared
     | SyncEventSessionRevertCommitted
 }
@@ -3053,10 +3052,6 @@ export type V2Event =
   | MessageRemoved
   | MessagePartUpdated
   | MessagePartRemoved
-  | SessionSkillActivated
-  | SessionCompactionStarted
-  | SessionCompactionFailed
-  | SessionRevertStaged
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -3071,6 +3066,7 @@ export type V2Event =
   | SessionExecutionInterrupted
   | SessionInstructionsUpdated
   | SessionSynthetic
+  | SessionSkillActivated
   | SessionShellStarted
   | SessionShellEnded
   | SessionStepStarted
@@ -3091,8 +3087,11 @@ export type V2Event =
   | SessionToolFailed
   | SessionRetryScheduled
   | SessionCompactionAdmitted
+  | SessionCompactionStarted
   | SessionCompactionDelta
   | SessionCompactionEnded
+  | SessionCompactionFailed
+  | SessionRevertStaged
   | SessionRevertCleared
   | SessionRevertCommitted
   | MessagePartDelta
@@ -3338,26 +3337,6 @@ export type SessionV1Info = {
   }
 }
 
-export type SessionStructuredError = {
-  type: string
-  message: string
-}
-
-export type FileDiffInfo = {
-  file: string
-  patch: string
-  additions: number
-  deletions: number
-  status: "added" | "deleted" | "modified"
-}
-
-export type SessionRevert = {
-  messageID: string
-  partID?: string
-  snapshot?: string
-  files?: Array<FileDiffInfo>
-}
-
 export type ModelRef = {
   id: string
   providerID: string
@@ -3412,6 +3391,11 @@ export type PromptAgentAttachment = {
   mention?: PromptMention
 }
 
+export type SessionStructuredError = {
+  type: string
+  message: string
+}
+
 export type SessionMessageProviderState = {
   [key: string]: unknown
 }
@@ -3429,6 +3413,21 @@ export type ToolFileContent = {
 }
 
 export type LlmToolContent = ToolTextContent | ToolFileContent
+
+export type FileDiffInfo = {
+  file: string
+  patch: string
+  additions: number
+  deletions: number
+  status: "added" | "deleted" | "modified"
+}
+
+export type SessionRevert = {
+  messageID: string
+  partID?: string
+  snapshot?: string
+  files?: Array<FileDiffInfo>
+}
 
 export type PermissionV2Source = {
   type: "tool"
@@ -3723,72 +3722,6 @@ export type SyncEventMessagePartRemoved = {
   }
 }
 
-export type SyncEventSessionSkillActivated = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.skill.activated.2"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      sessionID: string
-      id: string
-      name: string
-      text: string
-    }
-  }
-}
-
-export type SyncEventSessionCompactionStarted = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.compaction.started.2"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      sessionID: string
-      reason: "auto" | "manual"
-      recent: string
-      inputID?: string
-    }
-  }
-}
-
-export type SyncEventSessionCompactionFailed = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.compaction.failed.2"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      sessionID: string
-      reason: "auto" | "manual"
-      error: SessionStructuredError
-      inputID?: string
-    }
-  }
-}
-
-export type SyncEventSessionRevertStaged = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.revert.staged.2"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      sessionID: string
-      revert: SessionRevert
-    }
-  }
-}
-
 export type SyncEventSessionAgentSelected = {
   type: "sync"
   id: string
@@ -3986,6 +3919,23 @@ export type SyncEventSessionSynthetic = {
       metadata?: {
         [key: string]: unknown
       }
+    }
+  }
+}
+
+export type SyncEventSessionSkillActivated = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.skill.activated.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      id: string
+      name: string
+      text: string
     }
   }
 }
@@ -4301,17 +4251,19 @@ export type SyncEventSessionCompactionAdmitted = {
   }
 }
 
-export type SyncEventSessionCompactionDelta = {
+export type SyncEventSessionCompactionStarted = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.compaction.delta.1"
+    type: "session.compaction.started.1"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
-      text: string
+      reason: "auto" | "manual"
+      recent: string
+      inputID?: string
     }
   }
 }
@@ -4329,6 +4281,38 @@ export type SyncEventSessionCompactionEnded = {
       reason: "auto" | "manual"
       text: string
       recent: string
+    }
+  }
+}
+
+export type SyncEventSessionCompactionFailed = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.compaction.failed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      reason: "auto" | "manual"
+      error: SessionStructuredError
+      inputID?: string
+    }
+  }
+}
+
+export type SyncEventSessionRevertStaged = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.revert.staged.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      revert: SessionRevert
     }
   }
 }
@@ -4767,96 +4751,6 @@ export type InstructionEntryInfo = {
   value: unknown
 }
 
-export type SessionSkillActivatedV1 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.skill.activated"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    name: string
-    text: string
-  }
-}
-
-export type SessionCompactionStartedV1 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.compaction.started"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    reason: "auto" | "manual"
-  }
-}
-
-export type SessionCompactionFailedV1 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.compaction.failed"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRef
-  data: {
-    sessionID: string
-  }
-}
-
-export type SessionRevertV1 = {
-  messageID: string
-  partID?: string
-  snapshot?: string
-  diff?: string
-  files?: Array<{
-    path: string
-    status: "added" | "modified" | "deleted"
-    additions: number
-    deletions: number
-    patch: string
-  }>
-}
-
-export type SessionRevertStagedV1 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.revert.staged"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    revert: SessionRevertV1
-  }
-}
-
 export type SessionAgentSelected = {
   id: string
   created: number
@@ -5138,7 +5032,7 @@ export type SessionSkillActivated = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRef
   data: {
@@ -5538,7 +5432,7 @@ export type SessionCompactionStarted = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRef
   data: {
@@ -5546,25 +5440,6 @@ export type SessionCompactionStarted = {
     reason: "auto" | "manual"
     recent: string
     inputID?: string
-  }
-}
-
-export type SessionCompactionDelta = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.compaction.delta"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    text: string
   }
 }
 
@@ -5599,7 +5474,7 @@ export type SessionCompactionFailed = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRef
   data: {
@@ -5620,7 +5495,7 @@ export type SessionRevertStaged = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRef
   data: {
@@ -5667,10 +5542,6 @@ export type SessionRevertCommitted = {
 }
 
 export type SessionEventDurable =
-  | SessionSkillActivatedV1
-  | SessionCompactionStartedV1
-  | SessionCompactionFailedV1
-  | SessionRevertStagedV1
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -5704,7 +5575,6 @@ export type SessionEventDurable =
   | SessionRetryScheduled
   | SessionCompactionAdmitted
   | SessionCompactionStarted
-  | SessionCompactionDelta
   | SessionCompactionEnded
   | SessionCompactionFailed
   | SessionRevertStaged
@@ -6269,6 +6139,20 @@ export type SessionToolInputDelta = {
     assistantMessageID: string
     callID: string
     delta: string
+  }
+}
+
+export type SessionCompactionDelta = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.compaction.delta"
+  location?: LocationRef
+  data: {
+    sessionID: string
+    text: string
   }
 }
 
@@ -7241,48 +7125,6 @@ export type EventMessagePartRemoved = {
   }
 }
 
-export type EventSessionSkillActivated = {
-  id: string
-  type: "session.skill.activated"
-  properties: {
-    sessionID: string
-    id: string
-    name: string
-    text: string
-  }
-}
-
-export type EventSessionCompactionStarted = {
-  id: string
-  type: "session.compaction.started"
-  properties: {
-    sessionID: string
-    reason: "auto" | "manual"
-    recent: string
-    inputID?: string
-  }
-}
-
-export type EventSessionCompactionFailed = {
-  id: string
-  type: "session.compaction.failed"
-  properties: {
-    sessionID: string
-    reason: "auto" | "manual"
-    error: SessionStructuredError
-    inputID?: string
-  }
-}
-
-export type EventSessionRevertStaged = {
-  id: string
-  type: "session.revert.staged"
-  properties: {
-    sessionID: string
-    revert: SessionRevert
-  }
-}
-
 export type EventSessionAgentSelected = {
   id: string
   type: "session.agent.selected"
@@ -7413,6 +7255,17 @@ export type EventSessionSynthetic = {
     metadata?: {
       [key: string]: unknown
     }
+  }
+}
+
+export type EventSessionSkillActivated = {
+  id: string
+  type: "session.skill.activated"
+  properties: {
+    sessionID: string
+    id: string
+    name: string
+    text: string
   }
 }
 
@@ -7658,6 +7511,17 @@ export type EventSessionCompactionAdmitted = {
   }
 }
 
+export type EventSessionCompactionStarted = {
+  id: string
+  type: "session.compaction.started"
+  properties: {
+    sessionID: string
+    reason: "auto" | "manual"
+    recent: string
+    inputID?: string
+  }
+}
+
 export type EventSessionCompactionDelta = {
   id: string
   type: "session.compaction.delta"
@@ -7675,6 +7539,26 @@ export type EventSessionCompactionEnded = {
     reason: "auto" | "manual"
     text: string
     recent: string
+  }
+}
+
+export type EventSessionCompactionFailed = {
+  id: string
+  type: "session.compaction.failed"
+  properties: {
+    sessionID: string
+    reason: "auto" | "manual"
+    error: SessionStructuredError
+    inputID?: string
+  }
+}
+
+export type EventSessionRevertStaged = {
+  id: string
+  type: "session.revert.staged"
+  properties: {
+    sessionID: string
+    revert: SessionRevert
   }
 }
 
@@ -8753,10 +8637,6 @@ export type V2EventV2 =
   | MessageRemovedV2
   | MessagePartUpdatedV2
   | MessagePartRemovedV2
-  | SessionSkillActivatedV1V2
-  | SessionCompactionStartedV1V2
-  | SessionCompactionFailedV1V2
-  | SessionRevertStagedV1V2
   | SessionAgentSelectedV2
   | SessionModelSelectedV2
   | SessionMovedV2
@@ -9120,96 +9000,6 @@ export type SessionMessageCompactionFailedV2 = {
  */
 export type InstructionEntryKeyV2 = string
 
-export type SessionSkillActivatedV1V2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.skill.activated"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    name: string
-    text: string
-  }
-}
-
-export type SessionCompactionStartedV1V2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.compaction.started"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    reason: "auto" | "manual"
-  }
-}
-
-export type SessionCompactionFailedV1V2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.compaction.failed"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-  }
-}
-
-export type SessionRevertV1V2 = {
-  messageID: string
-  partID?: string
-  snapshot?: string
-  diff?: string
-  files?: Array<{
-    path: string
-    status: "added" | "modified" | "deleted"
-    additions: number
-    deletions: number
-    patch: string
-  }>
-}
-
-export type SessionRevertStagedV1V2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.revert.staged"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    revert: SessionRevertV1V2
-  }
-}
-
 export type SessionAgentSelectedV2 = {
   id: string
   created: number
@@ -9491,7 +9281,7 @@ export type SessionSkillActivatedV2 = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRefV2
   data: {
@@ -9911,7 +9701,7 @@ export type SessionCompactionStartedV2 = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRefV2
   data: {
@@ -9919,25 +9709,6 @@ export type SessionCompactionStartedV2 = {
     reason: "auto" | "manual"
     recent: string
     inputID?: string
-  }
-}
-
-export type SessionCompactionDeltaV2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.compaction.delta"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    text: string
   }
 }
 
@@ -9972,7 +9743,7 @@ export type SessionCompactionFailedV2 = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRefV2
   data: {
@@ -9993,7 +9764,7 @@ export type SessionRevertStagedV2 = {
   durable: {
     aggregateID: string
     seq: number
-    version: 2
+    version: 1
   }
   location?: LocationRefV2
   data: {
@@ -10492,6 +10263,20 @@ export type SessionToolInputDeltaV2 = {
     assistantMessageID: string
     callID: string
     delta: string
+  }
+}
+
+export type SessionCompactionDeltaV2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.compaction.delta"
+  location?: LocationRefV2
+  data: {
+    sessionID: string
+    text: string
   }
 }
 

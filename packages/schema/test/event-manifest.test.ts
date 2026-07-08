@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { DateTime, Schema } from "effect"
 import {
   Agent,
   Config,
-  Event,
   FileSystem,
   Form,
   Integration,
@@ -118,7 +116,6 @@ describe("public event manifest", () => {
         "session.instructions.updated.1",
         "session.synthetic.1",
         "session.skill.activated.1",
-        "session.skill.activated.2",
         "session.shell.started.1",
         "session.shell.ended.1",
         "session.step.started.1",
@@ -137,13 +134,9 @@ describe("public event manifest", () => {
         "session.retry.scheduled.1",
         "session.compaction.admitted.1",
         "session.compaction.started.1",
-        "session.compaction.started.2",
-        "session.compaction.delta.1",
         "session.compaction.ended.1",
         "session.compaction.failed.1",
-        "session.compaction.failed.2",
         "session.revert.staged.1",
-        "session.revert.staged.2",
         "session.revert.cleared.1",
         "session.revert.committed.1",
       ].toSorted(),
@@ -152,50 +145,15 @@ describe("public event manifest", () => {
       SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
     )
     expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
+    expect(SessionEvent.Compaction.Delta.durability).toBe("ephemeral")
+    expect(EventManifest.Durable.has("session.compaction.delta.1")).toBe(false)
     expect(EventManifest.ServerDefinitions).toContain(SessionEvent.UsageUpdated)
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
   })
 
-  test("retains legacy skill activation for replay and exposes v2 as current", () => {
-    const sessionID = SessionID.make("ses_test")
-    expect(SessionEvent.Skill.ActivatedV1.data.make({ sessionID, name: "effect", text: "Use Effect" })).toEqual({
-      sessionID,
-      name: "effect",
-      text: "Use Effect",
-    })
-    expect(EventManifest.Durable.get("session.skill.activated.1")).toBe(SessionEvent.Skill.ActivatedV1)
-    expect(EventManifest.Durable.get("session.skill.activated.2")).toBe(SessionEvent.Skill.Activated)
+  test("uses the current Session skill event as durable version 1", () => {
+    expect(EventManifest.Durable.get("session.skill.activated.1")).toBe(SessionEvent.Skill.Activated)
     expect(EventManifest.Latest.get("session.skill.activated")).toBe(SessionEvent.Skill.Activated)
-  })
-
-  test("recognizes retained v1 Session events in the durable log schema", () => {
-    const sessionID = SessionID.make("ses_test")
-    const durable = { aggregateID: sessionID, seq: Event.Seq.make(0), version: Event.Version.make(1) }
-    const created = DateTime.makeUnsafe(0)
-    const events = [
-      SessionEvent.Skill.ActivatedV1.make({
-        id: Event.ID.create(),
-        created,
-        type: "session.skill.activated",
-        durable,
-        data: { sessionID, name: "effect", text: "Use Effect" },
-      }),
-      SessionEvent.Compaction.StartedV1.make({
-        id: Event.ID.create(),
-        created,
-        type: "session.compaction.started",
-        durable,
-        data: { sessionID, reason: "auto" },
-      }),
-      SessionEvent.Compaction.FailedV1.make({
-        id: Event.ID.create(),
-        created,
-        type: "session.compaction.failed",
-        durable,
-        data: { sessionID },
-      }),
-    ]
-    expect(events.every(Schema.is(SessionEvent.Durable))).toBe(true)
   })
 
   test("keeps simplified session fragment and tool payloads on durable version 1", () => {

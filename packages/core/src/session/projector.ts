@@ -24,21 +24,14 @@ import {
 } from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
-import { PersistedRevert } from "@opencode-ai/schema/session-revert"
 import { Money } from "@opencode-ai/schema/money"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
 type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
-type CompactionFailedData =
-  | (typeof SessionEvent.Compaction.Failed.Type)["data"]
-  | (typeof SessionEvent.Compaction.FailedV1.Type)["data"]
 
-const settlesManualCompaction = (data: CompactionFailedData) => !("reason" in data) || data.reason === "manual"
-
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Persisted)
+const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -425,10 +418,7 @@ function run(db: DatabaseService, event: MessageEvent) {
               and(
                 eq(SessionMessageTable.session_id, event.data.sessionID),
                 eq(SessionMessageTable.type, "shell"),
-                or(
-                  sql`json_extract(${SessionMessageTable.data}, '$.shellID') = ${shellID}`,
-                  sql`json_extract(${SessionMessageTable.data}, '$.shell.id') = ${shellID}`,
-                ),
+                sql`json_extract(${SessionMessageTable.data}, '$.shellID') = ${shellID}`,
               ),
             )
             .orderBy(desc(SessionMessageTable.seq))
@@ -719,7 +709,6 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.RetryScheduled, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Delta, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
@@ -737,7 +726,7 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        if (settlesManualCompaction(event.data))
+        if (event.data.reason === "manual")
           yield* SessionInput.settleCompaction(db, {
             sessionID: event.data.sessionID,
             handledSeq: event.durable.seq,
@@ -746,7 +735,7 @@ const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
       Effect.gen(function* () {
-        const revert = decodeRevert(event.data.revert)
+        const revert = event.data.revert
         yield* db
           .update(SessionTable)
           .set({

@@ -11,11 +11,6 @@ export type ID = typeof ID.Type
 export const Name = Schema.String.pipe(Schema.brand("Skill.Name"))
 export type Name = typeof Name.Type
 
-export const normalizeIdentity = (skill: { readonly id?: ID; readonly name: string }) => ({
-  id: skill.id ?? ID.make(skill.name),
-  name: Name.make(skill.name),
-})
-
 export interface DirectorySource extends Schema.Schema.Type<typeof DirectorySource> {}
 export const DirectorySource = Schema.Struct({
   type: Schema.tag("directory"),

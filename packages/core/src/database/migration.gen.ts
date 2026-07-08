@@ -48,5 +48,6 @@ export const migrations = (
     import("./migration/20260705180000_rename_instructions"),
     import("./migration/20260706223930_add-session-fork"),
     import("./migration/20260707010146_durable_session_inbox"),
+    import("./migration/20260707120000_migrate_prelaunch_v2_state"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]
