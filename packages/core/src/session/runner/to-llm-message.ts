@@ -23,14 +23,14 @@ const media = (file: FileAttachment): ContentPart => ({
 
 const textAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
-  text: [
+  text: `\n\n${[
     `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
     file.description === undefined ? undefined : `Description: ${file.description}`,
     "",
     Buffer.from(file.data, "base64").toString("utf8"),
   ]
     .filter((line): line is string => line !== undefined)
-    .join("\n"),
+    .join("\n")}`,
   metadata: {
     attachment: {
       source: file.source,
@@ -42,14 +42,14 @@ const textAttachment = (file: FileAttachment): ContentPart => ({
 
 const directoryAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
-  text: [
+  text: `\n\n${[
     `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
     file.description === undefined ? undefined : `Description: ${file.description}`,
     file.data.length === 0 ? undefined : "",
     file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
   ]
     .filter((line): line is string => line !== undefined)
-    .join("\n"),
+    .join("\n")}`,
   metadata: {
     attachment: {
       source: file.source,
@@ -64,19 +64,6 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
   if (imageMimes.has(file.mime)) return [media(file)]
   return []
-}
-
-function separateTextParts(parts: ContentPart[]) {
-  let seenText = false
-  return parts.map((part) => {
-    if (part.type !== "text") return part
-    if (!seenText) {
-      seenText = true
-      return part
-    }
-    // OpenAI Chat flattens text-only content without adding a delimiter.
-    return { ...part, text: `\n\n${part.text}` }
-  })
 }
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
@@ -192,10 +179,10 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, provider
     case "model-switched":
       return []
     case "user":
-      const content = separateTextParts([
+      const content = [
         ...(message.text === "" ? [] : [Message.text(message.text)]),
         ...(message.files ?? []).flatMap(attachmentContent),
-      ])
+      ]
       if (content.length === 0) return []
       return [
         Message.make({

@@ -301,7 +301,7 @@ Recent work
     )
 
     expect(messages).toHaveLength(1)
-    expect(messages[0]?.content).toMatchObject([{ type: "text", text: "Attached directory: src/\n\nindex.ts" }])
+    expect(messages[0]?.content).toMatchObject([{ type: "text", text: "\n\nAttached directory: src/\n\nindex.ts" }])
   })
 
   test("uses materialized image data as provider media and drops unsupported attachments", () => {
