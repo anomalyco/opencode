@@ -113,6 +113,23 @@ Keep provider facades small and explicit:
 
 `Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
+### Provider Package Entrypoints
+
+Catalog-selected native providers use package-like export paths from `@opencode-ai/llm`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+
+```ts
+import { model } from "@opencode-ai/llm/providers/openai/responses"
+
+const selected = model("gpt-5", {
+  apiKey,
+  transport: "websocket",
+})
+```
+
+Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Keep transport choices inside the semantic entrypoint settings, so OpenAI Responses HTTP and WebSocket share one entrypoint. Provider facades may still expose named selectors such as `responsesWebSocket` for direct typed call sites; the package-like contract maps its settings to those selectors before returning an executable `Model`.
+
+Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
+
 ### Folder layout
 
 ```

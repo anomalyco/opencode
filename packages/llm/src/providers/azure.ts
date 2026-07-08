@@ -1,6 +1,7 @@
 import { Auth } from "../route/auth"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
 import type { Route as RouteDef, RouteDefaultsInput } from "../route/client"
+import type { ProviderPackage } from "../provider-package"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
@@ -22,6 +23,14 @@ export type ModelOptions = AzureURL &
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
 export type Config = ModelOptions
+
+export type Settings = ProviderPackage.Settings &
+  AzureURL & {
+    readonly apiKey?: string
+    readonly apiVersion?: string
+    readonly queryParams?: Readonly<Record<string, string>>
+    readonly providerOptions?: OpenAIProviderOptionsInput
+  }
 
 const resourceBaseURL = (resourceName: string) => `https://${resourceName.trim()}.openai.azure.com/openai/v1`
 
@@ -108,3 +117,24 @@ export const provider = {
   id,
   configure,
 }
+
+const config = (settings: Settings): Config => {
+  const common = {
+    apiKey: settings.apiKey,
+    apiVersion: settings.apiVersion,
+    headers: settings.headers === undefined ? undefined : { ...settings.headers },
+    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
+    limits: settings.limits,
+    providerOptions: settings.providerOptions,
+    queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
+  }
+  if (settings.baseURL !== undefined) return { ...common, baseURL: settings.baseURL }
+  if (settings.resourceName !== undefined) return { ...common, resourceName: settings.resourceName }
+  throw new Error("Azure requires resourceName or baseURL")
+}
+
+export const responsesModel: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+  configure(config(settings)).responses(modelID)
+export const chatModel: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
+export const model = responsesModel

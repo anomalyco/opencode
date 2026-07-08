@@ -19,6 +19,8 @@
     "./providers/amazon-bedrock": "./src/providers/amazon-bedrock.ts",
     "./providers/anthropic": "./src/providers/anthropic.ts",
     "./providers/azure": "./src/providers/azure.ts",
+    "./providers/azure/responses": "./src/providers/azure/responses.ts",
+    "./providers/azure/chat": "./src/providers/azure/chat.ts",
     "./providers/cloudflare": "./src/providers/cloudflare.ts",
     "./providers/github-copilot": "./src/providers/github-copilot.ts",
     "./providers/google": "./src/providers/google.ts",
