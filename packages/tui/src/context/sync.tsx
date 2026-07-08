@@ -461,12 +461,14 @@ export const {
         .catch(() => emptyConsoleState)
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
+      const vcsPromise = sdk.client.vcs.get({ workspace }).then((x) => x.data)
       await Promise.all([
         providersPromise,
         providerListPromise,
         capabilitiesPromise,
         agentsPromise,
         configPromise,
+        vcsPromise,
         projectPromise,
         ...(args.continue ? [sessionListPromise] : []),
       ])
@@ -477,6 +479,7 @@ export const {
           const consoleStateResponse = consoleStatePromise
           const agentsResponse = agentsPromise.then((x) => x.data ?? [])
           const configResponse = configPromise.then((x) => x.data!)
+          const vcsPromiseResolved = vcsPromise
           const sessionListResponse = args.continue ? sessionListPromise : undefined
 
           return Promise.all([
@@ -486,6 +489,7 @@ export const {
             consoleStateResponse,
             agentsResponse,
             configResponse,
+            vcsPromiseResolved,
             ...(sessionListResponse ? [sessionListResponse] : []),
           ]).then((responses) => {
             const providers = responses[0]
@@ -494,7 +498,8 @@ export const {
             const consoleState = responses[3]
             const agents = responses[4]
             const config = responses[5]
-            const sessions = responses[6]
+            const vcs = responses[6]
+            const sessions = responses[7]
 
             batch(() => {
               setStore("provider", reconcile(providers.providers))
@@ -504,6 +509,7 @@ export const {
               setStore("console_state", reconcile(consoleState))
               setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
+              setStore("vcs", reconcile(vcs))
               if (sessions !== undefined) setStore("session", reconcile(sessions))
             })
           })
@@ -525,8 +531,7 @@ export const {
               setStore("session_status", reconcile(x.data ?? {}))
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
-            project.workspace.sync(),
+            project.workspace.syncKeepCurrent(),
           ]).then(() => {
             setStore("status", "complete")
           })

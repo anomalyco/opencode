@@ -10,8 +10,17 @@ export function useDirectory() {
   const paths = useTuiPaths()
   return createMemo(() => {
     const directory = project.instance.path().directory || paths.cwd
-    const result = abbreviateHome(directory, paths.home)
-    if (sync.data.vcs?.branch) return result + ":" + sync.data.vcs.branch
-    return result
+
+    const workspaceID = project.workspace.current()
+    const workspace = workspaceID
+      ? project.workspace.list().find((w) => w.id === workspaceID)
+      : undefined
+
+    const base = workspace
+      ? workspace.name
+      : abbreviateHome(project.data.project.mainDir || directory, paths.home)
+
+    if (sync.data.vcs?.branch) return base + ":" + sync.data.vcs.branch
+    return base
   })
 }

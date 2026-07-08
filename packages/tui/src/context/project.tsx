@@ -52,7 +52,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       })
     }
 
-    async function syncWorkspace() {
+    async function syncWorkspace(keepCurrent?: boolean) {
       const listed = await sdk.client.experimental.workspace.list().catch(() => undefined)
       if (!listed?.data) return
       const status = await sdk.client.experimental.workspace.status().catch(() => undefined)
@@ -61,7 +61,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       batch(() => {
         setStore("workspace", "list", reconcile(listed.data))
         setStore("workspace", "status", reconcile(next))
-        if (!listed.data.some((item) => item.id === store.workspace.current)) {
+        if (!keepCurrent && !listed.data.some((item) => item.id === store.workspace.current)) {
           setStore("workspace", "current", undefined)
         }
       })
@@ -108,6 +108,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
           return store.workspace.status
         },
         sync: syncWorkspace,
+        syncKeepCurrent: () => syncWorkspace(true),
       },
       sync,
     }
