@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Message, UserMessage } from "@opencode-ai/sdk/v2"
-import { loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
+import { isTimelineReady, loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
 
 const user = (id: string) => ({ id, role: "user" }) as UserMessage
 const assistant = (id: string) => ({ id, role: "assistant" }) as AssistantMessage
@@ -15,37 +15,35 @@ describe("timeline model", () => {
     expect(selectVisibleUserMessages(users)).toBe(users)
   })
 
-  test("loads pages until a visible user turn is added", async () => {
-    let loaded = 10
-    let visible = 2
+  test("waits for an assistant-only load to hydrate its user root", () => {
+    expect(isTimelineReady([assistant("msg_2")], true)).toBe(false)
+    expect(isTimelineReady([user("msg_1"), assistant("msg_2")], true)).toBe(true)
+    expect(isTimelineReady([], false)).toBe(true)
+  })
+
+  test("loads exactly one opaque cursor page", async () => {
     let calls = 0
     const anchors: Array<string | boolean> = []
 
     await loadOlderTimeline({
       sessionID: () => "ses_test",
-      loaded: () => loaded,
-      visible: () => visible,
       more: () => true,
       loading: () => false,
       loadMore: async () => {
         calls += 1
-        loaded += 3
-        if (calls === 2) visible += 1
       },
       before: () => anchors.push("before"),
       after: (done) => anchors.push("after", done),
     })
 
-    expect(calls).toBe(2)
-    expect(anchors).toEqual(["before", "after", false, "after", true])
+    expect(calls).toBe(1)
+    expect(anchors).toEqual(["before", "after", true])
   })
 
   test("stops when a page adds no raw messages", async () => {
     let calls = 0
     await loadOlderTimeline({
       sessionID: () => "ses_test",
-      loaded: () => 10,
-      visible: () => 2,
       more: () => true,
       loading: () => false,
       loadMore: async () => {
@@ -62,8 +60,6 @@ describe("timeline model", () => {
 
     await loadOlderTimeline({
       sessionID: () => sessionID,
-      loaded: () => 10,
-      visible: () => 2,
       more: () => true,
       loading: () => false,
       loadMore: async () => {
@@ -83,8 +79,6 @@ describe("timeline model", () => {
     await expect(
       loadOlderTimeline({
         sessionID: () => "ses_test",
-        loaded: () => 10,
-        visible: () => 2,
         more: () => true,
         loading: () => false,
         loadMore: async () => {
