@@ -97,8 +97,8 @@ export namespace Frontend {
   export const RecordingFinish = Schema.String
   export type RecordingFinish = Schema.Schema.Type<typeof RecordingFinish>
 
-  export const ArtifactParams = Schema.Struct({ path: Schema.optional(Schema.String) })
-  export interface ArtifactParams extends Schema.Schema.Type<typeof ArtifactParams> {}
+  export const ScreenshotParams = Schema.Struct({ name: Schema.optional(Schema.String) })
+  export interface ScreenshotParams extends Schema.Schema.Type<typeof ScreenshotParams> {}
 
   export const TypeParams = Schema.Struct({ text: Schema.String })
   export interface TypeParams extends Schema.Schema.Type<typeof TypeParams> {}
@@ -124,7 +124,7 @@ export namespace Frontend {
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literal("ui.screenshot"),
-      params: Schema.optional(ArtifactParams),
+      params: Schema.optional(ScreenshotParams),
     }),
     Schema.Struct({
       ...JsonRpc.RequestFields,

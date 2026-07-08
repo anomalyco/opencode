@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp } from "node:fs/promises"
+import { mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { extname, join, resolve } from "node:path"
 import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
 import type { SimulationProtocol } from "../protocol"
@@ -104,11 +104,23 @@ export function state(harness: Harness) {
   }
 }
 
-export async function screenshot(harness: Harness, output?: string) {
+export async function screenshot(harness: Harness, name?: string) {
   await harness.renderOnce()
   const image = SimulationPng.screenshot(harness.renderer)
-  const path = output ?? join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
-  if (output) await mkdir(dirname(output), { recursive: true })
+  const filename = name ?? `screenshot-${crypto.randomUUID()}`
+  if (
+    !filename ||
+    filename.includes("/") ||
+    filename.includes("\\") ||
+    extname(filename)
+  )
+    throw new Error("screenshot name must not contain a path or extension")
+  const directory = resolve(
+    process.env.OPENCODE_DRIVE_MEDIA_DIR ??
+      join(tmpdir(), "opencode-drive", "output"),
+  )
+  await mkdir(directory, { recursive: true })
+  const path = join(directory, `${filename}.png`)
   await Bun.write(path, image.data)
   return path
 }

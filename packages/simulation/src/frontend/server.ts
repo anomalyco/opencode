@@ -17,7 +17,7 @@ async function handle(
 ) {
   switch (request.method) {
     case "ui.screenshot":
-      return SimulationActions.screenshot(harness, request.params?.path)
+      return SimulationActions.screenshot(harness, request.params?.name)
     case "ui.state": {
       return SimulationActions.state(harness)
     }
