@@ -14,6 +14,7 @@ import {
   useContext,
 } from "solid-js"
 import path from "node:path"
+import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
@@ -61,6 +62,7 @@ import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { DialogExportResult } from "../../ui/dialog-export-result"
 import { sessionEpilogue } from "../../util/presentation"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -711,7 +713,13 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const transcript = formatSessionTranscript(sessionData, messages(), showThinking(), showDetails())
+          const transcript = formatSessionTranscript(
+            sessionData,
+            messages(),
+            showThinking(),
+            showDetails(),
+            showAssistantMetadata(),
+          )
           await clipboard.write?.(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
@@ -731,53 +739,61 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
 
           const options = await DialogExportOptions.show(
             dialog,
-            defaultFilename,
             showThinking(),
             showDetails(),
             showAssistantMetadata(),
-            false,
           )
 
           if (options === null) return
 
-          const transcript = formatSessionTranscript(sessionData, messages(), options.thinking, options.toolDetails)
+          const content =
+            options.format === "markdown"
+              ? formatSessionTranscript(
+                  sessionData,
+                  messages(),
+                  options.thinking,
+                  options.toolDetails,
+                  options.assistantMetadata,
+                )
+              : await (async () => {
+                  if (options.debug) {
+                    const events: unknown[] = []
+                    for await (const event of sdk.api.session.log({ sessionID: sessionData.id, follow: false })) {
+                      if (event.type !== "log.synced") events.push(event)
+                    }
+                    return JSON.stringify({ info: sessionData, events }, null, 2) + EOL
+                  }
 
-          if (options.openWithoutSaving) {
-            // Just open in editor without saving
-            await openEditor({
-              renderer,
-              value: transcript,
-              cwd:
-                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
-                project.instance.directory() ||
-                paths.cwd,
-            })
-          } else {
-            const exportDir = paths.cwd
-            const filename = options.filename.trim()
-            const filepath = path.join(exportDir, filename)
+                  const messages: unknown[] = []
+                  let cursor: string | undefined
+                  do {
+                    const page = await sdk.api.message.list(
+                      cursor
+                        ? { sessionID: sessionData.id, limit: 200, cursor }
+                        : { sessionID: sessionData.id, limit: 200, order: "asc" },
+                    )
+                    messages.push(...page.data)
+                    cursor = page.data.length ? (page.cursor.next ?? undefined) : undefined
+                  } while (cursor)
+                  return JSON.stringify({ info: sessionData, messages }, null, 2) + EOL
+                })()
 
-            await writeExport(filepath, transcript)
-
-            // Open with EDITOR if available
-            const result = await openEditor({
-              renderer,
-              value: transcript,
-              cwd:
-                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
-                project.instance.directory() ||
-                paths.cwd,
-            })
-            if (result !== undefined) {
-              await writeExport(filepath, result)
-            }
-
-            toast.show({ message: `Session exported to ${filename}`, variant: "success" })
+          if (options.action === "copy") {
+            await clipboard.write?.(content)
+            dialog.clear()
+            toast.show({ message: "Copied to clipboard", variant: "success" })
+            return
           }
+
+          const filepath = path.join(
+            tmpdir(),
+            `session-${crypto.randomUUID()}.${options.format === "markdown" ? "md" : "json"}`,
+          )
+          await writeExport(filepath, content)
+          await DialogExportResult.show(dialog, filepath)
         } catch {
           toast.show({ message: "Failed to export session", variant: "error" })
         }
@@ -2746,6 +2762,7 @@ function formatSessionTranscript(
   messages: SessionMessageInfo[],
   thinking: boolean,
   toolDetails: boolean,
+  assistantMetadata: boolean,
 ) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
@@ -2767,7 +2784,13 @@ function formatSessionTranscript(
                 .join("\n")
       return [`**Tool: ${item.name}**\n\n**Input:**\n\`\`\`json\n${input}\n\`\`\`\n\n${output}`]
     })
-    return [`## Assistant\n\n${content.join("\n\n")}`]
+    const duration = message.time.completed
+      ? ` · ${((message.time.completed - message.time.created) / 1000).toFixed(1)}s`
+      : ""
+    const heading = assistantMetadata
+      ? `## Assistant (${message.agent} · ${message.model.providerID}/${message.model.id}${duration})`
+      : "## Assistant"
+    return [`${heading}\n\n${content.join("\n\n")}`]
   })
   return `# ${session.title}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
 }
