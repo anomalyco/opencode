@@ -10,11 +10,10 @@ import { Git } from "./git"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath, RelativePath } from "./schema"
-import { Snapshot as SnapshotSchema } from "@opencode-ai/schema/snapshot"
+import { ID } from "@opencode-ai/schema/snapshot"
 import { Hash } from "./util/hash"
 
-export const ID = SnapshotSchema.ID
-export type ID = SnapshotSchema.ID
+export { ID }
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Snapshot.Error", {
   operation: Schema.Literals(["capture", "files", "diff", "preview", "restore"]),
@@ -254,5 +253,3 @@ function failure(operation: Error["operation"], cause: unknown) {
     cause,
   })
 }
-
-export type { LegacyInfo as LegacyFileDiff } from "@opencode-ai/schema/file-diff"

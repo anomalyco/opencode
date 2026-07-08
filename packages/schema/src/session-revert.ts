@@ -13,7 +13,7 @@ export const Revert = Schema.Struct({
   files: Schema.Array(FileDiff.Info).pipe(optional),
 }).annotate({ identifier: "Session.Revert" })
 
-const LegacyFileDiff = Schema.Struct({
+const FileDiffV1 = Schema.Struct({
   path: Schema.String,
   status: Schema.Literals(["added", "modified", "deleted"]),
   additions: Schema.Finite,
@@ -21,13 +21,13 @@ const LegacyFileDiff = Schema.Struct({
   patch: Schema.String,
 })
 
-export interface LegacyRevert extends Schema.Schema.Type<typeof LegacyRevert> {}
-export const LegacyRevert = Schema.Struct({
+export interface RevertV1 extends Schema.Schema.Type<typeof RevertV1> {}
+export const RevertV1 = Schema.Struct({
   messageID: SessionMessage.ID,
   partID: Schema.String.pipe(optional),
   snapshot: Schema.String.pipe(optional),
   diff: Schema.String.pipe(optional),
-  files: Schema.Array(LegacyFileDiff).pipe(optional),
+  files: Schema.Array(FileDiffV1).pipe(optional),
 }).annotate({ identifier: "Session.RevertV1" })
 
 const PersistedCurrent = Revert.pipe(
@@ -42,11 +42,11 @@ const PersistedCurrent = Revert.pipe(
     }),
   ),
 )
-const PersistedLegacy = LegacyRevert.pipe(
+const PersistedLegacy = RevertV1.pipe(
   Schema.decodeTo(
-    Schema.Struct({ source: Schema.tag("legacy"), revert: Schema.toType(LegacyRevert) }),
+    Schema.Struct({ source: Schema.tag("legacy"), revert: Schema.toType(RevertV1) }),
     SchemaTransformation.transform({
-      decode: (revert): { readonly source: "legacy"; readonly revert: LegacyRevert } => ({
+      decode: (revert): { readonly source: "legacy"; readonly revert: RevertV1 } => ({
         source: "legacy",
         revert,
       }),

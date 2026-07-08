@@ -8224,7 +8224,7 @@ export type UserMessageV2 = {
   summary?: {
     title?: string | null
     body?: string | null
-    diffs: Array<FileDiffLegacyInfoV2>
+    diffs: Array<FileDiffLegacyInfo>
   } | null
   agent: string
   model: {
@@ -10007,14 +10007,6 @@ export type AgentUpdatedV2 = {
     | Array<unknown>
 }
 
-export type FileDiffLegacyInfoV2 = {
-  file?: string | null
-  patch?: string | null
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified" | null
-}
-
 export type SessionV1InfoV2 = {
   id: string
   slug: string
@@ -10027,7 +10019,7 @@ export type SessionV1InfoV2 = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<FileDiffLegacyInfoV2>
+    diffs?: Array<FileDiffLegacyInfo>
   }
   cost?: number
   tokens?: {

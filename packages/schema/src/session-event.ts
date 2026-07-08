@@ -515,7 +515,7 @@ export namespace RevertEvent {
   })
 }
 
-export const CurrentDefinitions = Event.inventory(
+export const Definitions = Event.inventory(
   AgentSelected,
   ModelSelected,
   Moved,
@@ -561,8 +561,6 @@ export const CurrentDefinitions = Event.inventory(
   RevertEvent.Committed,
 )
 
-export const Definitions = CurrentDefinitions
-
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
 )
@@ -572,6 +570,6 @@ export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
   .annotate({ identifier: "Session.Event.Durable" })
 export type DurableEvent = typeof Durable.Type
 
-export const All = Schema.Union(CurrentDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export const All = Schema.Union(Definitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type Event = typeof All.Type
 export type Type = Event["type"]

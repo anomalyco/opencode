@@ -3978,11 +3978,11 @@ export type EventSubscribeOutput =
             readonly deletions: number
             readonly files: number
             readonly diffs?: ReadonlyArray<{
-              readonly file?: string | undefined
-              readonly patch?: string | undefined
+              readonly file?: string
+              readonly patch?: string
               readonly additions: number
               readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified" | undefined
+              readonly status?: "added" | "deleted" | "modified"
             }>
           }
           readonly cost?: number
@@ -4040,11 +4040,11 @@ export type EventSubscribeOutput =
             readonly deletions: number
             readonly files: number
             readonly diffs?: ReadonlyArray<{
-              readonly file?: string | undefined
-              readonly patch?: string | undefined
+              readonly file?: string
+              readonly patch?: string
               readonly additions: number
               readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified" | undefined
+              readonly status?: "added" | "deleted" | "modified"
             }>
           }
           readonly cost?: number
@@ -4102,11 +4102,11 @@ export type EventSubscribeOutput =
             readonly deletions: number
             readonly files: number
             readonly diffs?: ReadonlyArray<{
-              readonly file?: string | undefined
-              readonly patch?: string | undefined
+              readonly file?: string
+              readonly patch?: string
               readonly additions: number
               readonly deletions: number
-              readonly status?: "added" | "deleted" | "modified" | undefined
+              readonly status?: "added" | "deleted" | "modified"
             }>
           }
           readonly cost?: number
@@ -4172,11 +4172,11 @@ export type EventSubscribeOutput =
                     readonly title?: string | undefined
                     readonly body?: string | undefined
                     readonly diffs: ReadonlyArray<{
-                      readonly file?: string | undefined
-                      readonly patch?: string | undefined
+                      readonly file?: string
+                      readonly patch?: string
                       readonly additions: number
                       readonly deletions: number
-                      readonly status?: "added" | "deleted" | "modified" | undefined
+                      readonly status?: "added" | "deleted" | "modified"
                     }>
                   }
                 | undefined
