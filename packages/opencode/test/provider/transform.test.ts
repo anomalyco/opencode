@@ -4007,6 +4007,12 @@ describe("ProviderTransform.variants", () => {
       },
       { id: "gpt-5.4-pro", releaseDate: "2026-03-05", efforts: ["medium", "high", "xhigh"] },
       { id: "gpt-5.5-pro", releaseDate: "2026-04-23", efforts: ["medium", "high", "xhigh"] },
+      { id: "gpt-5.6", releaseDate: "2026-07-02", efforts: ["none", "low", "medium", "high", "xhigh", "max"] },
+      {
+        id: "gpt-5.6-terra",
+        releaseDate: "2026-07-02",
+        efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+      },
       { id: "gpt-5-codex", releaseDate: "2025-09-23", efforts: ["low", "medium", "high"] },
       { id: "gpt-5.1-codex", releaseDate: "2025-11-13", efforts: ["low", "medium", "high"] },
       { id: "gpt-5.1-codex-max", releaseDate: "2025-11-13", efforts: ["low", "medium", "high", "xhigh"] },
