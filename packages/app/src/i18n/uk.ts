@@ -288,6 +288,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Видалити активний файл з контексту",
   "prompt.context.removeFile": "Видалити файл з контексту",
   "prompt.action.attachFile": "Додати файли",
+  "prompt.menu.addImagesAndFiles": "Додати файли та інше",
+  "prompt.menu.imagesAndFiles": "Зображення та файли",
+  "prompt.menu.commands": "Команди",
+  "prompt.menu.context": "Контекст",
+  "prompt.menu.shellCommand": "Команда оболонки",
   "prompt.attachment.remove": "Видалити вкладення",
   "prompt.action.send": "Надіслати",
   "prompt.action.stop": "Зупинити",
@@ -626,6 +631,8 @@ export const dict = {
   "home.sessions.group.today": "Сьогодні",
   "home.sessions.group.yesterday": "Учора",
   "home.sessions.group.older": "Раніше",
+  "home.providerTip":
+    "Підключіться до понад 75 провайдерів, щоб використовувати інші моделі, зокрема Claude, GPT, Gemini та інші",
 
   "session.tab.session": "Сесія",
   "session.tab.review": "Огляд",
