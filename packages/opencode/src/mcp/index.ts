@@ -28,7 +28,7 @@ import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
 import open from "open"
-import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Cause, Duration, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -367,34 +367,65 @@ export const layer = Layer.effect(
           return DISABLED_RESULT
         }
 
-        const { client: mcpClient, status } =
-          mcp.type === "remote"
-            ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
-            : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
+        // Retry loop to recover from race conditions during parallel MCP spawn.
+        // When many MCPs spawn concurrently with unbounded concurrency, some
+        // subprocesses may close their stdio pipe before completing the
+        // initialize handshake. Retrying with backoff gives them a chance to
+        // settle without forcing the user to manually restart opencode.
+        const RETRY_DELAYS_MS = [500, 1500, 3000] as const
+        let lastStatus: Status = { status: "failed", error: "Unknown error" }
 
-        if (!mcpClient) {
-          if (status.status !== "connected" && status.status !== "disabled") {
-            yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
+        for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+          const { client: mcpClient, status } =
+            mcp.type === "remote"
+              ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
+              : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
+          lastStatus = status
+
+          if (mcpClient) {
+            return yield* Effect.gen(function* () {
+              const listed = mcpClient.getServerCapabilities()?.tools
+                ? yield* McpCatalog.defs(mcpClient, mcp.timeout)
+                : []
+              if (!listed) {
+                return yield* Effect.fail(new Error("Failed to get tools"))
+              }
+              return {
+                mcpClient,
+                status,
+                defs: listed,
+                instructions: mcpClient.getInstructions()?.trim(),
+              } satisfies CreateResult
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.tryPromise(() => mcpClient.close())
+                  .pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
+              ),
+            )
           }
-          return { status } satisfies CreateResult
+
+          // Failed - retry if attempts remain
+          if (attempt < RETRY_DELAYS_MS.length) {
+            yield* Effect.logDebug("MCP connection failed, retrying", {
+              key,
+              attempt: attempt + 1,
+              maxAttempts: RETRY_DELAYS_MS.length + 1,
+              status: status.status,
+              error: status.status === "failed" ? status.error : undefined,
+            })
+            yield* Effect.sleep(Duration.millis(RETRY_DELAYS_MS[attempt]))
+          }
         }
 
-        return yield* Effect.gen(function* () {
-          const listed = mcpClient.getServerCapabilities()?.tools ? yield* McpCatalog.defs(mcpClient, mcp.timeout) : []
-          if (!listed) {
-            return yield* Effect.fail(new Error("Failed to get tools"))
-          }
-          return {
-            mcpClient,
-            status,
-            defs: listed,
-            instructions: mcpClient.getInstructions()?.trim(),
-          } satisfies CreateResult
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
-          ),
-        )
+        // All retries exhausted
+        if (lastStatus.status !== "connected" && lastStatus.status !== "disabled") {
+          yield* Effect.logWarning("server unavailable after retries", {
+            key,
+            type: mcp.type,
+            status: lastStatus.status,
+          })
+        }
+        return { status: lastStatus } satisfies CreateResult
       },
       Effect.map((result): CreateResult => result),
       Effect.catchCause((cause) => {
