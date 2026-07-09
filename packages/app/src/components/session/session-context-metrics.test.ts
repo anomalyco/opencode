@@ -105,4 +105,24 @@ describe("getSessionContext", () => {
       }),
     ).toBe(150)
   })
+
+  test("keeps active context tokens separate from cumulative session totals", () => {
+    const messages = [
+      assistant("a1", { input: 120, output: 20, reasoning: 0, read: 4_000, write: 0 }, 0.5),
+      assistant("a2", { input: 500, output: 100, reasoning: 20, read: 600, write: 80 }, 0.75),
+    ]
+    const cumulative = {
+      input: 620,
+      output: 120,
+      reasoning: 20,
+      cache: { read: 41_000_000, write: 80 },
+    }
+
+    const ctx = getSessionContext(messages, [])
+
+    expect(ctx?.message.id).toBe("a2")
+    expect(ctx?.tokens.cache.read).toBe(600)
+    expect(ctx?.total).toBe(1_300)
+    expect(getSessionTokenTotal(cumulative)).toBe(41_000_840)
+  })
 })
