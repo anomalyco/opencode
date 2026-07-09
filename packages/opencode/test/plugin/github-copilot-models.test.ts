@@ -187,7 +187,7 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
   expect(models["ignored-non-chat-record"]).toBeUndefined()
 })
 
-test("uses zero cost when Copilot reports a zero billing batch size", async () => {
+test("uses finite zero costs when Copilot reports invalid billing metadata", async () => {
   globalThis.fetch = mock(() =>
     Promise.resolve(
       new Response(
@@ -204,12 +204,40 @@ test("uses zero cost when Copilot reports a zero billing batch size", async () =
                   default: {
                     input_price: 0,
                     output_price: 0,
-                    cache_price: 0,
+                    cache_price: null,
                   },
                 },
               },
               capabilities: {
                 family: "mercury",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "overflow-model",
+              name: "Overflow Model",
+              version: "overflow-model-2026-07-09",
+              billing: {
+                token_prices: {
+                  batch_size: Number.MIN_VALUE,
+                  default: {
+                    input_price: Number.MAX_VALUE,
+                    output_price: -1,
+                    cache_price: 1,
+                  },
+                },
+              },
+              capabilities: {
+                family: "test",
                 limits: {
                   max_context_window_tokens: 128000,
                   max_output_tokens: 16384,
@@ -228,7 +256,9 @@ test("uses zero cost when Copilot reports a zero billing batch size", async () =
     ),
   ) as unknown as typeof fetch
 
-  const model = (await CopilotModels.get("https://api.githubcopilot.com")).models["mercury-alpha"]
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
+  const model = models["mercury-alpha"]
+  const overflow = models["overflow-model"]
 
   expect(model.cost).toEqual({
     input: 0,
@@ -238,7 +268,9 @@ test("uses zero cost when Copilot reports a zero billing batch size", async () =
       write: 0,
     },
   })
+  expect(overflow.cost).toEqual(model.cost)
   expect(JSON.stringify(model)).not.toContain("null")
+  expect(JSON.stringify(overflow)).not.toContain("null")
 })
 
 test("records Copilot advertised responses endpoint for non-GPT model IDs", async () => {
