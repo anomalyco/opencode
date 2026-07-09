@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
+import fs from "fs/promises"
 import { Effect, Layer, Context, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
@@ -20,7 +21,6 @@ import { escapeHtml } from "@/util/html"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
-const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
@@ -139,6 +139,31 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   }
 })
 
+async function externalSkillFiles(root: string) {
+  const result: string[] = []
+  const skills = path.join(root, "skills")
+  const rootStat = await fs.lstat(root).catch(() => undefined)
+  if (!rootStat?.isDirectory()) return result
+  const skillsStat = await fs.lstat(skills).catch(() => undefined)
+  if (!skillsStat?.isDirectory()) return result
+
+  async function walk(dir: string) {
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name)
+      if (entry.isSymbolicLink()) continue
+      if (entry.isDirectory()) {
+        await walk(full)
+        continue
+      }
+      if (entry.isFile() && entry.name === "SKILL.md") result.push(full)
+    }
+  }
+
+  await walk(skills)
+  return result
+}
+
 const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
@@ -170,6 +195,22 @@ const scan = Effect.fnUntraced(function* (
   }
 })
 
+const scanExternal = Effect.fnUntraced(function* (state: ScanState, root: string, scope: string) {
+  const matches = yield* Effect.tryPromise({
+    try: () => externalSkillFiles(root),
+    catch: (error) => error,
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.logError(`failed to scan ${scope} skills`, { dir: root, error: error }).pipe(Effect.as([] as string[])),
+    ),
+  )
+
+  for (const match of matches) {
+    state.matches.add(match)
+    state.dirs.add(path.dirname(match))
+  }
+})
+
 const discoverSkills = Effect.fnUntraced(function* (
   config: Config.Interface,
   discovery: Discovery.Interface,
@@ -189,8 +230,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
-      if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      yield* scanExternal(state, root, "global")
     }
 
     const upDirs = yield* fsys
@@ -198,7 +238,7 @@ const discoverSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      yield* scanExternal(state, root, "project")
     }
   }
 

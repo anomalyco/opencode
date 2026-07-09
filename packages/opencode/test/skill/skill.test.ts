@@ -2,13 +2,8 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
-import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
-import { Config } from "../../src/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Global } from "@opencode-ai/core/global"
 import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
@@ -266,6 +261,55 @@ description: A skill in the .claude/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".claude", "skills", "claude-skill", "SKILL.md"))
         }),
+      { git: true },
+    ),
+  )
+
+  it.live("does not follow symlinked external skill directories", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        withHome(
+          dir,
+          Effect.gen(function* () {
+            yield* Effect.promise(async () => {
+              const skills = path.join(dir, ".claude", "skills")
+              const local = path.join(skills, "local-skill")
+              const linkedTarget = path.join(dir, "linked-target")
+
+              await fs.mkdir(local, { recursive: true })
+              await fs.mkdir(linkedTarget, { recursive: true })
+              await Bun.write(
+                path.join(local, "SKILL.md"),
+                `---
+name: local-skill
+description: A regular external skill.
+---
+
+# Local Skill
+`,
+              )
+              await Bun.write(
+                path.join(linkedTarget, "SKILL.md"),
+                `---
+name: linked-skill
+description: A linked external skill.
+---
+
+# Linked Skill
+`,
+              )
+              await fs.symlink(
+                linkedTarget,
+                path.join(skills, "linked-skill"),
+                process.platform === "win32" ? "junction" : "dir",
+              )
+            })
+
+            const skill = yield* Skill.Service
+            const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+            expect(list.map((s) => s.name).toSorted()).toEqual(["local-skill"])
+          }),
+        ),
       { git: true },
     ),
   )
