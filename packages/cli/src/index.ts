@@ -1,22 +1,16 @@
 #!/usr/bin/env bun
 
-import { NodeFileSystem, NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Effect, Layer, Logger, References } from "effect"
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { Effect } from "effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
-import { Logging } from "@opencode-ai/core/observability/logging"
+import { Observability } from "@opencode-ai/core/observability"
 import { Updater } from "./services/updater"
 import { InstallationChannel, InstallationVersion, InstallationLocal } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { AppProcess } from "@opencode-ai/core/process"
-
-const LoggingLayer = Logger.layer(Logging.loggers(), { mergeWithExisting: false }).pipe(
-  Layer.provide(NodeFileSystem.layer),
-  Layer.orDie,
-  Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
-)
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -59,7 +53,7 @@ Effect.logInfo("cli starting", {
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Updater.layer),
   Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node]))),
-  Effect.provide(LoggingLayer),
+  Effect.provide(Observability.layer),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
   Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
