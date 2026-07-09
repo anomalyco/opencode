@@ -172,6 +172,26 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("should set session affinity for openrouter", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        id: "google/gemini-3.1-pro-preview",
+        providerID: "openrouter",
+        api: {
+          id: "google/gemini-3.1-pro-preview",
+          url: "https://openrouter.ai/api/v1",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.prompt_cache_key).toBe(sessionID)
+    expect(result.session_id).toBe(sessionID)
+  })
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
@@ -2821,7 +2841,7 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
   })
 })
 
-describe("ProviderTransform.message - cache control on gateway", () => {
+describe("ProviderTransform.message - cache control", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({
       id: "anthropic/claude-sonnet-4",
@@ -2866,6 +2886,37 @@ describe("ProviderTransform.message - cache control on gateway", () => {
 
     expect(result[0].content).toBe("You are a helpful assistant")
     expect(result[0].providerOptions).toBeUndefined()
+  })
+
+  test("openrouter gemini applies explicit cache control", () => {
+    const model = createModel({
+      id: "google/gemini-3.1-pro-preview",
+      providerID: "openrouter",
+      api: {
+        id: "google/gemini-3.1-pro-preview",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions?.openrouter).toEqual({
+      cacheControl: { type: "ephemeral" },
+    })
+    expect(result[1].content[0].providerOptions?.openrouter).toEqual({
+      cacheControl: { type: "ephemeral" },
+    })
   })
 
   test("non-gateway anthropic keeps existing cache control behavior", () => {

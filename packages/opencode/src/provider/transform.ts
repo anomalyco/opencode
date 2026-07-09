@@ -433,6 +433,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
+      (model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id.includes("gemini")) ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
       model.id.includes("anthropic") ||
@@ -1221,6 +1222,7 @@ export function options(input: {
 
   if (input.model.providerID === "openrouter") {
     result["prompt_cache_key"] = input.sessionID
+    result["session_id"] = input.sessionID
   }
   if (input.model.api.npm === "@ai-sdk/gateway") {
     result["gateway"] = {
