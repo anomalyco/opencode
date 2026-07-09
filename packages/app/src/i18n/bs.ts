@@ -603,6 +603,7 @@ export const dict = {
   "home.sessions.group.today": "Danas",
   "home.sessions.group.yesterday": "Jučer",
   "home.sessions.group.older": "Starije",
+  "home.providerTip": "Povežite se s više od 75 pružalaca usluga kako biste koristili druge modele, uključujući Claude, GPT, Gemini i druge",
 
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",

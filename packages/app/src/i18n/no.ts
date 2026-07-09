@@ -1043,6 +1043,7 @@ export const dict = {
   "home.sessions.group.today": "I dag",
   "home.sessions.group.yesterday": "I går",
   "home.sessions.group.older": "Eldre",
+  "home.providerTip": "Koble til over 75 leverandører for å bruke andre modeller, inkludert Claude, GPT, Gemini og flere",
 
   "session.tab.unknown": "Ukjent sesjon",
   "session.error.notFound": "Denne sesjonen finnes ikke",

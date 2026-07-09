@@ -557,6 +557,7 @@ export const dict = {
   "home.sessions.group.today": "Aujourd'hui",
   "home.sessions.group.yesterday": "Hier",
   "home.sessions.group.older": "Plus anciennes",
+  "home.providerTip": "Connectez-vous à plus de 75 fournisseurs pour utiliser d’autres modèles, notamment Claude, GPT, Gemini, etc.",
   "session.tab.session": "Session",
   "session.tab.review": "Revue",
   "session.tab.context": "Contexte",

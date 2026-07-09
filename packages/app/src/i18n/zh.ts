@@ -600,6 +600,7 @@ export const dict = {
   "home.sessions.group.today": "今天",
   "home.sessions.group.yesterday": "昨天",
   "home.sessions.group.older": "更早",
+  "home.providerTip": "连接 75 个以上的提供商，使用 Claude、GPT、Gemini 等其他模型",
 
   "session.tab.session": "会话",
   "session.tab.review": "审查",
