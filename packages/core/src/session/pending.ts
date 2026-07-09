@@ -31,14 +31,9 @@ const encodeUser = Schema.encodeSync(UserData)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticData)
 const encodeSynthetic = Schema.encodeSync(SyntheticData)
 const decodeAdmittedEvent = Schema.decodeUnknownOption(SessionEvent.InputAdmitted.data)
-const decodeCompactionAdmittedEvent = Schema.decodeUnknownOption(SessionEvent.Compaction.Admitted.data)
 const admittedEventType = Event.versionedType(
   SessionEvent.InputAdmitted.type,
   SessionEvent.InputAdmitted.durable.version,
-)
-const compactionAdmittedEventType = Event.versionedType(
-  SessionEvent.Compaction.Admitted.type,
-  SessionEvent.Compaction.Admitted.durable.version,
 )
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 
@@ -141,40 +136,10 @@ const promotedFromHistory = Effect.fn("SessionPending.promotedFromHistory")(func
       ? User.make({ ...base, ...decoded.value.input })
       : Synthetic.make({ ...base, ...decoded.value.input })
   }
-  // Fork-copied messages have no admitted event in this aggregate. Reconstruct
-  // from the projected message; delivery is not retained, so it cannot conflict.
-  return fromMessageRow(sessionID, message)
+  // A projected message without an admitted event in this aggregate (for
+  // example fork-copied history) is not a retryable admission.
+  return yield* Effect.die(new LifecycleConflict({ id }))
 })
-
-const fromMessageRow = (
-  sessionID: SessionSchema.ID,
-  message: typeof SessionMessageTable.$inferSelect,
-): User | Synthetic | undefined => {
-  const data = message.data as Record<string, unknown>
-  const base = {
-    admittedSeq: message.seq,
-    id: SessionMessage.ID.make(message.id),
-    sessionID,
-    timeCreated: DateTime.makeUnsafe(message.time_created),
-  }
-  const pick = (keys: ReadonlyArray<string>) =>
-    Object.fromEntries(keys.flatMap((key) => (data[key] === undefined ? [] : [[key, data[key]]])))
-  if (message.type === "user")
-    return User.make({
-      ...base,
-      type: "user",
-      data: decodeUser(pick(["text", "files", "agents", "metadata"])),
-      delivery: "steer",
-    })
-  if (message.type === "synthetic")
-    return Synthetic.make({
-      ...base,
-      type: "synthetic",
-      data: decodeSynthetic(pick(["text", "description", "metadata"])),
-      delivery: "steer",
-    })
-  return undefined
-}
 
 export const admit = Effect.fn("SessionPending.admit")(function* (
   db: DatabaseService,
@@ -236,8 +201,6 @@ export const admitCompaction = Effect.fn("SessionPending.admitCompaction")(funct
         if (exact.type === "compaction" && exact.sessionID === input.sessionID) return exact
         return yield* Effect.die(new LifecycleConflict({ id: input.id }))
       }
-      const settled = yield* settledCompactionFromHistory(db, input.sessionID, input.id)
-      if (settled) return settled
       const pending = yield* compaction(db, input.sessionID)
       if (pending) return pending
       return yield* events
@@ -263,35 +226,6 @@ export const admitCompaction = Effect.fn("SessionPending.admitCompaction")(funct
         )
     }),
   )
-})
-
-/**
- * Exact retry of an already-settled compaction reconciles against the durable
- * `session.compaction.admitted` event instead of a retained row.
- */
-const settledCompactionFromHistory = Effect.fn("SessionPending.settledCompactionFromHistory")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  id: SessionMessage.ID,
-) {
-  const rows = yield* db
-    .select()
-    .from(EventTable)
-    .where(and(eq(EventTable.aggregate_id, sessionID), eq(EventTable.type, compactionAdmittedEventType)))
-    .all()
-    .pipe(Effect.orDie)
-  for (const row of rows) {
-    const decoded = decodeCompactionAdmittedEvent(row.data)
-    if (decoded._tag !== "Some" || decoded.value.inputID !== id) continue
-    return Compaction.make({
-      admittedSeq: row.seq,
-      id,
-      sessionID,
-      timeCreated: DateTime.makeUnsafe(row.created),
-      type: "compaction",
-    })
-  }
-  return undefined
 })
 
 export const projectAdmitted = Effect.fn("SessionPending.projectAdmitted")(function* (

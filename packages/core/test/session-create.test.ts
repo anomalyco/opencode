@@ -219,11 +219,13 @@ describe("SessionV2.create", () => {
       })
       expect(yield* SessionPending.find(db, forkContext[0].id)).toBeUndefined()
       expect(yield* SessionPending.find(db, forkContext[1].id)).toBeUndefined()
-      // Fork-copied history still reconciles exact prompt retries from the
-      // projected message even though no pending row or admitted event exists.
+      // Fork-copied messages have no admitted event in the fork aggregate, so
+      // reusing their IDs as prompt IDs is conflicting reuse, not a retry.
       expect(
-        yield* session.prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false }),
-      ).toMatchObject({ id: forkContext[0].id, type: "user", data: { text: "First" } })
+        yield* session
+          .prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false })
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.PromptConflictError", messageID: forkContext[0].id })
 
       yield* session.prompt({
         sessionID: parent.id,

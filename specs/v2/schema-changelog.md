@@ -5,7 +5,7 @@
 - Rename the `SessionInput` schema namespace to `SessionPending` and the `session_input` table to `session_pending`.
 - Make the table pending-only: promotion consumes the user or synthetic row in the same event transaction that projects the message, and compaction settlement deletes the barrier row. Drop the `promoted_seq` column and the retained `promotedSeq`/`handledSeq` wire fields.
 - Add `GET /api/session/:sessionID/pending` (`v2.session.pending.list`) returning durable admitted work not yet visible in projected history, ordered by admission.
-- Reconcile exact retry of an already-promoted input against the projected `session_message` row plus the durable `session.input.admitted` event instead of a retained row; settled compaction retries reconcile against `session.compaction.admitted`. Fork-copied history reconciles from the projected message alone because fork aggregates carry no admitted events.
+- Reconcile exact retry of an already-promoted input against the projected `session_message` row plus the durable `session.input.admitted` event instead of a retained row. A projected message without an admitted event in the aggregate (for example fork-copied history) is conflicting reuse. Reusing a settled compaction ID admits a fresh barrier instead of reconciling; the worst case is one redundant compaction on a retried request.
 
 Compatibility:
 
