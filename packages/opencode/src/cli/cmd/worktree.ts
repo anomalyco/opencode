@@ -118,18 +118,26 @@ export const WorktreeListCommand = effectCmd({
   }),
 })
 
+const resolveWorktreeName = Effect.fnUntraced(function* (svc: Worktree.Interface, name: string) {
+  const list = yield* svc.list()
+  const match = list.find((w) => w.name === name)
+  if (!match) return name
+  return match.directory
+})
+
 export const WorktreeRemoveCommand = effectCmd({
-  command: "remove <directory>",
+  command: "remove <name>",
   describe: "remove a worktree",
   builder: (yargs) =>
-    yargs.positional("directory", {
-      describe: "worktree directory",
+    yargs.positional("name", {
+      describe: "worktree name or directory",
       type: "string",
       demandOption: true,
     }),
   handler: Effect.fn("Cli.worktree.remove")(function* (args) {
     const svc = yield* Worktree.Service
-    yield* svc.remove({ directory: args.directory }).pipe(
+    const directory = yield* resolveWorktreeName(svc, args.name)
+    yield* svc.remove({ directory }).pipe(
       Effect.catch((e) => fail(e.message)),
     )
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Worktree removed" + UI.Style.TEXT_NORMAL)
@@ -137,17 +145,18 @@ export const WorktreeRemoveCommand = effectCmd({
 })
 
 export const WorktreeResetCommand = effectCmd({
-  command: "reset <directory>",
+  command: "reset <name>",
   describe: "reset a worktree",
   builder: (yargs) =>
-    yargs.positional("directory", {
-      describe: "worktree directory",
+    yargs.positional("name", {
+      describe: "worktree name or directory",
       type: "string",
       demandOption: true,
     }),
   handler: Effect.fn("Cli.worktree.reset")(function* (args) {
     const svc = yield* Worktree.Service
-    yield* svc.reset({ directory: args.directory }).pipe(
+    const directory = yield* resolveWorktreeName(svc, args.name)
+    yield* svc.reset({ directory }).pipe(
       Effect.catch((e) => fail(e.message)),
     )
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Worktree reset" + UI.Style.TEXT_NORMAL)
