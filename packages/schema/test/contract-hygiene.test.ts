@@ -48,6 +48,25 @@ describe("contract hygiene", () => {
     ).toEqual({ text: "completed" })
   })
 
+  test("forms require at least one field", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "Empty form",
+        fields: [],
+      }),
+    ).toThrow()
+    expect(
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "Link form",
+        fields: [{ type: "link", url: "https://example.com" }],
+      }).fields,
+    ).toHaveLength(1)
+  })
+
   test("model defaults and provider overlays preserve public invariants", () => {
     const id = Model.ID.make("model")
     expect(Model.Info.empty(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
@@ -71,6 +90,7 @@ describe("contract hygiene", () => {
       Agent.Color,
       FileSystem.Submatch,
       Form.Field,
+      Form.Fields,
       Form.Info,
       Form.LinkField,
       Mcp.Resource,

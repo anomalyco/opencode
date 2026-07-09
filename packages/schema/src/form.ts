@@ -112,6 +112,9 @@ export const Field = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"), Schema.annotate({ identifier: "Form.Field" }))
 export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField | LinkField
 
+export const Fields = Schema.NonEmptyArray(Field).annotate({ identifier: "Form.Fields" })
+export type Fields = typeof Fields.Type
+
 const InfoBase = {
   id: ID,
   // This should be typed as SessionID. It is a plain string only because MCP elicitation
@@ -125,7 +128,7 @@ const InfoBase = {
 
 export const Info = Schema.Struct({
   ...InfoBase,
-  fields: Schema.Array(Field),
+  fields: Fields,
 }).annotate({ identifier: "Form.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 

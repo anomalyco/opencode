@@ -231,7 +231,7 @@ describe("Form", () => {
   it.effect("rejects invalid when definitions at creation", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service
-      const flipCreate = (fields: ReadonlyArray<Form.Field>) =>
+      const flipCreate = (fields: Form.CreateInput["fields"]) =>
         service.create({ sessionID: "global", title: "Invalid form", fields }).pipe(Effect.flip)
 
       expect(

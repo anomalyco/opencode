@@ -47,7 +47,7 @@ type ResourceTemplatePage = {
   nextCursor?: string
 }
 
-function resourceServer(input: { resources?: boolean; listChanged?: boolean } = {}) {
+function resourceServer(input: { resources?: boolean; listChanged?: boolean; emptyElicitation?: boolean } = {}) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const state = {
@@ -71,7 +71,26 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean } = 
           },
         },
       )
-      protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
+      protocol.setRequestHandler(ListToolsRequestSchema, () =>
+        Promise.resolve({
+          tools: input.emptyElicitation
+            ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+            : [],
+        }),
+      )
+      if (input.emptyElicitation) {
+        protocol.setRequestHandler(CallToolRequestSchema, async () => {
+          const result = await protocol.elicitInput({
+            mode: "form",
+            message: "Confirm",
+            requestedSchema: { type: "object", properties: {} },
+          })
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+          }
+        })
+      }
       if (input.resources !== false) {
         protocol.setRequestHandler(ListResourcesRequestSchema, (request) => {
           state.resourceLists += 1
@@ -140,7 +159,9 @@ function resourceMcpLayer(url: string) {
               data,
             } as EventV2.Payload<typeof definition>),
         }),
-        Layer.mock(Form.Service, {}),
+        Layer.mock(Form.Service, {
+          ask: () => Effect.die("Empty MCP elicitation must not create a form"),
+        }),
         Layer.mock(Integration.Service, {
           connection: {
             active: unusedIntegration,
@@ -485,6 +506,22 @@ test("skips MCP resource requests when the capability is absent", async () => {
           resources: 0,
           templates: 0,
         })
+      }),
+    ),
+  )
+})
+
+test("accepts empty MCP elicitations without creating forms", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ resources: false, emptyElicitation: true })
+        const result = yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          return yield* service.callTool({ server: "resources", name: "empty-elicitation" })
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+
+        expect(result.structured).toEqual({ action: "accept", content: {} })
       }),
     ),
   )

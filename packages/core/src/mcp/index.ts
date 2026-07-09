@@ -324,14 +324,16 @@ export const layer = Layer.effect(
               )
           }
           const params = input.params
+          const [field, ...fields] = Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+            toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
+          )
+          if (!field) return { action: "accept", content: {} }
           return yield* forms
             .ask({
               sessionID: GLOBAL_ELICITATION_SESSION_ID,
               title: `${input.server} is requesting input`,
               metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
-              fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
-                toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
-              ),
+              fields: [field, ...fields],
             })
             .pipe(
               Effect.raceFirst(waitForAbort(input.signal)),

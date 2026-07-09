@@ -78,7 +78,7 @@ function form(id: string, sessionID = "session"): Extract<V2Event, { type: "form
     id,
     sessionID,
     title: "Input requested",
-    fields: [],
+    fields: [{ type: "link", url: "https://example.com" }],
   }
 }
 

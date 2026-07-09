@@ -16,6 +16,9 @@ export type Info = typeof Info.Type
 export const Field = Form.Field
 export type Field = Form.Field
 
+export const Fields = Form.Fields
+export type Fields = Form.Fields
+
 export const When = Form.When
 export type When = Form.When
 
@@ -259,6 +262,7 @@ function matches(when: Form.When, value: Form.Value | undefined) {
 // are closed. Rejecting these at creation surfaces authoring mistakes to the caller instead of
 // silently never matching.
 function validateFields(fields: ReadonlyArray<Form.Field>) {
+  if (fields.length === 0) return "Form must have at least one field"
   const earlier = new Map<string, InputField>()
   for (const field of fields) {
     if (field.type === "link") continue
