@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
-// @ts-expect-error dead V1 retains the former value-style ModelsDev status re-export.
-export { CatalogModelStatus } from "@opencode-ai/core/models-dev"
+export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
+export type CatalogModelStatus = typeof CatalogModelStatus.Type
 
 export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "active"])
 export type ModelStatus = typeof ModelStatus.Type

@@ -1,35 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ConfigProviderV1 } from "@opencode-ai/core/v1/config/provider"
-// @ts-expect-error dead V1 test retains the former value-style ModelsDev status import.
 import { CatalogModelStatus, ModelStatus } from "@/provider/model-status"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 
 describe("provider model status schemas", () => {
   test("keeps catalog status separate from normalized provider status", () => {
-    // @ts-expect-error dead V1 test treats the normalized catalog status type as a schema value.
     expect(Schema.decodeUnknownSync(CatalogModelStatus)("deprecated")).toBe("deprecated")
-    // @ts-expect-error dead V1 test treats the normalized catalog status type as a schema value.
     expect(() => Schema.decodeUnknownSync(CatalogModelStatus)("active")).toThrow()
     expect(Schema.decodeUnknownSync(ModelStatus)("active")).toBe("active")
   })
 
   test("accepts active status across public provider schemas", () => {
     expect(Schema.decodeUnknownSync(ConfigProviderV1.Model)({ status: "active" }).status).toBe("active")
-    expect(
-      // @ts-expect-error dead V1 test consumes the removed ModelsDev model schema value.
-      Schema.decodeUnknownSync(ModelsDev.Model)({
-        id: "test-model",
-        name: "Test Model",
-        release_date: "2026-01-01",
-        attachment: false,
-        reasoning: false,
-        temperature: true,
-        tool_call: true,
-        limit: { context: 128000, output: 8192 },
-      }).status,
-    ).toBeUndefined()
     expect(
       Schema.decodeUnknownSync(Provider.Model)({
         id: "test-model",
