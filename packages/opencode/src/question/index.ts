@@ -97,7 +97,7 @@ const layer = Layer.effect(
       const info: Request = {
         id,
         sessionID: input.sessionID,
-        questions: input.questions,
+        questions: input.questions.map(sanitizeQuestion),
         tool: input.tool,
       }
       pending.set(id, { info, deferred })
@@ -157,5 +157,25 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+
+// Models sometimes emit carriage returns in question/option text, which the TUI
+// renderer treats as hard line breaks (every word on its own line). Normalize CR
+// out of the body and collapse newlines in short labels before the data is stored
+// and broadcast to every render surface (TUI, footer, web, scrollback).
+function sanitizeQuestion(info: Info): Info {
+  return {
+    ...info,
+    question: info.question.replace(/\r\n?/g, "\n"),
+    header: collapse(info.header),
+    options: info.options.map((o) => ({
+      label: collapse(o.label),
+      description: collapse(o.description),
+    })),
+  }
+}
+
+function collapse(text: string): string {
+  return text.replace(/\s*[\r\n]+\s*/g, " ").trim()
+}
 
 export * as Question from "."
