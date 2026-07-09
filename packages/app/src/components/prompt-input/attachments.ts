@@ -36,6 +36,7 @@ type PromptAttachmentsCoreInput = {
   warn?: () => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  persistTempImage?: (buffer: ArrayBuffer, ext: string) => Promise<string>
 }
 
 type PromptAttachmentsInput = {
@@ -47,6 +48,7 @@ type PromptAttachmentsInput = {
   addPart: (part: ContentPart) => boolean
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  persistTempImage?: (buffer: ArrayBuffer, ext: string) => Promise<string>
 }
 
 export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
@@ -68,11 +70,23 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
     const url = await dataUrl(file, mime)
     if (!url) return false
 
+    let sourcePath = input.getPathForFile?.(file) || undefined
+    // Screenshots and other in-memory clipboard images have no disk path, so
+    // persist them to a temp file that file-path-based tools (e.g. MCP image readers) can access.
+    if (!sourcePath && input.persistTempImage) {
+      sourcePath = await input.persistTempImage(await file.arrayBuffer(), mime.split("/")[1] ?? "png").catch(
+        (err) => {
+          console.warn("Failed to persist temp image for attachment:", err)
+          return undefined
+        },
+      )
+    }
+
     const attachment: ImageAttachmentPart = {
       type: "image",
       id: uuid(),
       filename: file.name,
-      sourcePath: input.getPathForFile?.(file) || undefined,
+      sourcePath,
       mime,
       dataUrl: url,
     }

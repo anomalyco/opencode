@@ -109,6 +109,9 @@ type PlatformBase = {
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
 
+  /** Persist an in-memory file (e.g. screenshot) to a temp file and return its path (desktop only) */
+  persistTempImage?(buffer: ArrayBuffer, ext: string): Promise<string>
+
   /** Export collected diagnostic logs (desktop only) */
   exportDebugLogs?(): Promise<string>
 

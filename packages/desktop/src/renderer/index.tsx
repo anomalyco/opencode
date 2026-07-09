@@ -303,9 +303,15 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       const image = await window.api.readClipboardImage().catch(() => null)
       if (!image) return null
       const blob = new Blob([image.buffer], { type: "image/png" })
-      return new File([blob], `pasted-image-${Date.now()}.png`, {
+      const file = new File([blob], `pasted-image-${crypto.randomUUID()}.png`, {
         type: "image/png",
       })
+      if (image.path) attachmentPaths.set(file, image.path)
+      return file
+    },
+
+    async persistTempImage(buffer: ArrayBuffer, ext: string) {
+      return window.api.persistTempImage(buffer, ext)
     },
   }
 }

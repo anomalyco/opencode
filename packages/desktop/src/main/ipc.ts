@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process"
-import { stat } from "node:fs/promises"
-import { basename } from "node:path"
+import { randomUUID } from "node:crypto"
+import { mkdirSync, rmSync } from "node:fs"
+import { stat, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { basename, join } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -42,6 +45,18 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  const clipboardTempDir = join(tmpdir(), `opencode-clipboard-${randomUUID()}`)
+  try {
+    mkdirSync(clipboardTempDir, { recursive: true })
+  } catch (err) {
+    console.error("Failed to create clipboard temp directory:", err)
+  }
+  app.once("will-quit", () => {
+    try {
+      rmSync(clipboardTempDir, { recursive: true, force: true })
+    } catch {}
+  })
+
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
 
@@ -184,12 +199,31 @@ export function registerIpcHandlers(deps: Deps) {
     })
   })
 
-  ipcMain.handle("read-clipboard-image", () => {
+  ipcMain.handle("read-clipboard-image", async () => {
     const image = clipboard.readImage()
     if (image.isEmpty()) return null
-    const buffer = image.toPNG().buffer
+    const png = image.toPNG()
     const size = image.getSize()
-    return { buffer, width: size.width, height: size.height }
+    // Persist the clipboard image to a temp file so file-path-based tools
+    // (e.g. MCP image readers) can access screenshots that only exist in memory.
+    const path = join(clipboardTempDir, `${randomUUID()}.png`)
+    try {
+      await writeFile(path, png)
+    } catch (err) {
+      console.error("Failed to persist clipboard image:", err)
+      return { buffer: png.buffer, width: size.width, height: size.height }
+    }
+    return { buffer: png.buffer, width: size.width, height: size.height, path }
+  })
+
+  ipcMain.handle("persist-temp-image", async (_event, buffer: ArrayBuffer, ext: string) => {
+    const path = join(clipboardTempDir, `${randomUUID()}.${ext || "png"}`)
+    try {
+      await writeFile(path, Buffer.from(buffer))
+    } catch {
+      throw new Error(`Failed to persist temp image to ${path}`)
+    }
+    return path
   })
 
   ipcMain.on("show-notification", (_event: IpcMainEvent, title: string, body?: string) => {
