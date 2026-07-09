@@ -67,7 +67,7 @@ test("concurrent service processes elect one server", async () => {
           directory: root,
           title: "recovery",
           version: "test",
-          resume_after_restart: true,
+          time_suspended: Date.now(),
         })
         .run()
         .pipe(Effect.orDie)
@@ -92,13 +92,13 @@ test("concurrent service processes elect one server", async () => {
         Effect.gen(function* () {
           const { db } = yield* Database.Service
           return yield* db
-            .select({ resumeAfterRestart: SessionTable.resume_after_restart })
+            .select({ timeSuspended: SessionTable.time_suspended })
             .from(SessionTable)
             .get()
             .pipe(Effect.orDie)
         }),
       ),
-    ).toEqual({ resumeAfterRestart: false })
+    ).toEqual({ timeSuspended: null })
     expect(await waitForExecutionStart(database, sessionID)).toBe(1)
   } finally {
     first.kill("SIGTERM")

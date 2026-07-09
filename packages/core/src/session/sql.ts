@@ -58,18 +58,18 @@ export const SessionTable = sqliteTable(
       providerID: string
       variant?: string
     }>(),
-    resume_after_restart: integer({ mode: "boolean" }).notNull().default(false),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
+    time_suspended: integer(),
   },
   (table) => [
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
-    index("session_resume_after_restart_idx")
-      .on(table.resume_after_restart)
-      .where(sql`${table.resume_after_restart} = 1`),
+    index("session_time_suspended_idx")
+      .on(table.time_suspended)
+      .where(sql`${table.time_suspended} is not null`),
   ],
 )
 

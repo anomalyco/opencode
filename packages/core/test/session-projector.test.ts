@@ -653,19 +653,19 @@ describe("SessionProjector", () => {
         .run()
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
-      const continuation = () =>
+      const suspended = () =>
         db
-          .select({ resumeAfterRestart: SessionTable.resume_after_restart })
+          .select({ timeSuspended: SessionTable.time_suspended })
           .from(SessionTable)
           .where(eq(SessionTable.id, sessionID))
           .get()
           .pipe(Effect.orDie)
 
       yield* events.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
-      expect((yield* continuation())?.resumeAfterRestart).toBe(false)
+      expect((yield* suspended())?.timeSuspended).toBeNull()
 
       yield* events.publish(SessionEvent.Execution.Started, { sessionID })
-      expect((yield* continuation())?.resumeAfterRestart).toBe(false)
+      expect((yield* suspended())?.timeSuspended).toBeNull()
     }),
   )
 

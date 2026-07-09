@@ -1,6 +1,6 @@
 export * as SessionStore from "./store"
 
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
@@ -56,7 +56,7 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(eq(SessionTable.resume_after_restart, true))
+          .where(isNotNull(SessionTable.time_suspended))
           .all()
           .pipe(
             Effect.orDie,
@@ -67,8 +67,8 @@ const layer = Layer.effect(
         return (
           (yield* db
             .update(SessionTable)
-            .set({ resume_after_restart: false })
-            .where(and(eq(SessionTable.id, sessionID), eq(SessionTable.resume_after_restart, true)))
+            .set({ time_suspended: null })
+            .where(and(eq(SessionTable.id, sessionID), isNotNull(SessionTable.time_suspended)))
             .returning({ sessionID: SessionTable.id })
             .get()
             .pipe(Effect.orDie)) !== undefined
@@ -77,8 +77,13 @@ const layer = Layer.effect(
       setSuspended: Effect.fn("SessionStore.setSuspended")(function* (sessionID, suspended) {
         yield* db
           .update(SessionTable)
-          .set({ resume_after_restart: suspended })
-          .where(and(eq(SessionTable.id, sessionID), eq(SessionTable.resume_after_restart, !suspended)))
+          .set({ time_suspended: suspended ? Date.now() : null })
+          .where(
+            and(
+              eq(SessionTable.id, sessionID),
+              suspended ? isNull(SessionTable.time_suspended) : isNotNull(SessionTable.time_suspended),
+            ),
+          )
           .run()
           .pipe(Effect.orDie)
       }),

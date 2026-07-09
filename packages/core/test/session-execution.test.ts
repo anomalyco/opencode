@@ -75,7 +75,7 @@ describe("SessionExecution lifecycle", () => {
             directory: "/project",
             title: id,
             version: "test",
-            resume_after_restart: true,
+            time_suspended: Date.now(),
           })),
         )
         .run()
@@ -86,11 +86,11 @@ describe("SessionExecution lifecycle", () => {
       expect(yield* store.consumeSuspended(second)).toBe(true)
       expect(
         (yield* db
-          .select({ resumeAfterRestart: SessionTable.resume_after_restart })
+          .select({ timeSuspended: SessionTable.time_suspended })
           .from(SessionTable)
           .all()
-          .pipe(Effect.orDie)).map((row) => row.resumeAfterRestart),
-      ).toEqual([false, false])
+          .pipe(Effect.orDie)).map((row) => row.timeSuspended),
+      ).toEqual([null, null])
     }),
   )
 
@@ -135,7 +135,7 @@ describe("SessionExecution lifecycle", () => {
       const database = yield* Database.Service
       const first = SessionV2.ID.make("ses_resume_first")
       const second = SessionV2.ID.make("ses_resume_second")
-      yield* seedSessions(database, [first, second], { resume_after_restart: true })
+      yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
 
       const drained: string[] = []
       const scope = yield* Scope.make()
@@ -156,7 +156,7 @@ describe("SessionExecution lifecycle", () => {
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<SessionV2.ID>,
-  values: { resume_after_restart?: boolean } = {},
+  values: { time_suspended?: number } = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
@@ -184,12 +184,12 @@ function seedSessions(
 
 function suspendedFlags(database: Database.Service["Service"]) {
   return database.db
-    .select({ id: SessionTable.id, suspended: SessionTable.resume_after_restart })
+    .select({ id: SessionTable.id, suspended: SessionTable.time_suspended })
     .from(SessionTable)
     .all()
     .pipe(
       Effect.orDie,
-      Effect.map((rows) => Object.fromEntries(rows.map((row) => [row.id, row.suspended]))),
+      Effect.map((rows) => Object.fromEntries(rows.map((row) => [row.id, row.suspended !== null]))),
     )
 }
 

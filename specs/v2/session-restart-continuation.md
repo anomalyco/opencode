@@ -11,7 +11,7 @@
 
 When the managed OpenCode server shuts down gracefully, active Sessions should continue automatically the next time the managed server starts.
 
-This RFC proposes one private boolean field on the existing Session row: `resume_after_restart`. The managed server suspends its active Sessions on graceful shutdown and resumes suspended Sessions on startup. Both are explicit actions the managed server invokes; no other server ever suspends or auto-resumes.
+This RFC proposes one private nullable timestamp on the existing Session row: `time_suspended`. The managed server suspends its active Sessions on graceful shutdown and resumes suspended Sessions on startup. Both are explicit actions the managed server invokes; no other server ever suspends or auto-resumes.
 
 The field is not Session status. Live activity remains process-local. Hard-crash recovery and exactly-once provider or tool execution remain out of scope.
 
@@ -21,16 +21,18 @@ Add this private Session field and partial index:
 
 ```sql
 ALTER TABLE session
-ADD COLUMN resume_after_restart INTEGER NOT NULL DEFAULT 0;
+ADD COLUMN time_suspended INTEGER;
 
-CREATE INDEX session_resume_after_restart_idx
-ON session(resume_after_restart)
-WHERE resume_after_restart = 1;
+CREATE INDEX session_time_suspended_idx
+ON session(time_suspended)
+WHERE time_suspended IS NOT NULL;
 ```
 
-`resume_after_restart = 1` means:
+A non-null `time_suspended` means:
 
-> A managed server suspended this Session during graceful shutdown. The next managed server may make one attempt to resume it.
+> A managed server suspended this Session during graceful shutdown, at this time. The next managed server may make one attempt to resume it.
+
+The name records the fact rather than one consumer's policy, and it follows the Session table's existing nullable-timestamp idiom (`time_compacting`, `time_archived`). The timestamp also gives operators suspension age for free, which later policy may use without a schema change.
 
 The field does not appear in public `Session.Info` and does not drive UI activity.
 
@@ -40,7 +42,7 @@ The field does not appear in public `Session.Info` and does not drive UI activit
 | ----------------- | ------------------- | ------------------------------------- |
 | Live activity     | `inactive / active` | Process-local `SessionRunCoordinator` |
 | Execution history | `started / settled` | Durable lifecycle events              |
-| Suspension        | `false / true`      | Private Session-row field             |
+| Suspension        | `null / timestamp`  | Private Session-row `time_suspended`  |
 
 A persisted status such as `idle / running / resumable` answers three different questions. `running` becomes stale after a crash, while `resumable` is pending work rather than current status.
 
@@ -61,7 +63,7 @@ Default, embedded, and stdio servers build the same execution layer but never in
 Teardown ordering makes suspension observe exactly the work a restart interrupts:
 
 1. The HTTP server closes all connections; no new work can arrive.
-2. `suspendActiveSessions` snapshots `SessionExecution.active` and sets `resume_after_restart = 1` for each.
+2. `suspendActiveSessions` snapshots `SessionExecution.active` and sets `time_suspended` for each.
 3. Session execution teardown interrupts the still-running drains.
 
 A SIGKILL runs none of this: nothing is suspended, and the user resumes manually. That is deliberate — automatic post-crash continuation would retry ambiguous provider and tool work.
@@ -70,11 +72,11 @@ A SIGKILL runs none of this: nothing is suspended, and the user resumes manually
 
 The Session execution layer clears the field through EventV2 live `commit` hooks, with no knowledge of server mode:
 
-| Lifecycle event             | `resume_after_restart`                |
+| Lifecycle event             | `time_suspended`                      |
 | --------------------------- | ------------------------------------- |
-| Execution started           | `0`                                   |
-| Execution succeeded         | `0`                                   |
-| Execution failed            | `0`                                   |
+| Execution started           | `NULL`                                |
+| Execution succeeded         | `NULL`                                |
+| Execution failed            | `NULL`                                |
 | Execution interrupted (any) | unchanged — interruption preserves it |
 
 Interruption must preserve suspension because managed teardown interrupts drains immediately after suspending them. Every other transition clearing the field closes the races: a drain that finishes on its own between suspension and teardown clears its flag, and an embedded server that completes a suspended Session during the gap clears it on start.
@@ -87,8 +89,8 @@ Because the clears are `commit` hooks rather than projections, event replay pres
 
 ```sql
 UPDATE session
-SET resume_after_restart = 0
-WHERE id = ? AND resume_after_restart = 1
+SET time_suspended = NULL
+WHERE id = ? AND time_suspended IS NOT NULL
 RETURNING id;
 ```
 
@@ -113,7 +115,7 @@ Losing one automatic continuation is safer than repeatedly restarting ambiguous 
 
 ## Migration Does Not Infer Historical Intent
 
-The migration adds the field with `DEFAULT 0`. It does not scan historical shutdown events.
+The migration adds the nullable column with no backfill. It does not scan historical shutdown events.
 
 An old shutdown event records what happened; it does not prove that a future process is authorized to start new work. The first upgrade may therefore require manual continuation for Sessions interrupted by the old binary.
 

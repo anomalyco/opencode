@@ -21,7 +21,7 @@ import migratePrelaunchV2StateMigration from "@opencode-ai/core/database/migrati
 import genericSessionInputMigration from "@opencode-ai/core/database/migration/20260709013000_generic_session_input"
 import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import addSessionForkMigration from "@opencode-ai/core/database/migration/20260706223930_add-session-fork"
-import resumeAfterRestartMigration from "@opencode-ai/core/database/migration/20260709140111_resume_after_restart"
+import timeSuspendedMigration from "@opencode-ai/core/database/migration/20260709163752_time_suspended"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -459,10 +459,10 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO event VALUES ('ses_shutdown', 0, 'session.execution.interrupted.1', '{"reason":"shutdown"}')`,
         )
 
-        yield* DatabaseMigration.applyOnly(db, [resumeAfterRestartMigration])
+        yield* DatabaseMigration.applyOnly(db, [timeSuspendedMigration])
 
-        expect(yield* db.get(sql`SELECT resume_after_restart FROM session WHERE id = 'ses_shutdown'`)).toEqual({
-          resume_after_restart: 0,
+        expect(yield* db.get(sql`SELECT time_suspended FROM session WHERE id = 'ses_shutdown'`)).toEqual({
+          time_suspended: null,
         })
       }),
     )

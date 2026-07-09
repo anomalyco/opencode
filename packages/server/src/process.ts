@@ -15,7 +15,7 @@ export type Options = {
   readonly hostname: string
   readonly port: Option.Option<number>
   readonly password: string
-  readonly resumeAfterRestart?: boolean
+  readonly restartContinuity?: boolean
 }
 
 const ReadinessApi = HttpApi.make("readiness").add(HealthGroup)
@@ -60,7 +60,7 @@ function bind(options: Options, port: number) {
           Context.get(context, HttpRouter.HttpRouter).asHttpEffect(),
           HttpMiddleware.logger,
         )
-        if (!options.resumeAfterRestart) return serve
+        if (!options.restartContinuity) return serve
         const restart = Context.get(context, SessionRestart.Service)
         return Layer.merge(serve, restartContinuity(restart))
       }),
