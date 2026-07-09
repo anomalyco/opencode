@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
@@ -83,6 +83,10 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
+  test("selects the Meta prompt for Muse Spark model IDs", () => {
+    expect(SystemPrompt.provider({ api: { id: "meta/muse-spark-preview" } })[0]).toContain("Meta Muse Spark")
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
