@@ -8,10 +8,27 @@ import { response } from "../location"
 
 export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers) =>
   Effect.gen(function* () {
+    const plugins = yield* PluginSupervisor.Service
+    const awaitCatalog = Effect.fn(function* () {
+      yield* plugins.flush.pipe(
+        Effect.timeoutOrElse({
+          duration: "5 seconds",
+          orElse: () =>
+            Effect.fail(
+              new ServiceUnavailableError({
+                message: "Model catalog initialization timed out",
+                service: "model.catalog",
+              }),
+            ),
+        }),
+      )
+    })
+
     return handlers
       .handle(
         "model.list",
         Effect.fn(function* () {
+          yield* awaitCatalog()
           const catalog = yield* Catalog.Service
           return yield* response(catalog.model.available())
         }),
@@ -19,19 +36,7 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
       .handle(
         "model.default",
         Effect.fn(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush.pipe(
-            Effect.timeoutOrElse({
-              duration: "5 seconds",
-              orElse: () =>
-                Effect.fail(
-                  new ServiceUnavailableError({
-                    message: "Model catalog initialization timed out",
-                    service: "model.catalog",
-                  }),
-                ),
-            }),
-          )
+          yield* awaitCatalog()
           const catalog = yield* Catalog.Service
           return yield* response(catalog.model.default())
         }),
