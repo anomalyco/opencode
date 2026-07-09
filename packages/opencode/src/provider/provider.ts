@@ -1071,11 +1071,17 @@ export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof 
 
 export function toPublicInfo(provider: Info): Info {
   return JSON.parse(
-    JSON.stringify(provider, (_, value) => {
-      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
-      if (typeof value === "bigint") return value.toString()
-      return value
-    }),
+    JSON.stringify(
+      {
+        ...provider,
+        models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
+      },
+      (_, value) => {
+        if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+        if (typeof value === "bigint") return value.toString()
+        return value
+      },
+    ),
   )
 }
 
