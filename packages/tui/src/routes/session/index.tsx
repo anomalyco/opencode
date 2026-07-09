@@ -782,7 +782,7 @@ export function Session() {
                       if (event.type !== "log.synced") events.push(event)
                     }
                     // Durable events stay in aggregate order even when their wall-clock timestamps differ.
-                    sdk.connection.history().forEach((event) => {
+                    sdk.connection.internal.history().forEach((event) => {
                       const index = events.findIndex((item) => item.created > event.created)
                       if (index === -1) {
                         events.push(event)

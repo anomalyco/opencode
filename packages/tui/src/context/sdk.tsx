@@ -169,8 +169,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         error() {
           return connection.error
         },
-        history() {
-          return history.slice()
+        internal: {
+          history() {
+            return history.slice()
+          },
         },
       },
       reload: props.reload,

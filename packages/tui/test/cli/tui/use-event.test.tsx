@@ -204,7 +204,7 @@ describe("useEvent", () => {
 
       expect(sdk.client).toBe(replacement.client)
       expect(sdk.api).toBe(replacement.api)
-      const history = sdk.connection.history()
+      const history = sdk.connection.internal.history()
       expect(history.map((event) => [event.data.status, event.data.attempt])).toEqual([
         ["connecting", 0],
         ["connected", 0],
@@ -229,7 +229,7 @@ describe("useEvent", () => {
         await wait(() => sdk.connection.status() === "connected")
       }
 
-      const history = sdk.connection.history()
+      const history = sdk.connection.internal.history()
       expect(history).toHaveLength(50)
       expect(history[0]?.data.status).toBe("reconnecting")
       expect(history.at(-1)?.data.status).toBe("connected")
