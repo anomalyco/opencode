@@ -5,11 +5,13 @@ import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Config } from "../config"
+import { makeLocationNode } from "../effect/app-node"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -30,16 +32,15 @@ export const Input = Schema.Struct({
     }),
 })
 
-const Output = Schema.Struct({
-  command: Schema.String,
-  cwd: Schema.String,
-  exitCode: Schema.Number.pipe(Schema.optional),
-  /** Bounded compact equivalent of stdout/stderr: stderr is labeled when present. */
-  output: Schema.String,
+const StructuredOutput = Schema.Struct({
+  exit: Schema.Number.pipe(Schema.optional),
   truncated: Schema.Boolean,
-  stdoutTruncated: Schema.Boolean.pipe(Schema.optional),
-  stderrTruncated: Schema.Boolean.pipe(Schema.optional),
-  timedOut: Schema.Boolean.pipe(Schema.optional),
+  timeout: Schema.Boolean.pipe(Schema.optional),
+})
+
+const Output = Schema.Struct({
+  ...StructuredOutput.fields,
+  output: Schema.String,
   warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
 
@@ -47,24 +48,12 @@ type Output = typeof Output.Type
 
 const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
 
-const compactOutput = (stdout: string, stderr: string) => {
-  const output = stdout && stderr ? `${stdout}\n\nstderr:\n${stderr}` : stderr ? `stderr:\n${stderr}` : stdout
-  return output || "(no output)"
-}
-
-const captureNotice = (stdoutTruncated: boolean, stderrTruncated: boolean) => {
-  if (stdoutTruncated && stderrTruncated) return "[stdout and stderr capture truncated at the in-memory safety limit]"
-  if (stdoutTruncated) return "[stdout capture truncated at the in-memory safety limit]"
-  if (stderrTruncated) return "[stderr capture truncated at the in-memory safety limit]"
-  return undefined
-}
-
 const modelOutput = (output: Output) => {
   const warnings = output.warnings?.length
     ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
     : ""
-  if (output.timedOut) return `${output.output}${warnings}\n\nCommand timed out before completion.`
-  return `${output.output}${warnings}\n\nCommand exited with code ${output.exitCode}.`
+  if (output.timeout) return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command timed out before completion.`
+  return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command exited with code ${output.exit}.`
 }
 
 const isTimeout = (error: AppProcess.AppProcessError) =>
@@ -89,19 +78,23 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 
 const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
 const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
-const externalCommandDirectories = (command: string, cwd: string) => {
+const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectories")(function* (
+  fs: FSUtil.Interface,
+  command: string,
+  cwd: string,
+) {
   const directories = new Set<string>()
   for (const token of shellTokens(command)) {
     const value = unquote(token).replace(/[;,|&]+$/, "")
     if (!path.isAbsolute(value)) continue
-    const resolved = FSUtil.resolve(value)
+    const resolved = yield* fs.resolve(value)
     if (FSUtil.contains(cwd, resolved)) continue
-    directories.add(FSUtil.resolve(path.dirname(resolved)))
+    directories.add(yield* fs.resolve(path.dirname(resolved)))
   }
   return [...directories]
-}
+})
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
@@ -116,7 +109,16 @@ export const layer = Layer.effectDiscard(
           description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [{ type: "text", text: modelOutput(output) }],
+          structured: StructuredOutput,
+          toStructuredOutput: ({ output }) => ({
+            truncated: output.truncated,
+            ...(output.exit === undefined ? {} : { exit: output.exit }),
+            ...(output.timeout === undefined ? {} : { timeout: output.timeout }),
+          }),
+          toModelOutput: ({ output }) => [
+            { type: "text", text: output.output },
+            { type: "text", text: modelOutput(output) },
+          ],
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = {
@@ -133,7 +135,7 @@ export const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-              const warnings = externalCommandDirectories(input.command, target.canonical).map(
+              const warnings = (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
                 (directory) =>
                   `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
               )
@@ -163,9 +165,9 @@ export const layer = Layer.effectDiscard(
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
                 .run(command, {
+                  combineOutput: true,
                   timeout: Duration.millis(timeout),
                   maxOutputBytes: MAX_CAPTURE_BYTES,
-                  maxErrorBytes: MAX_CAPTURE_BYTES,
                 })
                 .pipe(
                   Effect.catchTag("AppProcessError", (error) =>
@@ -174,26 +176,22 @@ export const layer = Layer.effectDiscard(
                 )
               if (!result) {
                 return {
-                  command: input.command,
-                  cwd: target.canonical,
                   output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
                   truncated: false,
-                  timedOut: true,
+                  timeout: true,
                   ...(warnings.length ? { warnings } : {}),
                 }
               }
 
-              const compact = compactOutput(result.stdout.toString("utf8"), result.stderr.toString("utf8"))
-              const notice = captureNotice(result.stdoutTruncated, result.stderrTruncated)
+              const output = result.output?.toString("utf8") || "(no output)"
+              const notice = result.outputTruncated
+                ? "[output capture truncated at the in-memory safety limit]"
+                : undefined
               return {
-                command: input.command,
-                cwd: target.canonical,
-                exitCode: result.exitCode,
-                output: notice ? `${compact}\n\n${notice}` : compact,
-                truncated: result.stdoutTruncated || result.stderrTruncated,
+                exit: result.exitCode,
+                output: notice ? `${output}\n\n${notice}` : output,
+                truncated: result.outputTruncated === true,
                 ...(warnings.length ? { warnings } : {}),
-                ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
-                ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
         }),
@@ -201,3 +199,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/bash",
+  layer,
+  deps: [ToolRegistry.node, LocationMutation.node, FSUtil.node, AppProcess.node, Config.node, PermissionV2.node],
+})

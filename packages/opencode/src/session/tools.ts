@@ -3,6 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
+import { McpCatalog } from "@/mcp/catalog"
 import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
@@ -21,9 +22,13 @@ import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const LIST_MCP_RESOURCES_TOOL = "list_mcp_resources"
-const READ_MCP_RESOURCE_TOOL = "read_mcp_resource"
+const MCP_RESOURCE_TOOLS = {
+  list: "list_mcp_resources",
+  listTemplates: "list_mcp_resource_templates",
+  read: "read_mcp_resource",
+} as const
 const MAX_MCP_RESOURCE_BLOB_BYTES = 10 * 1024 * 1024
 const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "application/pdf",
@@ -49,6 +54,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const flags = yield* RuntimeFlags.Service
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -87,6 +93,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
+    permission: input.session.permission,
   })) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
@@ -130,7 +137,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     (client) => !!client.getServerCapabilities()?.resources,
   )
   if (hasMcpResourceServer) {
-    tools[LIST_MCP_RESOURCES_TOOL] = tool({
+    tools[MCP_RESOURCE_TOOLS.list] = tool({
       description:
         "Lists resources provided by connected MCP servers. Resources provide context such as files, database schemas, or application-specific information.",
       inputSchema: jsonSchema(
@@ -167,7 +174,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               : resourceServers.map((server) => `mcp:${server}:*`)
             yield* plugin.trigger(
               "tool.execute.before",
-              { tool: LIST_MCP_RESOURCES_TOOL, sessionID: ctx.sessionID, callID: opts.toolCallId },
+              { tool: MCP_RESOURCE_TOOLS.list, sessionID: ctx.sessionID, callID: opts.toolCallId },
               { args },
             )
             yield* ctx.ask({
@@ -200,7 +207,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             }
             yield* plugin.trigger(
               "tool.execute.after",
-              { tool: LIST_MCP_RESOURCES_TOOL, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              { tool: MCP_RESOURCE_TOOLS.list, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
               output,
             )
             if (opts.abortSignal?.aborted) {
@@ -212,7 +219,90 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       },
     })
 
-    tools[READ_MCP_RESOURCE_TOOL] = tool({
+    tools[MCP_RESOURCE_TOOLS.listTemplates] = tool({
+      description:
+        "Lists resource templates provided by connected MCP servers. Resource templates are parameterized resources that can be read after filling in their URI template.",
+      inputSchema: jsonSchema(
+        ProviderTransform.schema(input.model, {
+          type: "object",
+          properties: {
+            server: {
+              type: "string",
+              description:
+                "Optional MCP server name. When omitted, lists resource templates from every connected server.",
+            },
+          },
+          additionalProperties: false,
+        }),
+      ),
+      execute(args, opts) {
+        return run.promise(
+          Effect.gen(function* () {
+            const parsed = parseListMcpResourcesArgs(args)
+            const ctx = context(toRecord(args), opts)
+            const clients = yield* mcp.clients()
+            const resourceServers = Object.entries(clients)
+              .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
+              .map((entry) => entry[0])
+              .sort((a, b) => a.localeCompare(b))
+            if (parsed.server && !resourceServers.includes(parsed.server)) {
+              throw new Error(
+                resourceServers.length === 0
+                  ? `MCP server "${parsed.server}" does not support resources`
+                  : `MCP server "${parsed.server}" does not support resources. Available resource servers: ${resourceServers.join(", ")}`,
+              )
+            }
+            const permissionPatterns = parsed.server
+              ? [`mcp:${parsed.server}:*`]
+              : resourceServers.map((server) => `mcp:${server}:*`)
+            yield* plugin.trigger(
+              "tool.execute.before",
+              { tool: MCP_RESOURCE_TOOLS.listTemplates, sessionID: ctx.sessionID, callID: opts.toolCallId },
+              { args },
+            )
+            yield* ctx.ask({
+              permission: "read",
+              metadata: parsed.server ? { server: parsed.server } : {},
+              patterns: permissionPatterns,
+              always: permissionPatterns,
+            })
+
+            const templates = Object.values(yield* mcp.resourceTemplates(parsed.server))
+            const filtered = templates
+              .filter((template) => !parsed.server || template.client === parsed.server)
+              .toSorted((a, b) =>
+                (a.client + "\u0000" + a.name + "\u0000" + a.uriTemplate).localeCompare(
+                  b.client + "\u0000" + b.name + "\u0000" + b.uriTemplate,
+                ),
+              )
+            const content = JSON.stringify({ resourceTemplates: filtered.map(formatMcpResourceTemplate) }, null, 2)
+            const truncated = yield* truncate.output(content, {}, input.agent)
+            const output = {
+              title: parsed.server ? `MCP resource templates: ${parsed.server}` : "MCP resource templates",
+              metadata: {
+                count: filtered.length,
+                servers: resourceServers,
+                ...(parsed.server ? { server: parsed.server } : {}),
+                truncated: truncated.truncated,
+                ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              },
+              output: truncated.content,
+            }
+            yield* plugin.trigger(
+              "tool.execute.after",
+              { tool: MCP_RESOURCE_TOOLS.listTemplates, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              output,
+            )
+            if (opts.abortSignal?.aborted) {
+              yield* input.processor.completeToolCall(opts.toolCallId, output)
+            }
+            return output
+          }),
+        )
+      },
+    })
+
+    tools[MCP_RESOURCE_TOOLS.read] = tool({
       description:
         "Read a specific resource from an MCP server using the server name and resource URI. The URI is an MCP identifier and does not need to be a file URL.",
       inputSchema: jsonSchema(
@@ -247,7 +337,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             }
             yield* plugin.trigger(
               "tool.execute.before",
-              { tool: READ_MCP_RESOURCE_TOOL, sessionID: ctx.sessionID, callID: opts.toolCallId },
+              { tool: MCP_RESOURCE_TOOLS.read, sessionID: ctx.sessionID, callID: opts.toolCallId },
               { args },
             )
             yield* ctx.ask({
@@ -282,7 +372,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             }
             yield* plugin.trigger(
               "tool.execute.after",
-              { tool: READ_MCP_RESOURCE_TOOL, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              { tool: MCP_RESOURCE_TOOLS.read, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
               output,
             )
             if (opts.abortSignal?.aborted) {
@@ -295,7 +385,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  for (const [key, item] of Object.entries(yield* mcp.tools())) {
+  if (flags.experimentalCodeMode) return tools
+
+  for (const [key, entry] of Object.entries(yield* mcp.tools())) {
+    const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
     const execute = item.execute
     if (!execute) continue
 
@@ -430,6 +523,11 @@ function requiredString(args: Record<string, unknown>, key: string) {
 function formatMcpResource(resource: MCP.Resource) {
   const result = Object.fromEntries(Object.entries(resource).filter((entry) => entry[0] !== "client"))
   return { ...result, server: resource.client }
+}
+
+function formatMcpResourceTemplate(template: Record<string, unknown> & { client: string }) {
+  const result = Object.fromEntries(Object.entries(template).filter((entry) => entry[0] !== "client"))
+  return { ...result, server: template.client }
 }
 
 function formatMcpResourceContent(server: string, uri: string, content: { contents: unknown }) {

@@ -15,6 +15,7 @@ import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
+import { PermissionV2 } from "../../permission"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
 import { SystemContext } from "../../system-context/index"
@@ -35,6 +36,9 @@ import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
+import { Snapshot } from "../../snapshot"
+import { makeLocationNode } from "../../effect/app-node"
+import { llmClient } from "../../effect/app-node-platform"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -86,7 +90,7 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -100,6 +104,7 @@ export const layer = Layer.effect(
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
+    const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -136,9 +141,13 @@ export const layer = Layer.effect(
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
-    // Match V1: dismissing a question halts the loop instead of becoming model-facing tool output.
-    const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
-      cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
+    // Match V1: declining a user prompt halts the loop instead of becoming model-facing tool output.
+    const isUserDeclined = (cause: Cause.Cause<unknown>) =>
+      cause.reasons.some(
+        (reason) =>
+          Cause.isDieReason(reason) &&
+          (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionV2.RejectedError),
+      )
 
     type TurnTransition =
       // Automatic compaction completed; rebuild the request from compacted history.
@@ -205,6 +214,7 @@ export const layer = Layer.effect(
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
+      const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -213,6 +223,7 @@ export const layer = Layer.effect(
           providerID: ProviderV2.ID.make(model.provider),
           ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
+        snapshot: startSnapshot,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
@@ -283,7 +294,7 @@ export const layer = Layer.effect(
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
-          if (settled._tag === "Failure" && isQuestionRejected(settled.cause)) {
+          if (settled._tag === "Failure" && isUserDeclined(settled.cause)) {
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
             return yield* Effect.interrupt
@@ -302,12 +313,35 @@ export const layer = Layer.effect(
             const message = failure instanceof Error ? failure.message : String(failure)
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
+          const stepSettlement = publisher.stepSettlement()
+          if (stepSettlement && !publisher.hasProviderError()) {
+            const endSnapshot = yield* snapshots.capture()
+            const files =
+              startSnapshot && endSnapshot
+                ? yield* snapshots
+                    .files({ from: startSnapshot, to: endSnapshot })
+                    .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                : undefined
+            yield* withPublication(
+              events.publish(SessionEvent.Step.Ended, {
+                sessionID: session.id,
+                timestamp: yield* DateTime.now,
+                assistantMessageID: yield* publisher.startAssistant(),
+                finish: stepSettlement.finish,
+                cost: 0,
+                tokens: stepSettlement.tokens,
+                snapshot: endSnapshot,
+                files,
+              }),
+            )
+          }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
-          if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
+          if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
+            return yield* Effect.failCause(settled.cause)
           return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
         }),
       )
@@ -377,4 +411,22 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    EventV2.node,
+    llmClient,
+    AgentV2.node,
+    ToolRegistry.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    Location.node,
+    SystemContextRegistry.node,
+    SkillGuidance.node,
+    ReferenceGuidance.node,
+    Config.node,
+    Snapshot.node,
+    Database.node,
+  ],
+})

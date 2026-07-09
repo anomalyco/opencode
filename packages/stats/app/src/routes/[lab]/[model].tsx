@@ -1,5 +1,5 @@
 import "../index.css"
-import { Link, Meta, Title } from "@solidjs/meta"
+import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
@@ -15,18 +15,30 @@ import {
   type UsageRange,
 } from "@opencode-ai/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
+import { LocaleLinks } from "../../component/locale-links"
+import { useI18n } from "../../context/i18n"
+import { useLanguage } from "../../context/language"
+import { localizedUrl } from "../../lib/language"
 import {
   findModelCatalogEntry,
   formatCatalogLabName,
   getModelCatalog,
-  type ModelCatalogCost,
+  type ModelCatalog,
   type ModelCatalogEntry,
 } from "../model-catalog"
+import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
+import { setStatsPageCacheHeaders } from "../stats-cache"
+import {
+  ComparisonCardsSection,
+  modelRefFromCatalog,
+  uniqueComparisonPairs,
+  type ComparisonModelRef,
+} from "../compare-cards"
 import {
   applyThemePreference,
   Footer,
@@ -38,30 +50,10 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsCanonicalBaseUrl = "https://opencode.ai/data/"
 const statsUnfurlPath = "banner.png"
-const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
-const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
-const modelHeaderLinks: readonly HeaderLink[] = [
-  { href: "#overview", label: "Overview" },
-  { href: "#usage", label: "Usage" },
-  { href: "#users", label: "Users" },
-  { href: "#efficiency", label: "Efficiency" },
-  { href: "#geo-breakdown", label: "Geo Breakdown" },
-  { href: "#peers", label: "Peers" },
-]
-const modelFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Data Home" },
-  { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
-  { href: `${import.meta.env.BASE_URL}#leaderboard`, label: "Leaderboard" },
-  { href: `${import.meta.env.BASE_URL}#session-cost`, label: "Session Cost" },
-  { href: `${import.meta.env.BASE_URL}#token-cost`, label: "Token Cost" },
-  { href: `${import.meta.env.BASE_URL}#market-share`, label: "Market Share" },
-  { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: "Geo Breakdown" },
-]
 const geoMapWidth = 960
 const geoMapHeight = 430
-const countryDisplayNames = new Intl.DisplayNames(["en"], { type: "region" })
+const shortMonths = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type IsoCountryCode = readonly [string, string, string]
 type WorldCountryProperties = GeoJsonProperties & { name?: string }
@@ -100,8 +92,10 @@ const getModelData = query(async (lab: string, model: string) => {
 }, "getStatsModelData")
 
 export default function StatsModel() {
+  const i18n = useI18n()
+  const language = useLanguage()
   const event = getRequestEvent()
-  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  setStatsPageCacheHeaders(event?.response.headers)
   const params = useParams()
   const labParam = createMemo(() => params.lab ?? "")
   const modelParam = createMemo(() => params.model ?? "")
@@ -119,19 +113,34 @@ export default function StatsModel() {
   })
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
-  const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
+  const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? i18n.t("model.fallback"))
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Usage, Cost & Rank | OpenCode Data`)
-  const modelDescription = createMemo(
+  const modelTitle = createMemo(() => i18n.t("model.title", { model: modelName() }))
+  const modelDescription = createMemo(() => i18n.t("model.description", { model: modelName() }))
+  const modelPath = createMemo(
     () =>
-      `View ${modelName()} OpenCode Go usage data, including token volume, weekly rank, token mix, costs, cache ratio, sessions, geo breakdowns, and peer models.`,
+      `/data/${catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/")}`,
   )
-  const modelUrl = createMemo(() =>
-    new URL(
-      catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/"),
-      statsCanonicalBaseUrl,
-    ).toString(),
-  )
+  const modelUrl = createMemo(() => localizedUrl(language.locale(), modelPath()))
+  const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
+  const modelHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
+    { href: "#overview", label: i18n.t("nav.overview") },
+    { href: "#momentum", label: i18n.t("model.momentum") },
+    { href: "#usage", label: i18n.t("nav.usage") },
+    { href: "#unique-users", label: i18n.t("model.uniqueUsers") },
+    { href: "#efficiency", label: i18n.t("nav.efficiency") },
+    { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+    { href: "#peers", label: i18n.t("nav.peers") },
+  ])
+  const modelFooterLinks = createMemo<readonly HeaderLink[]>(() => [
+    { href: import.meta.env.BASE_URL, label: i18n.t("nav.dataHome") },
+    { href: `${import.meta.env.BASE_URL}#top-models`, label: i18n.t("nav.topModels") },
+    { href: `${import.meta.env.BASE_URL}#session-cost`, label: i18n.t("nav.sessionCost") },
+    { href: `${import.meta.env.BASE_URL}#token-cost`, label: i18n.t("nav.tokenCost") },
+    { href: `${import.meta.env.BASE_URL}#cache-ratio`, label: i18n.t("nav.cacheRatio") },
+    { href: `${import.meta.env.BASE_URL}#market-share`, label: i18n.t("nav.marketShare") },
+    { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: i18n.t("nav.geoBreakdown") },
+  ])
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
     setThemePreference(preference)
@@ -151,7 +160,7 @@ export default function StatsModel() {
     <main data-page="stats" data-theme={themePreference()}>
       <Title>{modelTitle()}</Title>
       <Meta name="description" content={modelDescription()} />
-      <Link rel="canonical" href={modelUrl()} />
+      <LocaleLinks path={modelPath()} />
       <Meta property="og:type" content="website" />
       <Meta property="og:site_name" content="OpenCode" />
       <Meta property="og:title" content={modelTitle()} />
@@ -161,25 +170,36 @@ export default function StatsModel() {
       <Meta property="og:image:type" content="image/png" />
       <Meta property="og:image:width" content="1200" />
       <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
       <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={modelTitle()} />
       <Meta name="twitter:description" content={modelDescription()} />
       <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
-      <Header githubStars={githubStars() ?? "150K"} links={modelHeaderLinks} brandHref={import.meta.env.BASE_URL} />
+      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      <Header githubStars={githubStars() ?? "150K"} links={modelHeaderLinks()} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
           <Show when={catalogEntry() || stats() !== undefined} fallback={<ModelLoading />}>
             <Show when={catalogEntry() || stats()} fallback={<ModelNotFound lab={labParam()} model={modelParam()} />}>
               <>
-                <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
-                <ModelOverview data={stats() ?? null} />
-                <ModelUsageSection data={stats()?.usage ?? []} />
-                <ModelUsersSection data={stats()?.usage ?? []} />
+                <ModelHero
+                  data={stats() ?? null}
+                  catalog={catalogEntry() ?? null}
+                  catalogData={catalog() ?? null}
+                  labName={labName()}
+                />
+                <ModelOverview catalog={catalogEntry() ?? null} />
+                <ModelMomentumSection data={stats() ?? null} />
+                <ModelUsageSection data={stats() ?? null} />
+                <ModelUniqueUsersSection data={stats() ?? null} />
                 <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
+                <ComparisonCardsSection
+                  pairs={modelComparisonPairs(catalog(), catalogEntry() ?? null, stats() ?? null)}
+                  title="Compare This Model"
+                  description="Other models to compare with this one."
+                />
               </>
             </Show>
           </Show>
@@ -187,7 +207,8 @@ export default function StatsModel() {
         <Footer
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
-          links={modelFooterLinks}
+          links={modelFooterLinks()}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
         />
       </div>
     </main>
@@ -195,352 +216,708 @@ export default function StatsModel() {
 }
 
 function ModelLoading() {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
     <>
       <section id="overview" data-section="model-hero">
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
-            <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Data
+            <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
+              {i18n.t("footer.modelData")}
             </a>
-            <h1>Model Data</h1>
-            <p>Reading model aggregates from model_stat.</p>
+            <h1>
+              <a data-slot="heading-link" href="#overview">
+                {i18n.t("model.loadingTitle")}
+              </a>
+            </h1>
+            <p>{i18n.t("model.loadingDescription")}</p>
           </div>
         </div>
       </section>
       <section data-section="model-panel">
-        <ModelEmptyState title="Loading model data" description="Reading the model profile." />
+        <ModelEmptyState title={i18n.t("model.loadingTitle")} description={i18n.t("model.loadingProfile")} />
       </section>
     </>
   )
 }
 
 function ModelNotFound(props: { lab: string; model: string }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
     <>
       <section id="overview" data-section="model-hero">
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
-            <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Data
+            <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
+              {i18n.t("footer.modelData")}
             </a>
-            <h1>{props.model || "Model"}</h1>
-            <p>No model facts or model_stat rows matched {props.lab ? `${props.lab}/${props.model}` : props.model}.</p>
+            <h1>
+              <a data-slot="heading-link" href="#overview">
+                {props.model || i18n.t("model.fallback")}
+              </a>
+            </h1>
+            <p>{i18n.t("model.noMatched", { id: props.lab ? `${props.lab}/${props.model}` : props.model })}</p>
           </div>
         </div>
       </section>
       <section data-section="model-panel">
-        <ModelEmptyState title="No model data" description="Try opening a model from the leaderboard." />
+        <ModelEmptyState title={i18n.t("model.noDataTitle")} description={i18n.t("model.noDataDescription")} />
       </section>
     </>
   )
 }
 
-function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null; labName: string }) {
+function ModelHero(props: {
+  data: StatsModelData | null
+  catalog: ModelCatalogEntry | null
+  catalogData: ModelCatalog | null
+  labName: string
+}) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const labId = () => props.catalog?.lab ?? props.data?.provider ?? props.labName
-  const modelId = () => props.catalog?.id ?? props.data?.model ?? "Model"
+  const modelName = () => props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")
   const weights = () => props.catalog?.weights[0]
+  const labs = () => props.catalogData?.labs ?? []
+  const labModels = () =>
+    props.catalogData?.labs.find((lab) => lab.id === providerSlug(labId()))?.models ??
+    (props.catalog ? [props.catalog] : [])
   return (
     <section id="overview" data-section="model-hero">
-      <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Data
-      </a>
-      <div data-slot="model-hero-grid">
-        <div data-slot="model-hero-copy">
-          <div data-slot="model-hero-tags">
-            <a data-slot="hero-meta" href={`${import.meta.env.BASE_URL}${providerSlug(labId())}`}>
-              <ProviderIcon aria-hidden="true" id={getProviderIconId(labId())} />
+      <nav data-component="model-hero-breadcrumb" aria-label="Data breadcrumb">
+        <a data-slot="model-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
+          Data
+        </a>
+        <span data-slot="model-hero-separator">/</span>
+        <Show
+          when={labs().length > 0}
+          fallback={
+            <span data-slot="model-hero-crumb" data-current="true">
               <span>{props.labName}</span>
-            </a>
-            <span data-slot="model-id-tag">{modelId()}</span>
-          </div>
-          <h1>{props.catalog?.name ?? props.data?.model ?? "Model"}</h1>
-          <Show
-            when={props.data}
-            fallback={
-              <p>Model facts from the shared model index. OpenCode Go usage appears once this model has activity.</p>
-            }
-          >
-            {(data) => (
-              <p>
-                {data().rank === null
-                  ? "Unranked across last week's OpenCode Go usage"
-                  : `Ranked #${data().rank} across last week's OpenCode Go usage`}{" "}
-                with {formatPercent(data().tokenShare)} of observed 2M volume.
-              </p>
-            )}
-          </Show>
+              <ChevronDownIcon />
+            </span>
+          }
+        >
+          <details data-component="model-hero-menu">
+            <summary data-slot="model-hero-crumb" data-current="true">
+              <span>{props.labName}</span>
+              <ChevronDownIcon />
+            </summary>
+            <div data-slot="model-hero-options">
+              <For each={labs()}>
+                {(lab) => (
+                  <a
+                    data-slot="model-hero-option"
+                    data-current={lab.id === providerSlug(labId()) ? "true" : undefined}
+                    href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
+                  >
+                    {lab.name}
+                  </a>
+                )}
+              </For>
+            </div>
+          </details>
+        </Show>
+        <span data-slot="model-hero-separator">/</span>
+        <Show
+          when={labModels().length > 0}
+          fallback={
+            <span data-slot="model-hero-crumb" data-current="true" aria-current="page">
+              <span>{modelName()}</span>
+              <ChevronDownIcon />
+            </span>
+          }
+        >
+          <details data-component="model-hero-menu">
+            <summary data-slot="model-hero-crumb" data-current="true" aria-current="page">
+              <span>{modelName()}</span>
+              <ChevronDownIcon />
+            </summary>
+            <div data-slot="model-hero-options">
+              <For each={labModels()}>
+                {(model) => (
+                  <a
+                    data-slot="model-hero-option"
+                    data-current={model.id === props.catalog?.id ? "true" : undefined}
+                    href={language.route(`${import.meta.env.BASE_URL}${model.id}`)}
+                  >
+                    {model.name}
+                  </a>
+                )}
+              </For>
+            </div>
+          </details>
+        </Show>
+      </nav>
+      <div data-slot="model-hero-title-row">
+        <span data-slot="model-hero-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(labId())} />
+        </span>
+        <h1>{modelName()}</h1>
+        <div data-slot="model-hero-actions">
           <Show when={props.catalog?.openWeights && weights()}>
             {(weight) => (
-              <a data-slot="model-weight-link" href={weight().url} target="_blank" rel="noopener noreferrer">
-                Model weights: {weight().label}
+              <a data-slot="model-hero-action" href={weight().url} target="_blank" rel="noopener noreferrer">
+                <ModelHeroActionIcon kind="weights" />
+                <span>Model weights</span>
               </a>
             )}
           </Show>
         </div>
-        <Show when={props.data} fallback={<ModelCatalogCallout catalog={props.catalog} />}>
-          {(data) => (
-            <div data-component="model-rank-panel">
-              <span>7D Rank</span>
-              <strong>{data().rank === null ? "—" : `#${data().rank}`}</strong>
-              <p>{formatModelRankMoveLabel(data())}</p>
-            </div>
-          )}
-        </Show>
       </div>
       <div data-slot="model-hero-pattern" aria-hidden="true" />
-      <Show when={props.catalog}>{(catalog) => <ModelCatalogPanel data={catalog()} />}</Show>
-    </section>
-  )
-}
-
-function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
-  return (
-    <div data-component="model-rank-panel">
-      <span>Model Profile</span>
-      <strong>{props.catalog?.releaseDate ? formatCatalogDate(props.catalog.releaseDate) : "Listed"}</strong>
-      <p>No OpenCode Go usage in the current data window.</p>
-    </div>
-  )
-}
-
-function ModelCatalogPanel(props: { data: ModelCatalogEntry }) {
-  return (
-    <aside data-component="model-catalog" aria-label="Model facts">
-      <div data-slot="model-catalog-grid">
-        <CatalogDatum label="Context" value={formatCatalogLimit(props.data.limit?.context)} />
-        <CatalogDatum label="Output" value={formatCatalogLimit(props.data.limit?.output)} />
-        <CatalogDatum label="Knowledge" value={formatCatalogDate(props.data.knowledge)} />
-        <CatalogDatum label="Release" value={formatCatalogDate(props.data.releaseDate)} />
-        <CatalogDatum label="Inputs" value={formatCatalogModalities(props.data.modalities.input)} />
-      </div>
-    </aside>
-  )
-}
-
-function CatalogDatum(props: { label: string; value: string }) {
-  return (
-    <article data-component="model-catalog-datum">
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </article>
-  )
-}
-
-function ModelOverview(props: { data: StatsModelData | null }) {
-  return (
-    <section data-section="model-panel">
-      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, unique users, and market position." />
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title="No usage summary" description="This model has no OpenCode Go usage rows yet." />
+          <p data-slot="model-hero-state">
+            <span>Listed</span>
+            <span>across the shared model catalog.</span>
+          </p>
         }
       >
         {(data) => (
-          <div data-component="model-metric-grid">
-            <MetricCard label="Tokens" value={formatTokens(data().totals.tokens)} detail="last two months" />
-            <MetricCard label="Unique Users" value={formatUsers(data().totals.uniqueUsers)} detail="last two months" />
-            <MetricCard label="Sessions" value={formatInteger(data().totals.sessions)} detail="completed sessions" />
-            <MetricCard
-              label="Token Share"
-              value={formatPercent(data().tokenShare)}
-              detail={`${data().totalModels} models`}
-            />
-            <MetricCard
-              label="Momentum"
-              value={formatChange(data().tokenChange)}
-              detail="vs previous window"
-              state={data().tokenChange < 0 ? "negative" : "positive"}
-            />
-          </div>
+          <p data-slot="model-hero-rankline">
+            <span>Ranked</span>
+            <span data-slot="model-hero-rank-group">
+              <span data-slot="model-hero-pill">{formatHeroRank(data().rank)}</span>
+              <ModelHeroSparkline data={data()} />
+            </span>
+            <span>across last week's</span>
+            <span data-slot="model-hero-pill">OpenCode Go</span>
+            <span>usage with</span>
+            <span data-slot="model-hero-pill">{formatPercent(data().tokenShare)}</span>
+            <span>of observed</span>
+            <span data-slot="model-hero-pill">2M</span>
+            <span>volume.</span>
+          </p>
         )}
       </Show>
     </section>
   )
 }
 
-function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
+function ModelHeroActionIcon(props: { kind: "weights" | "compare" }) {
+  if (props.kind === "weights")
+    return (
+      <svg data-slot="model-hero-action-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+        <path d="M5.5 4.5H4.5V11.5H11.5V10.5" stroke="currentColor" stroke-linecap="square" />
+        <path d="M8.5 4.5H11.5V7.5" stroke="currentColor" stroke-linecap="square" />
+        <path d="M11.25 4.75L7.25 8.75" stroke="currentColor" stroke-linecap="square" />
+      </svg>
+    )
   return (
-    <section id="usage" data-section="model-panel">
-      <SectionTitle title="Usage" description="Daily OpenCode Go token volume over the recent two-month window." />
-      <Show
-        when={props.data.some((item) => item.tokens > 0)}
-        fallback={<ModelEmptyState title="No usage" description="No usage landed in the current window." />}
-      >
-        <ModelColumnChart data={props.data} metric="tokens" ariaLabel="Daily token usage chart" />
-      </Show>
+    <svg data-slot="model-hero-action-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <rect x="3.5" y="3.5" width="3" height="3" stroke="currentColor" />
+      <rect x="9.5" y="3.5" width="3" height="3" stroke="currentColor" />
+      <rect x="3.5" y="9.5" width="3" height="3" stroke="currentColor" />
+      <rect x="9.5" y="9.5" width="3" height="3" stroke="currentColor" />
+    </svg>
+  )
+}
+
+function ModelHeroSparkline(props: { data: StatsModelData }) {
+  const values = () => props.data.usage.slice(-14).map((point) => point.tokens)
+  return (
+    <span data-slot="model-hero-sparkline" aria-hidden="true">
+      <svg viewBox="0 0 36 24" fill="none">
+        <path d={sparklineAreaPath(values())} fill="currentColor" opacity="0.14" />
+        <path d={sparklineLinePath(values())} stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+      </svg>
+    </span>
+  )
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path d="M4.75 6.25L8 9.5L11.25 6.25" stroke="currentColor" stroke-width="1.5" />
+    </svg>
+  )
+}
+
+function ModelOverview(props: { catalog: ModelCatalogEntry | null }) {
+  const i18n = useI18n()
+  const language = useLanguage()
+  const specs = createMemo(() => [
+    {
+      label: i18n.t("model.context"),
+      value: formatCatalogLimit(props.catalog?.limit?.context, i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.output"),
+      value: formatCatalogLimit(props.catalog?.limit?.output, i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.knowledge"),
+      value: formatCatalogMonth(props.catalog?.knowledge, language.tag(language.locale()), i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.release"),
+      value: formatCatalogMonth(props.catalog?.releaseDate, language.tag(language.locale()), i18n.t("home.unknown")),
+    },
+    {
+      label: i18n.t("model.inputs"),
+      value: formatCatalogModalities(
+        props.catalog?.modalities.input ?? [],
+        language.tag(language.locale()),
+        i18n.t("home.unknown"),
+      ),
+    },
+  ])
+  return (
+    <section id="model-overview" data-section="model-specs" aria-label={i18n.t("nav.overview")}>
+      <For each={specs()}>
+        {(spec) => (
+          <div data-component="model-spec">
+            <span>{spec.label}</span>
+            <strong>{spec.value}</strong>
+          </div>
+        )}
+      </For>
     </section>
   )
 }
 
-function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
+function ModelMomentumSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   return (
-    <section id="users" data-section="model-panel">
-      <SectionTitle
-        title="Unique Users"
-        description="Daily unique OpenCode Go users over the recent two-month window."
-      />
+    <section id="momentum" data-section="model-momentum">
+      <h2 data-slot="model-momentum-title">
+        <a href="#momentum">{i18n.t("model.momentum")}.</a>
+        <span>{i18n.t("model.overviewDescription")}</span>
+      </h2>
+      <div data-slot="model-momentum-pattern" aria-hidden="true" />
       <Show
-        when={props.data.some((item) => item.users > 0)}
+        when={props.data}
         fallback={
-          <ModelEmptyState title="No user data" description="No user-bearing rows landed in the current window." />
+          <ModelEmptyState title={i18n.t("model.noSummaryTitle")} description={i18n.t("model.noSummaryDescription")} />
         }
       >
-        <ModelColumnChart data={props.data} metric="users" ariaLabel="Daily unique user chart" />
+        {(data) => (
+          <>
+            <MomentumChart data={data()} locale={language.tag(language.locale())} />
+            <div data-slot="model-momentum-metrics">
+              <MomentumMetric label={i18n.t("model.uniqueUsers")} value={formatUsers(data().totals.uniqueUsers)} />
+              <MomentumMetric
+                label={capitalizeLabel(i18n.t("model.completedSessions"))}
+                value={formatInteger(data().totals.sessions)}
+              />
+              <MomentumMetric label={i18n.t("model.tokenShare")} value={formatPercent(data().tokenShare)} />
+              <MomentumMetric
+                label="Rank"
+                value={formatRankLabel(data().rank)}
+                watermark={formatRankLabel(data().rank)}
+              />
+            </div>
+          </>
+        )}
       </Show>
     </section>
   )
 }
 
-function ModelColumnChart(props: { data: ModelUsagePoint[]; metric: "tokens" | "users"; ariaLabel: string }) {
-  const [activeIndex, setActiveIndex] = createSignal<number>()
-  const max = createMemo(() => Math.max(0, ...props.data.map((item) => modelUsageMetricValue(item, props.metric))) || 1)
-  const activePoint = createMemo(() => {
-    const index = activeIndex()
-    if (index === undefined) return undefined
-    return props.data[index]
-  })
-
+function MomentumChart(props: { data: StatsModelData; locale: string }) {
+  const chart = createMemo(() => momentumChart(props.data.usage, props.data.updatedAt))
+  const changeState = createMemo(() => (props.data.tokenChange < 0 ? "negative" : "positive"))
   return (
-    <div
-      data-component="model-usage-chart"
-      data-metric={props.metric}
-      data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
-      role="img"
-      aria-label={props.ariaLabel}
-      style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
-      onPointerLeave={(event) => {
-        if (event.pointerType === "touch") return
-        setActiveIndex(undefined)
-      }}
-    >
-      <div data-slot="model-usage-axis" aria-hidden="true">
-        <For each={props.data}>
-          {(point, index) => (
-            <div
-              data-active={activeIndex() === index() ? "true" : undefined}
-              data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
-            >
-              <span data-slot="model-usage-label">
-                <span data-slot="model-usage-total">{formatModelUsageValue(point, props.metric)}</span>
-                <span data-slot="model-usage-date">{point.date}</span>
-              </span>
-            </div>
-          )}
-        </For>
+    <div data-component="model-momentum-chart" role="img" aria-label="Recent model token momentum">
+      <div data-slot="model-momentum-summary">
+        <div data-slot="model-momentum-total">
+          <strong>{formatTokens(props.data.totals.tokens)} tokens</strong>
+          <span data-state={changeState()}>{formatChange(props.data.tokenChange)}</span>
+        </div>
+        <p>
+          <span>{formatMomentumDate(chart().startDate, props.locale, props.data.updatedAt)}</span>
+          <span aria-hidden="true">→</span>
+          <span>{formatMomentumDate(chart().endDate, props.locale, props.data.updatedAt)}</span>
+        </p>
       </div>
-      <div data-slot="model-usage-bars">
-        <For each={props.data}>
-          {(point, index) => (
-            <div
-              data-slot="model-usage-column"
-              role="button"
-              tabIndex={0}
-              aria-label={`${point.date} ${formatModelUsageValue(point, props.metric)} ${modelUsageLabel(props.metric)}`}
-              data-active={activeIndex() === index() ? "true" : undefined}
-              data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
-              onPointerDown={(event) => {
-                if (event.pointerType !== "touch") return
-                setActiveIndex(index())
-              }}
-              onPointerEnter={() => setActiveIndex(index())}
-              onPointerMove={(event) => {
-                if (event.pointerType === "touch") return
-                setActiveIndex(index())
-              }}
-              onClick={() => setActiveIndex(index())}
-              onFocus={() => setActiveIndex(index())}
-              onBlur={() => setActiveIndex(undefined)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return
-                event.preventDefault()
-                setActiveIndex(index())
-              }}
-            >
-              <div
-                data-slot="model-usage-bar"
-                style={
-                  {
-                    "--model-usage-fill": `${modelUsageHeight(modelUsageMetricValue(point, props.metric), max())}%`,
-                  } as JSX.CSSProperties
-                }
+      <div data-slot="model-momentum-plot">
+        <svg viewBox="0 0 1200 370" preserveAspectRatio="none" aria-hidden="true">
+          <path data-slot="model-momentum-line-muted" d={chart().previousPath} />
+          <path data-slot="model-momentum-line-active" d={chart().currentPath} />
+          <For each={chart().markers}>
+            {(marker) => (
+              <rect
+                data-slot="model-momentum-marker"
+                data-active={marker.active ? "true" : undefined}
+                x={marker.x - 3}
+                y={marker.y - 3}
+                width="6"
+                height="6"
               />
-              <Show when={activeIndex() === index() && activePoint()}>
-                {(active) => (
-                  <div
-                    data-component="chart-tooltip"
-                    data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
-                  >
-                    <strong>{active().date}</strong>
-                    <span>
-                      {formatModelUsageValue(active(), props.metric)} {modelUsageLabel(props.metric)}
-                    </span>
-                    <div data-slot="tooltip-divider" />
-                    <p>
-                      <span data-slot="tooltip-label">
-                        <i /> Daily {modelUsageLabel(props.metric)}
-                      </span>
-                      <b>{formatModelUsageValue(active(), props.metric)}</b>
-                    </p>
-                  </div>
-                )}
-              </Show>
-            </div>
-          )}
+            )}
+          </For>
+        </svg>
+        <span data-slot="model-momentum-end" data-state={changeState()} style={chart().endStyle}>
+          <i />
+          {formatChange(props.data.tokenChange)}
+        </span>
+      </div>
+      <div data-slot="model-momentum-months" aria-hidden="true">
+        <For each={momentumMonthLabels(chart().startDate, props.locale, props.data.updatedAt)}>
+          {(month) => <span style={{ left: `${month.x}%` }}>{month.label}</span>}
         </For>
       </div>
     </div>
   )
 }
 
-function modelUsageMetricValue(point: ModelUsagePoint, metric: "tokens" | "users") {
-  if (metric === "users") return point.users
-  return point.tokens
+function MomentumMetric(props: { label: string; value: string; watermark?: string }) {
+  return (
+    <div data-component="model-momentum-metric">
+      <Show when={props.watermark}>{(watermark) => <em aria-hidden="true">{watermark()}</em>}</Show>
+      <span>{props.label}</span>
+      <strong>{props.value}</strong>
+    </div>
+  )
 }
 
-function formatModelUsageValue(point: ModelUsagePoint, metric: "tokens" | "users") {
-  if (metric === "users") return formatUsers(point.users)
-  return formatTokens(point.tokens)
+function ModelUsageSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
+  return (
+    <ModelTrendSection
+      data={props.data}
+      id="usage"
+      title={i18n.t("nav.usage")}
+      description={i18n.t("model.usageDescription")}
+      ariaLabel={i18n.t("model.dailyTokenChart")}
+      emptyTitle={i18n.t("model.noUsageTitle")}
+      emptyDescription={i18n.t("model.noUsageDescription")}
+      value={(point) => point.tokens}
+      formatValue={formatTokens}
+      valueUnit={i18n.t("lab.tokens")}
+      rowLabel={i18n.t("lab.dailyTokens")}
+      lineTone="muted"
+    />
+  )
 }
 
-function modelUsageLabel(metric: "tokens" | "users") {
-  if (metric === "users") return "users"
-  return "tokens"
+function ModelUniqueUsersSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
+  return (
+    <ModelTrendSection
+      data={props.data}
+      id="unique-users"
+      title={i18n.t("model.uniqueUsers")}
+      description={i18n.t("model.usersDescription")}
+      ariaLabel={i18n.t("model.dailyUserChart")}
+      emptyTitle={i18n.t("model.noUsersTitle")}
+      emptyDescription={i18n.t("model.noUsersDescription")}
+      value={(point) => point.users}
+      formatValue={formatUsers}
+      valueUnit={i18n.t("format.users")}
+      rowLabel={i18n.t("model.uniqueUsers")}
+      lineTone="active"
+      activeLineBaseTone="muted"
+      highlightBars={false}
+      area
+    />
+  )
+}
+
+function ModelTrendSection(props: {
+  data: StatsModelData | null
+  id: string
+  title: string
+  description: string
+  ariaLabel: string
+  emptyTitle: string
+  emptyDescription: string
+  value: (point: ModelUsagePoint) => number
+  formatValue: (value: number) => string
+  valueUnit: string
+  rowLabel: string
+  lineTone: "muted" | "active"
+  activeLineBaseTone?: "muted" | "active"
+  highlightBars?: boolean
+  area?: boolean
+}) {
+  const activeLineClipId = createUniqueId()
+  const activeLineMaskId = createUniqueId()
+  const areaGradientId = createUniqueId()
+  const [activeIndex, setActiveIndex] = createSignal<number>()
+  const highlightBars = createMemo(() => props.highlightBars ?? true)
+  const lineScale = 326 / 450
+  const areaBottom = 100 / lineScale
+  const usage = createMemo(() => props.data?.usage ?? [])
+  const valueMax = createMemo(() => Math.max(0, ...usage().map((item) => props.value(item))) || 1)
+  const linePoints = createMemo(() =>
+    usage().map((point, index) => ({
+      point,
+      x: modelUsagePointX(index, usage().length),
+      y: modelUsageLineY(props.value(point), valueMax()),
+    })),
+  )
+  const linePath = createMemo(() => modelUsageLinePath(linePoints()))
+  const areaPath = createMemo(() => modelUsageAreaPath(linePoints(), areaBottom))
+  const activeLineBreak = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined || linePoints().length < 2) return undefined
+    return modelUsageColumnBounds(index, linePoints().length)
+  })
+  const activeLineClip = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined || linePoints().length < 2) return undefined
+    return modelUsageColumnInnerBounds(index, linePoints().length)
+  })
+  const activeTooltip = createMemo(() => {
+    const index = activeIndex()
+    const point = index === undefined ? undefined : usage()[index]
+    if (index === undefined || !point) return undefined
+    const bounds = modelUsageColumnBounds(index, usage().length)
+    return {
+      bounds,
+      index,
+      point,
+      tooltipY: (linePoints()[index]?.y ?? 100) * lineScale,
+    }
+  })
+  const monthTicks = createMemo(() => modelUsageMonthTicks(usage(), props.data?.updatedAt ?? null))
+
+  return (
+    <section id={props.id} data-section="model-panel">
+      <SectionTitle href={`#${props.id}`} title={props.title} description={props.description} />
+      <Show
+        when={usage().some((item) => props.value(item) > 0)}
+        fallback={<ModelEmptyState title={props.emptyTitle} description={props.emptyDescription} />}
+      >
+        <div
+          data-component="model-usage-chart"
+          data-variant="model-trend"
+          data-highlight-bars={highlightBars() ? "true" : undefined}
+          role="img"
+          aria-label={props.ariaLabel}
+          style={{ "--model-usage-count": usage().length } as JSX.CSSProperties}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "touch") return
+            setActiveIndex(undefined)
+          }}
+        >
+          <div data-slot="model-trend-plot">
+            <Show when={linePath()}>
+              {(path) => (
+                <>
+                  <Show when={props.area && areaPath()}>
+                    {(area) => (
+                      <svg
+                        data-slot="model-trend-area-layer"
+                        viewBox={`0 0 100 ${formatUsagePathNumber(areaBottom)}`}
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <linearGradient id={areaGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="var(--model-trend-active)" stop-opacity="0.1" />
+                            <stop offset="66%" stop-color="var(--model-trend-active)" stop-opacity="0.045" />
+                            <stop offset="100%" stop-color="var(--model-trend-active)" stop-opacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <path data-slot="model-trend-area" d={area()} fill={`url(#${areaGradientId})`} />
+                      </svg>
+                    )}
+                  </Show>
+                  <svg
+                    data-slot="model-trend-line"
+                    data-layer="base"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <Show
+                      when={activeLineBreak()}
+                      fallback={<path data-slot="model-trend-line-base" data-tone={props.lineTone} d={path()} />}
+                    >
+                      {(lineBreak) => (
+                        <>
+                          <defs>
+                            <mask id={activeLineMaskId} maskUnits="userSpaceOnUse">
+                              <rect x="0" y="-2" width="100" height="104" fill="white" />
+                              <rect x={lineBreak().x} y="-2" width={lineBreak().width} height="104" fill="black" />
+                            </mask>
+                          </defs>
+                          <path
+                            data-slot="model-trend-line-base"
+                            data-tone={props.activeLineBaseTone ?? props.lineTone}
+                            d={path()}
+                            mask={`url(#${activeLineMaskId})`}
+                          />
+                        </>
+                      )}
+                    </Show>
+                  </svg>
+                  <Show when={activeLineClip()}>
+                    {(clip) => (
+                      <svg
+                        data-slot="model-trend-line"
+                        data-layer="active"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <clipPath id={activeLineClipId} clipPathUnits="userSpaceOnUse">
+                            <rect x={clip().x} y="-2" width={clip().width} height="104" />
+                          </clipPath>
+                        </defs>
+                        <path data-slot="model-trend-line-active" d={path()} clip-path={`url(#${activeLineClipId})`} />
+                      </svg>
+                    )}
+                  </Show>
+                </>
+              )}
+            </Show>
+            <Show when={linePoints().at(-1)}>
+              {(point) => (
+                <span
+                  data-slot="model-trend-end-marker"
+                  data-tone={props.lineTone}
+                  aria-hidden="true"
+                  style={
+                    {
+                      "--model-trend-end-x": `${point().x}%`,
+                      "--model-trend-end-top": `${point().y * lineScale}%`,
+                    } as JSX.CSSProperties
+                  }
+                />
+              )}
+            </Show>
+            <div data-slot="model-trend-bars">
+              <For each={usage()}>
+                {(point, index) => (
+                  <div
+                    data-slot="model-trend-column"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${point.date} ${props.formatValue(props.value(point))} ${props.valueUnit}`}
+                    data-active={activeIndex() === index() ? "true" : undefined}
+                    data-muted={
+                      highlightBars() && activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined
+                    }
+                    style={
+                      {
+                        "--model-trend-token-height": modelUsageStripHeight(props.value(point), valueMax()),
+                      } as JSX.CSSProperties
+                    }
+                    onPointerDown={(event) => {
+                      if (event.pointerType !== "touch") return
+                      setActiveIndex(index())
+                    }}
+                    onPointerEnter={() => setActiveIndex(index())}
+                    onPointerMove={(event) => {
+                      if (event.pointerType === "touch") return
+                      setActiveIndex(index())
+                    }}
+                    onClick={() => setActiveIndex(index())}
+                    onFocus={() => setActiveIndex(index())}
+                    onBlur={() => setActiveIndex(undefined)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return
+                      event.preventDefault()
+                      setActiveIndex(index())
+                    }}
+                  >
+                    <div data-slot="model-trend-token-band">
+                      <div data-slot="model-trend-token-bar" />
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={activeTooltip()} keyed>
+              {(active) => (
+                <div
+                  data-component="chart-tooltip"
+                  data-placement={active.index > usage().length * 0.62 ? "left" : "right"}
+                  style={
+                    {
+                      "--model-trend-tooltip-left": `${active.bounds.x}%`,
+                      "--model-trend-tooltip-right": `${active.bounds.x + active.bounds.width}%`,
+                      "--model-trend-tooltip-y": `${active.tooltipY}`,
+                    } as JSX.CSSProperties
+                  }
+                >
+                  <strong>{formatModelUsageTooltipDate(active.point.date, props.data?.updatedAt ?? null)}</strong>
+                  <span>
+                    {props.formatValue(props.value(active.point))} {props.valueUnit}
+                  </span>
+                  <div data-slot="tooltip-divider" />
+                  <p>
+                    <span data-slot="tooltip-label">
+                      <i data-kind={props.lineTone === "active" ? "users" : "tokens"} /> {props.rowLabel}
+                    </span>
+                    <b>{props.formatValue(props.value(active.point))}</b>
+                  </p>
+                </div>
+              )}
+            </Show>
+          </div>
+          <div data-slot="model-trend-months" aria-hidden="true">
+            <For each={monthTicks()}>
+              {(tick) => (
+                <span
+                  data-align={tick.align}
+                  style={{ "--model-trend-month-left": `${tick.left}%` } as JSX.CSSProperties}
+                >
+                  {tick.label}
+                </span>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </section>
+  )
 }
 
 function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
+  const i18n = useI18n()
   return (
     <section id="efficiency" data-section="model-panel">
-      <SectionTitle title="Efficiency" description="Cost, cache behavior, and average OpenCode Go session shape." />
+      <SectionTitle
+        href="#efficiency"
+        title={i18n.t("nav.efficiency")}
+        description={i18n.t("model.efficiencyDescription")}
+      />
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title="No efficiency data" description="Efficiency data appears after usage lands." />
+          <ModelEmptyState
+            title={i18n.t("model.noEfficiencyTitle")}
+            description={i18n.t("model.noEfficiencyDescription")}
+          />
         }
       >
         {(data) => (
-          <div data-component="model-metric-grid" data-variant="dense">
-            <MetricCard label="Cost" value={formatMoney(data().totals.cost)} detail="total spend" />
-            <MetricCard
-              label="Cost / 1M"
-              value={
-                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
-              }
-              detail={props.catalog?.cost ? "input / output" : "observed all tokens"}
-            />
-            <MetricCard
-              label="Cost / Session"
-              value={formatSessionCost(data().totals.costPerSession)}
-              detail="average"
-            />
-            <MetricCard
-              label="Tokens / Session"
-              value={formatTokens(data().totals.tokensPerSession)}
-              detail="average"
-            />
-            <MetricCard label="Cache Ratio" value={formatPercent(data().totals.cacheRatio)} detail="input tokens" />
-          </div>
+          <>
+            <div data-slot="model-efficiency-pattern" aria-hidden="true" />
+            <div data-component="model-efficiency-grid">
+              <MetricCard label={i18n.t("model.totalSpendLabel")} value={formatMoney(data().totals.cost)} />
+              <MetricCard
+                label={i18n.t("model.costInput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.input)}
+              />
+              <MetricCard
+                label={i18n.t("model.costOutput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.output)}
+              />
+              <MetricCard
+                label={i18n.t("model.averageCostSession")}
+                value={formatSessionCost(data().totals.costPerSession)}
+              />
+              <MetricCard
+                label={i18n.t("model.averageTokensSession")}
+                value={formatTokens(data().totals.tokensPerSession)}
+              />
+              <MetricCard
+                label={i18n.t("model.cacheRatio")}
+                value={`${formatPercent(data().totals.cacheRatio)} ${i18n.t("model.inputTokens")}`}
+              />
+            </div>
+          </>
         )}
       </Show>
     </section>
@@ -548,6 +925,8 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
 }
 
 function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry[]> }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const [activeCountry, setActiveCountry] = createSignal<string>()
   const data = createMemo(() => props.data["2M"])
   const countryById = createMemo(
@@ -572,12 +951,14 @@ function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry
         setActiveCountry(undefined)
       }}
     >
-      <SectionTitle title="Geo Breakdown" description="OpenCode Go model tokens used by country." />
+      <SectionTitle
+        href="#geo-breakdown"
+        title={i18n.t("nav.geoBreakdown")}
+        description={i18n.t("model.geoDescription")}
+      />
       <Show
         when={data().length > 0}
-        fallback={
-          <ModelEmptyState title="No geo data" description="No OpenCode Go geo_stat rows matched this model." />
-        }
+        fallback={<ModelEmptyState title={i18n.t("model.noGeoTitle")} description={i18n.t("model.noGeoDescription")} />}
       >
         <div data-component="geo-breakdown">
           <div data-slot="geo-map-panel">
@@ -591,7 +972,7 @@ function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry
               {(country) => (
                 <div data-slot="geo-active-country">
                   <span>#{String(country().rank).padStart(2, "0")}</span>
-                  <strong>{formatCountryName(country().country)}</strong>
+                  <strong>{formatCountryName(country().country, language.tag(language.locale()), i18n)}</strong>
                   <p>
                     <b>{formatGeoTokens(country().tokens)}</b>
                     <em>{formatGeoShare(country().share)}</em>
@@ -618,6 +999,7 @@ function GeoWorldMap(props: {
   maxTokens: number
   onActiveCountryChange: (country: string | undefined) => void
 }) {
+  const i18n = useI18n()
   const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
   const countryOpacity = (country: CountryEntry | undefined) => {
     if (!country) return 0
@@ -631,9 +1013,9 @@ function GeoWorldMap(props: {
       data-component="geo-world-map"
       viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
       role="img"
-      aria-label="World map of model token usage by country"
+      aria-label={i18n.t("model.worldMap")}
     >
-      <title>Geo Breakdown map</title>
+      <title>{i18n.t("home.geoMapTitle")}</title>
       <g data-slot="geo-countries">
         <For each={worldCountryPaths}>
           {(country) => {
@@ -703,6 +1085,8 @@ function GeoCountryList(props: {
   maxTokens: number
   onActiveCountryChange: (country: string | undefined) => void
 }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
 
   return (
@@ -714,16 +1098,14 @@ function GeoCountryList(props: {
               type="button"
               data-active={props.activeCountry === country.country ? "true" : undefined}
               style={{ "--geo-row-opacity": String(opacityScale()(country.tokens)) } as JSX.CSSProperties}
-              aria-label={`${formatCountryName(country.country)} ${formatGeoTokens(country.tokens)} ${formatGeoShare(
-                country.share,
-              )}`}
+              aria-label={`${formatCountryName(country.country, language.tag(language.locale()), i18n)} ${formatGeoTokens(country.tokens)} ${formatGeoShare(country.share)}`}
               onClick={() => props.onActiveCountryChange(country.country)}
               onPointerEnter={() => props.onActiveCountryChange(country.country)}
               onFocus={() => props.onActiveCountryChange(country.country)}
             >
               <span>{String(country.rank).padStart(2, "0")}</span>
               <i />
-              <strong>{formatCountryName(country.country)}</strong>
+              <strong>{formatCountryName(country.country, language.tag(language.locale()), i18n)}</strong>
               <em>{formatGeoTokens(country.tokens)}</em>
               <b>{formatGeoShare(country.share)}</b>
             </button>
@@ -735,12 +1117,15 @@ function GeoCountryList(props: {
 }
 
 function ModelPeersSection(props: { data: StatsModelData | null }) {
+  const i18n = useI18n()
   return (
     <section id="peers" data-section="model-panel">
-      <SectionTitle title="Peers" description="Nearby models by recent OpenCode Go token volume." />
+      <SectionTitle href="#peers" title={i18n.t("nav.peers")} description={i18n.t("model.peersDescription")} />
       <Show
         when={props.data?.peers.length}
-        fallback={<ModelEmptyState title="No peers" description="Peer rankings appear after usage lands." />}
+        fallback={
+          <ModelEmptyState title={i18n.t("model.noPeersTitle")} description={i18n.t("model.noPeersDescription")} />
+        }
       >
         <ol data-component="model-peer-list">
           <For each={props.data?.peers ?? []}>
@@ -752,39 +1137,42 @@ function ModelPeersSection(props: { data: StatsModelData | null }) {
   )
 }
 
-function MetricCard(props: { label: string; value: string; detail: string; state?: "positive" | "negative" }) {
+function MetricCard(props: { label: string; value: string; detail?: string; state?: "positive" | "negative" }) {
   return (
     <article data-component="model-metric" data-state={props.state}>
       <span>{props.label}</span>
       <strong>{props.value}</strong>
-      <p>{props.detail}</p>
+      <Show when={props.detail}>{(detail) => <p>{detail()}</p>}</Show>
     </article>
   )
 }
 
 function PeerRow(props: { peer: ModelPeerEntry; active: boolean }) {
+  const language = useLanguage()
   return (
     <li>
       <a
-        href={`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`}
+        href={language.route(`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`)}
         data-active={props.active ? "true" : undefined}
       >
-        <span>{String(props.peer.rank).padStart(2, "0")}</span>
-        <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
-        <strong>{props.peer.model}</strong>
-        <em>{props.peer.author}</em>
+        <span data-slot="model-peer-rank" aria-label={props.active ? `Rank ${props.peer.rank}` : undefined}>
+          <Show when={!props.active}>{String(props.peer.rank).padStart(2, "0")}</Show>
+        </span>
+        <span data-slot="model-peer-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
+        </span>
+        <span data-slot="model-peer-copy">
+          <strong>{props.peer.model}</strong>
+          <em>{props.peer.author}</em>
+        </span>
         <b>{formatTokens(props.peer.tokens)}</b>
       </a>
     </li>
   )
 }
 
-function SectionTitle(props: { title: string; description: string }) {
-  return (
-    <p data-slot="section-title">
-      <strong>{props.title}.</strong> <span>{props.description}</span>
-    </p>
-  )
+function SectionTitle(props: { href: string; title: string; description: string }) {
+  return <SectionHeading href={props.href} title={props.title} description={props.description} />
 }
 
 function ModelEmptyState(props: { title: string; description: string; compact?: boolean }) {
@@ -794,6 +1182,55 @@ function ModelEmptyState(props: { title: string; description: string; compact?: 
       <p>{props.description}</p>
     </div>
   )
+}
+
+function modelComparisonPairs(
+  catalog: ModelCatalog | undefined,
+  catalogEntry: ModelCatalogEntry | null,
+  data: StatsModelData | null,
+) {
+  const current = modelComparisonRef(catalogEntry, data)
+  if (!current) return []
+  const peerPairs = (data?.peers ?? [])
+    .filter((peer) => peer.model !== data?.model)
+    .slice(0, 3)
+    .map((peer) => ({
+      first: current,
+      second: {
+        name: peer.model,
+        lab: peer.provider,
+        slug: peer.slug,
+        labName: peer.author,
+        metric: `#${peer.rank} / ${formatTokens(peer.tokens)}`,
+      },
+      detail: "Usage peer",
+    }))
+  const catalogPairs = (
+    catalogEntry && catalog ? (catalog.labs.find((lab) => lab.id === catalogEntry.lab)?.models ?? []) : []
+  )
+    .filter((model) => model.id !== catalogEntry?.id)
+    .slice(0, 3)
+    .map((model) => ({
+      first: current,
+      second: modelRefFromCatalog(model),
+      detail: "Same lab pair",
+    }))
+  return uniqueComparisonPairs([...peerPairs, ...catalogPairs])
+}
+
+function modelComparisonRef(
+  catalogEntry: ModelCatalogEntry | null,
+  data: StatsModelData | null,
+): ComparisonModelRef | undefined {
+  if (catalogEntry) return modelRefFromCatalog(catalogEntry)
+  if (!data) return undefined
+  return {
+    name: data.model,
+    lab: data.provider,
+    slug: data.slug,
+    labName: data.author,
+    metric: `#${data.rank}`,
+  }
 }
 
 function getProviderIconId(author: string) {
@@ -828,11 +1265,11 @@ function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
   return { x, y }
 }
 
-function formatCountryName(country: string) {
+function formatCountryName(country: string, locale: string, i18n: ReturnType<typeof useI18n>) {
   const code = country.toUpperCase()
-  if (code === "ZZ") return "Unknown"
+  if (code === "ZZ") return i18n.t("home.unknown")
   if (!countryNumericId(code)) return code
-  return countryDisplayNames.of(code) ?? code
+  return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code
 }
 
 function formatGeoTokens(value: number) {
@@ -843,32 +1280,253 @@ function formatGeoShare(value: number) {
   return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
 }
 
-function modelUsageHeight(tokens: number, max: number) {
-  if (tokens <= 0) return 0
-  return Math.max(2, Math.min(100, (tokens / max) * 100))
+function momentumChart(data: ModelUsagePoint[], updatedAt: string | null) {
+  const fallbackDate = updatedAt ? formatMomentumDateLabel(updatedAt) : "JAN 1"
+  const points =
+    data.length > 1 ? data : [data[0] ?? emptyUsagePoint(fallbackDate), data[0] ?? emptyUsagePoint(fallbackDate)]
+  const max = Math.max(1, ...points.map((point) => point.tokens))
+  const split = Math.max(1, Math.floor((points.length - 1) / 2))
+  const coordinates = points.map((point, index) => ({
+    date: point.date,
+    tokens: point.tokens,
+    x: (index / Math.max(1, points.length - 1)) * 1200,
+    y: 364 - (point.tokens / max) * 364,
+  }))
+  const end = coordinates[coordinates.length - 1]
+  return {
+    startDate: coordinates[0].date,
+    endDate: end.date,
+    previousPath: smoothLinePath(coordinates.slice(0, split + 1)),
+    currentPath: smoothLinePath(coordinates.slice(split)),
+    markers: [
+      { ...coordinates[0], active: false },
+      { ...coordinates[split], active: true },
+      { ...end, active: true },
+    ],
+    endStyle: {
+      "--momentum-end-x": `${Math.min(94, Math.max(0, ((end.x + 8) / 1200) * 100))}%`,
+      "--momentum-end-y": `${Math.min(96, Math.max(0, ((end.y - 7) / 370) * 100))}%`,
+    } as JSX.CSSProperties,
+  }
 }
 
-function isModelUsageDense(count: number) {
-  return count > 20
+function emptyUsagePoint(date: string): ModelUsagePoint {
+  return { date, tokens: 0, users: 0, sessions: 0, cost: 0 }
 }
 
-function isModelUsageLabelHidden(index: number, count: number) {
-  if (count <= 16) return false
-  const interval = Math.ceil(count / 8)
-  return index !== count - 1 && index % interval !== 0
+function smoothLinePath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return ""
+  if (points.length === 1) return `M${formatSparklinePoint(points[0].x)} ${formatSparklinePoint(points[0].y)}`
+  return points
+    .map((point, index) => {
+      if (index === 0) return `M${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`
+      const previous = points[index - 1]
+      const next = points[index + 1] ?? point
+      const beforePrevious = points[index - 2] ?? previous
+      const controlStart = {
+        x: previous.x + (point.x - beforePrevious.x) / 6,
+        y: previous.y + (point.y - beforePrevious.y) / 6,
+      }
+      const controlEnd = {
+        x: point.x - (next.x - previous.x) / 6,
+        y: point.y - (next.y - previous.y) / 6,
+      }
+      return `C${formatSparklinePoint(controlStart.x)} ${formatSparklinePoint(controlStart.y)} ${formatSparklinePoint(controlEnd.x)} ${formatSparklinePoint(controlEnd.y)} ${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`
+    })
+    .join(" ")
 }
 
-function formatRankMove(previousRank: number, rank: number) {
-  const change = previousRank - rank
+function momentumMonthLabels(startDate: string, locale: string, updatedAt: string | null) {
+  const start = parseMomentumDate(startDate, updatedAt)
+  const first = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1))
+  return Array.from({ length: 5 }, (_, index) => {
+    const date = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + index, 1))
+    return {
+      label: new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }).format(date).toUpperCase(),
+      x: index === 4 ? 98 : index * 24.5,
+    }
+  })
+}
+
+function formatMomentumDate(date: string, locale: string, updatedAt: string | null) {
+  return new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  })
+    .format(parseMomentumDate(date, updatedAt))
+    .toUpperCase()
+}
+
+function parseMomentumDate(date: string, updatedAt: string | null): Date {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(date)
+  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])))
+
+  const label = /^([A-Za-z]{3})\s+(\d{1,2})$/.exec(date.trim())
+  const month = label ? shortMonths.findIndex((item) => item.toLowerCase() === label[1].toLowerCase()) : -1
+  if (!label || month < 0) return new Date(Date.UTC(1970, 0, 1))
+
+  const anchor = updatedAt ? parseMomentumDate(updatedAt, null) : new Date(Date.UTC(1970, 0, 1))
+  const year = month > anchor.getUTCMonth() + 1 ? anchor.getUTCFullYear() - 1 : anchor.getUTCFullYear()
+  return new Date(Date.UTC(year, month, Number(label[2])))
+}
+
+function formatMomentumDateLabel(date: string) {
+  const parsed = parseMomentumDate(date, null)
+  if (parsed.getUTCFullYear() === 1970) return "JAN 1"
+  return `${shortMonths[parsed.getUTCMonth()]} ${parsed.getUTCDate()}`
+}
+
+function modelUsageStripHeight(value: number, max: number) {
+  if (value <= 0 || max <= 0) return "0px"
+  return `max(2px, ${(value / max) * 100}%)`
+}
+
+function modelUsageLineY(value: number, max: number) {
+  if (value <= 0 || max <= 0) return 100
+  return Math.max(0, 100 - (value / max) * 100)
+}
+
+function modelUsagePointX(index: number, count: number) {
+  if (count <= 1) return 50
+  return ((index + 0.5) / count) * 100
+}
+
+function modelUsageColumnBounds(index: number, count: number) {
+  if (count <= 0) return { x: 0, width: 100 }
+  return { x: (index / count) * 100, width: 100 / count }
+}
+
+function modelUsageColumnInnerBounds(index: number, count: number) {
+  const bounds = modelUsageColumnBounds(index, count)
+  const inset = Math.min(bounds.width * 0.1, 0.24)
+  return { x: bounds.x + inset, width: Math.max(0.001, bounds.width - inset * 2) }
+}
+
+type ModelUsageLinePoint = { x: number; y: number }
+
+function modelUsageLinePath(points: ModelUsageLinePoint[]) {
+  if (points.length === 0) return ""
+  if (points.length === 1) return `M ${formatUsagePathNumber(points[0].x)} ${formatUsagePathNumber(points[0].y)}`
+
+  return points.slice(0, -1).reduce(
+    (path, point, index) => {
+      const next = points[index + 1]
+      const previous = points[index - 1] ?? point
+      const afterNext = points[index + 2] ?? next
+      const controlA = {
+        x: point.x + (next.x - previous.x) / 6,
+        y: clampUsagePercent(point.y + (next.y - previous.y) / 6),
+      }
+      const controlB = {
+        x: next.x - (afterNext.x - point.x) / 6,
+        y: clampUsagePercent(next.y - (afterNext.y - point.y) / 6),
+      }
+      return `${path} C ${formatUsagePathNumber(controlA.x)} ${formatUsagePathNumber(controlA.y)}, ${formatUsagePathNumber(controlB.x)} ${formatUsagePathNumber(controlB.y)}, ${formatUsagePathNumber(next.x)} ${formatUsagePathNumber(next.y)}`
+    },
+    `M ${formatUsagePathNumber(points[0].x)} ${formatUsagePathNumber(points[0].y)}`,
+  )
+}
+
+function modelUsageAreaPath(points: ModelUsageLinePoint[], bottom: number) {
+  const path = modelUsageLinePath(points)
+  if (!path || points.length === 0) return ""
+  const first = points[0]
+  const last = points[points.length - 1]
+  return `${path} L ${formatUsagePathNumber(last.x)} ${formatUsagePathNumber(bottom)} L ${formatUsagePathNumber(first.x)} ${formatUsagePathNumber(bottom)} Z`
+}
+
+function formatUsagePathNumber(value: number) {
+  return Number(value.toFixed(3))
+}
+
+function clampUsagePercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function modelUsageMonthTicks(points: ModelUsagePoint[], updatedAt: string | null) {
+  const seen = new Set<string>()
+  return points.flatMap((point, index) => {
+    const parsed = parseMomentumDate(point.date, updatedAt)
+    const label = shortMonths[parsed.getUTCMonth()]
+    if (!label || seen.has(label)) return []
+    seen.add(label)
+    return [
+      {
+        label,
+        left: modelUsagePointX(index, points.length),
+        align: index === 0 ? "start" : index >= points.length - 2 ? "end" : "center",
+      },
+    ]
+  })
+}
+
+function formatModelUsageTooltipDate(value: string, updatedAt: string | null) {
+  const date = parseMomentumDate(value, updatedAt)
+  if (date.getUTCFullYear() === 1970) return value
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
+}
+
+function formatRankLabel(rank: number | null) {
+  if (rank === null) return "--"
+  return `#${String(rank).padStart(2, "0")}`
+}
+
+function capitalizeLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function formatRankMove(change: number) {
   if (change > 0) return `+${change}`
-  if (change < 0) return `${change}`
-  return "Even"
+  return `${change}`
 }
 
-function formatModelRankMoveLabel(data: StatsModelData) {
-  if (data.rank === null) return "No usage last week"
-  if (data.previousRank === null) return "New this week"
-  return `${formatRankMove(data.previousRank, data.rank)} vs previous week`
+function formatHeroRank(rank: number | null) {
+  if (rank === null) return "--"
+  return String(rank).padStart(2, "0")
+}
+
+function sparklineLinePath(values: number[]) {
+  return sparklinePoints(values)
+    .map(
+      (point, index) => `${index === 0 ? "M" : "L"}${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`,
+    )
+    .join(" ")
+}
+
+function sparklineAreaPath(values: number[]) {
+  const points = sparklinePoints(values)
+  return `M${formatSparklinePoint(points[0].x)} 18 ${points
+    .map((point) => `L${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`)
+    .join(" ")} L${formatSparklinePoint(points[points.length - 1].x)} 18 Z`
+}
+
+function sparklinePoints(values: number[]) {
+  const normalized = values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0]
+  const min = Math.min(...normalized)
+  const max = Math.max(...normalized)
+  return normalized.map((value, index) => ({
+    x: 8 + (index / Math.max(1, normalized.length - 1)) * 20,
+    y: min === max ? 12 : 18 - ((value - min) / (max - min)) * 12,
+  }))
+}
+
+function formatSparklinePoint(value: number) {
+  return Number(value.toFixed(2)).toString()
+}
+
+function formatModelRankMoveLabel(data: StatsModelData, i18n: ReturnType<typeof useI18n>) {
+  if (data.rank === null) return i18n.t("model.noUsageLastWeek")
+  if (data.previousRank === null) return i18n.t("model.newThisWeek")
+  const change = data.previousRank - data.rank
+  if (change === 0) return i18n.t("model.sameAsPreviousWeek")
+  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(change) })
 }
 
 function formatTokens(value: number) {
@@ -878,6 +1536,28 @@ function formatTokens(value: number) {
   if (value >= 1_000_000) return `${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return String(Math.round(value))
+}
+
+function formatCatalogLimit(value: number | undefined, unknown: string) {
+  return value === undefined ? unknown : formatTokens(value)
+}
+
+function formatCatalogMonth(value: string | undefined, locale: string, unknown: string) {
+  if (!value) return unknown
+  const match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(value)
+  if (!match) return value
+  return new Intl.DateTimeFormat(locale, {
+    month: match[2] ? "short" : undefined,
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(Number(match[1]), match[2] ? Number(match[2]) - 1 : 0, 1)))
+}
+
+function formatCatalogModalities(values: string[], locale: string, unknown: string) {
+  if (values.length === 0) return unknown
+  const labels = values.map((value) => value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()))
+  if (labels.length === 1) return labels[0] ?? unknown
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(labels)
 }
 
 function formatInteger(value: number) {
@@ -900,8 +1580,9 @@ function formatMoney(value: number) {
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
 }
 
-function formatCatalogPrice(value: ModelCatalogCost) {
-  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+function formatCatalogUnitPrice(value: number | undefined) {
+  if (value === undefined) return "-"
+  return `${formatModelPrice(value)} / 1M`
 }
 
 function formatModelPrice(value: number) {
@@ -916,35 +1597,6 @@ function formatSessionCost(value: number) {
 function formatChange(value: number) {
   if (value > 0) return `+${value}%`
   return `${value}%`
-}
-
-function formatCatalogLimit(value: number | undefined) {
-  return value === undefined ? "Unknown" : formatTokens(value)
-}
-
-function formatCatalogModalities(value: string[]) {
-  if (value.length === 0) return "Unknown"
-  return value.map(formatCatalogModality).join(", ")
-}
-
-function formatCatalogModality(value: string) {
-  if (value === "pdf") return "PDF"
-  return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-function formatCatalogDate(value: string | undefined) {
-  if (!value) return "Unknown"
-  const match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(value)
-  if (!match) return value
-  const year = Number(match[1])
-  const month = match[2] ? Number(match[2]) - 1 : 0
-  const day = match[3] ? Number(match[3]) : 1
-  return new Intl.DateTimeFormat("en", {
-    month: match[2] ? "short" : undefined,
-    day: match[3] ? "numeric" : undefined,
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month, day)))
 }
 
 function trimNumber(value: number, digits: number) {

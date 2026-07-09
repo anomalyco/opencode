@@ -19,7 +19,7 @@ export const ServerRowMenu: Component<{
   const isDefault = () => props.controller.defaultKey() === key
 
   return (
-    <MenuV2 gutter={4} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
+    <MenuV2 gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
       <MenuV2.Trigger
         as={IconButtonV2}
         variant="ghost-muted"

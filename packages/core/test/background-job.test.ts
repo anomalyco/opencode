@@ -1,7 +1,10 @@
 import { describe, expect } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect, Exit, Scope } from "effect"
 import { it } from "./lib/effect"
+
+const jobsLayer = LayerNode.compile(BackgroundJob.node)
 
 describe("BackgroundJob", () => {
   it.live("tracks process-local work through explicit observation", () =>
@@ -25,7 +28,7 @@ describe("BackgroundJob", () => {
         timedOut: false,
         info: { status: "completed", output: "done" },
       })
-    }).pipe(Effect.provide(BackgroundJob.layer)),
+    }).pipe(Effect.provide(jobsLayer)),
   )
 
   it.live("publishes jobs before starting immediately settling work", () =>
@@ -55,7 +58,7 @@ describe("BackgroundJob", () => {
           })
         })
       })
-    }).pipe(Effect.provide(BackgroundJob.layer)),
+    }).pipe(Effect.provide(jobsLayer)),
   )
 
   it.live("increments pending work before starting immediately settling extensions", () =>
@@ -80,7 +83,7 @@ describe("BackgroundJob", () => {
           })
         }),
       )
-    }).pipe(Effect.provide(BackgroundJob.layer)),
+    }).pipe(Effect.provide(jobsLayer)),
   )
 
   it.live("interrupts live work without promising settlement after the owning process-local scope closes", () =>

@@ -4,6 +4,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { LLMRequestPrep } from "@/session/llm/request"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { jsonSchema } from "ai"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -72,7 +73,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBeUndefined()
   })
 
-  test("should set promptCacheKey for openai provider regardless of setCacheKey", () => {
+  test("should set promptCacheKey for openai provider by default", () => {
     const openaiModel = {
       ...mockModel,
       providerID: "openai",
@@ -84,6 +85,56 @@ describe("ProviderTransform.options - setCacheKey", () => {
     }
     const result = ProviderTransform.options({ model: openaiModel, sessionID, providerOptions: {} })
     expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not set promptCacheKey for openai when explicitly disabled", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: { setCacheKey: false },
+    })
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should set promptCacheKey for the xAI SDK by default regardless of provider ID", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "custom-xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({ model: xaiModel, sessionID, providerOptions: {} })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not set promptCacheKey for the xAI SDK when explicitly disabled", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: xaiModel,
+      sessionID,
+      providerOptions: { setCacheKey: false },
+    })
+    expect(result.promptCacheKey).toBeUndefined()
   })
 
   test("should set store=false for openai provider", () => {
@@ -384,7 +435,12 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
         } as any,
         system: [],
         messages: [{ role: "user", content: "Hello" }],
-        tools: {},
+        tools: {
+          lookup: {
+            description: "Look up a value",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+        },
         provider: { id: "azure", options: { useCompletionUrls: true } } as any,
         auth: undefined,
         plugin: {
@@ -399,6 +455,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.params.options.reasoningEffort).toBe("high")
     expect(result.params.options.reasoningSummary).toBeUndefined()
     expect(result.params.options.include).toBeUndefined()
+    expect(result.tools.lookup.strict).toBe(false)
   })
 
   test("gpt-5.1 should have textVerbosity set to low", () => {
@@ -606,6 +663,84 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
+  test("forces reasoning for custom OpenAI package models with explicit effort", () => {
+    const model = createModel({
+      providerID: "meta",
+      api: {
+        id: "muse-spark",
+        url: "https://api.ai.meta.com/v1",
+        npm: "@ai-sdk/openai",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh", reasoningSummary: "auto" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh", reasoningSummary: "auto" },
+    })
+  })
+
+  test("forces reasoning for OpenAI package models marked reasoning-capable", () => {
+    expect(ProviderTransform.providerOptions(createModel(), { store: false })).toEqual({
+      openai: { forceReasoning: true, store: false },
+    })
+  })
+
+  test("forces reasoning for explicit effort even when model is not marked reasoning-capable", () => {
+    const model = createModel({
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("forces reasoning for Azure OpenAI models with explicit effort", () => {
+    const model = createModel({
+      providerID: "azure",
+      api: {
+        id: "custom-gpt-5-deployment",
+        url: "https://azure.openai.example.com/openai/v1",
+        npm: "@ai-sdk/azure",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+      azure: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("forces reasoning for Bedrock Mantle OpenAI models with explicit effort", () => {
+    const model = createModel({
+      providerID: "amazon-bedrock",
+      api: {
+        id: "openai.gpt-5-custom",
+        url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
+  test("overrides forceReasoning false when reasoning should be forced", () => {
+    expect(
+      ProviderTransform.providerOptions(createModel(), { forceReasoning: false, reasoningEffort: "xhigh" }),
+    ).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "xhigh" },
+    })
+  })
+
   test("uses gateway model provider slug for gateway models", () => {
     const model = createModel({
       providerID: "vercel",
@@ -700,7 +835,7 @@ describe("ProviderTransform.providerOptions", () => {
     })
 
     expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium" })).toEqual({
-      openai: { reasoningEffort: "medium" },
+      openai: { forceReasoning: true, reasoningEffort: "medium" },
     })
   })
 
@@ -2261,6 +2396,82 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
   })
 
+  test("strips GitHub Copilot itemId from the copilot namespace, preserving other copilot options", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking...",
+            providerOptions: {
+              copilot: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+            },
+          },
+          {
+            // The stale itemId on tool-call parts is what Copilot echoes back as the
+            // `function_call` item `id`, which is what the upstream connection rejects.
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "bash",
+            input: { command: "ls" },
+            providerOptions: {
+              copilot: { itemId: "fc_456", reasoningEffort: "medium" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.copilot?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[1].providerOptions?.copilot?.reasoningEffort).toBe("medium")
+  })
+
+  test("leaves a stray openai namespace on a Copilot model untouched, since Copilot's Responses model only reads the copilot namespace", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              openai: { itemId: "msg_456" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_456")
+  })
+
   test("preserves metadata for openai package when store is true", () => {
     const msgs = [
       {
@@ -3128,7 +3339,7 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
     })
 
-    test("grok-4 returns empty object", () => {
+    test("grok-4 uses the provider's standard efforts", () => {
       const model = createMockModel({
         id: "openrouter/grok-4",
         providerID: "openrouter",
@@ -3139,7 +3350,8 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(result).toEqual({})
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.medium).toEqual({ reasoning: { effort: "medium" } })
     })
 
     test("grok-3-mini returns low and high with reasoning", () => {
@@ -3268,6 +3480,27 @@ describe("ProviderTransform.variants", () => {
         providerID: "gateway",
         api: {
           id: "anthropic/claude-opus-4-8",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "high",
+      })
+    })
+
+    test("anthropic sonnet 5 returns adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-5",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-5",
           url: "https://gateway.ai",
           npm: "@ai-sdk/gateway",
         },
@@ -3534,18 +3767,19 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/xai", () => {
-    test("grok-3 returns empty object", () => {
+    test("grok-4.5 uses standard reasoning efforts", () => {
       const model = createMockModel({
-        id: "xai/grok-3",
+        id: "xai/grok-4.5",
         providerID: "xai",
         api: {
-          id: "grok-3",
+          id: "grok-4.5",
           url: "https://api.x.ai",
           npm: "@ai-sdk/xai",
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(result).toEqual({})
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.medium).toEqual({ reasoningEffort: "medium" })
     })
 
     test("grok-3-mini returns low and high with reasoningEffort", () => {
@@ -3871,6 +4105,12 @@ describe("ProviderTransform.variants", () => {
         expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       },
       {
+        name: "sonnet 5",
+        apiIds: ["claude-sonnet-5", "claude-sonnet-5-20260630"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
         name: "fable 5",
         apiIds: ["claude-fable-5"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
@@ -3967,6 +4207,28 @@ describe("ProviderTransform.variants", () => {
         effort: "high",
       })
     })
+
+    test("sonnet 5 uses adaptive reasoning for Vertex model IDs", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "google-vertex-anthropic/claude-sonnet-5@default",
+          providerID: "google-vertex-anthropic",
+          api: {
+            id: "claude-sonnet-5@default",
+            url: "https://us-central1-aiplatform.googleapis.com",
+            npm: "@ai-sdk/google-vertex/anthropic",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "high",
+      })
+    })
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {
@@ -4025,6 +4287,28 @@ describe("ProviderTransform.variants", () => {
           providerID: "bedrock",
           api: {
             id: "anthropic.claude-opus-4.8",
+            url: "https://bedrock.amazonaws.com",
+            npm: "@ai-sdk/amazon-bedrock",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "high",
+          display: "summarized",
+        },
+      })
+    })
+
+    test("anthropic sonnet 5 returns adaptive reasoning options with xhigh", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "bedrock/anthropic-claude-sonnet-5",
+          providerID: "bedrock",
+          api: {
+            id: "anthropic.claude-sonnet-5",
             url: "https://bedrock.amazonaws.com",
             npm: "@ai-sdk/amazon-bedrock",
           },
@@ -4222,6 +4506,12 @@ describe("ProviderTransform.variants", () => {
         efforts: ["low", "medium", "high", "xhigh", "max"],
         thinking: { type: "adaptive", display: "summarized" },
       },
+      {
+        name: "sonnet 5",
+        apiIds: ["anthropic--claude-sonnet-5", "anthropic--claude-5-sonnet"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        thinking: { type: "adaptive", display: "summarized" },
+      },
     ]) {
       for (const apiId of testCase.apiIds) {
         test(`${testCase.name} ${apiId} returns adaptive thinking variants under modelParams`, () => {
@@ -4400,12 +4690,12 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
   }
 })
 
-test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weakest effort is low", () => {
+test("ProviderTransform.smallOptions preserves the weakest OpenRouter reasoning effort", () => {
   expect(
     ProviderTransform.smallOptions({
       providerID: "openrouter",
       api: {
-        id: "anthropic/claude-sonnet-4.6",
+        id: "google/gemini-3.5-flash",
         npm: "@openrouter/ai-sdk-provider",
       },
       variants: {
@@ -4414,7 +4704,7 @@ test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weak
         high: { reasoning: { effort: "high" } },
       },
     } as any),
-  ).toEqual({ reasoning: { effort: "none" } })
+  ).toEqual({ reasoning: { effort: "low" } })
 })
 
 describe("ProviderTransform.smallOptions - google thinking controls", () => {
