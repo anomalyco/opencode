@@ -1,6 +1,6 @@
 export * as SkillTool from "./skill"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
@@ -13,11 +13,11 @@ export const name = "skill"
 const FILE_LIMIT = 10
 
 export const Input = Schema.Struct({
-  name: Schema.String.annotate({ description: "The name of the skill from the available skills list" }),
+  id: SkillV2.ID.annotate({ description: "The ID of the skill from the available skills list" }),
 })
 
 export const Output = Schema.Struct({
-  name: Schema.String,
+  name: SkillV2.Name,
   directory: Schema.String,
   output: Schema.String,
 })
@@ -27,7 +27,7 @@ export const description = [
   "",
   "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
   "",
-  "The skill name must match one of the available skills in the instructions.",
+  "The skill ID must match one of the available skills in the instructions.",
 ].join("\n")
 
 export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>) => {
@@ -70,13 +70,13 @@ export const Plugin = {
             execute: (input, context) =>
               Effect.gen(function* () {
                 const current = yield* skills.list()
-                const skill = current.find((skill) => skill.name === input.name)
-                if (!skill) return yield* unableToLoad(input.name)
+                const skill = current.find((skill) => skill.id === input.id)
+                if (!skill) return yield* unableToLoad(input.id)
                 return yield* Effect.gen(function* () {
                   yield* permission.assert({
                     action: name,
-                    resources: [skill.name],
-                    save: [skill.name],
+                    resources: [skill.id],
+                    save: [skill.id],
                     sessionID: context.sessionID,
                     agent: context.agent,
                     source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
@@ -94,7 +94,7 @@ export const Plugin = {
                     directory,
                     output: toModelOutput(skill, files),
                   }
-                }).pipe(Effect.mapError((error) => unableToLoad(input.name, error)))
+                }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
               }),
           }),
         ),

@@ -6,6 +6,7 @@ test("exposes every standard HTTP API group", () => {
 
   expect(Object.keys(client)).toEqual([
     "health",
+    "server",
     "location",
     "agent",
     "plugin",
@@ -33,21 +34,31 @@ test("exposes every standard HTTP API group", () => {
     "debug",
   ])
   expect(Object.keys(client.debug)).toEqual(["location"])
+  expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
   expect(Object.keys(client.message)).toEqual(["list"])
-  expect(Object.keys(client.integration)).toEqual([
-    "list",
-    "get",
-    "connectKey",
-    "connectOauth",
-    "attemptStatus",
-    "attemptComplete",
-    "attemptCancel",
-  ])
+  expect(Object.keys(client.integration)).toEqual(["list", "get", "connect", "attempt"])
+  expect(Object.keys(client.integration.connect)).toEqual(["key", "oauth"])
+  expect(Object.keys(client.integration.attempt)).toEqual(["status", "complete", "cancel"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.vcs)).toEqual(["status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+})
+
+test("server.get uses the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({ urls: ["http://192.168.1.10:4096"] })
+    },
+  })
+
+  expect(await client.server.get()).toEqual({ urls: ["http://192.168.1.10:4096"] })
+  expect(request?.method).toBe("GET")
+  expect(request?.url).toBe("http://localhost:3000/api/server")
 })
 
 test("MCP resource catalog uses the public HTTP contract", async () => {
@@ -66,7 +77,7 @@ test("MCP resource catalog uses the public HTTP contract", async () => {
     },
   })
 
-  const result = await client["server.mcp"].catalog({ location: { directory: "/tmp/project" } })
+  const result = await client["server.mcp"].resource.catalog({ location: { directory: "/tmp/project" } })
 
   expect(result.data.resources[0]?.uri).toBe("docs://readme")
   expect(request?.method).toBe("GET")
@@ -263,6 +274,7 @@ test("session methods use the public HTTP contract", async () => {
         })
       }
       if (url.includes("/prompt")) return Response.json(admission)
+      if (url.includes("/synthetic")) return Response.json(syntheticAdmission)
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
@@ -283,7 +295,13 @@ test("session methods use the public HTTP contract", async () => {
   })
   const admitted = await client.session.prompt({
     sessionID: "ses_test",
-    prompt: { text: "Hello" },
+    text: "Hello",
+    resume: false,
+  })
+  const synthetic = await client.session.synthetic({
+    sessionID: "ses_test",
+    text: "Completed",
+    delivery: "queue",
     resume: false,
   })
   await client.session.compact({ sessionID: "ses_test" })
@@ -298,6 +316,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(active).toEqual({ ses_test: { type: "running" } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
+  expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])
   expect(log).toEqual([modelSwitchedEvent, synced])
   expect(message).toEqual(modelSwitchedMessage)
@@ -308,6 +327,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/agent"],
     ["POST", "http://localhost:3000/api/session/ses_test/model"],
     ["POST", "http://localhost:3000/api/session/ses_test/prompt"],
+    ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
@@ -318,7 +338,14 @@ test("session methods use the public HTTP contract", async () => {
   const body = requests.find((request) => request.url.endsWith("/api/session/ses_test/prompt"))?.init?.body
   if (typeof body !== "string") throw new Error("Expected JSON request body")
   expect(JSON.parse(body)).toEqual({
-    prompt: { text: "Hello" },
+    text: "Hello",
+    resume: false,
+  })
+  const syntheticBody = requests.find((request) => request.url.endsWith("/synthetic"))?.init?.body
+  if (typeof syntheticBody !== "string") throw new Error("Expected JSON synthetic request body")
+  expect(JSON.parse(syntheticBody)).toEqual({
+    text: "Completed",
+    delivery: "queue",
     resume: false,
   })
 })
@@ -381,8 +408,21 @@ const admission = {
     admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
-    prompt: { text: "Hello" },
+    type: "user",
+    data: { text: "Hello" },
     delivery: "steer",
+    timeCreated: 1_717_171_717_000,
+  },
+}
+
+const syntheticAdmission = {
+  data: {
+    admittedSeq: 1,
+    id: "msg_synthetic",
+    sessionID: "ses_test",
+    type: "synthetic",
+    data: { text: "Completed" },
+    delivery: "queue",
     timeCreated: 1_717_171_717_000,
   },
 }

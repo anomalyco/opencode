@@ -18,7 +18,7 @@ This does not mean removing SQLite or Drizzle everywhere in one step. The smalle
 
 ## Current Inventory
 
-Production imports from `packages/opencode/src/storage/db.ts` are concentrated in 22 source files:
+Production imports from `packages/opencode/src/storage/db.ts` are concentrated in 21 source files:
 
 - `packages/opencode/src/account/repo.ts`
 - `packages/opencode/src/cli/cmd/db.ts`
@@ -36,13 +36,12 @@ Production imports from `packages/opencode/src/storage/db.ts` are concentrated i
 - `packages/opencode/src/session/projectors.ts`
 - `packages/opencode/src/session/prompt.ts`
 - `packages/opencode/src/session/session.ts`
-- `packages/opencode/src/session/todo.ts`
 - `packages/opencode/src/share/share-next.ts`
 - `packages/opencode/src/storage/db.ts`
 - `packages/opencode/src/sync/index.ts`
 - `packages/opencode/src/worktree/index.ts`
 
-There are 65 direct API/type references in those files. The references fall into the groups below.
+There are 63 direct API/type references in those files. The references fall into the groups below.
 
 ## Group 1: Database Runtime And Startup
 
@@ -151,7 +150,6 @@ Files:
 - `packages/opencode/src/session/session.ts`
 - `packages/opencode/src/session/message-v2.ts`
 - `packages/opencode/src/session/prompt.ts`
-- `packages/opencode/src/session/todo.ts`
 - `packages/opencode/src/session/projectors.ts`
 
 Current usage:
@@ -159,7 +157,6 @@ Current usage:
 - `session/session.ts` uses `Database.use` for session reads, list queries, children, part lookup, and global list helpers.
 - `session/message-v2.ts` uses `Database.use` to page messages, hydrate parts, fetch one message, and fetch parts.
 - `session/prompt.ts` imports `eq` from `@/storage/db` and reads current prompt-related session/message rows directly.
-- `session/todo.ts` uses `Database.transaction` for todo replacement and `Database.use` for list reads.
 - `session/projectors.ts` uses `TxOrDb` for session/message usage projection helpers.
 
 Why this group should be split:
@@ -171,7 +168,6 @@ Why this group should be split:
 Target shape:
 
 - Create or use a session/message read module with Effect-native methods for `get`, `list`, `page`, `parts`, and prompt assembly reads.
-- Move todo persistence either into a session todo repository or into the sync event projection path.
 - Convert `session/projectors.ts` only after Group 2 defines the replacement projector transaction type.
 
 Suggested order:
@@ -179,7 +175,6 @@ Suggested order:
 - Migrate `session/message-v2.ts` reads first because the module already centralizes message pagination and hydration.
 - Migrate `session/session.ts` read helpers next.
 - Migrate `session/prompt.ts` after message/session reads exist, and import drizzle operators from `drizzle-orm` if any direct SQL remains temporarily.
-- Migrate `session/todo.ts` writes with the sync transaction work or move them behind a repository.
 
 ## Group 5: Legacy CLI And One-Off Admin Reads
 

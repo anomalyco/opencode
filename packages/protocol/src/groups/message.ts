@@ -27,7 +27,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       params: { sessionID: Session.ID },
       query: SessionMessagesQuery,
       success: Schema.Struct({
-        data: Schema.Array(SessionMessage.Message),
+        data: Schema.Array(SessionMessage.Info),
         cursor: Schema.Struct({
           previous: Schema.String.pipe(Schema.optional),
           next: Schema.String.pipe(Schema.optional),
@@ -36,7 +36,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.session.messages",
+        identifier: "v2.message.list",
         summary: "Get session messages",
         description:
           "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",

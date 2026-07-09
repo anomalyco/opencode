@@ -182,12 +182,12 @@ describe("PermissionV2", () => {
       const agents = yield* AgentV2.Service
       yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
-          agent.permissions = [{ action: "todowrite", resource: "*", effect: "allow" }]
+          agent.permissions = [{ action: "custom", resource: "*", effect: "allow" }]
         }),
       )
 
       const service = yield* PermissionV2.Service
-      expect(yield* service.ask(assertion({ action: "todowrite", resources: ["*"] }))).toEqual({
+      expect(yield* service.ask(assertion({ action: "custom", resources: ["*"] }))).toEqual({
         id: PermissionV2.ID.create("per_test"),
         effect: "allow",
       })

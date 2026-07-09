@@ -5,13 +5,14 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
+const build = AgentV2.defaultID
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {
@@ -19,7 +20,7 @@ describe("toLLMMessages", () => {
       SessionMessage.Assistant.make({
         id: id(value),
         type: "assistant",
-        agent: "build",
+        agent: build,
         model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
         content,
         time: { created, completed: created },
@@ -56,7 +57,7 @@ describe("toLLMMessages", () => {
         SessionMessage.AgentSelected.make({
           id: id("agent"),
           type: "agent-switched",
-          agent: "build",
+          agent: build,
           time: { created },
         }),
         SessionMessage.ModelSelected.make({
@@ -82,24 +83,16 @@ describe("toLLMMessages", () => {
         SessionMessage.Synthetic.make({
           id: id("synthetic"),
           type: "synthetic",
-          sessionID: SessionV2.ID.make("ses_translate"),
           text: "Synthetic context",
           time: { created },
         }),
         SessionMessage.Shell.make({
           id: id("shell"),
           type: "shell",
-          shell: Shell.Info.make({
-            id: Shell.ID.make("sh_test"),
-            status: "exited",
-            command: "pwd",
-            cwd: "/project",
-            shell: "/bin/sh",
-            file: "/tmp/sh_test.out",
-            exit: 0,
-            metadata: {},
-            time: { started: 0, completed: 0 },
-          }),
+          shellID: Shell.ID.make("sh_test"),
+          status: "exited",
+          command: "pwd",
+          exit: 0,
           output: { output: "/project", cursor: 8, size: 8, truncated: false },
           time: { created, completed: created },
         }),
@@ -151,7 +144,7 @@ Recent work
     ])
   })
 
-  test("lowers text attachments as separate user messages", () => {
+  test("lowers text attachments after the prompt in one user message", () => {
     const file = FileAttachment.make({
       data: Base64.make(Buffer.from("export const value = 1").toString("base64")),
       mime: "text/plain",
@@ -171,21 +164,18 @@ Recent work
       model,
     )
 
-    expect(messages).toHaveLength(2)
+    expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: "Attached file: main.ts\n\nexport const value = 1",
-        },
-      ],
-      metadata: { attachment: { source: file.source, name: "main.ts" } },
-    })
-    expect(messages[1]).toMatchObject({
       id: id("user-text-file"),
       role: "user",
-      content: [{ type: "text", text: "Review this file" }],
+      content: [
+        { type: "text", text: "Review this file" },
+        {
+          type: "text",
+          text: "\n\nAttached file: main.ts\n\nexport const value = 1",
+          metadata: { attachment: { source: file.source, name: "main.ts" } },
+        },
+      ],
     })
   })
 
@@ -210,10 +200,11 @@ Recent work
       model,
     )
 
-    expect(messages[0]?.content).toEqual([
+    expect(messages[0]?.content).toMatchObject([
+      { type: "text", text: "Review this file" },
       {
         type: "text",
-        text: "Attached file: inline.txt\n\ninline content",
+        text: "\n\nAttached file: inline.txt\n\ninline content",
       },
     ])
   })
@@ -238,13 +229,79 @@ Recent work
       model,
     )
 
-    expect(messages).toHaveLength(2)
+    expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
+      id: id("user-directory"),
       role: "user",
-      content: [{ type: "text", text: "Attached directory: src/\n\nlib/\nindex.ts" }],
-      metadata: { attachment: { source: directory.source, name: "src/" } },
+      content: [
+        { type: "text", text: "Review this directory" },
+        {
+          type: "text",
+          text: "\n\nAttached directory: src/\n\nlib/\nindex.ts",
+          metadata: { attachment: { source: directory.source, name: "src/" } },
+        },
+      ],
     })
-    expect(messages[1]?.content).toEqual([{ type: "text", text: "Review this directory" }])
+  })
+
+  test("preserves attachment order after the prompt", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-mixed-files"),
+          type: "user",
+          text: "Review these attachments",
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("index.ts").toString("base64")),
+              mime: "application/x-directory",
+              source: { type: "uri", uri: "file:///project/src" },
+              name: "src/",
+            }),
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("export const value = 1").toString("base64")),
+              mime: "text/plain",
+              source: { type: "uri", uri: "file:///project/main.ts" },
+              name: "main.ts",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.content.map((part) => (part.type === "text" ? part.text : part.type))).toEqual([
+      "Review these attachments",
+      "\n\nAttached directory: src/\n\nindex.ts",
+      "\n\nAttached file: main.ts\n\nexport const value = 1",
+    ])
+  })
+
+  test("omits empty prompt text before an attachment", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-attachment-only"),
+          type: "user",
+          text: "",
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("index.ts").toString("base64")),
+              mime: "application/x-directory",
+              source: { type: "uri", uri: "file:///project/src" },
+              name: "src/",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.content).toMatchObject([{ type: "text", text: "\n\nAttached directory: src/\n\nindex.ts" }])
   })
 
   test("uses materialized image data as provider media and drops unsupported attachments", () => {
@@ -282,7 +339,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantText.make({ type: "text", text: "Checking" }),
@@ -295,7 +352,7 @@ Recent work
               type: "tool",
               id: "pending",
               name: "read",
-              state: SessionMessage.ToolStatePending.make({ status: "pending", input: '{"path":"README.md"}' }),
+              state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input: '{"path":"README.md"}' }),
               time: { created },
             }),
             SessionMessage.AssistantTool.make({
@@ -437,7 +494,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-openai-reasoning"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -461,13 +518,41 @@ Recent work
     ])
   })
 
+  test("replays flat state under an OpenCode hosted model's route key", () => {
+    const opencode = ModelV2.Ref.make({ id: ModelV2.ID.make("claude-fable-5"), providerID: ProviderV2.ID.opencode })
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-opencode-reasoning"),
+          type: "assistant",
+          agent: build,
+          model: opencode,
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Think",
+              state: { signature: "signed" },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      opencode,
+      "anthropic",
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
+    ])
+  })
+
   test("lowers failed assistant reasoning to text", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-failed"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -536,7 +621,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -631,7 +716,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-alias"),
           type: "assistant",
-          agent: "build",
+          agent: build,
           model: { id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({

@@ -154,7 +154,6 @@ OpenCode-serveren viser følgende API'er.
 | `DELETE` | `/session/:id`                           | Slet en session og alle dens data          | Returnerer `boolean`                                                                  |
 | `PATCH`  | `/session/:id`                           | Opdater sessionegenskaber                  | body: `{ title? }`, returnerer <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | Få en sessions undersessioner              | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
-| `GET`    | `/session/:id/todo`                      | Få to-do-listen for en session             | Returnerer <a href={typesUrl}><code>Todo[]</code></a>                                 |
 | `POST`   | `/session/:id/init`                      | Analyser appen og lav `AGENTS.md`          | body: `{ messageID, providerID, modelID }`, returnerer `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Fork en eksisterende session ved en besked | body: `{ messageID? }`, returnerer <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Afbryd en kørende session                  | Returnerer `boolean`                                                                  |

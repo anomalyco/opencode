@@ -1,7 +1,7 @@
 export * as GlobTool from "./glob"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { FileSystem } from "../filesystem"

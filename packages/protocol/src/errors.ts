@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Skill } from "@opencode-ai/schema/skill"
 
 export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestError>()(
   "InvalidRequestError",
@@ -83,7 +84,7 @@ export class MessageNotFoundError extends Schema.TaggedErrorClass<MessageNotFoun
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()(
   "SkillNotFoundError",
   {
-    skill: Schema.String,
+    skill: Skill.ID,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

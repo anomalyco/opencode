@@ -56,7 +56,7 @@ describe("Snapshot", () => {
             const plan = new Map([[RelativePath.make("scope/tracked.txt"), before]])
             const preview = yield* snapshot.preview({ files: plan, context: 1 })
             expect(preview).toHaveLength(1)
-            expect(preview[0]?.path).toBe(RelativePath.make("scope/tracked.txt"))
+            expect(preview[0]?.file).toBe(RelativePath.make("scope/tracked.txt"))
             yield* snapshot.restore({ files: plan })
             expect(yield* read(path.join(location, "tracked.txt"))).toBe("one\n")
             expect(yield* read(path.join(location, "added.txt"))).toBe("added\n")

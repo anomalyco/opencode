@@ -1,5 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
+import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
@@ -51,23 +52,31 @@ describe("ModelsDevPlugin", () => {
                   temperature: true,
                   tool_call: true,
                   cost: {
-                    input: 2.5,
-                    output: 15,
+                    input: Money.USDPerMillionTokens.make(2.5),
+                    output: Money.USDPerMillionTokens.make(15),
                     tiers: [
                       {
                         tier: { type: "context", size: 272_000 },
-                        input: 3,
-                        output: 18,
-                        cache_read: 0.25,
+                        input: Money.USDPerMillionTokens.make(3),
+                        output: Money.USDPerMillionTokens.make(18),
+                        cache_read: Money.USDPerMillionTokens.make(0.25),
                       },
                     ],
-                    context_over_200k: { input: 5, output: 22.5, cache_read: 0.5 },
+                    context_over_200k: {
+                      input: Money.USDPerMillionTokens.make(5),
+                      output: Money.USDPerMillionTokens.make(22.5),
+                      cache_read: Money.USDPerMillionTokens.make(0.5),
+                    },
                   },
                   limit: { context: 1_050_000, input: 922_000, output: 128_000 },
                   experimental: {
                     modes: {
                       fast: {
-                        cost: { input: 5, output: 30, cache_read: 0.5 },
+                        cost: {
+                          input: Money.USDPerMillionTokens.make(5),
+                          output: Money.USDPerMillionTokens.make(30),
+                          cache_read: Money.USDPerMillionTokens.make(0.5),
+                        },
                         provider: {
                           headers: { "x-mode": "fast" },
                           body: { service_tier: "priority" },
@@ -107,18 +116,31 @@ describe("ModelsDevPlugin", () => {
         variants: [],
       })
       expect(fast?.cost).toEqual([
-        { input: 5, output: 30, cache: { read: 0.5, write: 0 } },
+        {
+          input: Money.USDPerMillionTokens.make(5),
+          output: Money.USDPerMillionTokens.make(30),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.5),
+            write: Money.USDPerMillionTokens.zero,
+          },
+        },
         {
           tier: { type: "context", size: 272_000 },
-          input: 3,
-          output: 18,
-          cache: { read: 0.25, write: 0 },
+          input: Money.USDPerMillionTokens.make(3),
+          output: Money.USDPerMillionTokens.make(18),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.25),
+            write: Money.USDPerMillionTokens.zero,
+          },
         },
         {
           tier: { type: "context", size: 200_000 },
-          input: 5,
-          output: 22.5,
-          cache: { read: 0.5, write: 0 },
+          input: Money.USDPerMillionTokens.make(5),
+          output: Money.USDPerMillionTokens.make(22.5),
+          cache: {
+            read: Money.USDPerMillionTokens.make(0.5),
+            write: Money.USDPerMillionTokens.zero,
+          },
         },
       ])
     }),

@@ -106,6 +106,32 @@ const gateway = CloudflareAIGateway.configure({
 
 Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible helpers for DeepSeek, Cerebras, Groq, Fireworks, Together, etc.
 
+### Package-like entrypoints
+
+Native catalog integrations load provider behavior through package-like entrypoints. These are export paths from the same `@opencode-ai/llm` npm package, not independently published packages. Each entrypoint exports the same `model(modelID, settings)` contract, and `settings` contains serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+
+```ts
+import { model } from "@opencode-ai/llm/providers/openai/responses"
+
+const selected = model("gpt-5", {
+  apiKey: process.env.OPENAI_API_KEY,
+  transport: "websocket",
+  headers: { "x-application": "opencode" },
+  limits: { context: 200_000, output: 64_000 },
+})
+```
+
+OpenAI Chat and OpenAI Responses are separate semantic entrypoints:
+
+- `@opencode-ai/llm/providers/openai/chat`
+- `@opencode-ai/llm/providers/openai/responses`
+
+Responses HTTP versus WebSocket is a scoped `transport` setting on the Responses entrypoint, not another entrypoint. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Anthropic, OpenAI-compatible Chat, Google Gemini, and Amazon Bedrock expose their single native API through their existing provider paths.
+
+Provider facades such as `OpenAI.configure(...).responses(...)` remain the direct application API. Package-like entrypoints are the self-similar loading contract used when a catalog selects behavior by export path.
+
+Other provider exports listed above remain direct facades until they explicitly implement the package-like contract. Exporting a provider facade does not implicitly make it a catalog-loadable provider package.
+
 ## Provider options & HTTP overlays
 
 Three escape hatches in order of stability:

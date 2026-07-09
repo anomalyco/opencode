@@ -8,7 +8,8 @@ import { SkillV2 } from "../skill"
 import { Instructions } from "../instructions/index"
 
 const Summary = Schema.Struct({
-  name: Schema.String,
+  id: SkillV2.ID,
+  name: SkillV2.Name,
   description: Schema.String,
 })
 type Summary = typeof Summary.Type
@@ -16,6 +17,7 @@ type Summary = typeof Summary.Type
 const entries = (skills: ReadonlyArray<Summary>) =>
   skills.flatMap((skill) => [
     "  <skill>",
+    `    <id>${skill.id}</id>`,
     `    <name>${skill.name}</name>`,
     `    <description>${skill.description}</description>`,
     "  </skill>",
@@ -34,8 +36,8 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
   const diff = Instructions.diffByKey(
     previous,
     current,
-    (skill) => skill.name,
-    (before, after) => before.description !== after.description,
+    (skill) => skill.id,
+    (before, after) => before.name !== after.name || before.description !== after.description,
   )
   // Additions and removals render as small deltas; anything else restates the full list.
   if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
@@ -50,7 +52,7 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     ...(diff.removed.length === 0
       ? []
       : [
-          `The following skills are no longer available and must not be used: ${diff.removed.map((skill) => skill.name).join(", ")}.`,
+          `The following skill IDs are no longer available and must not be used: ${diff.removed.map((skill) => skill.id).join(", ")}.`,
         ]),
   ].join("\n")
 }
@@ -77,9 +79,9 @@ const layer = Layer.effect(
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
               ? []
-              : [{ name: skill.name, description: skill.description }],
+              : [{ id: skill.id, name: skill.name, description: skill.description }],
           )
-          .toSorted((a, b) => a.name.localeCompare(b.name))
+          .toSorted((a, b) => a.id.localeCompare(b.id))
         return Instructions.make({
           key: Instructions.Key.make("core/skill-guidance"),
           codec: Schema.toCodecJson(Schema.Array(Summary)),

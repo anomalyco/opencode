@@ -42,11 +42,6 @@ describe("H2: string property access reads as undefined (not a throw)", () => {
   test("unknown property on a number is undefined", async () => {
     expect(await value(`return (5).foo ?? "n"`)).toBe("n")
   })
-
-  test("supported string methods still work", async () => {
-    expect(await value(`return "AB".toLowerCase()`)).toBe("ab")
-    expect(await value(`return "hello".length`)).toBe(5)
-  })
 })
 
 describe("H3: array property access reads as undefined (not a throw)", () => {
@@ -63,8 +58,7 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
     expect(await value(`return [1,2,3].toSpliced === undefined`)).toBe(true)
   })
 
-  test("supported array methods and indexing still work", async () => {
-    expect(await value(`return [1,2,3].map(x => x + 1)`)).toEqual([2, 3, 4])
+  test("array indexing still works", async () => {
     expect(await value(`return [1,2,3][9] === undefined`)).toBe(true)
     expect(await value(`return [1,2,3][9]`)).toBeNull()
   })
@@ -202,9 +196,6 @@ describe("Error values and instanceof", () => {
       "TypeError",
       true,
     ])
-    expect(await value(`try { "a".normalize("NOPE") } catch (e) { return [e.name, e instanceof RangeError] }`)).toEqual(
-      ["RangeError", true],
-    )
     expect(await value(`try { "a".match("(") } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
       "SyntaxError",
       true,
@@ -263,55 +254,18 @@ describe("Error values and instanceof", () => {
   })
 })
 
-describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
-  test("sort and reverse mutate and return the receiver", async () => {
+describe("CodeMode-specific array behavior", () => {
+  test("sort with a comparator mutates and returns the receiver", async () => {
     expect(
       await value(`
-        const sorted = [3, 1, 2]
-        const sortResult = sorted.sort((a, b) => a - b)
-        const reversed = [1, 2, 3]
-        const reverseResult = reversed.reverse()
-        return { sorted, sameSort: sorted === sortResult, reversed, sameReverse: reversed === reverseResult }
+        const input = [3, 1, 2]
+        const result = input.sort((a, b) => a - b)
+        return { input, same: input === result }
       `),
-    ).toEqual({ sorted: [1, 2, 3], sameSort: true, reversed: [3, 2, 1], sameReverse: true })
+    ).toEqual({ input: [1, 2, 3], same: true })
   })
 
-  test("array callbacks receive the receiver and observe later mutations", async () => {
-    expect(
-      await value(`
-        const values = [1, 2, 3]
-        const seen = values.map((value, index, receiver) => {
-          if (index === 0) values[1] = 9
-          return [value, receiver === values]
-        })
-        return seen
-      `),
-    ).toEqual([
-      [1, true],
-      [9, true],
-      [3, true],
-    ])
-    expect(
-      await value(`
-        const values = [1, 2, 3]
-        const seen = []
-        values.forEach((value, index) => {
-          seen.push(value)
-          if (index === 0) values.pop()
-        })
-        return seen
-      `),
-    ).toEqual([1, 2])
-  })
-
-  test("splice removes in place and returns the removed elements", async () => {
-    expect(await value(`const a = [1,2,3,4]; const removed = a.splice(1, 2); return { removed, a }`)).toEqual({
-      removed: [2, 3],
-      a: [1, 4],
-    })
-  })
-
-  test("splice inserts new elements at the cut", async () => {
+  test("splice can replace and insert elements", async () => {
     expect(await value(`const a = ["a","d"]; a.splice(1, 0, "b", "c"); return a`)).toEqual(["a", "b", "c", "d"])
     expect(await value(`const a = [1,2,3]; const removed = a.splice(1, 1, "x"); return { removed, a }`)).toEqual({
       removed: [2],
@@ -319,30 +273,10 @@ describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
     })
   })
 
-  test("splice with one argument removes to the end; negative start counts back", async () => {
-    expect(await value(`const a = [1,2,3]; const removed = a.splice(1); return { removed, a }`)).toEqual({
-      removed: [2, 3],
-      a: [1],
-    })
-    expect(await value(`const a = [1,2,3]; const removed = a.splice(-1); return { removed, a }`)).toEqual({
-      removed: [3],
-      a: [1, 2],
-    })
-  })
-
   test("splice rejects inserting a container into itself", async () => {
     const err = await error(`const a = [1]; a.splice(0, 0, [a]); return a`)
     expect(err.kind).toBe("InvalidDataValue")
     expect(err.message).toContain("circular")
-  })
-
-  test("fill overwrites a range and returns the mutated array", async () => {
-    expect(await value(`const a = [1,2,3,4]; return a.fill(0, 1, 3)`)).toEqual([1, 0, 0, 4])
-    expect(await value(`return [1,2,3].fill("z")`)).toEqual(["z", "z", "z"])
-  })
-
-  test("copyWithin copies a range in place", async () => {
-    expect(await value(`return [1,2,3,4,5].copyWithin(0, 3)`)).toEqual([4, 5, 3, 4, 5])
   })
 
   test("keys/values/entries return arrays usable with for...of and spread", async () => {
@@ -359,16 +293,9 @@ describe("array methods: splice, fill, copyWithin, keys/values/entries", () => {
   })
 })
 
-describe("string methods: localeCompare, normalize, trim aliases", () => {
+describe("CodeMode-specific string behavior", () => {
   test("localeCompare orders strings for sorting", async () => {
     expect(await value(`return ["b","a","c"].sort((x, y) => x.localeCompare(y))`)).toEqual(["a", "b", "c"])
-    expect(await value(`return "a".localeCompare("a")`)).toBe(0)
-  })
-
-  test("normalize applies unicode normalization forms", async () => {
-    expect(await value(`return "\\u0065\\u0301".normalize("NFC").length`)).toBe(1)
-    expect(await value(`return "\\u00e9".normalize("NFD").length`)).toBe(2)
-    expect(await value(`return "x".normalize() === "x"`)).toBe(true)
   })
 
   test("an invalid normalize form is a clear catchable error", async () => {
@@ -451,11 +378,6 @@ describe("H5: builtin coercion functions work as array callbacks", () => {
 
   test("map(String) coerces each element", async () => {
     expect(await value(`return [1, 2, 3].map(String)`)).toEqual(["1", "2", "3"])
-  })
-
-  test("arrow callbacks still work (no regression)", async () => {
-    expect(await value(`return [1, 2, 3, 4].filter(x => x % 2 === 0)`)).toEqual([2, 4])
-    expect(await value(`return [1, 2, 3].reduce((a, b) => a + b, 0)`)).toBe(6)
   })
 
   test("a non-callable callback is still rejected", async () => {

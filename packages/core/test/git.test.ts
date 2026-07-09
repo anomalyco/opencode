@@ -146,7 +146,7 @@ describe("Git trees", () => {
         RelativePath.make("scope/tracked.txt"),
       ])
       const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 1 })
-      expect(diffs.map((item) => [item.path, item.status])).toEqual([
+      expect(diffs.map((item) => [item.file, item.status])).toEqual([
         [RelativePath.make("scope/added.txt"), "added"],
         [RelativePath.make("scope/tracked.txt"), "modified"],
       ])
@@ -154,7 +154,7 @@ describe("Git trees", () => {
       const files = new Map([[RelativePath.make("scope/tracked.txt"), before]])
       const preview = yield* git.tree.preview({ repository, current: after, files, context: 1 })
       expect(preview).toHaveLength(1)
-      expect(preview[0]?.path).toBe(RelativePath.make("scope/tracked.txt"))
+      expect(preview[0]?.file).toBe(RelativePath.make("scope/tracked.txt"))
       yield* git.tree.restore({ repository, files })
       expect(yield* read(path.join(root.path, "scope", "tracked.txt"))).toBe("one\n")
       expect(yield* read(path.join(root.path, "scope", "added.txt"))).toBe("added\n")

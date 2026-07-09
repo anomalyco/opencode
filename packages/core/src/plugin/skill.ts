@@ -33,7 +33,8 @@ export const Plugin = define({
         SkillV2.EmbeddedSource.make({
           type: "embedded",
           skill: SkillV2.Info.make({
-            name: "opencode",
+            id: SkillV2.ID.make("opencode"),
+            name: SkillV2.Name.make("OpenCode"),
             description: OpencodeDescription,
             location: AbsolutePath.make("/builtin/opencode.md"),
             content: OpencodeContent,
@@ -44,7 +45,8 @@ export const Plugin = define({
         SkillV2.EmbeddedSource.make({
           type: "embedded",
           skill: SkillV2.Info.make({
-            name: "report",
+            id: SkillV2.ID.make("report"),
+            name: SkillV2.Name.make("Report"),
             description: REPORT_DESCRIPTION,
             slash: true,
             location: AbsolutePath.make("/builtin/report.md"),
@@ -90,6 +92,7 @@ const configuredPlugins = Effect.fn("SkillPlugin.configuredPlugins")(function* (
         }),
       )
     }
+    if (entry.type !== "directory") return Effect.succeed([])
     return fs
       .glob("{plugin,plugins}/*.{ts,js}", {
         cwd: entry.path,
@@ -103,15 +106,22 @@ const configuredPlugins = Effect.fn("SkillPlugin.configuredPlugins")(function* (
 })
 
 function terminal() {
-  return [
-    process.env.TERM_PROGRAM ? `TERM_PROGRAM=${process.env.TERM_PROGRAM}` : undefined,
-    process.env.TERM ? `TERM=${process.env.TERM}` : undefined,
-    process.env.COLORTERM ? `COLORTERM=${process.env.COLORTERM}` : undefined,
-  ]
-    .filter((item): item is string => item !== undefined)
-    .join(", ") || "Unavailable: terminal environment variables are not set"
+  return (
+    [
+      process.env.TERM_PROGRAM ? `TERM_PROGRAM=${process.env.TERM_PROGRAM}` : undefined,
+      process.env.TERM ? `TERM=${process.env.TERM}` : undefined,
+      process.env.COLORTERM ? `COLORTERM=${process.env.COLORTERM}` : undefined,
+    ]
+      .filter((item): item is string => item !== undefined)
+      .join(", ") || "Unavailable: terminal environment variables are not set"
+  )
 }
 
 function shell() {
-  return process.env.SHELL ?? process.env.ComSpec ?? process.env.COMSPEC ?? "Unavailable: shell environment variable is not set"
+  return (
+    process.env.SHELL ??
+    process.env.ComSpec ??
+    process.env.COMSPEC ??
+    "Unavailable: shell environment variable is not set"
+  )
 }

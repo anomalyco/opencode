@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Show, type JSX } from "solid-js"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
@@ -21,16 +21,11 @@ import type {
 import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
-import {
-  filterRenderableDiff,
-  filterReviewFiles,
-  reviewDiffKinds,
-  type RenderDiff,
-} from "@/pages/session/v2/review-diff-kinds"
+import { filterReviewFiles, reviewDiffKinds, type RenderDiff } from "@/pages/session/v2/review-diff-kinds"
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 
-type ReviewDiff = SnapshotFileDiff | VcsFileDiff
+type ReviewDiff = FileDiffInfo | VcsFileDiff
 
 export type ReviewPanelV2Props = {
   title?: JSX.Element
@@ -54,7 +49,7 @@ export type ReviewPanelV2Props = {
 export function ReviewPanelV2(props: ReviewPanelV2Props) {
   const sdk = useSDK()
 
-  const diffs = createMemo(() => props.diffs().filter(filterRenderableDiff))
+  const diffs = createMemo(() => props.diffs())
   const filteredFiles = createMemo(() =>
     filterReviewFiles(
       diffs().map((diff) => diff.file),

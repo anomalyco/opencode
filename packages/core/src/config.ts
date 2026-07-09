@@ -119,7 +119,17 @@ export class Directory extends Schema.Class<Directory>("Config.Directory")({
   path: AbsolutePath,
 }) {}
 
-export type Entry = Document | Directory
+export class AgentsDirectory extends Schema.Class<AgentsDirectory>("Config.AgentsDirectory")({
+  type: Schema.Literal("agents"),
+  path: AbsolutePath,
+}) {}
+
+export class ClaudeDirectory extends Schema.Class<ClaudeDirectory>("Config.ClaudeDirectory")({
+  type: Schema.Literal("claude"),
+  path: AbsolutePath,
+}) {}
+
+export type Entry = Document | Directory | AgentsDirectory | ClaudeDirectory
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries
@@ -176,16 +186,37 @@ const layer = Layer.effect(
 
     const discover = Effect.fn("Config.discover")(function* () {
       const globalDirectory = AbsolutePath.make(global.config)
+      const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
+      const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
       const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
       const discovered = locationIsGlobal
         ? []
         : yield* fs
             .up({
-              targets: [".opencode", ...names.toReversed()],
+              targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
               start: location.directory,
               stop: location.project.directory,
             })
-            .pipe(Effect.orDie)
+          .pipe(Effect.orDie)
+
+      // We load certain files from a few other folders in the ecosystem
+      const claude = [
+        ...((yield* fs.isDir(globalClaudeDirectory))
+          ? [new ClaudeDirectory({ type: "claude", path: globalClaudeDirectory })]
+          : []),
+        ...discovered
+          .filter((item) => path.basename(item) === ".claude")
+          .map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) })),
+      ]
+      const agents = [
+        ...((yield* fs.isDir(globalAgentsDirectory))
+          ? [new AgentsDirectory({ type: "agents", path: globalAgentsDirectory })]
+          : []),
+        ...discovered
+          .filter((item) => path.basename(item) === ".agents")
+          .map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) })),
+      ]
+
       const directories = [
         globalDirectory,
         ...discovered
@@ -193,15 +224,18 @@ const layer = Layer.effect(
           .toReversed()
           .map((directory) => AbsolutePath.make(directory)),
       ]
-      const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
+      const directPaths = discovered
+        .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
+        .toReversed()
       const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
         Effect.orDie,
         Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
       )
+
       const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
       return {
-        entries: [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()],
-        directories,
+        entries: [...claude, ...agents, ...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()],
+        directories: [...directories, ...claude.map((entry) => entry.path), ...agents.map((entry) => entry.path)],
         files: directPaths,
       }
     })

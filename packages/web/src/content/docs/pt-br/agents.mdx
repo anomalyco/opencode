@@ -72,7 +72,7 @@ Este agente é útil quando você deseja que o LLM analise código, sugira alter
 
 _Modo_: `subagent`
 
-Um agente de propósito geral para pesquisar questões complexas e executar tarefas em múltiplas etapas. Tem acesso total às ferramentas (exceto todo), portanto, pode fazer alterações em arquivos quando necessário. Use isso para executar várias unidades de trabalho em paralelo.
+Um agente de propósito geral para pesquisar questões complexas e executar tarefas em múltiplas etapas. Tem acesso total às ferramentas, portanto, pode fazer alterações em arquivos quando necessário. Use isso para executar várias unidades de trabalho em paralelo.
 
 ---
 

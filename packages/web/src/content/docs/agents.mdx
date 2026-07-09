@@ -72,7 +72,7 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 
 _Mode_: `subagent`
 
-A general-purpose agent for researching complex questions and executing multi-step tasks. Has full tool access (except todo), so it can make file changes when needed. Use this to run multiple units of work in parallel.
+A general-purpose agent for researching complex questions and executing multi-step tasks. Has full tool access, so it can make file changes when needed. Use this to run multiple units of work in parallel.
 
 ---
 
@@ -439,7 +439,6 @@ The available permission keys are:
 | `bash`               | `bash`                                                           |
 | `task`               | `task`                                                           |
 | `external_directory` | Any tool that reads or writes files outside the project worktree |
-| `todowrite`          | `todowrite`, `todoread`                                          |
 | `webfetch`           | `webfetch`                                                       |
 | `websearch`          | `websearch`                                                      |
 | `lsp`                | `lsp`                                                            |

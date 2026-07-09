@@ -2,12 +2,17 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { pack } from "./pack.js"
+import { withPackedArchive } from "./pack.js"
 
 const run = async (command: ReadonlyArray<string>, cwd: string) => {
   const process = Bun.spawn(command, { cwd, env: globalThis.process.env, stdout: "inherit", stderr: "inherit" })
   const exitCode = await process.exited
   if (exitCode !== 0) throw new Error(`${command.join(" ")} exited with code ${exitCode}`)
+}
+
+const reject = async (command: ReadonlyArray<string>, cwd: string) => {
+  const process = Bun.spawn([...command], { cwd, env: globalThis.process.env, stdout: "ignore", stderr: "ignore" })
+  if ((await process.exited) === 0) throw new Error(`${command.join(" ")} unexpectedly succeeded`)
 }
 
 export const verifyPackage = async (archive: string) => {
@@ -25,11 +30,40 @@ import { Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
 
-const options: HttpRecorder.RecorderOptions = { redact: { jsonFields: ["access_token"] } }
-HttpRecorder.http("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient>
-HttpRecorder.socket("consumer/socket", options).pipe(
+const options: HttpRecorder.RecorderOptions = { match: () => true, redact: { jsonFields: ["access_token"] } }
+const socketOptions: HttpRecorder.SocketRecorderOptions = { redact: { jsonFields: ["access_token"] } }
+HttpRecorder.layer("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient>
+HttpRecorder.layerFetch("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient>
+HttpRecorder.hasCassetteSync("consumer", { directory: "recordings" }) satisfies boolean
+HttpRecorder.removeCassetteSync("consumer", { directory: "recordings" })
+HttpRecorder.layerSocket("consumer/socket", socketOptions).pipe(
   Layer.provide(NodeSocket.layerWebSocket("wss://example.test")),
 ) satisfies Layer.Layer<Socket.Socket>
+HttpRecorder.layerWebSocketConstructor("consumer/websocket", socketOptions).pipe(
+  Layer.provide(NodeSocket.layerWebSocketConstructor),
+) satisfies Layer.Layer<Socket.WebSocketConstructor>
+// @ts-expect-error HTTP request matching does not apply to WebSocket frames.
+HttpRecorder.layerSocket("consumer/socket", { match: () => true })
+`,
+    )
+    await writeFile(
+      path.join(directory, "exports.mjs"),
+      `import { HttpRecorder } from "@opencode-ai/http-recorder"
+
+const root = Object.keys(await import("@opencode-ai/http-recorder")).sort()
+if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) {
+  throw new Error(\`Unexpected root exports: \${root}\`)
+}
+
+const namespace = Object.keys(HttpRecorder).sort()
+if (JSON.stringify(namespace) !== JSON.stringify(["hasCassetteSync", "layer", "layerFetch", "layerSocket", "layerWebSocketConstructor", "removeCassetteSync"])) {
+  throw new Error(\`Unexpected HttpRecorder exports: \${namespace}\`)
+}
+`,
+    )
+    await writeFile(
+      path.join(directory, "deep-import.mjs"),
+      `import "@opencode-ai/http-recorder/internal"
 `,
     )
     await writeFile(
@@ -41,7 +75,7 @@ HttpRecorder.socket("consumer/socket", options).pipe(
           moduleResolution: "NodeNext",
           strict: true,
           noEmit: true,
-          // Required by effect@4.0.0-beta.74: its schema.d.ts references an undeclared SchemaErrorTypeId.
+          // Required by effect@4.0.0-beta.83: its declarations currently contain unresolved internal symbols.
           skipLibCheck: true,
           lib: ["ES2022", "DOM", "ESNext.Disposable"],
         },
@@ -49,27 +83,28 @@ HttpRecorder.socket("consumer/socket", options).pipe(
       }),
     )
 
-    await run(["npm", "install", archive, "typescript@5.8.2"], directory)
     await run(
       [
-        "node",
-        "--input-type=module",
-        "-e",
-        'import("@opencode-ai/http-recorder").then((module) => { const root = Object.keys(module).sort(); const namespace = Object.keys(module.HttpRecorder).sort(); if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) throw new Error(`Unexpected root exports: ${root}`); if (JSON.stringify(namespace) !== JSON.stringify(["http", "socket"])) throw new Error(`Unexpected namespace exports: ${namespace}`) })',
+        "npm",
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--package-lock=false",
+        archive,
+        "typescript@5.8.2",
+        "effect@4.0.0-beta.83",
+        "@effect/platform-node@4.0.0-beta.83",
       ],
       directory,
     )
+    await run(["node", path.join(directory, "exports.mjs")], directory)
+    await run(["bun", path.join(directory, "exports.mjs")], directory)
+    await reject(["node", path.join(directory, "deep-import.mjs")], directory)
     await run([path.join(directory, "node_modules", ".bin", "tsc"), "--noEmit"], directory)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
 }
 
-if (import.meta.main) {
-  const archive = await pack()
-  try {
-    await verifyPackage(archive)
-  } finally {
-    await Bun.file(archive).delete()
-  }
-}
+if (import.meta.main) await withPackedArchive(verifyPackage)

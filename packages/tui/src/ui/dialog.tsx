@@ -11,6 +11,7 @@ import { useClipboard } from "../context/clipboard"
 export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large" | "xlarge"
+    centered?: boolean
     onClose: () => void
   }>,
 ) {
@@ -40,9 +41,10 @@ export function Dialog(
       width={dimensions().width}
       height={dimensions().height}
       alignItems="center"
+      justifyContent={props.centered ? "center" : undefined}
       position="absolute"
       zIndex={3000}
-      paddingTop={dimensions().height / 4}
+      paddingTop={props.centered ? 0 : dimensions().height / 4}
       left={0}
       top={0}
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
@@ -73,6 +75,7 @@ function init() {
       onClose?: () => void
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
+    centered: false,
   })
 
   const renderer = useRenderer()
@@ -143,6 +146,7 @@ function init() {
       }
       batch(() => {
         setStore("size", "medium")
+        setStore("centered", false)
         setStore("stack", [])
       })
       refocus()
@@ -156,6 +160,7 @@ function init() {
         if (item.onClose) item.onClose()
       }
       setStore("size", "medium")
+      setStore("centered", false)
       setStore("stack", [
         {
           element: input,
@@ -169,8 +174,14 @@ function init() {
     get size() {
       return store.size
     },
+    get centered() {
+      return store.centered
+    },
     setSize(size: "medium" | "large" | "xlarge") {
       setStore("size", size)
+    },
+    setCentered(centered: boolean) {
+      setStore("centered", centered)
     },
   }
 }
@@ -213,7 +224,7 @@ export function DialogProvider(props: ParentProps) {
         onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
       >
         <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size}>
+          <Dialog onClose={() => value.clear()} size={value.size} centered={value.centered}>
             {value.stack.at(-1)!.element}
           </Dialog>
         </Show>

@@ -31,7 +31,7 @@ describe("toolDisplayMetadata", () => {
   })
 
   test("does not expose pending or malformed metadata", () => {
-    expect(toolDisplayMetadata({ status: "pending", structured: { provider: "exa" } })).toEqual({})
+    expect(toolDisplayMetadata({ status: "streaming", structured: { provider: "exa" } })).toEqual({})
     expect(toolDisplayMetadata({ status: "completed" })).toEqual({})
     expect(toolDisplayMetadata({ status: "completed", structured: null })).toEqual({})
     expect(toolDisplayMetadata({ status: "completed", structured: [] })).toEqual({})

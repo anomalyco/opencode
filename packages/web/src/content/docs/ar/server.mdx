@@ -145,26 +145,25 @@ http://<hostname>:<port>/doc
 
 ### الجلسات
 
-| الطريقة  | المسار                                   | الوصف                                 | الملاحظات                                                                        |
-| -------- | ---------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------- |
-| `GET`    | `/session`                               | سرد جميع الجلسات                      | يعيد <a href={typesUrl}><code>Session[]</code></a>                               |
-| `POST`   | `/session`                               | إنشاء جلسة جديدة                      | المتن: `{ parentID?, title? }`، يعيد <a href={typesUrl}><code>Session</code></a> |
-| `GET`    | `/session/status`                        | الحصول على حالة الجلسات جميعها        | يعيد `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`           |
-| `GET`    | `/session/:id`                           | الحصول على تفاصيل الجلسة              | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
-| `DELETE` | `/session/:id`                           | حذف جلسة وجميع بياناتها               | يعيد `boolean`                                                                   |
-| `PATCH`  | `/session/:id`                           | تحديث خصائص الجلسة                    | المتن: `{ title? }`، يعيد <a href={typesUrl}><code>Session</code></a>            |
-| `GET`    | `/session/:id/children`                  | الحصول على الجلسات الفرعية لجلسة      | يعيد <a href={typesUrl}><code>Session[]</code></a>                               |
-| `GET`    | `/session/:id/todo`                      | الحصول على قائمة المهام (todo) للجلسة | يعيد <a href={typesUrl}><code>Todo[]</code></a>                                  |
-| `POST`   | `/session/:id/init`                      | تحليل التطبيق وإنشاء `AGENTS.md`      | المتن: `{ messageID, providerID, modelID }`، يعيد `boolean`                      |
-| `POST`   | `/session/:id/fork`                      | تفريع جلسة موجودة عند رسالة           | المتن: `{ messageID? }`، يعيد <a href={typesUrl}><code>Session</code></a>        |
-| `POST`   | `/session/:id/abort`                     | إلغاء جلسة قيد التشغيل                | يعيد `boolean`                                                                   |
-| `POST`   | `/session/:id/share`                     | مشاركة جلسة                           | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
-| `DELETE` | `/session/:id/share`                     | إلغاء مشاركة جلسة                     | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
-| `GET`    | `/session/:id/diff`                      | الحصول على diff لهذه الجلسة           | الاستعلام: `messageID?`، يعيد <a href={typesUrl}><code>FileDiff[]</code></a>     |
-| `POST`   | `/session/:id/summarize`                 | تلخيص الجلسة                          | المتن: `{ providerID, modelID }`، يعيد `boolean`                                 |
-| `POST`   | `/session/:id/revert`                    | التراجع عن رسالة                      | المتن: `{ messageID, partID? }`، يعيد `boolean`                                  |
-| `POST`   | `/session/:id/unrevert`                  | استعادة جميع الرسائل المتراجع عنها    | يعيد `boolean`                                                                   |
-| `POST`   | `/session/:id/permissions/:permissionID` | الرد على طلب إذن                      | المتن: `{ response, remember? }`، يعيد `boolean`                                 |
+| الطريقة  | المسار                                   | الوصف                              | الملاحظات                                                                        |
+| -------- | ---------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | سرد جميع الجلسات                   | يعيد <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`   | `/session`                               | إنشاء جلسة جديدة                   | المتن: `{ parentID?, title? }`، يعيد <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | الحصول على حالة الجلسات جميعها     | يعيد `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`           |
+| `GET`    | `/session/:id`                           | الحصول على تفاصيل الجلسة           | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id`                           | حذف جلسة وجميع بياناتها            | يعيد `boolean`                                                                   |
+| `PATCH`  | `/session/:id`                           | تحديث خصائص الجلسة                 | المتن: `{ title? }`، يعيد <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | الحصول على الجلسات الفرعية لجلسة   | يعيد <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`   | `/session/:id/init`                      | تحليل التطبيق وإنشاء `AGENTS.md`   | المتن: `{ messageID, providerID, modelID }`، يعيد `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | تفريع جلسة موجودة عند رسالة        | المتن: `{ messageID? }`، يعيد <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | إلغاء جلسة قيد التشغيل             | يعيد `boolean`                                                                   |
+| `POST`   | `/session/:id/share`                     | مشاركة جلسة                        | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id/share`                     | إلغاء مشاركة جلسة                  | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
+| `GET`    | `/session/:id/diff`                      | الحصول على diff لهذه الجلسة        | الاستعلام: `messageID?`، يعيد <a href={typesUrl}><code>FileDiff[]</code></a>     |
+| `POST`   | `/session/:id/summarize`                 | تلخيص الجلسة                       | المتن: `{ providerID, modelID }`، يعيد `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | التراجع عن رسالة                   | المتن: `{ messageID, partID? }`، يعيد `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | استعادة جميع الرسائل المتراجع عنها | يعيد `boolean`                                                                   |
+| `POST`   | `/session/:id/permissions/:permissionID` | الرد على طلب إذن                   | المتن: `{ response, remember? }`، يعيد `boolean`                                 |
 
 ---
 

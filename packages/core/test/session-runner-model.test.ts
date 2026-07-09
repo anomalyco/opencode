@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { LLM, Model } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import { DateTime, Effect } from "effect"
+import { Money } from "@opencode-ai/schema/money"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
@@ -52,6 +53,7 @@ describe("SessionRunnerModel", () => {
       expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
       expect(resolved.route).toMatchObject({
         id: "openai-responses",
+        providerMetadataKey: "openai",
         endpoint: { baseURL: "https://openai.example/v1" },
         defaults: {
           headers: { "x-test": "header" },
@@ -131,7 +133,7 @@ describe("SessionRunnerModel", () => {
           providerID: catalog.providerID,
           variant: ModelV2.VariantID.make("high"),
         },
-        cost: 0,
+        cost: Money.USD.zero,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
         location: { directory: AbsolutePath.make("/project") },
@@ -170,7 +172,7 @@ describe("SessionRunnerModel", () => {
         projectID: ProjectV2.ID.global,
         title: "test",
         model: { id: catalog.id, providerID: catalog.providerID, variant: ModelV2.VariantID.make("high") },
-        cost: 0,
+        cost: Money.USD.zero,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
         location: { directory: AbsolutePath.make("/project") },
@@ -200,7 +202,7 @@ describe("SessionRunnerModel", () => {
           providerID: catalog.providerID,
           variant: ModelV2.VariantID.make("unknown"),
         },
-        cost: 0,
+        cost: Money.USD.zero,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
         location: { directory: AbsolutePath.make("/project") },
@@ -236,7 +238,7 @@ describe("SessionRunnerModel", () => {
         projectID: ProjectV2.ID.global,
         title: "test",
         model: { id: catalog.id, providerID: catalog.providerID, variant: ModelV2.VariantID.make("high") },
-        cost: 0,
+        cost: Money.USD.zero,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
         location: { directory: AbsolutePath.make("/project") },
@@ -263,6 +265,7 @@ describe("SessionRunnerModel", () => {
 
       expect(resolved.route).toMatchObject({
         id: "anthropic-messages",
+        providerMetadataKey: "anthropic",
         endpoint: { baseURL: "https://anthropic.example/v1" },
       })
     }),

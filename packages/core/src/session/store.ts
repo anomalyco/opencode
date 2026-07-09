@@ -13,10 +13,10 @@ import { fromRow } from "./info"
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
-  readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Message[], MessageDecodeError>
+  readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
-  ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Message } | undefined>
+  ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionStore") {}
@@ -25,7 +25,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
 
     return Service.of({
       get: Effect.fn("SessionStore.get")(function* (sessionID) {

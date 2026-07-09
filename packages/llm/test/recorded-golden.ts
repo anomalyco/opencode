@@ -28,7 +28,7 @@ type TargetInput = {
   readonly transport?: Transport
   readonly prefix?: string
   readonly tags?: ReadonlyArray<string>
-  readonly metadata?: Record<string, unknown>
+  readonly metadata?: HttpRecorder.CassetteMetadata
   readonly options?: HttpRecorder.RecorderOptions
   readonly scenarios: ReadonlyArray<ScenarioInput>
 }
@@ -43,7 +43,7 @@ const defaultPrefix = (target: TargetInput) => {
 
 const metadata = (target: TargetInput) => ({
   provider: target.model.provider,
-  protocol: target.protocol,
+  ...(target.protocol ? { protocol: target.protocol } : {}),
   route: target.model.route.id,
   transport: target.transport ?? "http",
   model: target.model.id,

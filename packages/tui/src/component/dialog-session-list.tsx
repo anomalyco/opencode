@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import path from "path"
-import type { SessionV2Info } from "@opencode-ai/sdk/v2"
+import type { SessionInfo } from "@opencode-ai/sdk/v2"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -44,7 +44,7 @@ export function DialogSessionList() {
       workspace: location.workspaceID,
     })
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; session list UI reuses legacy mutable session types.
-    return { query, sessions: structuredClone(response.data) as SessionV2Info[] }
+    return { query, sessions: structuredClone(response.data) as SessionInfo[] }
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
@@ -77,7 +77,7 @@ export function DialogSessionList() {
     const pinnedSet = new Set(pinned)
     const slotByID = new Map(local.session.slots().map((sessionID, index) => [sessionID, index + 1]))
 
-    const option = (session: SessionV2Info, category: string) => {
+    const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
       const footer = directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
       const slot = slotByID.get(session.id)
@@ -88,12 +88,11 @@ export function DialogSessionList() {
         category,
         footer,
         bg: deleting ? theme.error : undefined,
-        gutter:
-          data.session.family(session.id).some((id) => data.session.status(id) === "running")
-            ? () => <Spinner />
-            : slot === undefined
-              ? undefined
-              : () => <text fg={theme.accent}>{slot}</text>,
+        gutter: data.session.family(session.id).some((id) => data.session.status(id) === "running")
+          ? () => <Spinner />
+          : slot === undefined
+            ? undefined
+            : () => <text fg={theme.accent}>{slot}</text>,
       }
     }
 
@@ -135,16 +134,14 @@ export function DialogSessionList() {
               setToDelete(option.value)
               return
             }
-            void sdk.client.v2.session
-              .remove({ sessionID: option.value }, { throwOnError: true })
-              .catch((error) => {
-                setToDelete(undefined)
-                toast.show({
-                  message: `Failed to delete session: ${errorMessage(error)}`,
-                  variant: "error",
-                  duration: 5000,
-                })
+            void sdk.client.v2.session.remove({ sessionID: option.value }, { throwOnError: true }).catch((error) => {
+              setToDelete(undefined)
+              toast.show({
+                message: `Failed to delete session: ${errorMessage(error)}`,
+                variant: "error",
+                duration: 5000,
               })
+            })
           },
         },
         {

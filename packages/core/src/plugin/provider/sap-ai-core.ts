@@ -8,7 +8,8 @@ export const SapAICorePlugin = define({
   id: "opencode.provider.sap-ai-core",
   effect: Effect.fn(function* (ctx) {
     const npm = yield* Npm.Service
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
         const serviceKey =
@@ -37,7 +38,8 @@ export const SapAICorePlugin = define({
         )
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
         evt.language = evt.sdk(evt.model.modelID ?? evt.model.id)

@@ -9,6 +9,7 @@ import { SDKProvider, useSDK } from "../../../src/context/sdk"
 import { useEvent } from "../../../src/context/event"
 import { createApi, createClient, createEventStream, createFetch } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
+import type { LogSink } from "../../../src/context/log"
 
 const projectID = "proj_test"
 
@@ -49,7 +50,7 @@ function update(version: string): V2Event {
   }
 }
 
-async function mount(discover?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>) {
+async function mount(discover?: () => Promise<{ client: OpencodeClient; api: OpenCodeClient }>, log?: LogSink) {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const seen: V2Event[] = []
@@ -62,7 +63,7 @@ async function mount(discover?: () => Promise<{ client: OpencodeClient; api: Ope
   })
 
   const app = await testRender(() => (
-    <TestTuiContexts>
+    <TestTuiContexts log={log}>
       <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)} discover={discover}>
         <ProjectProvider>
           <Probe
@@ -105,6 +106,36 @@ function Probe(props: {
 }
 
 describe("useEvent", () => {
+  test("logs only durable events", async () => {
+    const logs: Array<{ message: string; tags: Readonly<Record<string, unknown>> }> = []
+    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => logs.push({ message, tags }))
+    const durable = event(
+      {
+        id: "evt_renamed",
+        created: 1,
+        type: "session.renamed",
+        durable: { aggregateID: "ses_test", seq: 1, version: 1 },
+        data: { sessionID: "ses_test", title: "Renamed" },
+      },
+      { directory: "/tmp/project" },
+    )
+
+    try {
+      emit(vcs("main"))
+      emit(durable)
+      await wait(() => seen.length === 2 && logs.length === 1)
+
+      expect(logs).toEqual([
+        {
+          message: "event",
+          tags: { type: "session.renamed", aggregateID: "ses_test", seq: 1 },
+        },
+      ])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
   test("delivers events for the current project", async () => {
     const { app, emit, seen, workspaces } = await mount()
 

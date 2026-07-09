@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.14",
+  "version": "1.17.15",
   "name": "@opencode-ai/http-recorder",
-  "description": "Record and replay Effect HTTP client traffic with deterministic cassettes",
+  "description": "Record and replay Effect HTTP and WebSocket traffic with deterministic cassettes",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -28,14 +28,14 @@
   },
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit && tsgo -p test/tsconfig.json --noEmit",
     "build": "bun ./script/build.ts",
     "verify:package": "bun ./script/verify-package.ts"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./internal": "./src/internal.ts"
+    ".": "./src/index.ts"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "README.md",
@@ -47,14 +47,14 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "@effect/platform-node": "catalog:",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.83",
     "@effect/platform-node-shared": "4.0.0-beta.83"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.83"
+    "effect": "catalog:"
   }
 }

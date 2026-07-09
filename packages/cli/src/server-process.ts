@@ -7,10 +7,11 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppProcess } from "@opencode-ai/core/process"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { start } from "@opencode-ai/server/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import path from "node:path"
-import { Effect, FileSystem, Logger, Option, Redacted, Schedule, Schema } from "effect"
+import { Effect, Exit, FileSystem, Logger, Option, Redacted, Schedule, Schema, Scope } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
@@ -27,7 +28,7 @@ export type Options = {
 export const run = Effect.fn("cli.server-process.run")((options: Options) =>
   processEffect(options).pipe(
     Effect.provide(Updater.layer),
-    Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node]))),
+    Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node, EffectFlock.node]))),
     Effect.provide(NodeServices.layer),
   ),
 )
@@ -36,6 +37,16 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(Global.Path.home))
   return yield* Effect.scoped(
     Effect.gen(function* () {
+      const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
+      const lockScope = serviceOptions === undefined ? undefined : yield* acquireServiceLock(serviceOptions.file)
+      if (
+        serviceOptions !== undefined &&
+        lockScope !== undefined &&
+        (yield* Service.discover(serviceOptions)) !== undefined
+      ) {
+        yield* Scope.close(lockScope, Exit.void)
+        return
+      }
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {
@@ -55,7 +66,10 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         port: Option.fromNullishOr(options.port ?? config.port),
         password,
       }).pipe(Effect.provide(Logger.layer([], { mergeWithExisting: false })))
-      if (options.mode === "service") yield* register(address, password)
+      if (lockScope !== undefined) {
+        yield* register(address, password)
+        yield* Scope.close(lockScope, Exit.void)
+      }
       const url = HttpServer.formatAddress(address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (options.mode === "default" && !environmentPassword) console.log(`server password ${password}`)
@@ -64,6 +78,16 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       return yield* options.mode === "stdio" ? waitForStdinClose() : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
+})
+
+const acquireServiceLock = Effect.fnUntraced(function* (file: string) {
+  const flock = yield* EffectFlock.Service
+  const scope = yield* Scope.make()
+  yield* Effect.addFinalizer((exit) => Scope.close(scope, exit))
+  yield* flock
+    .acquire(`service:${file}`, undefined, { staleMs: 3_000, timeoutMs: 3_000 })
+    .pipe(Effect.provideService(Scope.Scope, scope))
+  return scope
 })
 
 // The latest atomic registration wins. A displaced process notices the new id,

@@ -19,7 +19,8 @@ export const CloudflareWorkersAIPlugin = define({
         if (accountId) provider.settings = { ...provider.settings, baseURL: workersEndpoint(accountId) }
       })
     })
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
         if (evt.package !== "@ai-sdk/openai-compatible") return
@@ -35,7 +36,8 @@ export const CloudflareWorkersAIPlugin = define({
         )
       }),
     )
-    yield* ctx.aisdk.language(
+    yield* ctx.aisdk.hook(
+      "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
         evt.language = evt.sdk.languageModel(evt.model.modelID ?? evt.model.id)

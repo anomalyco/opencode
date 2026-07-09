@@ -1,7 +1,8 @@
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo } from "solid-js"
+import { useData } from "../../context/data"
+import { lastAssistantWithUsage } from "../../util/session"
 
 const id = "internal:sidebar-context"
 
@@ -11,13 +12,14 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
+  const data = useData()
   const theme = () => props.api.theme.current
-  const msg = createMemo(() => props.api.state.session.messages(props.session_id))
-  const session = createMemo(() => props.api.state.session.get(props.session_id))
+  const msg = createMemo(() => data.session.message.list(props.session_id))
+  const session = createMemo(() => data.session.get(props.session_id))
   const cost = createMemo(() => session()?.cost ?? 0)
 
   const state = createMemo(() => {
-    const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    const last = lastAssistantWithUsage(msg(), session()?.revert?.messageID)
     if (!last) {
       return {
         tokens: 0,
@@ -27,7 +29,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const model = data.location
+      .model.list(session()?.location)
+      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,

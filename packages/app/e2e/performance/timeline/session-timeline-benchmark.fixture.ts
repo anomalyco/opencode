@@ -295,7 +295,7 @@ function performanceTurn(index: number) {
             messageID: assistantID,
             type: "tool",
             callID: `call_0000_${suffix}_patch`,
-            tool: "apply_patch",
+            tool: "patch",
             state: {
               status: "completed",
               input: { patchText: realisticPatch(index) },

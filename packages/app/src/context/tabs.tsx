@@ -28,6 +28,11 @@ export type DraftTab = {
 
 export type Tab = SessionTab | DraftTab
 
+export type TabInfo = {
+  title?: string
+  directory?: string
+}
+
 type RecentTab = {
   key?: string
 }
@@ -64,6 +69,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       createStore<Tab[]>([]),
     )
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
+    const [info, setInfo] = persisted(Persist.window("tabs.info"), createStore<Record<string, TabInfo>>({}))
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
 
     const params = useParams()
@@ -102,6 +108,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       for (const key of draftPersistedKeys()) removePersisted(Persist.draft(draftID, key), platform)
     }
 
+    const removeInfo = (key: string) => {
+      if (!info[key]) return
+      setInfo(
+        produce((draft) => {
+          delete draft[key]
+        }),
+      )
+    }
+
     onCleanup(memory.dispose)
 
     createEffect(() => {
@@ -110,11 +125,19 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       const next = store.filter((tab) => servers.has(tab.server))
       if (next.length !== store.length) {
         for (const tab of store) {
-          if (!servers.has(tab.server)) memory.remove(tabKey(tab))
+          if (!servers.has(tab.server)) {
+            const key = tabKey(tab)
+            memory.remove(key)
+            removeInfo(key)
+          }
         }
         setStore(() => next)
       }
       if (recent.key && !next.some((tab) => tabKey(tab) === recent.key)) setRecentKey(undefined)
+      const keys = new Set(next.map(tabKey))
+      for (const key of Object.keys(info)) {
+        if (!keys.has(key)) removeInfo(key)
+      }
     })
 
     createEffect(() => {
@@ -150,6 +173,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (nextTab) navigateTab(nextTab)
       }).finally(() => closing.delete(key))
       memory.remove(key)
+      removeInfo(key)
       if (draftID) removeDraftPersisted(draftID)
     }
 
@@ -264,6 +288,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const removed = store.filter((tab) => tab.server === key).map(tabKey)
         setStore((tabs) => tabs.filter((tab) => tab.server !== key))
         for (const key of removed) memory.remove(key)
+        for (const key of removed) removeInfo(key)
         if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
         for (const draftID of drafts) removeDraftPersisted(draftID)
         if (server.key === key) navigate("/")
@@ -318,6 +343,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
         })
         for (const key of removed) memory.remove(key)
+        for (const key of removed) removeInfo(key)
+      },
+      rememberSessionInfo(tab: SessionTab, session: Session) {
+        const key = tabKey(tab)
+        const next = { title: session.title, directory: session.directory }
+        const current = info[key]
+        if (current?.title === next.title && current.directory === next.directory) return
+        setInfo(key, next)
       },
       select: navigateTab,
       remember(tab: Tab) {
@@ -342,6 +375,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, ready, recentReady }
+    return { ...actions, store, info, ready, recentReady }
   },
 })

@@ -10,12 +10,14 @@
     "./backend/*": "./src/backend/*.ts",
     "./frontend": "./src/frontend/simulation.ts",
     "./frontend/*": "./src/frontend/*.ts",
-    "./protocol": "./src/protocol/index.ts"
+    "./protocol": "./src/protocol/index.ts",
+    "./recording": "./src/recording.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@fontsource/adwaita-mono": "5.2.1",
     "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/llm": "workspace:*",

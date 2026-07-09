@@ -8,6 +8,7 @@ import { HttpApi, HttpApiClient } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
 import { createRoutes } from "./routes"
+import { ServerInfo } from "./server-info"
 
 export type Options = {
   readonly hostname: string
@@ -48,7 +49,12 @@ function listen(options: Options) {
 function bind(hostname: string, port: number, password: string) {
   const server = createServer()
   return Layer.build(
-    createRoutes(password).pipe(
+    createRoutes(password, () => {
+      const address = server.address()
+      if (address === null || typeof address === "string") return []
+      const host = address.family === "IPv6" ? `[${address.address}]` : address.address
+      return ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname)
+    }).pipe(
       Layer.flatMap((context) =>
         HttpServer.serve(Context.get(context, HttpRouter.HttpRouter).asHttpEffect(), HttpMiddleware.logger),
       ),

@@ -71,7 +71,7 @@ Denne agenten er nyttig når du vil at LLM skal analysere kode, foreslå endring
 
 _Modus_: `subagent`
 
-En generell agent for å undersøke komplekse spørsmål og utføre flertrinnsoppgaver. Har full verktøytilgang (unntatt todo), slik at den kan gjøre filendringer når det er nødvendig. Bruk denne til å kjøre flere arbeidsenheter parallelt.
+En generell agent for å undersøke komplekse spørsmål og utføre flertrinnsoppgaver. Har full verktøytilgang, slik at den kan gjøre filendringer når det er nødvendig. Bruk denne til å kjøre flere arbeidsenheter parallelt.
 
 ---
 

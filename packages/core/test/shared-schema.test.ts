@@ -24,7 +24,6 @@ import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Reference } from "@opencode-ai/schema/reference"
-import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Skill } from "@opencode-ai/schema/skill"
 import { AbsolutePath, DateTimeUtcFromMillis, optional, statics } from "@opencode-ai/schema/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -46,7 +45,6 @@ test("Core reuses the canonical shared schemas", async () => {
     coreReference,
     coreSessionInput,
     coreSessionMessage,
-    coreSessionTodo,
     coreSkill,
     coreV2Schema,
     coreSchema,
@@ -67,7 +65,6 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/reference"),
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
-    import("@opencode-ai/core/session/todo"),
     import("@opencode-ai/core/skill"),
     import("@opencode-ai/core/v2-schema"),
     import("@opencode-ai/core/schema"),
@@ -76,6 +73,7 @@ test("Core reuses the canonical shared schemas", async () => {
 
   const schemas = [
     [AgentV2.ID, Agent.ID],
+    [AgentV2.Name, Agent.Name],
     [AgentV2.Color, Agent.Color],
     [AgentV2.Info, Agent.Info],
     [coreCommand.Info, Command.Info],
@@ -136,7 +134,9 @@ test("Core reuses the canonical shared schemas", async () => {
     [SessionV2.Info, Session.Info],
     [SessionV2.ListAnchor, Session.ListAnchor],
     [coreSessionInput.Delivery, SessionInput.Delivery],
-    [coreSessionInput.Admitted, SessionInput.Admitted],
+    [coreSessionInput.Message, SessionInput.Message],
+    [coreSessionInput.User, SessionInput.User],
+    [coreSessionInput.Synthetic, SessionInput.Synthetic],
     [coreSessionMessage.ID, SessionMessage.ID],
     [coreSessionMessage.AssistantRetry, SessionMessage.AssistantRetry],
     [coreSessionMessage.AgentSelected, SessionMessage.AgentSelected],
@@ -145,7 +145,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.Synthetic, SessionMessage.Synthetic],
     [coreSessionMessage.System, SessionMessage.System],
     [coreSessionMessage.Shell, SessionMessage.Shell],
-    [coreSessionMessage.ToolStatePending, SessionMessage.ToolStatePending],
+    [coreSessionMessage.ToolStateStreaming, SessionMessage.ToolStateStreaming],
     [coreSessionMessage.ToolStateRunning, SessionMessage.ToolStateRunning],
     [coreSessionMessage.ToolStateCompleted, SessionMessage.ToolStateCompleted],
     [coreSessionMessage.ToolStateError, SessionMessage.ToolStateError],
@@ -156,9 +156,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.AssistantContent, SessionMessage.AssistantContent],
     [coreSessionMessage.Assistant, SessionMessage.Assistant],
     [coreSessionMessage.Compaction, SessionMessage.Compaction],
-    [coreSessionMessage.Message, SessionMessage.Message],
-    [coreSessionTodo.Info, SessionTodo.Info],
-    [coreSessionTodo.Event, SessionTodo.Event],
+    [coreSessionMessage.Info, SessionMessage.Info],
     [coreSkill.DirectorySource, Skill.DirectorySource],
     [coreSkill.UrlSource, Skill.UrlSource],
     [coreSkill.EmbeddedSource, Skill.EmbeddedSource],

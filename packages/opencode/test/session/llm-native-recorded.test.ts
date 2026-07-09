@@ -2,7 +2,6 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
@@ -224,7 +223,7 @@ function isSelected(scenario: RecordedScenario) {
 const canRun = (scenario: RecordedScenario) =>
   shouldRecord
     ? scenario.canRecord()
-    : HttpRecorderInternal.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
+    : HttpRecorder.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
 
 const recordError = (scenario: RecordedScenario) =>
   scenario.id === "openai-oauth"
@@ -272,14 +271,11 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     url: (url: string) => url.replace(/\/proxy\/connections\/[^/]+\/v1/, "/proxy/connections/{connection}/v1"),
     body: redactRecordedBody,
   }
-  const recordedHttp = shouldRecord
-    ? HttpRecorderInternal.cassetteLayer(scenario.cassette, {
-        directory: FIXTURES_DIR,
-        mode: "record",
-        metadata,
-        redactor: HttpRecorderInternal.Redactor.make(redact),
-      })
-    : HttpRecorder.http(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
+  if (shouldRecord) {
+    if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
+    HttpRecorder.removeCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
+  }
+  const recordedHttp = HttpRecorder.layerFetch(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
   return AppNodeBuilder.build(LayerNode.group([Provider.node, LLM.node]), [
     [LayerNodePlatform.requestExecutor, RequestExecutor.layer.pipe(Layer.provide(recordedHttp))],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalNativeLlm: true })],

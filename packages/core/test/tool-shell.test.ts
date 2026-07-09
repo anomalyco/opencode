@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { DateTime, Duration, Effect, Fiber, Layer, Scope } from "effect"
+import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
@@ -104,7 +105,7 @@ const executionNode = makeGlobalNode({
           sessionID: id,
           assistantMessageID,
           finish: "stop",
-          cost: 0,
+          cost: Money.USD.zero,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         })
       })
@@ -442,10 +443,7 @@ describe("ShellTool", () => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
-            const settled = yield* settleTool(
-              registry,
-              call({ command: idleCommand, timeout: 50, background: true }),
-            )
+            const settled = yield* settleTool(registry, call({ command: idleCommand, timeout: 50, background: true }))
             const structured = settled.output?.structured as Record<string, unknown> | undefined
             const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
             expect(settled.output?.structured).toMatchObject({ truncated: false })

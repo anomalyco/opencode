@@ -16,7 +16,7 @@ const Cursor = Schema.Struct({
 const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
 const cursor = {
-  encode(message: SessionMessage.Message, order: "asc" | "desc", direction: "previous" | "next") {
+  encode(message: SessionMessage.Info, order: "asc" | "desc", direction: "previous" | "next") {
     return Buffer.from(JSON.stringify({ id: message.id, order, direction })).toString("base64url")
   },
   decode(input: string) {

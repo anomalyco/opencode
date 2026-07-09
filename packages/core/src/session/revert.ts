@@ -1,7 +1,7 @@
 export * as SessionRevert from "./revert"
 
 import { and, asc, eq, gt } from "drizzle-orm"
-import { DateTime, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { RelativePath } from "../schema"
@@ -46,7 +46,7 @@ const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
+  const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
   const files = new Map<RelativePath, Snapshot.ID>()
   for (const row of rows) {
     const message = yield* decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie)
@@ -70,7 +70,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   const next = yield* plan({ sessionID: input.session.id, messageID: input.messageID })
   const restore = new Map<RelativePath, Snapshot.ID>()
   if (original) {
-    for (const file of input.session.revert?.files ?? []) restore.set(file.path, original)
+    for (const file of input.session.revert?.files ?? []) restore.set(RelativePath.make(file.file), original)
   }
   if (input.files !== false) for (const [file, tree] of next) restore.set(file, tree)
   if (restore.size) yield* snapshot.restore({ files: restore })
@@ -81,10 +81,6 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   const revert = {
     messageID: input.messageID,
     snapshot: original,
-    diff: files
-      .map((file) => file.patch)
-      .join("")
-      .trim(),
     files,
   } satisfies SessionSchema.Info["revert"]
   yield* events.publish(SessionEvent.RevertEvent.Staged, {
@@ -100,7 +96,7 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
   const original = session.revert.snapshot ? Snapshot.ID.make(session.revert.snapshot) : undefined
   if (original)
     yield* snapshot.restore({
-      files: new Map((session.revert.files ?? []).map((file) => [file.path, original])),
+      files: new Map((session.revert.files ?? []).map((file) => [RelativePath.make(file.file), original])),
     })
   const events = yield* EventV2.Service
   yield* events.publish(SessionEvent.RevertEvent.Cleared, {

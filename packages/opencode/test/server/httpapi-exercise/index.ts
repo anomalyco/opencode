@@ -579,8 +579,10 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: "/experimental/session?roots=false&archived=false", headers: ctx.headers() }))
     .json(200, array),
   http.protected.get("/experimental/capabilities", "experimental.capabilities.get").json(200, (body) => {
-    check(typeof body === "object" && body !== null, "capabilities should be an object")
-    check("backgroundSubagents" in body, "capabilities should report background subagents")
+    check(
+      typeof body === "object" && body !== null && "backgroundSubagents" in body && body.backgroundSubagents === true,
+      "capabilities should report background subagents as available",
+    )
   }),
   http.protected
     .post("/experimental/session/{sessionID}/background", "experimental.session.background")
@@ -1323,23 +1325,6 @@ const scenarios: Scenario[] = [
         body.some((item) => isRecord(item) && item.id === ctx.state.child.id && item.parentID === ctx.state.parent.id),
         "children should include seeded child",
       )
-    }),
-  http.protected
-    .get("/session/{sessionID}/todo", "session.todo")
-    .seeded((ctx) =>
-      Effect.gen(function* () {
-        const session = yield* ctx.session({ title: "Todo session" })
-        const todos = [{ content: "cover session todo", status: "pending" as const, priority: "high" as const }]
-        yield* ctx.todos(session.id, todos)
-        return { session, todos }
-      }),
-    )
-    .at((ctx) => ({
-      path: route("/session/{sessionID}/todo", { sessionID: ctx.state.session.id }),
-      headers: ctx.headers(),
-    }))
-    .json(200, (body, ctx) => {
-      check(stable(body) === stable(ctx.state.todos), "todos should match seeded state")
     }),
   http.protected
     .get("/session/{sessionID}/diff", "session.diff")

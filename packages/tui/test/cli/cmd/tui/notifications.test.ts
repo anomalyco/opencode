@@ -77,6 +77,7 @@ function form(id: string, sessionID = "session"): Extract<V2Event, { type: "form
   return {
     id,
     sessionID,
+    title: "Input requested",
     mode: "form",
     fields: [],
   }
@@ -93,7 +94,7 @@ function permission(id: string, sessionID = "session"): PermissionRequest {
   }
 }
 
-function durable(sessionID: string) {
+function durable(sessionID: string): { aggregateID: string; seq: number; version: 1 } {
   return { aggregateID: sessionID, seq: 0, version: 1 }
 }
 
@@ -138,10 +139,20 @@ const questionNotification: TuiAttentionNotifyInput = {
 }
 
 const formNotification: TuiAttentionNotifyInput = {
-  title: "Demo session",
+  title: "Input requested",
   message: "Input needs response",
   notification: { when: "blurred" },
   sound: { name: "question", when: "always" },
+}
+
+const titledFormNotification: TuiAttentionNotifyInput = {
+  ...formNotification,
+  title: "Confirm deployment",
+}
+
+const globalFormNotification: TuiAttentionNotifyInput = {
+  ...formNotification,
+  title: "demo-mcp is requesting input",
 }
 
 const permissionNotification: TuiAttentionNotifyInput = {
@@ -155,19 +166,29 @@ describe("internal notifications TUI plugin", () => {
   test("notifies for form, question, and permission requests with blurred notifications and always-on sounds", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1") } })
+    harness.emit({
+      id: "event-1",
+      created: 0,
+      type: "form.created",
+      data: { form: { ...form("form-1"), title: "Confirm deployment" } },
+    })
     harness.emit({ id: "event-2", created: 0, type: "question.asked", data: question("question-1") })
     harness.emit({ id: "event-3", created: 0, type: "permission.asked", data: permission("permission-1") })
 
-    expect(harness.notifications).toEqual([formNotification, questionNotification, permissionNotification])
+    expect(harness.notifications).toEqual([titledFormNotification, questionNotification, permissionNotification])
   })
 
-  test("ignores global forms until the TUI can render them", async () => {
+  test("notifies for global forms once the TUI can render them", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1", "global") } })
+    harness.emit({
+      id: "event-1",
+      created: 0,
+      type: "form.created",
+      data: { form: { ...form("form-1", "global"), title: "demo-mcp is requesting input" } },
+    })
 
-    expect(harness.notifications).toEqual([])
+    expect(harness.notifications).toEqual([globalFormNotification])
   })
 
   test("dedupes pending forms, questions, and permissions until they are resolved", async () => {
@@ -243,14 +264,14 @@ describe("internal notifications TUI plugin", () => {
       id: "event-1",
       created: 0,
       type: "form.created",
-      data: { form: form("form-1", "subagent") },
+      data: { form: { ...form("form-1", "subagent"), title: "Questions" } },
     })
     harness.emit(executionStarted("event-2", "subagent"))
     harness.emit(executionSucceeded("event-3", "subagent"))
 
     expect(harness.notifications).toEqual([
       {
-        title: "Subagent session",
+        title: "Questions",
         message: "Input needs response",
         notification: false,
         sound: { name: "question", when: "always" },

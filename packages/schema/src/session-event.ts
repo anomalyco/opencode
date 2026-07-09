@@ -5,16 +5,21 @@ import { optional } from "./schema.js"
 import { Event } from "./event.js"
 import { ToolContent } from "./llm.js"
 import { FinishReason } from "./llm.js"
-import { Delivery } from "./session-delivery.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
-import { FileAttachment, Prompt } from "./prompt.js"
+import { FileAttachment } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
-import { Revert } from "./revert.js"
+import { Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
+import { Agent } from "./agent.js"
+import { Skill as SkillSchema } from "./skill.js"
+import { Money } from "./money.js"
+import { Snapshot } from "./snapshot.js"
+import { TokenUsage } from "./token-usage.js"
+import { SessionInput } from "./session-input.js"
 
 export { FileAttachment }
 
@@ -23,18 +28,12 @@ export const Source = Schema.Struct({
   end: NonNegativeInt,
   text: Schema.String,
 }).annotate({
-  identifier: "session.event.source",
+  identifier: "Session.Event.Source",
 })
 export interface Source extends Schema.Schema.Type<typeof Source> {}
 
 const Base = {
   sessionID: SessionID,
-}
-const PromptFields = {
-  ...Base,
-  inputID: SessionMessage.ID,
-  prompt: Prompt,
-  delivery: Delivery,
 }
 
 const options = {
@@ -48,7 +47,7 @@ export const AgentSelected = Event.durable({
   ...options,
   schema: {
     ...Base,
-    agent: Schema.String,
+    agent: Agent.ID,
   },
 })
 export type AgentSelected = typeof AgentSelected.Type
@@ -84,6 +83,16 @@ export const Renamed = Event.durable({
 })
 export type Renamed = typeof Renamed.Type
 
+export const UsageUpdated = Event.ephemeral({
+  type: "session.usage.updated",
+  schema: {
+    ...Base,
+    cost: Money.USD,
+    tokens: TokenUsage.Info,
+  },
+})
+export type UsageUpdated = typeof UsageUpdated.Type
+
 export const Deleted = Event.durable({
   type: "session.deleted",
   durable: {
@@ -105,22 +114,26 @@ export const Forked = Event.durable({
 })
 export type Forked = typeof Forked.Type
 
-export const PromptPromoted = Event.durable({
-  type: "session.prompt.promoted",
+export const InputPromoted = Event.durable({
+  type: "session.input.promoted",
   ...options,
   schema: {
     sessionID: SessionID,
     inputID: SessionMessage.ID,
   },
 })
-export type PromptPromoted = typeof PromptPromoted.Type
+export type InputPromoted = typeof InputPromoted.Type
 
-export const PromptAdmitted = Event.durable({
-  type: "session.prompt.admitted",
+export const InputAdmitted = Event.durable({
+  type: "session.input.admitted",
   ...options,
-  schema: PromptFields,
+  schema: {
+    ...Base,
+    inputID: SessionMessage.ID,
+    input: SessionInput.Message,
+  },
 })
-export type PromptAdmitted = typeof PromptAdmitted.Type
+export type InputAdmitted = typeof InputAdmitted.Type
 
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
@@ -172,7 +185,8 @@ export namespace Skill {
     ...options,
     schema: {
       ...Base,
-      name: Schema.String,
+      id: SkillSchema.ID,
+      name: SkillSchema.Name,
       text: Schema.String,
     },
   })
@@ -209,9 +223,9 @@ export namespace Step {
     schema: {
       ...Base,
       assistantMessageID: SessionMessage.ID,
-      agent: Schema.String,
+      agent: Agent.ID,
       model: Model.Ref,
-      snapshot: Schema.String.pipe(optional),
+      snapshot: Snapshot.ID.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
@@ -223,17 +237,9 @@ export namespace Step {
       ...Base,
       assistantMessageID: SessionMessage.ID,
       finish: FinishReason,
-      cost: Schema.Finite,
-      tokens: Schema.Struct({
-        input: Schema.Finite,
-        output: Schema.Finite,
-        reasoning: Schema.Finite,
-        cache: Schema.Struct({
-          read: Schema.Finite,
-          write: Schema.Finite,
-        }),
-      }),
-      snapshot: Schema.String.pipe(optional),
+      cost: Money.USD,
+      tokens: TokenUsage.Info,
+      snapshot: Snapshot.ID.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
     },
   })
@@ -246,6 +252,8 @@ export namespace Step {
       ...Base,
       assistantMessageID: SessionMessage.ID,
       error: SessionError.Error,
+      cost: Money.USD.pipe(optional),
+      tokens: TokenUsage.Info.pipe(optional),
     },
   })
   export type Failed = typeof Failed.Type
@@ -400,7 +408,6 @@ export namespace Tool {
       ...ToolBase,
       structured: Schema.Record(Schema.String, Schema.Unknown),
       content: Schema.Array(ToolContent),
-      outputPaths: Schema.Array(Schema.String).pipe(optional),
       result: Schema.Unknown.pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
@@ -451,7 +458,9 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
-      reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
+      reason: Schema.Literals(["auto", "manual"]),
+      recent: Schema.String,
+      inputID: SessionMessage.ID.pipe(optional),
     },
   })
   export type Started = typeof Started.Type
@@ -480,7 +489,12 @@ export namespace Compaction {
   export const Failed = Event.durable({
     type: "session.compaction.failed",
     ...options,
-    schema: Base,
+    schema: {
+      ...Base,
+      reason: Started.data.fields.reason,
+      error: SessionError.Error,
+      inputID: SessionMessage.ID.pipe(optional),
+    },
   })
   export type Failed = typeof Failed.Type
 }
@@ -489,7 +503,7 @@ export namespace RevertEvent {
   export const Staged = Event.durable({
     type: "session.revert.staged",
     ...options,
-    schema: { ...Base, revert: Revert.State },
+    schema: { ...Base, revert: Revert },
   })
   export const Cleared = Event.durable({ type: "session.revert.cleared", ...options, schema: Base })
   export const Committed = Event.durable({
@@ -504,10 +518,11 @@ export const Definitions = Event.inventory(
   ModelSelected,
   Moved,
   Renamed,
+  UsageUpdated,
   Deleted,
   Forked,
-  PromptPromoted,
-  PromptAdmitted,
+  InputPromoted,
+  InputAdmitted,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,
@@ -550,7 +565,7 @@ export const DurableDefinitions = Event.inventory(
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
   .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "SessionDurableEvent" })
+  .annotate({ identifier: "Session.Event.Durable" })
 export type DurableEvent = typeof Durable.Type
 
 export const All = Schema.Union(Definitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))

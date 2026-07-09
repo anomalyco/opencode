@@ -151,7 +151,6 @@ opencode 服务器暴露以下 API。
 | `DELETE` | `/session/:id`                           | 删除会话及其所有数据       | 返回 `boolean`                                                                    |
 | `PATCH`  | `/session/:id`                           | 更新会话属性               | 请求体：`{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | 获取会话的子会话           | 返回 <a href={typesUrl}><code>Session[]</code></a>                                |
-| `GET`    | `/session/:id/todo`                      | 获取会话的待办事项列表     | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                   |
 | `POST`   | `/session/:id/init`                      | 分析应用并创建 `AGENTS.md` | 请求体：`{ messageID, providerID, modelID }`，返回 `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 在某条消息处分叉现有会话   | 请求体：`{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 中止正在运行的会话         | 返回 `boolean`                                                                    |

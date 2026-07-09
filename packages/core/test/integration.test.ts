@@ -1,14 +1,33 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Exit, Fiber, Scope, Stream } from "effect"
+import { Cause, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Integration } from "@opencode-ai/core/integration"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, EventV2.node])))
+const failingCredentialNode = makeGlobalNode({
+  service: Credential.Service,
+  layer: Layer.succeed(
+    Credential.Service,
+    Credential.Service.of({
+      all: () => Effect.succeed([]),
+      list: () => Effect.succeed([]),
+      get: () => Effect.succeed(undefined),
+      create: () => Effect.die(new Error("credential persistence failed")),
+      update: () => Effect.void,
+      remove: () => Effect.void,
+    }),
+  ),
+  deps: [],
+})
+const failingIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Integration.node, EventV2.node]), [[Credential.node, failingCredentialNode]]),
+)
 
 describe("Integration", () => {
   it.effect("registers integrations through the editor", () =>
@@ -251,6 +270,47 @@ describe("Integration", () => {
         time: attempt.time,
       })
       expect(yield* credentials.list(integrationID)).toHaveLength(1)
+    }),
+  )
+
+  failingIt.effect("fails the attempt when credential persistence fails", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("chatgpt")
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
+          authorize: () =>
+            Effect.succeed({
+              mode: "code" as const,
+              url: "https://example.com/authorize",
+              instructions: "Paste the code",
+              callback: () =>
+                Effect.succeed(
+                  Credential.OAuth.make({
+                    type: "oauth",
+                    methodID,
+                    access: "access",
+                    refresh: "refresh",
+                    expires: 1,
+                  }),
+                ),
+            }),
+        }),
+      )
+
+      const attempt = yield* integrations.connection.oauth({ integrationID, methodID, inputs: {} })
+      const exit = yield* integrations.attempt
+        .complete({ attemptID: attempt.attemptID, code: "1234" })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true)
+      expect(yield* integrations.attempt.status(attempt.attemptID)).toEqual({
+        status: "failed",
+        message: "credential persistence failed",
+        time: attempt.time,
+      })
     }),
   )
 

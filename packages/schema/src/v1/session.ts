@@ -2,7 +2,6 @@ export * as SessionV1 from "./session.js"
 
 import { Effect, Schema, Types } from "effect"
 import { durable, ephemeral, inventory } from "../event.js"
-import { FileDiff } from "../file-diff.js"
 import { Project } from "../project.js"
 import { Provider } from "../provider.js"
 import { Model } from "../model.js"
@@ -11,6 +10,7 @@ import { ascending } from "../identifier.js"
 import { SessionID } from "../session-id.js"
 import { WorkspaceID } from "../workspace-id.js"
 import { PermissionV1 } from "./permission.js"
+import { FileDiff } from "../file-diff.js"
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
@@ -340,7 +340,7 @@ export const User = Schema.Struct({
     Schema.Struct({
       title: Schema.optional(Schema.String),
       body: Schema.optional(Schema.String),
-      diffs: Schema.Array(FileDiff.Info),
+      diffs: Schema.Array(FileDiff.LegacyInfo),
     }),
   ),
   agent: Schema.String,
@@ -510,7 +510,7 @@ const SessionSummary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optional(Schema.Array(FileDiff.Info)),
+  diffs: optional(Schema.Array(FileDiff.LegacyInfo)),
 })
 
 const SessionTokens = Schema.Struct({
@@ -565,7 +565,7 @@ export const SessionInfo = Schema.Struct({
   }),
   permission: optional(PermissionV1.Ruleset),
   revert: optional(SessionRevert),
-}).annotate({ identifier: "Session" })
+}).annotate({ identifier: "SessionV1.Info" })
 export type SessionInfo = typeof SessionInfo.Type
 
 const events = {
@@ -644,7 +644,7 @@ export const Diff = ephemeral({
   type: "session.diff",
   schema: {
     sessionID: SessionID,
-    diff: Schema.Array(FileDiff.Info),
+    diff: Schema.Array(FileDiff.LegacyInfo),
   },
 })
 

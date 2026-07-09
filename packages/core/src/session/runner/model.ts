@@ -82,6 +82,8 @@ export interface Resolved {
   readonly model: Model
   /** Selected catalog identity. Durable records and displays must use this, never the API model id. */
   readonly ref: ModelV2.Ref
+  /** Catalog pricing in dollars per million tokens. */
+  readonly cost: ModelV2.Info["cost"]
 }
 
 export interface Interface {
@@ -94,13 +96,14 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
-export const resolved = (model: Model, variant?: ModelV2.VariantID): Resolved => ({
+export const resolved = (model: Model, variant?: ModelV2.VariantID, cost: ModelV2.Info["cost"] = []): Resolved => ({
   model,
   ref: ModelV2.Ref.make({
     id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(model.provider),
     ...(variant === undefined ? {} : { variant }),
   }),
+  cost,
 })
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
@@ -341,6 +344,7 @@ const layer = Layer.effect(
             providerID: selected.providerID,
             ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
           }),
+          cost: selected.cost,
         }
       }),
     })

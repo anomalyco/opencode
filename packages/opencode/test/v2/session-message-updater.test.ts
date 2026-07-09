@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect } from "effect"
-import * as DateTime from "effect/DateTime"
+import { DateTime, Effect } from "effect"
 import { SessionID } from "../../src/session/schema"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -8,6 +7,9 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Money } from "@opencode-ai/schema/money"
+import { Snapshot } from "@opencode-ai/schema/snapshot"
 
 function durable(sessionID: SessionID, seq = 0, version = 1) {
   return { aggregateID: sessionID, seq: EventV2.Seq.make(seq), version: EventV2.Version.make(version) }
@@ -27,13 +29,13 @@ test.skip("step snapshots carry over to assistant messages", () => {
       data: {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: Agent.ID.make("build"),
         model: {
           id: ModelV2.ID.make("model"),
           providerID: ProviderV2.ID.make("provider"),
           variant: ModelV2.VariantID.make("default"),
         },
-        snapshot: "before",
+        snapshot: Snapshot.ID.make("before"),
       },
     } satisfies SessionEvent.Event),
   )
@@ -50,21 +52,24 @@ test.skip("step snapshots carry over to assistant messages", () => {
         sessionID,
         assistantMessageID,
         finish: "stop",
-        cost: 0,
+        cost: Money.USD.zero,
         tokens: {
           input: 1,
           output: 2,
           reasoning: 0,
           cache: { read: 0, write: 0 },
         },
-        snapshot: "after",
+        snapshot: Snapshot.ID.make("after"),
       },
     } satisfies SessionEvent.Event),
   )
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
-  expect(state.messages[0].snapshot).toEqual({ start: "before", end: "after" })
+  expect(state.messages[0].snapshot).toEqual({
+    start: Snapshot.ID.make("before"),
+    end: Snapshot.ID.make("after"),
+  })
   expect(state.messages[0].finish).toBe("stop")
 })
 
@@ -82,7 +87,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: Agent.ID.make("build"),
         model: {
           id: ModelV2.ID.make("model"),
           providerID: ProviderV2.ID.make("provider"),
@@ -141,7 +146,7 @@ test.skip("tool completion stores completed timestamp", () => {
       data: {
         sessionID,
         assistantMessageID,
-        agent: "build",
+        agent: Agent.ID.make("build"),
         model: {
           id: ModelV2.ID.make("model"),
           providerID: ProviderV2.ID.make("provider"),
@@ -213,7 +218,7 @@ test.skip("tool completion stores completed timestamp", () => {
   })
 })
 
-test("compaction events reduce to compaction message only when completed", () => {
+test("compaction events reduce to a compaction message through completion", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const id = EventV2.ID.create()
@@ -224,15 +229,25 @@ test("compaction events reduce to compaction message only when completed", () =>
       id,
       created: DateTime.makeUnsafe(0),
       type: "session.compaction.started",
-      durable: durable(sessionID),
+      durable: durable(sessionID, 0, 2),
       data: {
         sessionID,
         reason: "auto",
+        recent: "recent context",
       },
     } satisfies SessionEvent.Event),
   )
 
-  expect(state.messages).toEqual([])
+  expect(state.messages).toMatchObject([
+    {
+      id: SessionMessage.ID.fromEvent(id),
+      type: "compaction",
+      reason: "auto",
+      recent: "recent context",
+      status: "running",
+      summary: "",
+    },
+  ])
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
@@ -263,7 +278,7 @@ test("compaction events reduce to compaction message only when completed", () =>
       id: endedID,
       created: DateTime.makeUnsafe(0),
       type: "session.compaction.ended",
-      durable: durable(sessionID, 1),
+      durable: durable(sessionID, 3),
       data: {
         sessionID,
         reason: "auto",
@@ -275,9 +290,10 @@ test("compaction events reduce to compaction message only when completed", () =>
 
   expect(state.messages).toHaveLength(1)
   expect(state.messages[0]).toMatchObject({
-    id: SessionMessage.ID.fromEvent(endedID),
+    id: SessionMessage.ID.fromEvent(id),
     type: "compaction",
     reason: "auto",
+    status: "completed",
     summary: "final summary",
     recent: "recent context",
     time: { created: DateTime.makeUnsafe(0) },

@@ -141,7 +141,13 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       .subscribe(SessionEvent.Compaction.Delta)
       .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
     yield* Effect.yieldNow
-    expect(yield* compaction.compactManual({ session, messages: [userMessage] })).toBe(true)
+    expect(
+      yield* compaction.compactManual({
+        session,
+        messages: [userMessage],
+        inputID: SessionMessage.ID.make("msg_manual_compaction"),
+      }),
+    ).toBe(true)
     expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
 
     expect(requests).toHaveLength(1)

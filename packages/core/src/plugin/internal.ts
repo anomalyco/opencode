@@ -1,6 +1,6 @@
 export * as PluginInternal from "./internal"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { AgentV2 } from "../agent"
@@ -28,10 +28,9 @@ import { PermissionV2 } from "../permission"
 import { Reference } from "../reference"
 import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
-import { SessionTodo } from "../session/todo"
 import { Shell } from "../shell"
 import { SkillV2 } from "../skill"
-import { ApplyPatchTool } from "../tool/apply-patch"
+import { PatchTool } from "../tool/patch"
 import { EditTool } from "../tool/edit"
 import { GlobTool } from "../tool/glob"
 import { GrepTool } from "../tool/grep"
@@ -41,7 +40,6 @@ import { ReadTool } from "../tool/read"
 import { ShellTool } from "../tool/shell"
 import { SkillTool } from "../tool/skill"
 import { SubagentTool } from "../tool/subagent"
-import { TodoWriteTool } from "../tool/todowrite"
 import { Tools } from "../tool/tools"
 import { WebFetchTool } from "../tool/webfetch"
 import { WebSearchTool } from "../tool/websearch"
@@ -78,7 +76,6 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const reference = yield* Reference.Service
   const ripgrep = yield* Ripgrep.Service
   const instructions = yield* SessionInstructions.Service
-  const todo = yield* SessionTodo.Service
   const shell = yield* Shell.Service
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
@@ -107,7 +104,6 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Reference.Service, reference),
     Context.make(Ripgrep.Service, ripgrep),
     Context.make(SessionInstructions.Service, instructions),
-    Context.make(SessionTodo.Service, todo),
     Context.make(Shell.Service, shell),
     Context.make(SkillV2.Service, skill),
     Context.make(Tools.Service, tools),
@@ -127,7 +123,7 @@ const pre = [
   SkillPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,
-  ApplyPatchTool.Plugin,
+  PatchTool.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,
   GrepTool.Plugin,
@@ -136,7 +132,6 @@ const pre = [
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
-  TodoWriteTool.Plugin,
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
   WriteTool.Plugin,

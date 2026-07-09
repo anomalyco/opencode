@@ -657,6 +657,7 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   provider: "bedrock",
+  providerMetadataKey: "bedrock",
   protocol,
   // Bedrock's URL embeds the region in the route endpoint host and the
   // validated modelId in the path. We read the validated body so the URL

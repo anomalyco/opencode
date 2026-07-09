@@ -321,50 +321,8 @@ test("holds markdown code blocks until final commit and keeps newline ownership"
   }
 })
 
-test("renders todo and question summaries without boilerplate footer copy", async () => {
+test("renders question summaries without boilerplate footer copy", async () => {
   const cases = [
-    {
-      title: "# Todos",
-      include: [
-        "[✓] List files under `run/`",
-        "[•] Count functions in each `run/` file",
-        "[ ] Mark each tracking item complete",
-      ],
-      exclude: ["Updating", "todos completed"],
-      start: toolCommit({
-        tool: "todowrite",
-        phase: "start",
-        toolState: "running",
-        state: {
-          status: "running",
-          input: {
-            todos: [
-              { status: "completed", content: "List files under `run/`" },
-              { status: "in_progress", content: "Count functions in each `run/` file" },
-              { status: "pending", content: "Mark each tracking item complete" },
-            ],
-          },
-          time: { start: 1 },
-        },
-      }),
-      final: toolCommit({
-        tool: "todowrite",
-        phase: "final",
-        toolState: "completed",
-        state: {
-          status: "completed",
-          input: {
-            todos: [
-              { status: "completed", content: "List files under `run/`" },
-              { status: "in_progress", content: "Count functions in each `run/` file" },
-              { status: "pending", content: "Mark each tracking item complete" },
-            ],
-          },
-          metadata: {},
-          time: { start: 1, end: 4 },
-        },
-      }),
-    },
     {
       title: "# Questions",
       include: ["What should I work on in the codebase next?", "Bug fix"],

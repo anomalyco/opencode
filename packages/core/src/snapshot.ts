@@ -10,10 +10,10 @@ import { Git } from "./git"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath, RelativePath } from "./schema"
+import { ID } from "@opencode-ai/schema/snapshot"
 import { Hash } from "./util/hash"
 
-export const ID = Schema.String.pipe(Schema.brand("Snapshot.ID"))
-export type ID = typeof ID.Type
+export { ID }
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Snapshot.Error", {
   operation: Schema.Literals(["capture", "files", "diff", "preview", "restore"]),
@@ -252,13 +252,4 @@ function failure(operation: Error["operation"], cause: unknown) {
     message: cause instanceof globalThis.Error ? cause.message : String(cause),
     cause,
   })
-}
-
-/** Legacy persisted session diff shape. */
-export type LegacyFileDiff = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
 }

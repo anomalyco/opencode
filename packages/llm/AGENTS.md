@@ -113,6 +113,23 @@ Keep provider facades small and explicit:
 
 `Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
+### Provider Package Entrypoints
+
+Catalog-selected native providers use package-like export paths from `@opencode-ai/llm`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+
+```ts
+import { model } from "@opencode-ai/llm/providers/openai/responses"
+
+const selected = model("gpt-5", {
+  apiKey,
+  transport: "websocket",
+})
+```
+
+Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Keep transport choices inside the semantic entrypoint settings, so OpenAI Responses HTTP and WebSocket share one entrypoint. Provider facades may still expose named selectors such as `responsesWebSocket` for direct typed call sites; the package-like contract maps its settings to those selectors before returning an executable `Model`.
+
+Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
+
 ### Folder layout
 
 ```
@@ -303,7 +320,7 @@ recorded.effect("streams text", () =>
 )
 ```
 
-Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
+Replay is the default. `RECORD=true` records fresh cassettes locally and requires the listed env vars; unset `CI` before recording because CI always forces replay. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
 
 Pass `provider`, `protocol`, and optional `tags` to `recordedTests(...)` / `recorded.effect.with(...)` so cassettes carry searchable metadata. Use recorded-test filters to replay or record a narrow subset without rewriting a whole file:
 
@@ -316,6 +333,6 @@ Filters apply in replay and record mode. Combine them with `RECORD=true` when re
 
 **Binary response bodies.** Most providers stream text (SSE, JSON). The recorder treats known textual media types (`text/*`, JSON/XML structured types, JavaScript, forms, YAML, and SVG) as text and stores every other response as base64 with `bodyEncoding: "base64"`. This preserves binary formats such as AWS event-stream frames without a lossy UTF-8 round trip.
 
-**Matching strategy.** Replay walks the cassette in record order via an internal cursor: the Nth runtime request is served by the Nth recorded interaction, and each one is validated by comparing method, URL, allow-listed headers, and the canonical JSON body. This handles tool loops (each round's request differs as history grows) and retry/polling scenarios (successive byte-identical requests with different responses) uniformly. If a test reorders its requests, re-record the cassette. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
+**Matching strategy.** A runtime request atomically claims the first unused recorded interaction that matches its method, URL, allow-listed headers, and canonical JSON body. Distinct requests may replay in any order or concurrently. Repeated identical requests consume their matching responses in cassette order, preserving deterministic retry and polling behavior. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.

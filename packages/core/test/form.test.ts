@@ -14,6 +14,7 @@ const formID = Form.ID.create("frm_test")
 const input = {
   id: formID,
   sessionID: SessionSchema.ID.make("ses_test"),
+  title: "Test form",
   mode: "form",
   fields: [{ key: "name", type: "string", required: true }],
 } satisfies Form.CreateInput
@@ -45,10 +46,12 @@ describe("Form", () => {
       const service = yield* Form.Service
       const created = yield* service.create({
         sessionID: "global",
+        title: "MCP input",
         mode: "form",
         fields: [{ key: "name", type: "string", required: true }],
       })
       expect(created.sessionID).toBe("global")
+      expect(created.title).toBe("MCP input")
 
       const owned = yield* service.list({ sessionID: "global" })
       expect(owned.map((form) => form.id)).toEqual([created.id])
@@ -64,6 +67,7 @@ describe("Form", () => {
       const service = yield* Form.Service
       const created = yield* service.create({
         sessionID: "global",
+        title: "Conditional form",
         mode: "form",
         fields: [
           { key: "confirm", type: "boolean", required: true },
@@ -96,6 +100,7 @@ describe("Form", () => {
       ]
       const created = yield* service.create({
         sessionID: "global",
+        title: "Multiselect form",
         mode: "form",
         fields: [
           { key: "langs", type: "multiselect", options },
@@ -118,6 +123,7 @@ describe("Form", () => {
       const service = yield* Form.Service
       const created = yield* service.create({
         sessionID: "global",
+        title: "Dependent form",
         mode: "form",
         fields: [
           { key: "a", type: "boolean" },
@@ -160,6 +166,7 @@ describe("Form", () => {
       ]
       const created = yield* service.create({
         sessionID: "global",
+        title: "Selection form",
         mode: "form",
         fields: [
           { key: "langs", type: "multiselect", options },
@@ -191,6 +198,7 @@ describe("Form", () => {
       const service = yield* Form.Service
       const created = yield* service.create({
         sessionID: "global",
+        title: "Cascading form",
         mode: "form",
         fields: [
           { key: "a", type: "boolean" },
@@ -213,7 +221,7 @@ describe("Form", () => {
     Effect.gen(function* () {
       const service = yield* Form.Service
       const flipCreate = (fields: ReadonlyArray<Form.Field>) =>
-        service.create({ sessionID: "global", mode: "form", fields }).pipe(Effect.flip)
+        service.create({ sessionID: "global", title: "Invalid form", mode: "form", fields }).pipe(Effect.flip)
 
       expect(
         yield* flipCreate([

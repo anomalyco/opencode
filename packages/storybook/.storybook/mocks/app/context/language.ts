@@ -1,7 +1,4 @@
 const dict: Record<string, string> = {
-  "session.todo.title": "Todos",
-  "session.todo.collapse": "Collapse todos",
-  "session.todo.expand": "Expand todos",
   "prompt.loading": "Loading prompt...",
   "prompt.placeholder.normal": "Ask anything...",
   "prompt.placeholder.simple": "Ask anything...",

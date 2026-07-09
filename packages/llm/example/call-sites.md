@@ -342,12 +342,22 @@ const response =
   )
 ```
 
-HTTP versus WebSocket is represented as named route selectors, not as model or
-request overrides. Same protocol, different transport, different route:
+For direct provider-facade calls, HTTP versus WebSocket is represented as named
+route selectors, not as model or request overrides. Same protocol, different
+transport, different route:
 
 ```ts
 OpenAI.responses("gpt-4o")
 OpenAI.responsesWebSocket("gpt-4o")
+```
+
+The package-like OpenAI Responses entrypoint instead keeps transport scoped to
+Responses settings while preserving the same `model(...)` contract:
+
+```ts
+import { model } from "@opencode-ai/llm/providers/openai/responses"
+
+model("gpt-4o", { apiKey, transport: "websocket" })
 ```
 
 The client should not require a different public layer just because a selected
@@ -468,10 +478,10 @@ const model =
 ```
 
 That boundary can branch on durable config/catalog metadata and call typed
-provider APIs directly. Transport selection belongs there too: map metadata like
-`endpoint.websocket` to `OpenAI.responsesWebSocket(apiModelID)`; otherwise use
-the normal `OpenAI.responses(apiModelID)` route. The client runtime only executes
-the route carried by the model.
+provider APIs directly. A direct provider-facade boundary maps metadata like
+`endpoint.websocket` to `OpenAI.responsesWebSocket(apiModelID)`. A package-loading
+boundary passes `transport: "websocket"` to the OpenAI Responses entrypoint.
+The client runtime only executes the route carried by the resulting model.
 
 ## Competitive Shape
 
@@ -507,8 +517,9 @@ App boundary = explicit durable-config -> typed-provider call
   id.
 - No `model(id, overrides)` escape hatch. Model selection takes the model id;
   endpoint/auth/deployment customization happens by configuring the route first.
-- No transport override on model/request. HTTP SSE versus WebSocket is a named
-  route selector such as `responses` versus `responsesWebSocket`.
+- No transport override on an executable model or request. Direct provider
+  facades use `responses` versus `responsesWebSocket`; the package-like Responses
+  entrypoint maps its scoped `transport` setting before constructing the model.
 - No separate public `LLMClient.layerWithWebSocket`. The runtime should expose one
   client layer with the available transport capabilities.
 - No executable `ModelRef`. The executable handle is `Model`; durable model

@@ -606,7 +606,7 @@ const layer = Layer.effect(
                 file,
               ])).text
           return {
-            path: file,
+            file,
             status,
             additions: binary ? 0 : Number(stats[0] ?? 0),
             deletions: binary ? 0 : Number(stats[1] ?? 0),

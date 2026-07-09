@@ -67,7 +67,8 @@ export function cortexFetch(upstream: FetchLike = fetch) {
 export const SnowflakeCortexPlugin = define({
   id: "opencode.provider.snowflake-cortex",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.sdk(
+    yield* ctx.aisdk.hook(
+      "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("snowflake-cortex")) return
         const token =

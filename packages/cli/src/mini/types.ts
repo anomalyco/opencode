@@ -113,6 +113,7 @@ export type FooterQueuedPrompt = {
 }
 
 export type RunAgent = {
+  id: string
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
@@ -135,7 +136,6 @@ export type RunInput = {
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
-  backgroundSubagents: boolean
   demo?: boolean
 }
 
@@ -199,15 +199,6 @@ export type ToolTaskSnapshot = {
   tail: string
 }
 
-export type ToolTodoSnapshot = {
-  kind: "todo"
-  items: Array<{
-    status: string
-    content: string
-  }>
-  tail: string
-}
-
 export type ToolQuestionSnapshot = {
   kind: "question"
   items: Array<{
@@ -217,12 +208,7 @@ export type ToolQuestionSnapshot = {
   tail: string
 }
 
-export type ToolSnapshot =
-  | ToolCodeSnapshot
-  | ToolDiffSnapshot
-  | ToolTaskSnapshot
-  | ToolTodoSnapshot
-  | ToolQuestionSnapshot
+export type ToolSnapshot = ToolCodeSnapshot | ToolDiffSnapshot | ToolTaskSnapshot | ToolQuestionSnapshot
 
 export type EntryLayout = "inline" | "block"
 

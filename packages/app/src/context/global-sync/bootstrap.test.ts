@@ -30,7 +30,6 @@ function directoryState() {
       return this.session_status[id]?.type !== "idle"
     },
     session_diff: {},
-    todo: {},
     permission: {},
     question: {},
     mcp_ready: true,

@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
+import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
@@ -19,6 +19,7 @@ import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
 import { SessionV1 } from "./v1/session"
+import { Money } from "@opencode-ai/schema/money"
 import { InstallationVersion } from "./installation/version"
 import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
@@ -34,7 +35,7 @@ import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
-import { Revert } from "@opencode-ai/schema/revert"
+import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "./fs-util"
 import { Mime } from "./mime"
 import type { EventLog } from "@opencode-ai/schema/event-log"
@@ -46,8 +47,8 @@ import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { fileURLToPath } from "url"
 
-export const RevertState = Revert.State
-export type RevertState = Revert.State
+export const RevertState = Session.Revert
+export type RevertState = Session.Revert
 
 // get project -> project.locations
 //
@@ -121,6 +122,13 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class SyntheticConflictError extends Schema.TaggedErrorClass<SyntheticConflictError>()(
+  "Session.SyntheticConflictError",
+  {
+    sessionID: SessionSchema.ID,
+    inputID: SessionMessage.ID,
+  },
+) {}
 export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
   uri: Schema.String,
   message: Schema.String,
@@ -136,7 +144,7 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.Bus
   sessionID: SessionSchema.ID,
 }) {}
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
-  skill: Schema.String,
+  skill: SkillV2.ID,
 }) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
@@ -146,6 +154,7 @@ export type Error =
   | MessageDecodeError
   | OperationUnavailableError
   | PromptConflictError
+  | SyntheticConflictError
   | AttachmentError
   | CompactionConflictError
   | BusyError
@@ -170,14 +179,14 @@ export interface Interface {
       id: SessionMessage.ID
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  }) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   readonly message: (input: {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
-  }) => Effect.Effect<SessionMessage.Message | undefined>
+  }) => Effect.Effect<SessionMessage.Info | undefined>
   readonly context: (
     sessionID: SessionSchema.ID,
-  ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   /**
    * Durable, ordered, gap-free session log read. Replays public durable
    * session events after the exclusive `after` cursor, emits a `Synced`
@@ -191,7 +200,10 @@ export interface Interface {
     after?: number
     follow?: boolean
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
-  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
+  readonly switchAgent: (input: {
+    sessionID: SessionSchema.ID
+    agent: AgentV2.ID
+  }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
@@ -200,23 +212,26 @@ export interface Interface {
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    prompt: PromptInput.Prompt
+    text: string
+    files?: PromptInput.Prompt["files"]
+    agents?: PromptInput.Prompt["agents"]
+    metadata?: Record<string, unknown>
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | AttachmentError>
+  }) => Effect.Effect<SessionInput.User, NotFoundError | PromptConflictError | AttachmentError>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     command: string
     arguments?: string
-    agent?: string
+    agent?: AgentV2.ID
     model?: ModelV2.Ref
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<
-    SessionInput.Admitted,
+    SessionInput.User,
     NotFoundError | PromptConflictError | AttachmentError | CommandV2.NotFoundError | CommandV2.EvaluationError
   >
   readonly shell: (input: {
@@ -227,7 +242,7 @@ export interface Interface {
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    skill: string
+    skill: SkillV2.ID
     resume?: boolean
   }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (
@@ -239,18 +254,20 @@ export interface Interface {
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly synthetic: (input: {
+    id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     text: string
     description?: string
     metadata?: Record<string, unknown>
+    delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<SessionInput.Synthetic, NotFoundError | SyntheticConflictError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
       messageID: SessionMessage.ID
       files?: boolean
-    }) => Effect.Effect<Revert.State, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
+    }) => Effect.Effect<Session.Revert, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
     readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
@@ -273,7 +290,7 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
@@ -322,7 +339,7 @@ const layer = Layer.effect(
                 variant: input.model.variant,
               }
             : undefined,
-          cost: 0,
+          cost: Money.USD.zero,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },
         })
@@ -483,15 +500,19 @@ const layer = Layer.effect(
             // continues from the reverted boundary rather than stale post-boundary history.
             if (session.revert)
               yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
-            const prompt = yield* resolvePrompt(input.prompt).pipe(Effect.provideService(FSUtil.Service, fs))
+            const prompt = yield* resolvePrompt({ text: input.text, files: input.files, agents: input.agents }).pipe(
+              Effect.provideService(FSUtil.Service, fs),
+            )
             const messageID = input.id ?? SessionMessage.ID.create()
-            const delivery = input.delivery ?? "steer"
-            const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
+            const admittedInput = SessionInput.Message.make({
+              type: "user",
+              data: { ...prompt, metadata: input.metadata },
+              delivery: input.delivery ?? "steer",
+            })
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
-              prompt,
-              delivery,
+              input: admittedInput,
             }).pipe(
               Effect.catchDefect((defect) =>
                 defect instanceof SessionInput.LifecycleConflict
@@ -499,7 +520,10 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (!SessionInput.equivalent(admitted, expected))
+            if (
+              admitted.type !== "user" ||
+              !SessionInput.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
+            )
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
@@ -529,13 +553,15 @@ const layer = Layer.effect(
         })
         const model = command.model ?? commandAgent?.model ?? input.model
         if (agent !== undefined && session.agent !== AgentV2.ID.make(agent))
-          yield* result.switchAgent({ sessionID: input.sessionID, agent })
+          yield* result.switchAgent({ sessionID: input.sessionID, agent: AgentV2.ID.make(agent) })
         if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
 
         return yield* result.prompt({
           id: input.id,
           sessionID: input.sessionID,
-          prompt: { text: evaluated.text, files: input.files, agents: input.agents },
+          text: evaluated.text,
+          files: input.files,
+          agents: input.agents,
           delivery: input.delivery,
           resume: input.resume,
         })
@@ -591,12 +617,13 @@ const layer = Layer.effect(
       skill: Effect.fn("V2Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const skills = yield* SkillV2.Service.pipe(Effect.provide(locations.get(session.location)))
-        const skill = (yield* skills.list()).find((item) => item.name === input.skill)
+        const skill = (yield* skills.list()).find((item) => item.id === input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
         yield* events.publish(
           SessionEvent.Skill.Activated,
           {
             sessionID: input.sessionID,
+            id: skill.id,
             name: skill.name,
             text: skill.content,
           },
@@ -659,35 +686,60 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })
         if (backgrounded.length === 0) return
-        yield* result.synthetic({
-          sessionID,
-          text: [
-            "User requested that active blocking work be moved to the background.",
-            "",
-            "Backgrounded work:",
-            ...backgrounded.map((job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`),
-            "",
-            "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
-          ].join("\n"),
-        })
+        yield* result
+          .synthetic({
+            sessionID,
+            text: [
+              "User requested that active blocking work be moved to the background.",
+              "",
+              "Backgrounded work:",
+              ...backgrounded.map((job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`),
+              "",
+              "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
+            ].join("\n"),
+          })
+          .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),
-      synthetic: Effect.fn("V2Session.synthetic")(function* (input) {
-        yield* result.get(input.sessionID)
-        yield* events.publish(SessionEvent.Synthetic, {
-          sessionID: input.sessionID,
-          text: input.text,
-          description: input.description,
-          metadata: input.metadata,
-        })
-        if (input.resume === false) return
-        yield* execution
-          .resume(input.sessionID)
-          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
-      }),
+      synthetic: Effect.fn("V2Session.synthetic")((input) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* result.get(input.sessionID)
+            const inputID = input.id ?? SessionMessage.ID.create()
+            const admittedInput = SessionInput.Message.make({
+              type: "synthetic",
+              data: {
+                text: input.text,
+                description: input.description,
+                metadata: input.metadata,
+              },
+              delivery: input.delivery ?? "steer",
+            })
+            const admitted = yield* SessionInput.admit(db, events, {
+              id: inputID,
+              sessionID: input.sessionID,
+              input: admittedInput,
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInput.LifecycleConflict
+                  ? new SyntheticConflictError({ sessionID: input.sessionID, inputID })
+                  : Effect.die(defect),
+              ),
+            )
+            if (
+              admitted.type !== "synthetic" ||
+              !SessionInput.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
+            )
+              return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
+            if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
+              yield* execution.wake(input.sessionID)
+            return admitted
+          }),
+        ),
+      ),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
@@ -705,10 +757,12 @@ const layer = Layer.effect(
         clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          return yield* SessionRevert.clear(session).pipe(
+          const revert = yield* SessionRevert.clear(session).pipe(
             Effect.provideService(EventV2.Service, events),
             Effect.provide(locations.get(session.location)),
           )
+          yield* execution.wake(sessionID)
+          return revert
         }),
         commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
           const session = yield* result.get(sessionID)

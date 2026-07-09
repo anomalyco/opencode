@@ -1,8 +1,8 @@
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Effect } from "effect"
 
-export default define({
+export default Plugin.define({
   id: "variant-source",
   effect: (ctx) =>
     ctx.catalog

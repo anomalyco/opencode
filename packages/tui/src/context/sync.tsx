@@ -15,8 +15,7 @@ import type {
   ProviderListResponse,
   QuestionRequest,
   Session,
-  SnapshotFileDiff,
-  Todo,
+  FileDiffInfo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore } from "solid-js/store"
@@ -42,9 +41,6 @@ export const {
       provider_default: Record<string, string>
       provider_next: ProviderListResponse
       console_state: ConsoleState
-      capabilities: {
-        experimentalBackgroundSubagents: boolean
-      }
       provider_auth: Record<string, ProviderAuthMethod[]>
       agent: Agent[]
       command: Command[]
@@ -52,8 +48,7 @@ export const {
       question: Record<string, QuestionRequest[]>
       config: Config
       session: Session[]
-      session_diff: Record<string, SnapshotFileDiff[]>
-      todo: Record<string, Todo[]>
+      session_diff: Record<string, FileDiffInfo[]>
       message: Record<string, Message[]>
       part: Record<string, Part[]>
       lsp: LspStatus[]
@@ -71,9 +66,6 @@ export const {
         connected: [],
       },
       console_state: emptyConsoleState,
-      capabilities: {
-        experimentalBackgroundSubagents: false,
-      },
       provider_auth: {},
       agent: [],
       command: [],
@@ -82,7 +74,6 @@ export const {
       config: {},
       session: [],
       session_diff: {},
-      todo: {},
       message: {},
       part: {},
       lsp: [],

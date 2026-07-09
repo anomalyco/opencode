@@ -14,11 +14,14 @@ import { SimulationServer } from "./server"
  */
 export async function create(options: CliRendererConfig): Promise<CliRenderer> {
   const headless = process.env.OPENCODE_DRIVE_RENDERER === "headless"
-  const renderer = headless ? await SimulationRenderer.create(options) : await createCliRenderer(options)
+  const manifest = DriveManifest.resolve()
+  const renderer = headless
+    ? await SimulationRenderer.create(options, manifest.recording?.timeline)
+    : await createCliRenderer(options)
   const server = SimulationServer.start(
     SimulationActions.createHarness(renderer),
-    DriveManifest.resolve().endpoints.ui,
-    headless,
+    manifest.endpoints.ui,
+    headless && manifest.recording ? () => SimulationRenderer.finish(renderer) : undefined,
   )
   process.stderr.write(`opencode drive ui websocket: ${server.url}\n`)
   renderer.once("destroy", () => server.stop())

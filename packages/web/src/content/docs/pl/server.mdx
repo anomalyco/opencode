@@ -154,7 +154,6 @@ Serwer opencode udostępnia następujące interfejsy API.
 | `DELETE` | `/session/:id`                           | Usuń sesję i wszystkie jej dane             | Zwraca `boolean`                                                                   |
 | `PATCH`  | `/session/:id`                           | Aktualizuj właściwości sesji                | treść: `{ title? }`, zwraca <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | Pobierz sesje podrzędne sesji               | Zwraca <a href={typesUrl}><code>Session[]</code></a>                               |
-| `GET`    | `/session/:id/todo`                      | Pobierz listę rzeczy do zrobienia dla sesji | Zwraca <a href={typesUrl}><code>Todo[]</code></a>                                  |
 | `POST`   | `/session/:id/init`                      | Przeanalizuj aplikację i utwórz `AGENTS.md` | treść: `{ messageID, providerID, modelID }`, zwraca `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Rozwiń istniejącą sesję w wiadomości        | treść: `{ messageID? }`, zwraca <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Przerwij trwającą sesję                     | Zwraca `boolean`                                                                   |

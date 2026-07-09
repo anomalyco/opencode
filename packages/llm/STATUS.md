@@ -1,6 +1,6 @@
 # LLM Provider Parity Status
 
-Last reviewed: 2026-07-02
+Last reviewed: 2026-07-08
 
 This file tracks the gap between the native `@opencode-ai/llm` package and the AI SDK provider packages that opencode still depends on for many catalog/runtime paths.
 
@@ -64,26 +64,27 @@ Everything else currently fails with `SessionRunnerModel.UnsupportedApiError` wh
 5. Azure is only a provider facade, not a full runtime replacement. Native Azure exists, but the catalog runner does not select it, and token auth/resource variants need review.
 6. Provider option typing is uneven. OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter each expose a small typed subset plus raw HTTP overlays; this is useful but not equivalent to AI SDK provider option coverage.
 7. Structured output is not provider-native yet. `LLM.generateObject` still uses a synthetic tool strategy, while the future design expects native structured output where reliable and tool fallback where needed.
-8. Package/namespace boundaries need to be made explicit in docs and exports. Protocol namespaces exist, but planned public groupings should call out OpenAI Chat, OpenAI Responses, OpenAI-compatible Chat, OpenAI-compatible Responses, Anthropic Messages, Gemini, Vertex Gemini, Vertex Anthropic Messages, Bedrock Converse, and Bedrock Mantle as separate API slices.
+8. Package/namespace boundaries for the current native loading set are explicit in docs and exports. Other exported provider facades are not catalog package entrypoints until they implement the contract. Missing native API boundaries remain for OpenAI-compatible Responses, Vertex Gemini, Vertex Anthropic Messages, and Bedrock Mantle.
 9. Recorded coverage is uneven. OpenAI, Anthropic, Gemini, Bedrock Converse, Cloudflare, OpenRouter, and several OpenAI-compatible Chat providers have cassettes. Azure, Vertex, and Mantle need first-class recorded scenarios before switching defaults.
 
-## Proposed Native Namespace Shape
+## Native Namespace Shape
 
 These are implementation/API slices, not separate npm packages.
 
-| Namespace | Purpose |
-| --- | --- |
-| `OpenAI.Chat` or `OpenAIChat` | OpenAI `/chat/completions` semantics. |
-| `OpenAI.Responses` or `OpenAIResponses` | OpenAI `/responses` HTTP and WebSocket semantics. |
-| `OpenAICompatible.Chat` or `OpenAICompatibleChat` | Generic OpenAI-compatible `/chat/completions`. |
-| `OpenAICompatible.Responses` or `OpenAICompatibleResponses` | Generic OpenAI-compatible `/responses`. Missing today. |
-| `Anthropic.Messages` or `AnthropicMessages` | Anthropic Messages API. |
-| `Google.Gemini` or `Gemini` | Gemini Developer API. |
-| `GoogleVertex.Gemini` | Vertex Gemini API. Missing today. |
-| `GoogleVertex.AnthropicMessages` | Vertex-hosted Anthropic Messages API. Missing today. |
-| `Bedrock.Converse` or `BedrockConverse` | AWS Bedrock Converse API. |
-| `Bedrock.Mantle` | AWS Bedrock Mantle OpenAI-compatible APIs. Missing today. |
-| `Azure.OpenAIChat` / `Azure.OpenAIResponses` | Azure deployment specializations over OpenAI protocols. |
+| API slice | Package-like entrypoint | Purpose |
+| --- | --- | --- |
+| OpenAI Chat | `@opencode-ai/llm/providers/openai/chat` | OpenAI `/chat/completions` semantics. |
+| OpenAI Responses | `@opencode-ai/llm/providers/openai/responses` | OpenAI `/responses` semantics with HTTP/WebSocket selected through settings. |
+| OpenAI-compatible Chat | `@opencode-ai/llm/providers/openai-compatible` | Generic OpenAI-compatible `/chat/completions`. |
+| OpenAI-compatible Responses | Missing | Generic OpenAI-compatible `/responses`. |
+| Anthropic Messages | `@opencode-ai/llm/providers/anthropic` | Anthropic Messages API. |
+| Gemini Developer API | `@opencode-ai/llm/providers/google` | Google AI Studio Gemini API. |
+| Vertex Gemini | Missing | Vertex Gemini API. |
+| Vertex Anthropic Messages | Missing | Vertex-hosted Anthropic Messages API. |
+| Bedrock Converse | `@opencode-ai/llm/providers/amazon-bedrock` | AWS Bedrock Converse API. |
+| Bedrock Mantle | Missing | AWS Bedrock Mantle OpenAI-compatible APIs. |
+| Azure OpenAI Chat | `@opencode-ai/llm/providers/azure/chat` | Azure specialization of OpenAI Chat. |
+| Azure OpenAI Responses | `@opencode-ai/llm/providers/azure/responses` | Azure specialization of OpenAI Responses. |
 
 ## Suggested Next Work Slices
 

@@ -6,6 +6,7 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
+import { lastAssistantWithUsage } from "../../util/session"
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -22,17 +23,15 @@ export function SubagentFooter() {
   const usage = createMemo(() => {
     const current = session()
     if (!current) return
+    const last = lastAssistantWithUsage(data.session.message.list(route.sessionID), current.revert?.messageID)
+    if (!last) return
     const tokens =
-      current.tokens.input +
-      current.tokens.output +
-      current.tokens.reasoning +
-      current.tokens.cache.read +
-      current.tokens.cache.write
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (tokens <= 0) return
 
     const model = data.location
       .model.list(current.location)
-      ?.find((model) => model.providerID === current.model?.providerID && model.id === current.model.id)
+      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = current.cost
 
@@ -83,10 +82,10 @@ export function SubagentFooter() {
           </box>
           <box flexDirection="row" gap={2}>
             <box
-               onMouseOver={() => setHover("parent")}
-               onMouseOut={() => setHover(null)}
+              onMouseOver={() => setHover("parent")}
+              onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.parent")}
-               backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
                 Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>

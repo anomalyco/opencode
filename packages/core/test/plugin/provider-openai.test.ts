@@ -1,4 +1,5 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { Money } from "@opencode-ai/schema/money"
 import { describe, expect } from "bun:test"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
@@ -185,7 +186,16 @@ describe("OpenAIPlugin", () => {
           draft.package = item.package
         })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5.5"), (model) => {
-          model.cost = [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }]
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(1),
+              output: Money.USDPerMillionTokens.make(2),
+              cache: {
+                read: Money.USDPerMillionTokens.make(0.1),
+                write: Money.USDPerMillionTokens.zero,
+              },
+            },
+          ]
         })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5.5-pro"), () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-4.1"), () => {})

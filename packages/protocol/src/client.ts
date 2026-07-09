@@ -34,6 +34,7 @@ export const ClientApi: ClientApiShape = makeDefaultApi({
 
 export const groupNames = {
   "server.health": "health",
+  "server.server": "server",
   "server.debug": "debug",
   "server.location": "location",
   "server.agent": "agent",
@@ -58,27 +59,6 @@ export const groupNames = {
   "server.project": "project",
   "server.projectCopy": "projectCopy",
   "server.vcs": "vcs",
-} as const
-
-export const endpointNames = {
-  "debug.location.evict": "evictLocation",
-  "session.messages": "list",
-  "integration.connect.key": "connectKey",
-  "integration.connect.oauth": "connectOauth",
-  "integration.attempt.status": "attemptStatus",
-  "integration.attempt.complete": "attemptComplete",
-  "integration.attempt.cancel": "attemptCancel",
-  "session.instructions.entry.list": ["instructions", "entry", "list"],
-  "session.instructions.entry.put": ["instructions", "entry", "put"],
-  "session.instructions.entry.remove": ["instructions", "entry", "remove"],
-  "session.revert.stage": "revertStage",
-  "session.revert.clear": "revertClear",
-  "session.revert.commit": "revertCommit",
-  "permission.request.list": "listRequests",
-  "permission.saved.list": "listSaved",
-  "permission.saved.remove": "removeSaved",
-  "form.request.list": "listRequests",
-  "question.request.list": "listRequests",
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect", "pty.connectToken"])

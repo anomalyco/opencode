@@ -11,7 +11,6 @@ import {
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
-  parseTodos,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -122,6 +121,8 @@ describe("TUI inline tool wrapping", () => {
     // Legacy tool names normalize to their renamed views.
     expect(toolDisplay("bash")).toBe("shell")
     expect(toolDisplay("task")).toBe("subagent")
+    expect(toolDisplay("apply_patch")).toBe("patch")
+    expect(toolDisplay("patch")).toBe("patch")
     expect(toolDisplay("plugin_tool")).toBe("generic")
   })
 
@@ -160,9 +161,6 @@ describe("TUI inline tool wrapping", () => {
         deletions: 0,
         movePath: undefined,
       },
-    ])
-    expect(parseTodos([null, { status: "pending" }, { status: "pending", content: "Safe" }])).toEqual([
-      { status: "pending", content: "Safe" },
     ])
     expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
     expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])

@@ -154,7 +154,6 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 | `DELETE` | `/session/:id`                           | 세션 삭제 및 모든 데이터           | `boolean`                                                                     |
 | `PATCH`  | `/session/:id`                           | 업데이트 세션 속성                 | 본체: `{ title? }`, 반환 <a href={typesUrl}><code>Session</code></a>          |
 | `GET`    | `/session/:id/children`                  | 세션의 하위 세션                   | 리턴 <a href={typesUrl}><code>Session[]</code></a>                            |
-| `GET`    | `/session/:id/todo`                      | 세션의 할 일(Todo) 목록 받기       | <a href={typesUrl}><code>Todo[]</code></a>                                    |
 | `POST`   | `/session/:id/init`                      | 앱 초기화 및 `AGENTS.md` 분석      | 몸: `{ messageID, providerID, modelID }`, 반환 `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 메시지의 기존 세션                 | 몸: `{ messageID? }`, 반환 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 운영 중인 세션                     | 반품 `boolean`                                                                |

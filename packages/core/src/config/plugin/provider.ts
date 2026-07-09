@@ -1,6 +1,7 @@
 export * as ConfigProviderPlugin from "./provider"
 
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { Money } from "@opencode-ai/schema/money"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
@@ -91,8 +92,8 @@ export const Plugin = define({
                   input: cost.input,
                   output: cost.output,
                   cache: {
-                    read: cost.cache?.read ?? 0,
-                    write: cost.cache?.write ?? 0,
+                    read: cost.cache?.read ?? Money.USDPerMillionTokens.zero,
+                    write: cost.cache?.write ?? Money.USDPerMillionTokens.zero,
                   },
                 }))
               }

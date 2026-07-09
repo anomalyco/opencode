@@ -37,7 +37,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, SessionV2Info, UserMessage } from "@opencode-ai/sdk/v2"
+import type { SessionInfo, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -57,6 +57,7 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+import { lastAssistantWithUsage } from "../../util/session"
 
 registerOpencodeSpinner()
 
@@ -164,9 +165,9 @@ export function Prompt(props: PromptProps) {
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
   const activeSubagents = createMemo(() => {
     if (!props.sessionID) return 0
-    return data.session.family(props.sessionID).filter(
-      (id) => id !== props.sessionID && data.session.status(id) === "running",
-    ).length
+    return data.session
+      .family(props.sessionID)
+      .filter((id) => id !== props.sessionID && data.session.status(id) === "running").length
   })
   const runningShells = createMemo(
     () => data.shell.list(currentLocation()).filter((shell) => shell.metadata.sessionID === props.sessionID).length,
@@ -276,18 +277,20 @@ export function Prompt(props: PromptProps) {
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const session = sync.session.get(props.sessionID)
-    const msg = sync.data.message[props.sessionID] ?? []
-    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    const session = data.session.get(props.sessionID)
+    if (!session) return
+    const last = lastAssistantWithUsage(data.session.message.list(props.sessionID), session.revert?.messageID)
     if (!last) return
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (tokens <= 0) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const model = data.location.model
+      .list(session.location)
+      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = session?.cost ?? 0
+    const cost = session.cost
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
@@ -626,7 +629,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || dialog.stack.length > 0) {
+    if (props.visible === false || props.disabled || dialog.stack.length > 0) {
       if (input.focused) input.blur()
       return
     }
@@ -1025,7 +1028,7 @@ export function Prompt(props: PromptProps) {
 
       sessionID = created.id
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; prompt state still uses legacy mutable session types.
-      session = structuredClone(created) as SessionV2Info
+      session = structuredClone(created) as SessionInfo
     }
 
     const inputText = expandTrackedPastedText(
@@ -1096,7 +1099,7 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       (data.location.skill.list(currentLocation()) ?? []).some(
-        (skill) => skill.slash === true && skill.name === inputText.split("\n")[0].split(" ")[0].slice(1),
+        (skill) => skill.slash === true && skill.id === inputText.split("\n")[0].split(" ")[0].slice(1),
       )
     ) {
       move.startSubmit()
@@ -1124,7 +1127,7 @@ export function Prompt(props: PromptProps) {
         })
       }
       if (session?.revert) {
-        const error = await sdk.api.session.revertCommit({ sessionID }).then(
+        const error = await sdk.api.session.revert.commit({ sessionID }).then(
           () => undefined,
           (error) => error,
         )
@@ -1136,11 +1139,9 @@ export function Prompt(props: PromptProps) {
       const error = await sdk.api.session
         .prompt({
           sessionID,
-          prompt: {
-            text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
-            files: store.prompt.files,
-            agents: store.prompt.agents,
-          },
+          text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
+          files: store.prompt.files,
+          agents: store.prompt.agents,
         })
         .then(
           () => undefined,
@@ -1449,7 +1450,10 @@ export function Prompt(props: PromptProps) {
                   input.cursorColor = theme.text
                 }, 0)
               }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              onMouseDown={(r: MouseEvent) => {
+                if (props.disabled) return
+                r.target?.focus()
+              }}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
@@ -1624,11 +1628,11 @@ export function Prompt(props: PromptProps) {
                     <text fg={theme.text}>
                       {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
                     </text>
-                    <text fg={theme.text}>
-                      {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
-                    </text>
                   </Match>
                 </Switch>
+                <text fg={theme.text}>
+                  {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
+                </text>
               </Match>
               <Match when={store.mode === "shell"}>
                 <text fg={theme.text}>

@@ -303,7 +303,6 @@ describe("SessionInstructions", () => {
     const synthetic = SessionMessage.Synthetic.make({
       id: SessionMessage.ID.make("msg_synthetic"),
       type: "synthetic",
-      sessionID: SessionV2.ID.make("ses_test"),
       text: "Instructions from: /repo/sub/AGENTS.md\ncontent",
       description: "Loaded /repo/sub/AGENTS.md",
       metadata: { instruction: { paths: ["/repo/sub/AGENTS.md"] } },

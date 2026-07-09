@@ -151,7 +151,6 @@ opencode 伺服器暴露以下 API。
 | `DELETE` | `/session/:id`                           | 刪除工作階段及其所有資料       | 回傳 `boolean`                                                                      |
 | `PATCH`  | `/session/:id`                           | 更新工作階段屬性               | 請求主體：`{ title? }`，回傳 <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | 取得工作階段的子工作階段       | 回傳 <a href={typesUrl}><code>Session[]</code></a>                                  |
-| `GET`    | `/session/:id/todo`                      | 取得工作階段的待辦事項清單     | 回傳 <a href={typesUrl}><code>Todo[]</code></a>                                     |
 | `POST`   | `/session/:id/init`                      | 分析應用程式並建立 `AGENTS.md` | 請求主體：`{ messageID, providerID, modelID }`，回傳 `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 在某條訊息處分岔現有工作階段   | 請求主體：`{ messageID? }`，回傳 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 中止正在執行的工作階段         | 回傳 `boolean`                                                                      |

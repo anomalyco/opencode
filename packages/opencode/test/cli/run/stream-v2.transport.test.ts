@@ -53,8 +53,31 @@ function connected(id = "evt_connected") {
   return { id, type: "server.connected", data: {} } satisfies RunV2Event
 }
 
-function durable(sessionID: string, seq = 0, version = 1) {
+function durable(sessionID: string, seq?: number): { aggregateID: string; seq: number; version: 1 }
+function durable<const Version extends 1 | 2>(
+  sessionID: string,
+  seq: number,
+  version: Version,
+): { aggregateID: string; seq: number; version: Version }
+function durable(sessionID: string, seq = 0, version: 1 | 2 = 1) {
   return { aggregateID: sessionID, seq, version }
+}
+
+function promptAdmission(input: Parameters<OpenCodeClient["session"]["prompt"]>[0], sessionID = "ses_1") {
+  return {
+    admittedSeq: 1,
+    id: input.id ?? "msg_prompt",
+    sessionID,
+    type: "user" as const,
+    data: {
+      text: input.text,
+      files: input.files,
+      agents: input.agents,
+      metadata: input.metadata,
+    },
+    delivery: input.delivery ?? ("steer" as const),
+    timeCreated: 2,
+  }
 }
 
 function footer() {
@@ -164,19 +187,8 @@ describe("V2 mini transport", () => {
 
     let admitted = false
     spyOn(client.session, "prompt").mockImplementation((request) => {
-      const messageID = request.id ?? "msg_prompt"
-      const prompt = request.prompt ?? { text: "" }
       admitted = true
-      return ok({
-        data: {
-          admittedSeq: 1,
-          id: messageID,
-          sessionID: "ses_1",
-          prompt,
-          delivery: "steer" as const,
-          timeCreated: 2,
-        },
-      }) as never
+      return ok({ data: promptAdmission(request) }) as never
     })
 
     const turn = transport.runPromptTurn({
@@ -191,7 +203,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -249,7 +261,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.prompt.promoted",
+          type: "session.input.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -264,16 +276,7 @@ describe("V2 mini transport", () => {
           data: { sessionID: "ses_1" },
         })
       })
-      return ok({
-        data: {
-          admittedSeq: 1,
-          id: input.id ?? "msg_prompt",
-          sessionID: "ses_1",
-          prompt: input.prompt ?? { text: "" },
-          delivery: "steer" as const,
-          timeCreated: 2,
-        },
-      }) as never
+      return ok({ data: promptAdmission(input) }) as never
     })
 
     await transport.runPromptTurn({
@@ -304,8 +307,8 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(request?.prompt?.text).toBe("Review @note.ts and @docs")
-    expect(request?.prompt?.files).toEqual([
+    expect(request?.text).toBe("Review @note.ts and @docs")
+    expect(request?.files).toEqual([
       {
         uri: pathToFileURL(filePath).href,
         name: "note.ts",
@@ -344,7 +347,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.prompt.promoted",
+          type: "session.input.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -359,16 +362,7 @@ describe("V2 mini transport", () => {
           data: { sessionID: "ses_1" },
         })
       })
-      return ok({
-        data: {
-          admittedSeq: 1,
-          id: input.id ?? "msg_prompt",
-          sessionID: "ses_1",
-          prompt: input.prompt ?? { text: "" },
-          delivery: "steer" as const,
-          timeCreated: 2,
-        },
-      })
+      return ok({ data: promptAdmission(input) })
     })
 
     await transport.runPromptTurn({
@@ -401,8 +395,8 @@ describe("V2 mini transport", () => {
 
     expect(remoteRead).not.toHaveBeenCalled()
     expect(remoteList).not.toHaveBeenCalled()
-    expect(request?.prompt?.text).toBe("Review @note.ts and @docs")
-    expect(request?.prompt?.files).toEqual([
+    expect(request?.text).toBe("Review @note.ts and @docs")
+    expect(request?.files).toEqual([
       {
         uri: "file:///remote/project/note.ts",
         name: "note.ts",
@@ -442,7 +436,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.prompt.promoted",
+          type: "session.input.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -457,16 +451,7 @@ describe("V2 mini transport", () => {
           data: { sessionID: "ses_1" },
         })
       })
-      return ok({
-        data: {
-          admittedSeq: 1,
-          id: input.id ?? "msg_prompt",
-          sessionID: "ses_1",
-          prompt: input.prompt ?? { text: "" },
-          delivery: "steer" as const,
-          timeCreated: 2,
-        },
-      })
+      return ok({ data: promptAdmission(input) })
     })
 
     await transport.runPromptTurn({
@@ -490,8 +475,8 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(request?.prompt?.text).toBe("Review @diagram.png")
-    expect(request?.prompt?.files).toEqual([
+    expect(request?.text).toBe("Review @diagram.png")
+    expect(request?.files).toEqual([
       {
         name: "diagram.png",
         uri: pathToFileURL(filePath).href,
@@ -583,12 +568,8 @@ describe("V2 mini transport", () => {
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
     spyOn(client.session, "prompt").mockImplementation((request) => {
-      const messageID = request.id ?? "msg_prompt"
-      const prompt = request.prompt ?? { text: "" }
       admitted = true
-      return ok({
-        data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
-      })
+      return ok({ data: promptAdmission(request) })
     })
 
     const turn = transport.runPromptTurn({
@@ -655,12 +636,8 @@ describe("V2 mini transport", () => {
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
     spyOn(client.session, "prompt").mockImplementation((request) => {
-      const messageID = request.id ?? "msg_prompt"
-      const prompt = request.prompt ?? { text: "" }
       admitted = true
-      return ok({
-        data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
-      })
+      return ok({ data: promptAdmission(request) })
     })
 
     const turn = transport.runPromptTurn({
@@ -893,12 +870,8 @@ describe("V2 mini transport", () => {
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
     spyOn(client.session, "prompt").mockImplementation((request) => {
-      const messageID = request.id ?? "msg_prompt"
-      const prompt = request.prompt ?? { text: "" }
       admitted = true
-      return ok({
-        data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
-      })
+      return ok({ data: promptAdmission(request) })
     })
     const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
 
@@ -950,12 +923,8 @@ describe("V2 mini transport", () => {
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
     spyOn(client.session, "prompt").mockImplementation((request) => {
-      const messageID = request.id ?? "msg_prompt"
-      const prompt = request.prompt ?? { text: "" }
       admitted = true
-      return ok({
-        data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
-      })
+      return ok({ data: promptAdmission(request) })
     })
 
     const turn = transport.runPromptTurn({
@@ -970,7 +939,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -1009,12 +978,8 @@ describe("V2 mini transport", () => {
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
     // @ts-expect-error successful SDK response is valid for both modes at runtime
     spyOn(client.session, "prompt").mockImplementation((request) => {
-      const messageID = request.id ?? "msg_prompt"
-      const prompt = request.prompt ?? { text: "" }
       admitted = true
-      return ok({
-        data: { admittedSeq: 1, id: messageID, sessionID: "ses_1", prompt, delivery: "steer" as const, timeCreated: 2 },
-      })
+      return ok({ data: promptAdmission(request) })
     })
     const interrupted = spyOn(client.session, "interrupt").mockImplementation(() => ok(undefined))
     const controller = new AbortController()
@@ -1031,7 +996,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
@@ -1311,17 +1276,10 @@ describe("V2 mini transport", () => {
           {
             id: "msg_shell",
             type: "shell" as const,
-            shell: {
-              id: "sh_1",
-              status: "exited",
-              command: "ls",
-              cwd: "/tmp",
-              shell: "/bin/sh",
-              file: "/tmp/opencode-shell",
-              exit: 0,
-              metadata: {},
-              time: { started: 0, completed: 1 },
-            },
+            shellID: "sh_1",
+            status: "exited",
+            command: "ls",
+            exit: 0,
             output: { output: "file.txt", cursor: 8, size: 8, truncated: false },
             time: { created: 1, completed: 2 },
           },
@@ -1378,17 +1336,10 @@ describe("V2 mini transport", () => {
           {
             id: "msg_failed_shell",
             type: "shell" as const,
-            shell: {
-              id: "sh_failed",
-              status: "exited",
-              command: "false",
-              cwd: "/tmp",
-              shell: "/bin/sh",
-              file: "/tmp/failed",
-              exit: 7,
-              metadata: {},
-              time: { started: 0, completed: 1 },
-            },
+            shellID: "sh_failed",
+            status: "exited",
+            command: "false",
+            exit: 7,
             output: { output: "failure output", cursor: 14, size: 14, truncated: false },
             time: { created: 1, completed: 2 },
           },
@@ -1472,7 +1423,7 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.prompt.promoted",
+          type: "session.input.promoted",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
@@ -1491,7 +1442,8 @@ describe("V2 mini transport", () => {
         admittedSeq: 1,
         id: input.id ?? "msg_cmd",
         sessionID: "ses_1",
-        prompt: { text: "evaluated template" },
+        type: "user" as const,
+        data: { text: "evaluated template" },
         delivery: "steer" as const,
         timeCreated: 2,
       })
@@ -1551,6 +1503,7 @@ describe("V2 mini transport", () => {
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
+            id: input.skill ?? "tigerstyle",
             name: input.skill ?? "tigerstyle",
             text: "skill instructions",
           },
@@ -1633,6 +1586,7 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
+        id: "other",
         name: "other",
         text: "other instructions",
       },
@@ -1655,6 +1609,7 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
+        id: "tigerstyle",
         name: "tigerstyle",
         text: "skill instructions",
       },
@@ -1722,6 +1677,7 @@ describe("V2 mini transport", () => {
           {
             id: "msg_skill",
             type: "skill" as const,
+            skill: "tigerstyle",
             name: "tigerstyle",
             text: "skill instructions",
             time: { created: 2 },
@@ -1745,6 +1701,7 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
+        id: "tigerstyle",
         name: "tigerstyle",
         text: "skill instructions",
       },
@@ -1865,13 +1822,12 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_admitted",
       created: 1,
-      type: "session.prompt.admitted",
+      type: "session.input.admitted",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
         inputID: "msg_child_prompt",
-        prompt: { text: "actual child prompt" },
-        delivery: "steer",
+        input: { type: "user", data: { text: "actual child prompt" }, delivery: "steer" },
       },
     })
     await Bun.sleep(0)
@@ -1884,7 +1840,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_promoted",
       created: 2,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable("ses_child", 1),
       data: { sessionID: "ses_child", inputID: "msg_child_prompt" },
     })
@@ -1931,13 +1887,12 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_admitted_race",
       created: 1,
-      type: "session.prompt.admitted",
+      type: "session.input.admitted",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
         inputID: "msg_child_race",
-        prompt: { text: "prompt admitted before hydration" },
-        delivery: "steer",
+        input: { type: "user", data: { text: "prompt admitted before hydration" }, delivery: "steer" },
       },
     })
     await Bun.sleep(0)
@@ -1946,7 +1901,7 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_promoted_race",
       created: 2,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable("ses_child", 1),
       data: { sessionID: "ses_child", inputID: "msg_child_race" },
     })

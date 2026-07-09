@@ -8,7 +8,7 @@ import { InstructionCheckpointTable, SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
+const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 
 export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db

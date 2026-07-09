@@ -34,7 +34,7 @@ const ref = {
   modelID: ModelV2.ID.make("test-model"),
 }
 
-const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+const layer = () =>
   LayerNode.compile(
     LayerNode.group([
       Agent.node,
@@ -52,11 +52,10 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
-    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+    [[RuntimeFlags.node, RuntimeFlags.layer()]],
   )
 
 const it = testEffect(layer())
-const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -389,7 +388,7 @@ describe("tool.task", () => {
   )
 
   it.instance(
-    "execute shapes child permissions for task, todowrite, and primary tools",
+    "execute shapes child permissions for task and primary tools",
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
@@ -422,11 +421,6 @@ describe("tool.task", () => {
         expect(child.agent).toBe("reviewer")
         expect(child.permission).toEqual([
           {
-            permission: "todowrite",
-            pattern: "*",
-            action: "deny",
-          },
-          {
             permission: "bash",
             pattern: "*",
             action: "deny",
@@ -454,37 +448,6 @@ describe("tool.task", () => {
         },
       },
     },
-  )
-
-  it.instance("rejects background execution when the experiment is disabled", () =>
-    Effect.gen(function* () {
-      const { chat, assistant } = yield* seed()
-      const tool = yield* TaskTool
-      const def = yield* tool.init()
-
-      const exit = yield* def
-        .execute(
-          {
-            description: "inspect bug",
-            prompt: "look into the cache key path",
-            subagent_type: "general",
-            background: true,
-          },
-          {
-            sessionID: chat.id,
-            messageID: assistant.id,
-            agent: "build",
-            abort: new AbortController().signal,
-            extra: { promptOps: stubOps() },
-            messages: [],
-            metadata: () => Effect.void,
-            ask: () => Effect.void,
-          },
-        )
-        .pipe(Effect.exit)
-
-      expect(Exit.isFailure(exit)).toBe(true)
-    }),
   )
 
   it.instance("backgrounds a running foreground task without restarting it", () =>
@@ -558,7 +521,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("execute launches background tasks without waiting for completion", () =>
+  it.instance("execute launches background tasks without waiting for completion", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const { chat, assistant } = yield* seed()
@@ -596,7 +559,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("running task_id reports the existing background task", () =>
+  it.instance("running task_id reports the existing background task", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const { chat, assistant } = yield* seed()
@@ -661,7 +624,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("background tasks complete through the job service", () =>
+  it.instance("background tasks complete through the job service", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const { chat, assistant } = yield* seed()
@@ -694,7 +657,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("background task completion does not wait for the parent async prompt", () =>
+  it.instance("background task completion does not wait for the parent async prompt", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const { chat, assistant } = yield* seed()
@@ -732,7 +695,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("removing the parent session cancels running background tasks", () =>
+  it.instance("removing the parent session cancels running background tasks", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
@@ -771,7 +734,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("removing the child task session cancels its running background task", () =>
+  it.instance("removing the child task session cancels its running background task", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
@@ -810,7 +773,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("cancelling the parent run cancels running background tasks", () =>
+  it.instance("cancelling the parent run cancels running background tasks", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const runState = yield* SessionRunState.Service

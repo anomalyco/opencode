@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Money } from "@opencode-ai/schema/money"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
@@ -298,13 +299,31 @@ describe("CatalogV2", () => {
         catalog.model.update(providerID, ModelV2.ID.make("cheap-large"), (model) => {
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
-          model.cost = [{ input: 1, output: 1, cache: { read: 0, write: 0 } }]
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(1),
+              output: Money.USDPerMillionTokens.make(1),
+              cache: {
+                read: Money.USDPerMillionTokens.zero,
+                write: Money.USDPerMillionTokens.zero,
+              },
+            },
+          ]
           model.time.released = Date.now()
         })
         catalog.model.update(providerID, ModelV2.ID.make("expensive-mini"), (model) => {
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
-          model.cost = [{ input: 10, output: 10, cache: { read: 0, write: 0 } }]
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(10),
+              output: Money.USDPerMillionTokens.make(10),
+              cache: {
+                read: Money.USDPerMillionTokens.zero,
+                write: Money.USDPerMillionTokens.zero,
+              },
+            },
+          ]
           model.time.released = Date.now()
         })
       })

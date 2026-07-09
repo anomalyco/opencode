@@ -6,7 +6,9 @@ import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 
-const subscriberCapacity = 256
+// Session execution emits dense event bursts; allow healthy SSE clients enough
+// time to absorb one without weakening the bounded slow-subscriber failure.
+const subscriberCapacity = 4_096
 
 function eventData(data: unknown): Sse.Event {
   return {

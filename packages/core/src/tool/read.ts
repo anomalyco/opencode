@@ -1,6 +1,6 @@
 export * as ReadTool from "./read"
 
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { dirname } from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"

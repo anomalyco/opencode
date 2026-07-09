@@ -37,7 +37,8 @@ function defaultCost(model: CurrentModel) {
 
 export function runAgent(input: CurrentAgent): RunAgent {
   return {
-    name: input.id,
+    id: input.id,
+    name: input.name,
     description: input.description,
     mode: input.mode,
     hidden: input.hidden,
@@ -53,7 +54,7 @@ export function runCommand(input: CurrentCommand): RunCommand {
 
 export function runSkill(input: CurrentSkill): RunCommand {
   return {
-    name: input.name,
+    name: input.id,
     description: input.description,
     source: "skill",
   }

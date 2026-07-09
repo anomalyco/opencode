@@ -71,7 +71,7 @@ Ovaj agent je koristan kada želite da LLM analizira kod, predloži promjene ili
 
 _Režim_: `subagent`
 
-Agent opće namjene za istraživanje složenih pitanja i izvršavanje zadataka u više koraka. Ima potpuni pristup alatima (osim todo), tako da može mijenjati fajlove kada je to potrebno. Koristite ovo za paralelno pokretanje više jedinica rada.
+Agent opće namjene za istraživanje složenih pitanja i izvršavanje zadataka u više koraka. Ima potpuni pristup alatima, tako da može mijenjati fajlove kada je to potrebno. Koristite ovo za paralelno pokretanje više jedinica rada.
 
 ---
 

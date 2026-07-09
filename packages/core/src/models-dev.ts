@@ -2,6 +2,7 @@ import path from "path"
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
+import { Money } from "@opencode-ai/schema/money"
 import { Global } from "./global"
 import { Flag } from "./flag/flag"
 import { Flock } from "./util/flock"
@@ -18,10 +19,10 @@ export type CatalogModelStatus = typeof CatalogModelStatus.Type
 const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
-  input: Schema.Finite,
-  output: Schema.Finite,
-  cache_read: Schema.optional(Schema.Finite),
-  cache_write: Schema.optional(Schema.Finite),
+  input: Money.USDPerMillionTokens,
+  output: Money.USDPerMillionTokens,
+  cache_read: Schema.optional(Money.USDPerMillionTokens),
+  cache_write: Schema.optional(Money.USDPerMillionTokens),
   tier: Schema.Struct({
     type: Schema.Literal("context"),
     size: Schema.Finite,
@@ -29,17 +30,17 @@ const CostTier = Schema.Struct({
 })
 
 const Cost = Schema.Struct({
-  input: Schema.Finite,
-  output: Schema.Finite,
-  cache_read: Schema.optional(Schema.Finite),
-  cache_write: Schema.optional(Schema.Finite),
+  input: Money.USDPerMillionTokens,
+  output: Money.USDPerMillionTokens,
+  cache_read: Schema.optional(Money.USDPerMillionTokens),
+  cache_write: Schema.optional(Money.USDPerMillionTokens),
   tiers: Schema.optional(Schema.Array(CostTier)),
   context_over_200k: Schema.optional(
     Schema.Struct({
-      input: Schema.Finite,
-      output: Schema.Finite,
-      cache_read: Schema.optional(Schema.Finite),
-      cache_write: Schema.optional(Schema.Finite),
+      input: Money.USDPerMillionTokens,
+      output: Money.USDPerMillionTokens,
+      cache_read: Schema.optional(Money.USDPerMillionTokens),
+      cache_write: Schema.optional(Money.USDPerMillionTokens),
     }),
   ),
 })

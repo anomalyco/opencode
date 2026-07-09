@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -87,11 +88,11 @@ describe("SessionV2.log", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const created = yield* session.create({ location })
-      yield* session.switchAgent({ sessionID: created.id, agent: "one" })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("one") })
       // Not in the durable manifest, so reads must skip it without failing.
       yield* events.publish(GapEvent, { sessionID: created.id, value: "filtered" })
-      yield* session.switchAgent({ sessionID: created.id, agent: "two" })
-      yield* session.switchAgent({ sessionID: created.id, agent: "three" })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("two") })
+      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("three") })
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id, after: 1 })))
 

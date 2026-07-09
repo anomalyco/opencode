@@ -4,8 +4,9 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { Tools } from "@opencode-ai/core/tool/tools"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, type Scope } from "effect"
+import { host } from "../plugin/host"
 
 export const toolIdentity = {
   agent: AgentV2.ID.make("build"),
@@ -48,7 +49,7 @@ export const registerToolPlugin = <R>(plugin: {
 }): Effect.Effect<void, never, R | Tools.Service | Scope.Scope> =>
   Effect.gen(function* () {
     const tools = yield* Tools.Service
-    const context: Pick<PluginContext, "tool"> = {
+    const context = host({
       tool: {
         transform: (callback) =>
           Effect.gen(function* () {
@@ -66,15 +67,13 @@ export const registerToolPlugin = <R>(plugin: {
               registrations,
               (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
               { discard: true },
-            )
+            ).pipe(Effect.orDie)
+            return { dispose: Effect.void }
           }),
-        execute: {
-          before: () => Effect.die("registerToolPlugin does not support tool hooks"),
-          after: () => Effect.die("registerToolPlugin does not support tool hooks"),
-        },
+        hook: () => Effect.die("registerToolPlugin does not support tool hooks"),
       },
-    }
-    yield* plugin.effect(context as PluginContext)
+    })
+    yield* plugin.effect(context)
   })
 
 export const settleTool = (registry: ToolRegistry.Interface, input: ToolRegistry.ExecuteInput, model = testModel) =>

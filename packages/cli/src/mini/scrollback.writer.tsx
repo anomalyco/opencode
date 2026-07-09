@@ -7,26 +7,6 @@ import { toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
 import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
-function todoText(item: { status: string; content: string }): string {
-  if (item.status === "completed") {
-    return `[✓] ${item.content}`
-  }
-
-  if (item.status === "cancelled") {
-    return `~[ ] ${item.content}~`
-  }
-
-  if (item.status === "in_progress") {
-    return `[•] ${item.content}`
-  }
-
-  return `[ ] ${item.content}`
-}
-
-function todoColor(theme: RunTheme, status: string) {
-  return status === "in_progress" ? theme.block.warning : theme.block.muted
-}
-
 export function entryGroupKey(commit: StreamCommit): string | undefined {
   if (!commit.partID) {
     return undefined
@@ -137,10 +117,6 @@ export function RunEntryContent(props: {
     const next = structured()
     return next?.kind === "task" ? next : undefined
   })
-  const todo_snapshot = createMemo(() => {
-    const next = structured()
-    return next?.kind === "todo" ? next : undefined
-  })
   const question_snapshot = createMemo(() => {
     const next = structured()
     return next?.kind === "question" ? next : undefined
@@ -237,25 +213,6 @@ export function RunEntryContent(props: {
             {task_snapshot()!.tail ? (
               <text width="100%" wrapMode="word" fg={theme().block.muted}>
                 {task_snapshot()!.tail}
-              </text>
-            ) : null}
-          </box>
-        </box>
-      </Match>
-      <Match when={todo_snapshot()}>
-        <box width="100%" flexDirection="column" gap={1}>
-          <text width="100%" wrapMode="word" fg={theme().block.muted}>
-            # Todos
-          </text>
-          <box width="100%" flexDirection="column" gap={0}>
-            {todo_snapshot()!.items.map((item) => (
-              <text width="100%" wrapMode="word" fg={todoColor(theme(), item.status)}>
-                {todoText(item)}
-              </text>
-            ))}
-            {todo_snapshot()!.tail ? (
-              <text width="100%" wrapMode="word" fg={theme().block.muted}>
-                {todo_snapshot()!.tail}
               </text>
             ) : null}
           </box>

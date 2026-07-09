@@ -2,7 +2,7 @@ export * as ShellTool from "./shell"
 
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"

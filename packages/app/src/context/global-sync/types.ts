@@ -13,8 +13,7 @@ import type {
   ReferenceInfo,
   Session,
   SessionStatus,
-  SnapshotFileDiff,
-  Todo,
+  FileDiffInfo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
@@ -51,10 +50,7 @@ export type State = {
   }
   session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: SnapshotFileDiff[]
-  }
-  todo: {
-    [sessionID: string]: Todo[]
+    [sessionID: string]: FileDiffInfo[]
   }
   permission: {
     [sessionID: string]: PermissionRequest[]

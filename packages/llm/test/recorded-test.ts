@@ -1,11 +1,8 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
-import { LLMClient, RequestExecutor } from "../src/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "../src/route"
 import type { Service as LLMClientService } from "../src/route/client"
 import type { Service as RequestExecutorService } from "../src/route/executor"
 import type { Service as WebSocketExecutorService } from "../src/route/transport/websocket"
@@ -14,7 +11,6 @@ import {
   type RecordedCaseOptions as RunnerCaseOptions,
   type RecordedGroupOptions,
 } from "./recorded-runner"
-import { webSocketCassetteLayer } from "./recorded-websocket"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
@@ -64,31 +60,27 @@ export const recordedTests = (options: RecordedTestsOptions) =>
   recordedEffectGroup<RecordedEnv, never, RecordedTestsOptions, RecordedCaseOptions>({
     duplicateLabel: "recorded cassette",
     options,
-    cassetteExists: (cassette) => HttpRecorderInternal.hasCassetteSync(cassette, { directory: FIXTURES_DIR }),
+    cassetteExists: (cassette) => HttpRecorder.hasCassetteSync(cassette, { directory: FIXTURES_DIR }),
     layer: ({ cassette, metadata, options, caseOptions, recording }) => {
       const recorderOptions = mergeOptions(options.options, caseOptions.options)
       const recorderMetadata = {
         ...recorderOptions?.metadata,
         ...metadata,
       }
-      const mode = recording ? "record" : "replay"
-      const cassetteService = HttpRecorderInternal.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(
-        Layer.provide(NodeFileSystem.layer),
-      )
+      if (recording) {
+        if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
+        HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
+      }
       const requestExecutor = RequestExecutor.layer.pipe(
         Layer.provide(
-          HttpRecorderInternal.recordingLayer(cassette, {
-            mode,
+          HttpRecorder.layerFetch(cassette, {
+            ...recorderOptions,
+            directory: FIXTURES_DIR,
             metadata: recorderMetadata,
-            redactor: HttpRecorderInternal.Redactor.make(recorderOptions?.redact),
-            match: recorderOptions?.match,
-          }).pipe(Layer.provide(FetchHttpClient.layer)),
+          }),
         ),
       )
-      const deps = Layer.mergeAll(
-        requestExecutor,
-        webSocketCassetteLayer(cassette, { metadata: recorderMetadata, mode }),
-      )
-      return Layer.mergeAll(deps, LLMClient.layer.pipe(Layer.provide(deps))).pipe(Layer.provide(cassetteService))
+      const deps = Layer.mergeAll(requestExecutor, WebSocketExecutor.layer)
+      return Layer.mergeAll(deps, LLMClient.layer.pipe(Layer.provide(deps)))
     },
   })

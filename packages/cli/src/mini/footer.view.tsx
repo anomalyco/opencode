@@ -89,7 +89,6 @@ type RunFooterViewProps = {
   theme: () => RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
-  backgroundSubagents: boolean
   history?: () => RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
@@ -169,9 +168,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
-  const foregroundSubagents = createMemo(
-    () => props.backgroundSubagents && activeTabs().some((item) => !item.background),
-  )
+  const foregroundSubagents = createMemo(() => activeTabs().some((item) => !item.background))
   const model = createMemo(() => {
     const current = props.currentModel()
     return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }

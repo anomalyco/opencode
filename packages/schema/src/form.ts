@@ -106,7 +106,7 @@ const InfoBase = {
   // elicitations can be attributed to real sessions, revert this to SessionID. Do not rely
   // on non-session owners anywhere else.
   sessionID: Schema.String,
-  title: Schema.String.pipe(optional),
+  title: Schema.String,
   metadata: Metadata.pipe(optional),
 }
 

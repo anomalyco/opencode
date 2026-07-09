@@ -6,13 +6,16 @@ import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { Money } from "@opencode-ai/schema/money"
+import { AgentV2 } from "../../agent"
+import { Snapshot } from "../../snapshot"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
-  readonly agent: string
+  readonly agent: AgentV2.ID
   readonly model: ModelV2.Ref
-  readonly provider: string
-  readonly snapshot?: string
+  readonly providerMetadataKey: string
+  readonly snapshot?: Snapshot.ID
   readonly assistantMessageID?: SessionMessage.ID
 }
 
@@ -84,7 +87,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantMessageID ??= SessionMessage.ID.create()
     stepStarted = true
     yield* events.publish(SessionEvent.Step.Started, {
-      ...input,
+      sessionID: input.sessionID,
+      agent: input.agent,
+      model: input.model,
       assistantMessageID,
       snapshot: input.snapshot,
     })
@@ -94,34 +99,42 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantMessageID === undefined
       ? Effect.die(new Error("Tool event before assistant step start"))
       : Effect.succeed(assistantMessageID)
-  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.provider]
-
+  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
   const fragments = (
     name: string,
     ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
     single = false,
   ) => {
-    const chunks = new Map<string, { readonly ordinal: number; readonly values: string[] }>()
+    const chunks = new Map<
+      string,
+      { readonly ordinal: number; readonly values: string[]; state?: Record<string, unknown> }
+    >()
     let nextOrdinal = 0
-    const start = (id: string) =>
+    const start = (id: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
         if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
         const ordinal = nextOrdinal++
-        chunks.set(id, { ordinal, values: [] })
+        chunks.set(id, { ordinal, values: [], state })
         return Effect.succeed(ordinal)
       })
-    const append = (id: string, value: string) =>
+    const append = (id: string, value: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         const current = chunks.get(id)
         if (!current) return Effect.die(new Error(`${name} delta before start: ${id}`))
         current.values.push(value)
+        if (state !== undefined) current.state = { ...current.state, ...state }
         return Effect.succeed(current.ordinal)
       })
     const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* ended(id, current.values.join(""), current.ordinal, state)
+      yield* ended(
+        id,
+        current.values.join(""),
+        current.ordinal,
+        state === undefined ? current.state : { ...current.state, ...state },
+      )
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -216,7 +229,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     if (replace || stepFailure === undefined) stepFailure = error
   })
 
-  const publishStepFailure = Effect.fnUntraced(function* () {
+  const publishStepFailure = Effect.fnUntraced(function* (usage?: {
+    readonly cost: Money.USD
+    readonly tokens: ReturnType<typeof tokens>
+  }) {
     if (stepFailed || stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
     stepFailed = true
@@ -224,6 +240,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       sessionID: input.sessionID,
       assistantMessageID,
       error: stepFailure,
+      ...usage,
     })
   })
 
@@ -252,11 +269,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(new Error(`Unknown tool call: ${callID}`))
   }
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
-    event: LLMEvent,
-    outputPaths: ReadonlyArray<string> = [],
-    error?: SessionError.Error,
-  ) {
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent, error?: SessionError.Error) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -284,7 +297,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "reasoning-start":
         retryEvidence = true
-        const startedReasoningOrdinal = yield* reasoning.start(event.id)
+        const startedReasoningOrdinal = yield* reasoning.start(event.id, providerState(event.providerMetadata))
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
@@ -293,7 +306,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         })
         return
       case "reasoning-delta":
-        const deltaReasoningOrdinal = yield* reasoning.append(event.id, event.text)
+        const deltaReasoningOrdinal = yield* reasoning.append(
+          event.id,
+          event.text,
+          providerState(event.providerMetadata),
+        )
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
@@ -336,14 +353,13 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (tool.called) return yield* Effect.die(new Error(`Duplicate tool call: ${event.id}`))
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
-        const state = providerState(event.providerMetadata)
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           input: record(event.input),
           executed: tool.providerExecuted,
-          state,
+          state: providerState(event.providerMetadata),
         })
         return
       }
@@ -378,7 +394,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
-          outputPaths,
           ...(executed ? { result: event.result } : {}),
           executed,
           resultState,
@@ -409,12 +424,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "step-finish":
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
+        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
         if (event.reason === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)
           return
         }
-        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
         return
       case "finish":
         return

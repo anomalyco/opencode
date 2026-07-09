@@ -1,19 +1,42 @@
 export * as PluginSupervisor from "./supervisor"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Effect, Fiber, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
+import { AgentV2 } from "../agent"
+import { Catalog } from "../catalog"
+import { CommandV2 } from "../command"
 import { Config } from "../config"
 import { ConfigPlugin } from "../config/plugin"
+import { makeLocationNode } from "../effect/app-node"
+import { httpClient } from "../effect/app-node-platform"
 import { EventV2 } from "../event"
+import { FileMutation } from "../file-mutation"
+import { FileSystem } from "../filesystem"
+import { Form } from "../form"
 import { FSUtil } from "../fs-util"
+import { Global } from "../global"
+import { Image } from "../image"
+import { Integration } from "../integration"
 import { Location } from "../location"
+import { LocationMutation } from "../location-mutation"
+import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
+import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 import { PluginPromise } from "../plugin/promise"
+import { Reference } from "../reference"
+import { Ripgrep } from "../ripgrep"
+import { SessionInstructions } from "../session/instructions"
+import { Shell } from "../shell"
+import { SkillV2 } from "../skill"
+import { ReadToolFileSystem } from "../tool/read-filesystem"
+import { ToolRegistry } from "../tool/registry"
+import { WebSearchTool } from "../tool/websearch"
 import { PluginInternal } from "./internal"
+import { PluginRuntime } from "./runtime"
 import { SdkPlugins } from "./sdk"
 
 const PluginModule = Schema.Struct({
@@ -246,7 +269,8 @@ const resolvePackageEntrypoint = Effect.fnUntraced(function* (fs: FSUtil.Interfa
 })
 
 export interface Interface {
-  readonly ready: Effect.Effect<void>
+  /** Wait for the initial plugin generation and startup updates to settle. */
+  readonly flush: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PluginSupervisor") {}
@@ -259,35 +283,95 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const events = yield* EventV2.Service
     const lock = Semaphore.makeUnsafe(1)
-    const reload = Effect.fn("PluginSupervisor.reload")(() =>
-      lock.withPermit(
+    const ready = yield* Deferred.make<void>()
+    let observed = 0
+    let applied = -1
+
+    const activate = Effect.fn("PluginSupervisor.activate")(function* (target: number) {
+      yield* lock.withPermit(
         Effect.gen(function* () {
+          if (applied >= target) return
           // Resolve OpenCode's internal plugins with their privileged Location services.
           const internal = yield* PluginInternal.list()
           // Combine internal plugins with host-contributed SDK plugins in boot order.
           const pre = [...internal.pre, ...sdk.all()]
-          // Read the current layered config before resolving plugin directives and packages.
-          const entries = yield* config.entries()
-          const operations = yield* scan(entries)
+          const operations = yield* scan(yield* config.entries())
           // Apply config operations and load enabled package plugins into one ordered generation.
           const plugins = yield* resolve(pre, internal.post, operations)
           // Replace the active generation in one scoped, batched activation.
           yield* registry.activate(plugins)
+          applied = target
         }),
-      ),
-    )
-    yield* events.subscribe([Event.Updated, SdkPlugins.Updated]).pipe(
-      Stream.runForEach(() =>
-        reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
+      )
+    })
+    const updates = yield* events
+      .subscribe([Event.Updated, SdkPlugins.Updated])
+      .pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
+    const signals = yield* Stream.concat(
+      Stream.succeed(0),
+      Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
+    ).pipe(Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }))
+    const attempt = (target: number) =>
+      activate(target).pipe(
+        Effect.map(() => observed === target),
+        Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }).pipe(Effect.as(false))),
+      )
+
+    yield* signals.pipe(
+      Stream.runForEach((target) =>
+        activate(target).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    const fiber = yield* reload().pipe(
-      Effect.withSpan("PluginSupervisor.boot"),
+    yield* signals.pipe(
+      Stream.debounce("100 millis"),
+      Stream.mapEffect(attempt),
+      Stream.filter((settled) => settled),
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.andThen(Deferred.succeed(ready, undefined)),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ ready: Fiber.join(fiber) })
+    return Service.of({ flush: Deferred.await(ready) })
   }),
 )
+
+const nodeLayer = layer as Layer.Layer<Service, never, PluginInternal.Requirements>
+
+export const node = makeLocationNode({
+  service: Service,
+  layer: nodeLayer,
+  deps: [
+    PluginV2.node,
+    SdkPlugins.node,
+    AgentV2.node,
+    Catalog.node,
+    CommandV2.node,
+    Config.node,
+    EventV2.node,
+    FileMutation.node,
+    FileSystem.node,
+    FSUtil.node,
+    Global.node,
+    httpClient,
+    Image.node,
+    Integration.node,
+    Location.node,
+    LocationMutation.node,
+    ModelsDev.node,
+    Npm.node,
+    PermissionV2.node,
+    PluginRuntime.node,
+    Form.node,
+    ReadToolFileSystem.node,
+    Reference.node,
+    Ripgrep.node,
+    SessionInstructions.node,
+    Shell.node,
+    SkillV2.node,
+    ToolRegistry.toolsNode,
+    WebSearchTool.configNode,
+  ],
+})
 
 export { layer }

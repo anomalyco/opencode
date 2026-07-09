@@ -64,7 +64,7 @@ export function fromRow(row: SessionRow): Info {
         messageID: MessageID.make(row.revert.messageID),
         partID: row.revert.partID ? PartID.make(row.revert.partID) : undefined,
         snapshot: row.revert.snapshot,
-        diff: row.revert.diff,
+        diff: "diff" in row.revert ? row.revert.diff : undefined,
       }
     : undefined
   return {

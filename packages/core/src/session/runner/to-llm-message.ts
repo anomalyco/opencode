@@ -21,45 +21,50 @@ const media = (file: FileAttachment): ContentPart => ({
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
-const textAttachment = (file: FileAttachment) =>
-  Message.make({
-    role: "user",
-    content: [
-      `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
-      file.description === undefined ? undefined : `Description: ${file.description}`,
-      "",
-      Buffer.from(file.data, "base64").toString("utf8"),
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join("\n"),
-    metadata: {
-      attachment: {
-        source: file.source,
-        name: file.name,
-        description: file.description,
-      },
+const textAttachment = (file: FileAttachment): ContentPart => ({
+  type: "text",
+  text: `\n\n${[
+    `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
+    file.description === undefined ? undefined : `Description: ${file.description}`,
+    "",
+    Buffer.from(file.data, "base64").toString("utf8"),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")}`,
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
     },
-  })
+  },
+})
 
-const directoryAttachment = (file: FileAttachment) =>
-  Message.make({
-    role: "user",
-    content: [
-      `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
-      file.description === undefined ? undefined : `Description: ${file.description}`,
-      file.data.length === 0 ? undefined : "",
-      file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join("\n"),
-    metadata: {
-      attachment: {
-        source: file.source,
-        name: file.name,
-        description: file.description,
-      },
+const directoryAttachment = (file: FileAttachment): ContentPart => ({
+  type: "text",
+  text: `\n\n${[
+    `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
+    file.description === undefined ? undefined : `Description: ${file.description}`,
+    file.data.length === 0 ? undefined : "",
+    file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n")}`,
+  metadata: {
+    attachment: {
+      source: file.source,
+      name: file.name,
+      description: file.description,
     },
-  })
+  },
+})
+
+const attachmentContent = (file: FileAttachment): ContentPart[] => {
+  if (file.mime === "text/plain") return [textAttachment(file)]
+  if (file.mime === "application/x-directory") return [directoryAttachment(file)]
+  if (imageMimes.has(file.mime)) return [media(file)]
+  return []
+}
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
@@ -69,7 +74,7 @@ const providerMetadata = (
 ): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
 const toolInput = (tool: SessionMessage.AssistantTool) =>
-  tool.state.status === "pending"
+  tool.state.status === "streaming"
     ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
     : tool.state.input
 
@@ -113,7 +118,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
+const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, providerMetadataKey: string) => {
   const sameModel =
     String(message.model.providerID) === String(model.providerID) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
@@ -125,7 +130,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: providerMetadata(model.providerID, item.state),
+              providerMetadata: providerMetadata(providerMetadataKey, item.state),
             },
           ]
         : item.text.length > 0
@@ -133,13 +138,13 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
           : []
     const call = toolCall(
       item,
-      reuseProviderMetadata ? providerMetadata(model.providerID, item.providerState) : undefined,
+      reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,
     )
     if (item.executed !== true) return [call]
     const result = toolResult(
       item,
       reuseProviderMetadata
-        ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
+        ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
         : undefined,
     )
     return result ? [call, result] : [call]
@@ -155,7 +160,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
       toolResult(
         item,
         reuseProviderMetadata
-          ? providerMetadata(model.providerID, item.providerResultState ?? item.providerState)
+          ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
           : undefined,
       ),
     )
@@ -168,23 +173,22 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
       return []
     case "user":
-      const files = message.files ?? []
+      const content = [
+        ...(message.text === "" ? [] : [Message.text(message.text)]),
+        ...(message.files ?? []).flatMap(attachmentContent),
+      ]
+      if (content.length === 0) return []
       return [
-        ...files.filter((file) => file.mime === "text/plain").map(textAttachment),
-        ...files.filter((file) => file.mime === "application/x-directory").map(directoryAttachment),
         Message.make({
           id: message.id,
           role: "user",
-          content: [
-            { type: "text", text: message.text },
-            ...files.filter((file) => imageMimes.has(file.mime)).map(media),
-          ],
+          content,
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),
@@ -202,12 +206,12 @@ function toLLMMessage(message: SessionMessage.Message, model: ModelV2.Ref): Mess
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.shell.command}\n\n${message.output?.output ?? ""}`,
+          content: `Shell command: ${message.command}\n\n${message.output?.output ?? ""}`,
           metadata: message.metadata,
         }),
       ]
     case "assistant":
-      return assistant(message, model)
+      return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
       return [
@@ -232,5 +236,8 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: ModelV2.Ref) =>
-  messages.flatMap((message) => toLLMMessage(message, model))
+export const toLLMMessages = (
+  messages: readonly SessionMessage.Info[],
+  model: ModelV2.Ref,
+  providerMetadataKey: string = model.providerID,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

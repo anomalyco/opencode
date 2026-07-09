@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -178,7 +178,7 @@ describe("PluginSupervisor config", () => {
   it.live("loads user plugins before internal post plugins", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
-      yield* sdk.register(define({ id: "sdk-order", effect: () => Effect.void }))
+      yield* sdk.register(EffectPlugin.define({ id: "sdk-order", effect: () => Effect.void }))
       yield* withLocation(
         {
           plugins: [
@@ -229,7 +229,7 @@ describe("PluginSupervisor config", () => {
 
 const ready = Effect.fnUntraced(function* () {
   const supervisor = yield* PluginSupervisor.Service
-  yield* supervisor.ready
+  yield* supervisor.flush
 })
 
 function withLocation<A, E, R>(
@@ -273,9 +273,9 @@ function withLocation<A, E, R>(
 function mutablePlugin(description: string) {
   const plugin = pathToFileURL(path.join(import.meta.dir, "../../../plugin/src/v2/promise/index.ts")).href
   return `
-import { define } from ${JSON.stringify(plugin)}
+import { Plugin } from ${JSON.stringify(plugin)}
 
-export default define({
+export default Plugin.define({
   id: "mutable-plugin",
   setup: async (ctx) => {
     await ctx.agent.transform((agents) => {

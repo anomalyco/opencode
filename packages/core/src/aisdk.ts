@@ -6,6 +6,7 @@ import type {
   JSONValue,
   LanguageModelV3,
   LanguageModelV3CallOptions,
+  LanguageModelV3FinishReason,
   LanguageModelV3FunctionTool,
   LanguageModelV3Message,
   LanguageModelV3Prompt,
@@ -304,6 +305,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
     provider: ProviderID.make(info.providerID),
+    providerMetadataKey: optionKey,
     protocol: "ai-sdk",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
     auth: Auth.none,
@@ -416,7 +418,7 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "media":
       return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
     case "reasoning":
-      return [{ type: "reasoning", text: part.text }]
+      return [{ type: "reasoning", text: part.text, providerOptions: providerOptions(part.providerMetadata) }]
     case "tool-call":
       return [
         {
@@ -425,6 +427,7 @@ function assistantPart(part: ContentPart): AssistantContent {
           toolName: part.name,
           input: part.input,
           providerExecuted: part.providerExecuted,
+          providerOptions: providerOptions(part.providerMetadata),
         },
       ]
     case "tool-result":
@@ -440,6 +443,7 @@ function toolResultPart(part: ContentPart): ToolResultContent[] {
       toolCallId: part.id,
       toolName: part.name,
       output: toolOutput(part.result),
+      providerOptions: providerOptions(part.providerMetadata),
     },
   ]
 }
@@ -624,8 +628,8 @@ function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["us
   return Object.values(output).some((value) => value !== undefined) ? output : undefined
 }
 
-function finishReason(value: unknown): FinishReason {
-  return Schema.is(FinishReason)(value) ? value : "unknown"
+function finishReason(value: LanguageModelV3FinishReason): FinishReason {
+  return value.unified === "other" ? "unknown" : value.unified
 }
 
 function providerMetadata(value: unknown) {

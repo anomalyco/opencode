@@ -876,6 +876,7 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   provider: "anthropic",
+  providerMetadataKey: "anthropic",
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,
