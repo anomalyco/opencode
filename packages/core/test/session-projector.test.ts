@@ -632,6 +632,43 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("does not infer restart continuation from lifecycle history", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const continuation = () =>
+        db
+          .select({ resumeAfterRestart: SessionTable.resume_after_restart })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+
+      yield* events.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+      expect((yield* continuation())?.resumeAfterRestart).toBe(false)
+
+      yield* events.publish(SessionEvent.Execution.Started, { sessionID })
+      expect((yield* continuation())?.resumeAfterRestart).toBe(false)
+    }),
+  )
+
   it.effect("updates only the newest incomplete assistant projection", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

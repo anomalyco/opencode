@@ -220,6 +220,7 @@ export default {
           \`permission\` text,
           \`agent\` text,
           \`model\` text,
+          \`resume_after_restart\` integer DEFAULT false NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           \`time_compacting\` integer,
@@ -273,6 +274,9 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`session_resume_after_restart_idx\` ON \`session\` (\`resume_after_restart\`) WHERE "session"."resume_after_restart" = 1;`,
+      )
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">

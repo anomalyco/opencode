@@ -1,6 +1,6 @@
 export * as SessionStore from "./store"
 
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
@@ -17,6 +17,9 @@ export interface Interface {
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
+  readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  readonly consumeSuspended: (sessionID: Session.ID) => Effect.Effect<boolean>
+  readonly setSuspended: (sessionID: Session.ID, suspended: boolean) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionStore") {}
@@ -48,6 +51,36 @@ const layer = Layer.effect(
               message: yield* decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie),
             }
           : undefined
+      }),
+      listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
+        return yield* db
+          .select({ sessionID: SessionTable.id })
+          .from(SessionTable)
+          .where(eq(SessionTable.resume_after_restart, true))
+          .all()
+          .pipe(
+            Effect.orDie,
+            Effect.map((rows) => rows.map((row) => row.sessionID)),
+          )
+      }),
+      consumeSuspended: Effect.fn("SessionStore.consumeSuspended")(function* (sessionID) {
+        return (
+          (yield* db
+            .update(SessionTable)
+            .set({ resume_after_restart: false })
+            .where(and(eq(SessionTable.id, sessionID), eq(SessionTable.resume_after_restart, true)))
+            .returning({ sessionID: SessionTable.id })
+            .get()
+            .pipe(Effect.orDie)) !== undefined
+        )
+      }),
+      setSuspended: Effect.fn("SessionStore.setSuspended")(function* (sessionID, suspended) {
+        yield* db
+          .update(SessionTable)
+          .set({ resume_after_restart: suspended })
+          .where(and(eq(SessionTable.id, sessionID), eq(SessionTable.resume_after_restart, !suspended)))
+          .run()
+          .pipe(Effect.orDie)
       }),
     })
   }),

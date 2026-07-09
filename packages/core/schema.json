@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "8c1748cc-f978-4df4-879d-fe7fda5c4c34",
+  "id": "326edd83-814d-4849-b859-43aa15522f3b",
   "prevIds": [
-    "beb91b32-23e2-405f-99b8-1e8763db94f8"
+    "8c1748cc-f978-4df4-879d-fe7fda5c4c34"
   ],
   "ddl": [
     {
@@ -1406,6 +1406,16 @@
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "resume_after_restart",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "time_created",
@@ -2178,6 +2188,20 @@
       "where": null,
       "origin": "manual",
       "name": "session_parent_idx",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "resume_after_restart",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"session\".\"resume_after_restart\" = 1",
+      "origin": "manual",
+      "name": "session_resume_after_restart_idx",
       "entityType": "indexes",
       "table": "session"
     }
