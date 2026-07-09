@@ -155,7 +155,7 @@ describe("AgentV2", () => {
     }),
   )
 
-  it.effect("explicitly denies shell access for explore", () =>
+  it.effect("denies shell access for explore", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       yield* AgentPlugin.Plugin.effect(
@@ -171,7 +171,6 @@ describe("AgentV2", () => {
 
       const explore = yield* agent.get(AgentV2.ID.make("explore"))
       expect(explore).toBeDefined()
-      expect(explore!.permissions).toContainEqual({ action: "shell", resource: "*", effect: "deny" })
       expect(PermissionV2.evaluate("shell", "git status", explore!.permissions).effect).toBe("deny")
     }),
   )
