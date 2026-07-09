@@ -164,6 +164,7 @@ async function renderFooter(
     width?: number
     height?: number
     state?: Partial<FooterState>
+    agent?: string
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
   } = {},
@@ -199,7 +200,7 @@ async function renderFooter(
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
           backgroundSubagents={input.backgroundSubagents ?? true}
-          agent="opencode"
+          agent={input.agent ?? "Build"}
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
           onQuestionReply={() => {}}
@@ -307,6 +308,19 @@ test("direct footer composer area does not adopt footer surface", async () => {
     await app.renderOnce()
 
     expect(area.backgroundColor.toInts()).not.toEqual(surface.toInts())
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer statusline uses selected agent label", async () => {
+  const app = await renderFooter({ agent: "Plan" })
+
+  try {
+    await app.renderOnce()
+
+    expect(app.captureCharFrame()).toContain("PLAN")
+    expect(app.captureCharFrame()).not.toContain("BUILD")
   } finally {
     app.cleanup()
   }
