@@ -20,14 +20,11 @@ import {
   uniqueCommandPaletteEntries,
   type CommandPaletteEntry,
 } from "./command-palette"
+import { DialogCommandPaletteV2 } from "./dialog-command-palette-v2"
 
 const DialogSelectFileV2 = lazy(() =>
   import("./dialog-select-directory-v2").then((module) => ({ default: module.DialogSelectDirectoryV2 })),
 )
-const DialogCommandPaletteV2 = lazy(() =>
-  import("./dialog-command-palette-v2").then((module) => ({ default: module.DialogCommandPaletteV2 })),
-)
-
 type DialogSelectFileMode = "all" | "files"
 
 export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
