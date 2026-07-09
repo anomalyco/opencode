@@ -3,6 +3,7 @@
 import { $ } from "bun"
 import fs from "fs"
 import path from "path"
+import { createRequire } from "module"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 
@@ -23,6 +24,7 @@ const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+const canary = Bun.spawnSync([process.execPath, "--revision"]).stdout.toString().includes("-canary.")
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
@@ -113,34 +115,54 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) {
-        return false
-      }
+const targets = (
+  singleFlag
+    ? allTargets.filter((item) => {
+        if (item.os !== process.platform || item.arch !== process.arch) {
+          return false
+        }
 
-      // When building for the current platform, prefer a single native binary by default.
-      // Baseline binaries require additional Bun artifacts and can be flaky to download.
-      if (item.avx2 === false) {
-        return baselineFlag
-      }
+        // When building for the current platform, prefer a single native binary by default.
+        // Baseline binaries require additional Bun artifacts and can be flaky to download.
+        if (item.avx2 === false) {
+          return baselineFlag
+        }
 
-      // also skip abi-specific builds for the same reason
-      if (item.abi !== undefined) {
-        return false
-      }
+        // also skip abi-specific builds for the same reason
+        if (item.abi !== undefined) {
+          return false
+        }
 
-      return true
-    })
-  : allTargets
+        return true
+      })
+    : allTargets
+)
+  // Bun does not publish a current Darwin x64 baseline canary, so we must not publish one either
+  .filter((item) => !(canary && item.os === "darwin" && item.arch === "x64" && item.avx2 === false))
 
 await $`rm -rf dist`
 
+const localParserWorker = "./.build/parser.worker.js"
+const installedParserWorker = fs.realpathSync(
+  fs.existsSync(path.resolve(dir, "node_modules/@opentui/core/parser.worker.js"))
+    ? path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
+    : path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js"),
+)
+await fs.promises.mkdir(path.dirname(path.resolve(dir, localParserWorker)), { recursive: true })
+await fs.promises.copyFile(installedParserWorker, path.resolve(dir, localParserWorker))
+const parserWorkerPlugin: Bun.BunPlugin = {
+  name: "local-parser-worker",
+  setup(build) {
+    const require = createRequire(installedParserWorker)
+    build.onResolve({ filter: /^web-tree-sitter(?:\/.*)?$/ }, (args) => ({ path: require.resolve(args.path) }))
+  },
+}
+
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
-  await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
+  await $`bun install --no-save --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+  await $`bun install --no-save --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+  await $`bun install --no-save --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
   const name = [
@@ -156,19 +178,16 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
-  const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
-  const parserWorker = fs.realpathSync(fs.existsSync(localPath) ? localPath : rootPath)
   const workerPath = "./src/cli/tui/worker.ts"
 
   // Use platform-specific bunfs root path based on target OS
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
-  const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
+  const workerRelativePath = path.relative(dir, localParserWorker).replaceAll("\\", "/")
 
   await Bun.build({
     conditions: ["bun", "node"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [plugin, parserWorkerPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
@@ -185,7 +204,7 @@ for (const item of targets) {
       windows: {},
     },
     files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
-    entrypoints: ["./src/index.ts", parserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
+    entrypoints: ["./src/index.ts", localParserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
       OPENCODE_VERSION: `'${Script.version}'`,

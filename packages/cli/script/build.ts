@@ -4,6 +4,7 @@ import { $ } from "bun"
 import fs from "fs"
 import { rm } from "fs/promises"
 import path from "path"
+import { createRequire } from "module"
 import { Script } from "@opencode-ai/script"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import pkg from "../package.json"
@@ -20,6 +21,7 @@ const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
+const canary = Bun.spawnSync([process.execPath, "--revision"]).stdout.toString().includes("-canary.")
 
 const allTargets: {
   os: string
@@ -41,19 +43,33 @@ const allTargets: {
   { os: "win32", arch: "x64", avx2: false },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) return false
-      if (item.avx2 === false) return baselineFlag
-      return item.abi === undefined
-    })
-  : allTargets
+const targets = (
+  singleFlag
+    ? allTargets.filter((item) => {
+        if (item.os !== process.platform || item.arch !== process.arch) return false
+        if (item.avx2 === false) return baselineFlag
+        return item.abi === undefined
+      })
+    : allTargets
+).filter((item) => !(canary && item.os === "darwin" && item.arch === "x64" && item.avx2 === false))
 
-if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+if (!skipInstall) await $`bun install --no-save --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
 
-const localParserWorker = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
-const rootParserWorker = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
-const parserWorker = fs.realpathSync(fs.existsSync(localParserWorker) ? localParserWorker : rootParserWorker)
+const localParserWorker = "./.build/parser.worker.js"
+const installedParserWorker = fs.realpathSync(
+  fs.existsSync(path.resolve(dir, "node_modules/@opentui/core/parser.worker.js"))
+    ? path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
+    : path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js"),
+)
+await fs.promises.mkdir(path.dirname(path.resolve(dir, localParserWorker)), { recursive: true })
+await fs.promises.copyFile(installedParserWorker, path.resolve(dir, localParserWorker))
+const parserWorkerPlugin: Bun.BunPlugin = {
+  name: "local-parser-worker",
+  setup(build) {
+    const require = createRequire(installedParserWorker)
+    build.onResolve({ filter: /^web-tree-sitter(?:\/.*)?$/ }, (args) => ({ path: require.resolve(args.path) }))
+  },
+}
 
 for (const item of targets) {
   const target = [
@@ -68,9 +84,9 @@ for (const item of targets) {
   const name = target.replace(binary, "cli")
   console.log(`building ${name}`)
   const result = await Bun.build({
-    entrypoints: ["./src/index.ts", parserWorker],
+    entrypoints: ["./src/index.ts", localParserWorker],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [plugin, parserWorkerPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
@@ -96,7 +112,7 @@ for (const item of targets) {
       FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",
       OTUI_TREE_SITTER_WORKER_PATH:
         (item.os === "win32" ? '"B:/~BUN/root/' : '"/$bunfs/root/') +
-        path.relative(dir, parserWorker).replaceAll("\\", "/") +
+        path.relative(dir, localParserWorker).replaceAll("\\", "/") +
         '"',
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
