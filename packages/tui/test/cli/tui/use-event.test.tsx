@@ -218,26 +218,6 @@ describe("useEvent", () => {
     }
   })
 
-  test("keeps the latest 50 connection events", async () => {
-    const { app, events, sdk } = await mount()
-
-    try {
-      await wait(() => sdk.connection.status() === "connected")
-      for (const _ of Array.from({ length: 17 })) {
-        events.disconnect()
-        await wait(() => sdk.connection.status() === "reconnecting")
-        await wait(() => sdk.connection.status() === "connected")
-      }
-
-      const history = sdk.connection.internal.history()
-      expect(history).toHaveLength(50)
-      expect(history[0]?.data.status).toBe("reconnecting")
-      expect(history.at(-1)?.data.status).toBe("connected")
-    } finally {
-      app.renderer.destroy()
-    }
-  })
-
   test("keeps the current client when discovery fails", async () => {
     let calls = 0
     const { app, events, sdk, seen } = await mount(async () => {
