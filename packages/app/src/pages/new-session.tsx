@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createResource, onCleanup, untrack } from "solid-js"
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useSearchParams } from "@solidjs/router"
@@ -29,6 +29,7 @@ import { useTitlebarRightMount } from "@/components/titlebar"
 import { useProviders } from "@/hooks/use-providers"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { Persist, persisted } from "@/utils/persist"
+import createPresence from "solid-presence"
 
 const workspaceBarEnabled = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
@@ -122,15 +123,7 @@ export default function NewSessionPage() {
       <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
         <div class="@container relative flex flex-col min-h-0 h-full flex-1">
           <div class="flex-1 min-h-0 overflow-hidden rounded-[10px]">
-            <NewSessionDesignView
-              footer={
-                <ProviderTip
-                  ready={() => serverSync().child(sdk().directory)[0].provider_ready}
-                  connected={() => providers.paid().length > 0}
-                  openProviders={openProviderSettings}
-                />
-              }
-            >
+            <NewSessionDesignView>
               <div class={NEW_SESSION_CONTENT_WIDTH}>
                 <Show
                   when={prompt.ready() || promptReady()}
@@ -191,6 +184,11 @@ export default function NewSessionPage() {
                 </Show>
               </div>
             </NewSessionDesignView>
+            <ProviderTip
+              ready={() => serverSync().child(sdk().directory)[0].provider_ready}
+              connected={() => providers.paid().length > 0}
+              openProviders={openProviderSettings}
+            />
           </div>
         </div>
       </div>
@@ -204,62 +202,39 @@ function ProviderTip(props: { ready: () => boolean; connected: () => boolean; op
     Persist.global("new-session.provider-tip"),
     createStore({ dismissedAt: 0 }),
   )
-  const [state, setState] = createStore({ dismissing: false, now: Date.now() })
-  let dismissTimer: ReturnType<typeof setTimeout> | undefined
   const visible = createMemo(
     () =>
-      state.dismissing ||
-      (props.ready() &&
-        persistedReady() &&
-        !props.connected() &&
-        state.now - persistedState.dismissedAt >= providerTipDismissalDuration),
+      props.ready() &&
+      persistedReady() &&
+      !props.connected() &&
+      Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,
   )
 
-  createEffect(() => {
-    if (!persistedReady()) return
-    const remaining = persistedState.dismissedAt + providerTipDismissalDuration - state.now
-    if (remaining <= 0) return
-    const timer = setTimeout(() => setState("now", Date.now()), Math.min(remaining, 2_147_483_647))
-    onCleanup(() => clearTimeout(timer))
-  })
-
-  onCleanup(() => {
-    if (dismissTimer) clearTimeout(dismissTimer)
-  })
-
   function dismiss() {
-    if (state.dismissing) return
-    const dismissedAt = Date.now()
-    setState("dismissing", true)
-    setState("now", dismissedAt)
-    setPersistedState("dismissedAt", dismissedAt)
-    dismissTimer = setTimeout(completeDismissal, providerTipExitDuration + 50)
+    setPersistedState("dismissedAt", Date.now())
   }
 
-  function completeDismissal() {
-    if (!state.dismissing) return
-    if (dismissTimer) clearTimeout(dismissTimer)
-    dismissTimer = undefined
-    setState("dismissing", false)
-  }
+  const [ref, setRef] = createSignal<HTMLDivElement>()
+  const presence = createPresence({
+    show: () => visible(),
+    element: () => ref() ?? null,
+  })
 
   return (
-    <Show when={visible()}>
+    <Show when={presence.present()}>
       <div class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-10">
         <div
+          ref={setRef}
           data-component="provider-tip"
+          data-visible={visible()}
           class="group/provider-tip pointer-events-auto relative flex h-6 max-w-full items-center transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none"
           classList={{
-            "opacity-0 [transform:translate3d(0,24px,0)] will-change-[transform,opacity]": state.dismissing,
-          }}
-          onTransitionEnd={(event) => {
-            if (event.target === event.currentTarget && event.propertyName === "transform") completeDismissal()
+            "data-[visible=false]:animate-out fade-out slide-out-to-bottom-4": true,
           }}
         >
           <button
             type="button"
             class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
-            disabled={state.dismissing}
             onClick={props.openProviders}
           >
             <span class="truncate">{language.t("home.providerTip")}</span>
@@ -267,23 +242,21 @@ function ProviderTip(props: { ready: () => boolean; connected: () => boolean; op
               <IconV2 name="chevron-down" size="small" class="-rotate-90" />
             </span>
           </button>
-          <Show when={!state.dismissing}>
-            <TooltipV2
-              class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/provider-tip:delay-[250ms] group-hover/provider-tip:duration-150 group-hover/provider-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
-              placement="top"
-              openDelay={1000}
-              value={language.t("common.dismiss")}
+          <TooltipV2
+            class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/provider-tip:delay-[250ms] group-hover/provider-tip:duration-150 group-hover/provider-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
+            placement="top"
+            openDelay={1000}
+            value={language.t("common.dismiss")}
+          >
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded-[4px] text-v2-icon-icon-muted transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none"
+              aria-label={language.t("common.dismiss")}
+              onClick={dismiss}
             >
-              <button
-                type="button"
-                class="flex size-6 items-center justify-center rounded-[4px] text-v2-icon-icon-muted transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none"
-                aria-label={language.t("common.dismiss")}
-                onClick={dismiss}
-              >
-                <IconV2 name="xmark-small" />
-              </button>
-            </TooltipV2>
-          </Show>
+              <IconV2 name="xmark-small" />
+            </button>
+          </TooltipV2>
         </div>
       </div>
     </Show>

@@ -88,6 +88,7 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
+    "solid-presence": "0.2.0",
     "tailwindcss": "catalog:"
   }
 }
