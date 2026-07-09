@@ -26,6 +26,7 @@ import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import { useTitlebarRightMount } from "@/components/titlebar"
+import { useCommand } from "@/context/command"
 import { useProviders } from "@/hooks/use-providers"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { Persist, persisted } from "@/utils/persist"
@@ -48,6 +49,7 @@ export default function NewSessionPage() {
   const comments = useComments()
   const language = useLanguage()
   const settings = useSettings()
+  const command = useCommand()
   const providers = useProviders(() => sdk().directory)
   const openProviderSettings = useSettingsDialog("providers")
   const route = useSessionKey()
@@ -67,6 +69,16 @@ export default function NewSessionPage() {
     controls: projectControls,
     onDone: () => inputRef?.focus(),
   })
+
+  command.register("new-session", () => [
+    {
+      id: "input.focus",
+      title: language.t("command.input.focus"),
+      category: language.t("command.category.view"),
+      keybind: "ctrl+l",
+      onSelect: () => inputRef?.focus(),
+    },
+  ])
 
   const [store, setStore] = createStore<{ worktree?: string }>({})
   const rightMount = useTitlebarRightMount()
