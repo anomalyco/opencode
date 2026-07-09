@@ -9,7 +9,6 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt } from "@opencode-ai/schema/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -84,13 +83,12 @@ const prompt = (sessionID: SessionV2.ID, text: string) =>
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const messageID = SessionMessage.ID.create()
-    yield* events.publish(SessionEvent.PromptAdmitted, {
+    yield* events.publish(SessionEvent.InputAdmitted, {
       sessionID,
       inputID: messageID,
-      prompt: Prompt.make({ text }),
-      delivery: "steer",
+      input: { type: "user", data: { text }, delivery: "steer" },
     })
-    yield* events.publish(SessionEvent.PromptPromoted, {
+    yield* events.publish(SessionEvent.InputPromoted, {
       sessionID,
       inputID: messageID,
     })

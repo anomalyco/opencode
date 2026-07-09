@@ -75,7 +75,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     on(
       () =>
         data.session.message.list(sessionID()).flatMap((message) =>
-          message.type === "user"
+          message.type === "user" || message.type === "synthetic"
             ? [
                 {
                   id: message.id,
@@ -156,7 +156,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   const isPending = (messageID: string) => {
     const message = data.session.message.get(sessionID(), messageID)
-    if (message?.type === "user") return data.session.input.has(sessionID(), messageID)
+    if (message?.type === "user" || message?.type === "synthetic") return data.session.input.has(sessionID(), messageID)
     return message?.type === "compaction" && message.status === "running"
   }
 
@@ -168,11 +168,21 @@ export function createSessionRows(sessionID: Accessor<string>) {
   const message = (event: { id: string; data: { sessionID: string } }) => {
     if (event.data.sessionID === sessionID()) appendMessage(event.id.replace(/^evt_/, "msg_"))
   }
-  const input = (event: { data: { sessionID: string; inputID: string } }) => {
-    if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID)
+  const input = (event: {
+    data: {
+      sessionID: string
+      inputID: string
+      input: { type: "user" } | { type: "synthetic"; data: { description?: string } }
+    }
+  }) => {
+    if (
+      event.data.sessionID === sessionID() &&
+      (event.data.input.type === "user" || event.data.input.data.description?.trim())
+    )
+      appendMessage(event.data.inputID)
   }
   const subscriptions = [
-    data.on("session.prompt.admitted", input),
+    data.on("session.input.admitted", input),
     data.on("session.compaction.started", message),
     data.on("session.instructions.updated", message),
     data.on("session.synthetic", (event) => {

@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
-import type { Prompt } from "@opencode-ai/schema/prompt"
 import type { SessionInput } from "./input"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import { PermissionV1 } from "../v1/permission"
@@ -14,6 +13,7 @@ import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { Instructions } from "../instructions/index"
 import type { Session } from "@opencode-ai/schema/session"
+import type { SyntheticData, UserData } from "@opencode-ai/schema/session-input"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
@@ -150,7 +150,7 @@ export const SessionInputTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionInput.Info["type"]>().notNull(),
-    prompt: text({ mode: "json" }).$type<Prompt>(),
+    data: text({ mode: "json" }).$type<UserData | SyntheticData | Record<string, never>>().notNull(),
     delivery: text().$type<SessionInput.Delivery>(),
     admitted_seq: integer().notNull(),
     promoted_seq: integer(),
@@ -159,10 +159,9 @@ export const SessionInputTable = sqliteTable(
       .$default(() => Date.now()),
   },
   (table) => [
-    index("session_input_session_pending_type_delivery_seq_idx").on(
+    index("session_input_session_pending_delivery_seq_idx").on(
       table.session_id,
       table.promoted_seq,
-      table.type,
       table.delivery,
       table.admitted_seq,
     ),

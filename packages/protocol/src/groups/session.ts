@@ -293,11 +293,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
-          prompt: PromptInput.Prompt,
+          ...PromptInput.Prompt.fields,
+          metadata: SessionInput.UserData.fields.metadata,
           delivery: SessionInput.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionInput.Admitted }),
+        success: Schema.Struct({ data: SessionInput.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -323,7 +324,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           delivery: SessionInput.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionInput.Admitted }),
+        success: Schema.Struct({ data: SessionInput.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
       })
         .middleware(sessionLocationMiddleware)
@@ -360,20 +361,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.post("session.synthetic", "/api/session/:sessionID/synthetic", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
+          id: SessionMessage.ID.pipe(Schema.optional),
           text: Schema.String,
           description: Schema.String.pipe(Schema.optional),
           metadata: SessionMessage.Synthetic.fields.metadata,
+          delivery: SessionInput.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        success: Schema.Struct({ data: SessionInput.Synthetic }),
+        error: [ConflictError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.synthetic",
             summary: "Add synthetic message",
-            description: "Append a synthetic message to a session and resume execution.",
+            description: "Durably admit synthetic session input and schedule execution unless resume is false.",
           }),
         ),
     )

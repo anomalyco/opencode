@@ -153,7 +153,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
       const time = toMillis("created" in event ? event.created : undefined)
 
-      if (event.type === "session.prompt.promoted") {
+      if (event.type === "session.input.promoted") {
         if (event.data.inputID === messageID) {
           promoted = true
           continue
@@ -409,10 +409,8 @@ export async function runNonInteractivePrompt(input: Input) {
         {
           sessionID: input.sessionID,
           id: messageID,
-          prompt: {
-            text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-            files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
-          },
+          text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
+          files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
           delivery: "steer",
         },
         { signal: admission.signal },

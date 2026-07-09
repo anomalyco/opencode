@@ -18,7 +18,6 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -174,16 +173,17 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+        text: "Fix the failing tests",
         resume: false,
       })
 
-      expect(message.prompt.text).toBe("Fix the failing tests")
+      expect(message.data.text).toBe("Fix the failing tests")
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admitted(message.id)).toMatchObject({
         id: message.id,
         sessionID,
-        prompt: { text: "Fix the failing tests" },
+        type: "user",
+        data: { text: "Fix the failing tests" },
         delivery: "steer",
       })
     }),
@@ -198,7 +198,7 @@ describe("SessionV2.prompt", () => {
 
       const boundary = yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "boundary" }),
+        text: "boundary",
         resume: false,
       })
       yield* SessionInput.promoteSteers(db, events, sessionID)
@@ -210,7 +210,7 @@ describe("SessionV2.prompt", () => {
       })
       expect((yield* session.get(sessionID)).revert?.messageID).toBe(boundary.id)
 
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "after revert" }), resume: false })
+      yield* session.prompt({ sessionID, text: "after revert", resume: false })
 
       expect((yield* session.get(sessionID)).revert).toBeUndefined()
       expect(
@@ -219,6 +219,35 @@ describe("SessionV2.prompt", () => {
         ),
       ).not.toContainAnyValues([boundary.id, stale])
       expect(yield* SessionInput.find(db, boundary.id)).toBeUndefined()
+    }),
+  )
+
+  it.effect("holds synthetic input behind a staged revert and discards it when committed", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({
+        sessionID,
+        text: "boundary",
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(db, events, sessionID)
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+      wakeCalls.length = 0
+
+      const completion = yield* session.synthetic({ sessionID, text: "stale completion" })
+
+      expect(wakeCalls).toEqual([])
+      expect(yield* SessionInput.find(db, completion.id)).toMatchObject({ type: "synthetic" })
+
+      yield* session.revert.commit(sessionID)
+
+      expect(yield* SessionInput.find(db, completion.id)).toBeUndefined()
     }),
   )
 
@@ -231,14 +260,12 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: {
-          text: "Inspect this image",
-          files: [{ uri, name: "image.png", mention: { start: 8, end: 17, text: "[Image 1]" } }],
-        },
+        text: "Inspect this image",
+        files: [{ uri, name: "image.png", mention: { start: 8, end: 17, text: "[Image 1]" } }],
         resume: false,
       })
 
-      expect(message.prompt.files).toEqual([
+      expect(message.data.files).toEqual([
         {
           data: uri.slice(uri.indexOf(",") + 1),
           mime: "image/png",
@@ -248,8 +275,8 @@ describe("SessionV2.prompt", () => {
         },
       ])
       const stored = yield* admitted(message.id)
-      expect(stored?.type).toBe("prompt")
-      if (stored?.type === "prompt") expect(stored.prompt.files).toEqual(message.prompt.files)
+      expect(stored?.type).toBe("user")
+      if (stored?.type === "user") expect(stored.data.files).toEqual(message.data.files)
     }),
   )
 
@@ -265,21 +292,19 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: {
-          text: "Inspect this",
-          files: [{ uri: sourceUri.href, name: "main.ts" }],
-        },
+        text: "Inspect this",
+        files: [{ uri: sourceUri.href, name: "main.ts" }],
         resume: false,
       })
 
-      expect(message.prompt.files).toHaveLength(1)
-      expect(message.prompt.files?.[0]).toMatchObject({
+      expect(message.data.files).toHaveLength(1)
+      expect(message.data.files?.[0]).toMatchObject({
         mime: "text/plain",
         source: { type: "uri", uri: sourceUri.href },
         name: "main.ts",
       })
       expect(
-        Buffer.from(message.prompt.files?.[0]?.data ?? "", "base64")
+        Buffer.from(message.data.files?.[0]?.data ?? "", "base64")
           .toString("utf8")
           .replace(/\r$/, ""),
       ).toBe('import { describe, expect } from "bun:test"')
@@ -294,17 +319,18 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: { text: "Inspect this", files: [{ uri, name: "source" }] },
+        text: "Inspect this",
+        files: [{ uri, name: "source" }],
         resume: false,
       })
 
-      expect(message.prompt.files).toHaveLength(1)
-      expect(message.prompt.files?.[0]).toMatchObject({
+      expect(message.data.files).toHaveLength(1)
+      expect(message.data.files?.[0]).toMatchObject({
         mime: "application/x-directory",
         source: { type: "uri", uri },
         name: "source",
       })
-      expect(Buffer.from(message.prompt.files?.[0]?.data ?? "", "base64").toString("utf8")).toContain(
+      expect(Buffer.from(message.data.files?.[0]?.data ?? "", "base64").toString("utf8")).toContain(
         "session-prompt.test.ts",
       )
     }),
@@ -327,11 +353,12 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: { text: "Inspect this image", files: [{ uri: pathToFileURL(source).href }] },
+        text: "Inspect this image",
+        files: [{ uri: pathToFileURL(source).href }],
         resume: false,
       })
 
-      expect(message.prompt.files).toEqual([
+      expect(message.data.files).toEqual([
         {
           data: bytes.toString("base64"),
           mime: "image/png",
@@ -340,7 +367,7 @@ describe("SessionV2.prompt", () => {
         },
       ])
       const stored = yield* admitted(message.id)
-      expect(stored?.type === "prompt" ? stored.prompt.files : undefined).toEqual(message.prompt.files)
+      expect(stored?.type === "user" ? stored.data.files : undefined).toEqual(message.data.files)
     }),
   )
 
@@ -352,11 +379,12 @@ describe("SessionV2.prompt", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: { text: "Inspect this", files: [{ uri, name: "main.ts" }] },
+        text: "Inspect this",
+        files: [{ uri, name: "main.ts" }],
         resume: false,
       })
 
-      expect(message.prompt.files).toEqual([
+      expect(message.data.files).toEqual([
         {
           data: Buffer.from("export const value = 1\n").toString("base64"),
           mime: "text/plain",
@@ -376,7 +404,8 @@ describe("SessionV2.prompt", () => {
       const error = yield* session
         .prompt({
           sessionID,
-          prompt: { text: "Inspect this", files: [{ uri, name: "image.png" }] },
+          text: "Inspect this",
+          files: [{ uri, name: "image.png" }],
           resume: false,
         })
         .pipe(Effect.flip)
@@ -402,22 +431,22 @@ describe("SessionV2.prompt", () => {
       const fiber = yield* publicEvents({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "First" }), resume: false })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Second" }), resume: false })
+      yield* session.prompt({ sessionID, text: "First", resume: false })
+      yield* session.prompt({ sessionID, text: "Second", resume: false })
       yield* SessionInput.promoteSteers(db, events, sessionID)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
-        [0, "session.prompt.admitted"],
-        [1, "session.prompt.admitted"],
-        [2, "session.prompt.promoted"],
-        [3, "session.prompt.promoted"],
+        [0, "session.input.admitted"],
+        [1, "session.input.admitted"],
+        [2, "session.input.promoted"],
+        [3, "session.input.promoted"],
       ])
       expect(
         Array.from(
           yield* publicEvents({ sessionID, after: streamed[0].durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
-      ).toEqual([[1, "session.prompt.admitted"]])
+      ).toEqual([[1, "session.input.admitted"]])
     }),
   )
 
@@ -427,7 +456,7 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const message = yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+        text: "Fix the failing tests",
         resume: false,
       })
 
@@ -446,7 +475,7 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const input = { sessionID, prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }), resume: false }
+      const input = { sessionID, text: "Fix the failing tests", resume: false }
 
       const first = yield* session.prompt(input)
       const second = yield* session.prompt(input)
@@ -464,7 +493,7 @@ describe("SessionV2.prompt", () => {
       const input = {
         sessionID,
         id: messageID,
-        prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+        text: "Fix the failing tests",
         resume: false,
       }
 
@@ -484,7 +513,7 @@ describe("SessionV2.prompt", () => {
       const input = {
         sessionID,
         id: messageID,
-        prompt: PromptInput.Prompt.make({ text: "Recover committed prompt" }),
+        text: "Recover committed prompt",
         resume: false,
       }
       const first = yield* session.prompt(input)
@@ -505,13 +534,13 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({
         sessionID,
         id: messageID,
-        prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+        text: "Fix the failing tests",
       })
       const failure = yield* session
         .prompt({
           sessionID,
           id: messageID,
-          prompt: PromptInput.Prompt.make({ text: "Delete the failing tests" }),
+          text: "Delete the failing tests",
           resume: false,
         })
         .pipe(Effect.flip)
@@ -530,14 +559,14 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({
         id: messageID,
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+        text: "Fix the failing tests",
         resume: false,
       })
       const failure = yield* session
         .prompt({
           id: messageID,
           sessionID,
-          prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+          text: "Fix the failing tests",
           delivery: "queue",
           resume: false,
         })
@@ -554,7 +583,7 @@ describe("SessionV2.prompt", () => {
       const input = {
         sessionID,
         id: messageID,
-        prompt: PromptInput.Prompt.make({ text: "Fix the failing tests" }),
+        text: "Fix the failing tests",
         resume: false,
       }
 
@@ -563,7 +592,7 @@ describe("SessionV2.prompt", () => {
       expect(messages[1]).toEqual(messages[0])
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(1)
-      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1))).toBe(1)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.InputAdmitted.type, 1))).toBe(1)
     }),
   )
 
@@ -576,7 +605,7 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({
         id: messageID,
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Promote once" }),
+        text: "Promote once",
         resume: false,
       })
 
@@ -585,7 +614,7 @@ describe("SessionV2.prompt", () => {
         { concurrency: "unbounded" },
       )
 
-      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptPromoted.type, 1))).toBe(1)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.InputPromoted.type, 1))).toBe(1)
       expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
@@ -603,9 +632,11 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({
         id: messageID,
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Replay pending" }),
+        text: "Replay pending",
         resume: false,
       })
+      const syntheticID = SessionMessage.ID.create()
+      yield* session.synthetic({ id: syntheticID, sessionID, text: "Replay synthetic", resume: false })
       const recorded = yield* db
         .select()
         .from(EventTable)
@@ -631,7 +662,16 @@ describe("SessionV2.prompt", () => {
         })),
       )
 
-      expect(yield* admitted(messageID)).toMatchObject({ id: messageID, prompt: { text: "Replay pending" } })
+      expect(yield* admitted(messageID)).toMatchObject({
+        id: messageID,
+        type: "user",
+        data: { text: "Replay pending" },
+      })
+      expect(yield* admitted(syntheticID)).toMatchObject({
+        id: syntheticID,
+        type: "synthetic",
+        data: { text: "Replay synthetic" },
+      })
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(wakeCalls).toEqual([])
     }),
@@ -656,11 +696,9 @@ describe("SessionV2.prompt", () => {
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
-      const prompt = PromptInput.Prompt.make({ text: "Fix the failing tests" })
-
-      yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
+      yield* session.prompt({ id: messageID, sessionID, text: "Fix the failing tests", resume: false })
       const failure = yield* session
-        .prompt({ id: messageID, sessionID: other, prompt, resume: false })
+        .prompt({ id: messageID, sessionID: other, text: "Fix the failing tests", resume: false })
         .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
@@ -692,7 +730,7 @@ describe("SessionV2.prompt", () => {
         .prompt({
           id: messageID,
           sessionID,
-          prompt: PromptInput.Prompt.make({ text: "Conflicting prompt" }),
+          text: "Conflicting prompt",
           resume: false,
         })
         .pipe(Effect.flip)
@@ -709,7 +747,7 @@ describe("SessionV2.prompt", () => {
       executionCalls.length = 0
       wakeCalls.length = 0
 
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Run by default" }) })
+      yield* session.prompt({ sessionID, text: "Run by default" })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([sessionID])
@@ -725,7 +763,7 @@ describe("SessionV2.prompt", () => {
 
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Run explicitly" }),
+        text: "Run explicitly",
         resume: true,
       })
 
@@ -741,10 +779,150 @@ describe("SessionV2.prompt", () => {
       executionCalls.length = 0
       wakeCalls.length = 0
 
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Do not run" }), resume: false })
+      yield* session.prompt({ sessionID, text: "Do not run", resume: false })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([])
+    }),
+  )
+
+  it.effect("treats prompt metadata as durable retry identity", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = {
+        id: messageID,
+        sessionID,
+        text: "Deploy",
+        metadata: { source: "api" },
+        resume: false,
+      }
+
+      const first = yield* session.prompt(input)
+      const retried = yield* session.prompt(input)
+      const failure = yield* session.prompt({ ...input, metadata: { source: "plugin" } }).pipe(Effect.flip)
+
+      expect(retried).toEqual(first)
+      expect(first.data.metadata).toEqual({ source: "api" })
+      expect(failure._tag).toBe("Session.PromptConflictError")
+    }),
+  )
+
+  it.effect("durably admits synthetic input before transcript promotion", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+
+      const input = yield* session.synthetic({
+        id: messageID,
+        sessionID,
+        text: "Background work completed",
+        description: "shell completion",
+        metadata: { job: "shell" },
+        resume: false,
+      })
+
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* admitted(input.id)).toMatchObject({
+        type: "synthetic",
+        sessionID,
+        delivery: "steer",
+        data: {
+          text: "Background work completed",
+          description: "shell completion",
+          metadata: { job: "shell" },
+        },
+      })
+
+      yield* SessionInput.promoteSteers(db, events, sessionID)
+
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        {
+          id: messageID,
+          type: "synthetic",
+          text: "Background work completed",
+          description: "shell completion",
+          metadata: { job: "shell" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("reconciles exact synthetic retries and rejects conflicting reuse", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const database = yield* Database.Service
+      const input = { id: messageID, sessionID, text: "Completed", resume: false }
+
+      const entries = yield* Effect.all([session.synthetic(input), session.synthetic(input)], {
+        concurrency: "unbounded",
+      })
+      yield* SessionInput.promoteSteers(database.db, events, sessionID)
+      const promotedRetry = yield* session.synthetic(input)
+      const failure = yield* session.synthetic({ ...input, text: "Different completion" }).pipe(Effect.flip)
+
+      expect(entries[1]).toEqual(entries[0])
+      expect(promotedRetry).toMatchObject({ id: messageID, type: "synthetic", promotedSeq: expect.any(Number) })
+      expect(failure).toMatchObject({ _tag: "Session.SyntheticConflictError", sessionID, inputID: messageID })
+      expect(yield* admittedCount).toBe(1)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.InputAdmitted.type, 1))).toBe(1)
+    }),
+  )
+
+  it.effect("keeps synthetic queue input pending until the queue boundary", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+
+      const input = yield* session.synthetic({
+        sessionID,
+        text: "Queued completion",
+        delivery: "queue",
+        resume: false,
+      })
+
+      expect(input.delivery).toBe("queue")
+      expect(yield* SessionInput.promoteSteers(db, events, sessionID)).toBe(0)
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* SessionInput.promoteNextQueued(db, events, sessionID)).toBe(true)
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: input.id, type: "synthetic", text: "Queued completion" },
+      ])
+    }),
+  )
+
+  it.effect("promotes prompt and synthetic steers in admission order", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+
+      yield* session.prompt({
+        sessionID,
+        text: "First prompt",
+        resume: false,
+      })
+      yield* session.synthetic({ sessionID, text: "Background completion", resume: false })
+      yield* session.prompt({
+        sessionID,
+        text: "Second prompt",
+        resume: false,
+      })
+
+      yield* SessionInput.promoteSteers(db, events, sessionID)
+
+      expect(
+        (yield* session.messages({ sessionID, order: "asc" })).map((message) =>
+          message.type === "user" || message.type === "synthetic" ? message.text : message.type,
+        ),
+      ).toEqual(["First prompt", "Background completion", "Second prompt"])
     }),
   )
 })

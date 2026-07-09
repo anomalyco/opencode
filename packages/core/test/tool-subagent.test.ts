@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -16,6 +16,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -263,6 +264,13 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
+          const events = yield* EventV2.Service
+          const admitted = yield* events.subscribe(SessionEvent.InputAdmitted).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.input.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
 
           const settled = yield* settleTool(registry, {
             sessionID: parent.id,
@@ -277,7 +285,10 @@ describe("SubagentTool", () => {
           const childID = outputSessionID(settled.output?.structured)
           expect(settled.output?.structured).toMatchObject({ status: "running" })
 
-          yield* Effect.yieldNow
+          const admission = Array.from(yield* Fiber.join(admitted))[0]
+          expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)
+          const database = yield* Database.Service
+          yield* SessionInput.promoteSteers(database.db, events, parent.id)
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent id="${childID}" state="completed"`)

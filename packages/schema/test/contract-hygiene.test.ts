@@ -39,6 +39,13 @@ describe("contract hygiene", () => {
     expect(Schema.decodeUnknownSync(Value)({ value: "1" })).toEqual({ value: 1 })
     expect(Schema.encodeSync(Value)({ value: 1 })).toEqual({ value: "1" })
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
+    expect(
+      Schema.encodeSync(SessionInput.SyntheticData)({
+        text: "completed",
+        description: undefined,
+        metadata: undefined,
+      }),
+    ).toEqual({ text: "completed" })
   })
 
   test("model defaults and provider overlays preserve public invariants", () => {
@@ -92,6 +99,10 @@ describe("contract hygiene", () => {
       Pty.Info,
       Session.ListAnchor,
       Session.Revert,
+      SessionInput.UserData,
+      SessionInput.SyntheticData,
+      SessionInput.User,
+      SessionInput.Synthetic,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)

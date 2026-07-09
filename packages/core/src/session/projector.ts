@@ -313,13 +313,13 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         .values(
           inputRows.flatMap((row) => {
             const id = idMap.get(row.id)
-            return id && row.type === "prompt"
+            return id && row.type !== "compaction"
               ? [
                   {
                     id,
                     session_id: event.data.sessionID,
-                    type: "prompt" as const,
-                    prompt: row.prompt,
+                    type: row.type,
+                    data: row.data,
                     delivery: row.delivery,
                     admitted_seq: row.admitted_seq,
                     promoted_seq: row.promoted_seq,
@@ -629,27 +629,40 @@ const layer = Layer.effectDiscard(
         .pipe(Effect.orDie),
     )
     yield* events.project(SessionEvent.Forked, (event) => projectFork(db, event))
-    yield* events.project(SessionEvent.PromptPromoted, (event) =>
+    yield* events.project(SessionEvent.InputPromoted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        const input = yield* SessionInput.projectPromptPromoted(db, {
+        const input = yield* SessionInput.projectPromoted(db, {
           id: event.data.inputID,
           sessionID: event.data.sessionID,
           promotedSeq: event.durable.seq,
         })
-        yield* insertMessage(db, event, {
-          id: input.id,
-          type: "user",
-          metadata: event.metadata,
-          text: input.prompt.text,
-          files: input.prompt.files,
-          agents: input.prompt.agents,
-          time: { created: event.created },
-        })
+        yield* insertMessage(
+          db,
+          event,
+          input.type === "user"
+            ? {
+                id: input.id,
+                type: "user",
+                metadata: input.data.metadata,
+                text: input.data.text,
+                files: input.data.files,
+                agents: input.data.agents,
+                time: { created: event.created },
+              }
+            : {
+                id: input.id,
+                type: "synthetic",
+                text: input.data.text,
+                description: input.data.description,
+                metadata: input.data.metadata,
+                time: { created: event.created },
+              },
+        )
       }),
     )
-    yield* events.project(SessionEvent.PromptAdmitted, (event) =>
+    yield* events.project(SessionEvent.InputAdmitted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
@@ -657,8 +670,7 @@ const layer = Layer.effectDiscard(
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
-          prompt: event.data.prompt,
-          delivery: event.data.delivery,
+          input: event.data.input,
           timeCreated: event.created,
         })
       }),

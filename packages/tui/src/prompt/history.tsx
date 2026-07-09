@@ -16,7 +16,7 @@ export type PastedText = {
   }
 }
 
-export type PromptInfo = Types.DeepMutable<SessionPromptInput["prompt"]> & {
+export type PromptInfo = Types.DeepMutable<Pick<SessionPromptInput, "text" | "files" | "agents">> & {
   pasted: PastedText[]
   mode?: "normal" | "shell"
 }

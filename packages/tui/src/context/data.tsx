@@ -315,19 +315,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
           }
           break
-        case "session.prompt.promoted": {
+        case "session.input.promoted": {
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
             if (position === undefined) return
             const existing = draft[position]
-            if (existing?.type === "user" && store.session.input[event.data.sessionID]?.includes(event.data.inputID)) {
-              existing.time.created = event.created
-              draft.splice(position, 1)
-              draft.push(existing)
-              index.clear()
-              draft.forEach((message, indexValue) => index.set(message.id, indexValue))
-              return
-            }
+            if (!existing || !store.session.input[event.data.sessionID]?.includes(event.data.inputID)) return
+            existing.time.created = event.created
+            draft.splice(position, 1)
+            draft.push(existing)
+            index.clear()
+            draft.forEach((message, indexValue) => index.set(message.id, indexValue))
           })
           setStore(
             "session",
@@ -337,21 +335,30 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           )
           break
         }
-        case "session.prompt.admitted":
+        case "session.input.admitted":
           if (!store.session.input[event.data.sessionID]?.includes(event.data.inputID))
             setStore("session", "input", event.data.sessionID, [
               ...(store.session.input[event.data.sessionID] ?? []),
               event.data.inputID,
             ])
           message.update(event.data.sessionID, (draft, index) => {
-            message.append(draft, index, {
-              id: event.data.inputID,
-              type: "user",
-              text: event.data.prompt.text,
-              files: event.data.prompt.files,
-              agents: event.data.prompt.agents,
-              time: { created: event.created },
-            })
+            message.append(
+              draft,
+              index,
+              event.data.input.type === "user"
+                ? {
+                    id: event.data.inputID,
+                    type: "user",
+                    ...event.data.input.data,
+                    time: { created: event.created },
+                  }
+                : {
+                    id: event.data.inputID,
+                    type: "synthetic",
+                    ...event.data.input.data,
+                    time: { created: event.created },
+                  },
+            )
           })
           break
         case "session.instructions.updated":
@@ -1069,7 +1076,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             console.error("Failed to refresh default location data", failure.reason)
           const key = locationKey(defaultLocation())
           const locations = new Map(
-            Object.values(store.session.info).map((session) => [locationKey(session.location), session.location] as const),
+            Object.values(store.session.info).map(
+              (session) => [locationKey(session.location), session.location] as const,
+            ),
           )
           const refreshed = await Promise.allSettled(
             Array.from(locations)

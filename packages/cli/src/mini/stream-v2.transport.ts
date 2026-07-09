@@ -562,7 +562,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     input.trace?.write("recv.event", event)
     subagents.main(event)
-    if (event.type === "session.prompt.promoted") {
+    if (event.type === "session.input.promoted") {
       if (state.wait?.messageID === event.data.inputID) state.wait.promoted = true
       state.messageIDs.add(event.data.inputID)
       write([], { phase: "running", status: "waiting for assistant" })
@@ -1052,11 +1052,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             {
               sessionID: input.sessionID,
               id: messageID,
-              prompt: {
-                text: [next.prompt.text, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-                files: attachments.length ? attachments : undefined,
-                agents: agents.length ? agents : undefined,
-              },
+              text: [next.prompt.text, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
+              files: attachments.length ? attachments : undefined,
+              agents: agents.length ? agents : undefined,
               delivery: "steer",
             },
             { signal: next.signal },

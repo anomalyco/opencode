@@ -162,14 +162,25 @@ type Endpoint5_10Request = Parameters<RawClient["server.session"]["session.promp
 type Endpoint5_10Input = {
   readonly sessionID: Endpoint5_10Request["params"]["sessionID"]
   readonly id?: Endpoint5_10Request["payload"]["id"]
-  readonly prompt: Endpoint5_10Request["payload"]["prompt"]
+  readonly text: Endpoint5_10Request["payload"]["text"]
+  readonly files?: Endpoint5_10Request["payload"]["files"]
+  readonly agents?: Endpoint5_10Request["payload"]["agents"]
+  readonly metadata?: Endpoint5_10Request["payload"]["metadata"]
   readonly delivery?: Endpoint5_10Request["payload"]["delivery"]
   readonly resume?: Endpoint5_10Request["payload"]["resume"]
 }
 const Endpoint5_10 = (raw: RawClient["server.session"]) => (input: Endpoint5_10Input) =>
   raw["session.prompt"]({
     params: { sessionID: input["sessionID"] },
-    payload: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
+    payload: {
+      id: input["id"],
+      text: input["text"],
+      files: input["files"],
+      agents: input["agents"],
+      metadata: input["metadata"],
+      delivery: input["delivery"],
+      resume: input["resume"],
+    },
   }).pipe(
     Effect.mapError(mapClientError),
     Effect.map((value) => value.data),
@@ -223,21 +234,28 @@ const Endpoint5_12 = (raw: RawClient["server.session"]) => (input: Endpoint5_12I
 type Endpoint5_13Request = Parameters<RawClient["server.session"]["session.synthetic"]>[0]
 type Endpoint5_13Input = {
   readonly sessionID: Endpoint5_13Request["params"]["sessionID"]
+  readonly id?: Endpoint5_13Request["payload"]["id"]
   readonly text: Endpoint5_13Request["payload"]["text"]
   readonly description?: Endpoint5_13Request["payload"]["description"]
   readonly metadata?: Endpoint5_13Request["payload"]["metadata"]
+  readonly delivery?: Endpoint5_13Request["payload"]["delivery"]
   readonly resume?: Endpoint5_13Request["payload"]["resume"]
 }
 const Endpoint5_13 = (raw: RawClient["server.session"]) => (input: Endpoint5_13Input) =>
   raw["session.synthetic"]({
     params: { sessionID: input["sessionID"] },
     payload: {
+      id: input["id"],
       text: input["text"],
       description: input["description"],
       metadata: input["metadata"],
+      delivery: input["delivery"],
       resume: input["resume"],
     },
-  }).pipe(Effect.mapError(mapClientError))
+  }).pipe(
+    Effect.mapError(mapClientError),
+    Effect.map((value) => value.data),
+  )
 
 type Endpoint5_14Request = Parameters<RawClient["server.session"]["session.shell"]>[0]
 type Endpoint5_14Input = {

@@ -122,6 +122,13 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class SyntheticConflictError extends Schema.TaggedErrorClass<SyntheticConflictError>()(
+  "Session.SyntheticConflictError",
+  {
+    sessionID: SessionSchema.ID,
+    inputID: SessionMessage.ID,
+  },
+) {}
 export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
   uri: Schema.String,
   message: Schema.String,
@@ -147,6 +154,7 @@ export type Error =
   | MessageDecodeError
   | OperationUnavailableError
   | PromptConflictError
+  | SyntheticConflictError
   | AttachmentError
   | CompactionConflictError
   | BusyError
@@ -204,10 +212,13 @@ export interface Interface {
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    prompt: PromptInput.Prompt
+    text: string
+    files?: PromptInput.Prompt["files"]
+    agents?: PromptInput.Prompt["agents"]
+    metadata?: Record<string, unknown>
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | AttachmentError>
+  }) => Effect.Effect<SessionInput.User, NotFoundError | PromptConflictError | AttachmentError>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -220,7 +231,7 @@ export interface Interface {
     delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<
-    SessionInput.Admitted,
+    SessionInput.User,
     NotFoundError | PromptConflictError | AttachmentError | CommandV2.NotFoundError | CommandV2.EvaluationError
   >
   readonly shell: (input: {
@@ -243,12 +254,14 @@ export interface Interface {
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly synthetic: (input: {
+    id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     text: string
     description?: string
     metadata?: Record<string, unknown>
+    delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<SessionInput.Synthetic, NotFoundError | SyntheticConflictError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -487,15 +500,19 @@ const layer = Layer.effect(
             // continues from the reverted boundary rather than stale post-boundary history.
             if (session.revert)
               yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
-            const prompt = yield* resolvePrompt(input.prompt).pipe(Effect.provideService(FSUtil.Service, fs))
+            const prompt = yield* resolvePrompt({ text: input.text, files: input.files, agents: input.agents }).pipe(
+              Effect.provideService(FSUtil.Service, fs),
+            )
             const messageID = input.id ?? SessionMessage.ID.create()
-            const delivery = input.delivery ?? "steer"
-            const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
+            const admittedInput = SessionInput.Message.make({
+              type: "user",
+              data: { ...prompt, metadata: input.metadata },
+              delivery: input.delivery ?? "steer",
+            })
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
-              prompt,
-              delivery,
+              input: admittedInput,
             }).pipe(
               Effect.catchDefect((defect) =>
                 defect instanceof SessionInput.LifecycleConflict
@@ -503,7 +520,10 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (!SessionInput.equivalent(admitted, expected))
+            if (
+              admitted.type !== "user" ||
+              !SessionInput.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
+            )
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
@@ -539,7 +559,9 @@ const layer = Layer.effect(
         return yield* result.prompt({
           id: input.id,
           sessionID: input.sessionID,
-          prompt: { text: evaluated.text, files: input.files, agents: input.agents },
+          text: evaluated.text,
+          files: input.files,
+          agents: input.agents,
           delivery: input.delivery,
           resume: input.resume,
         })
@@ -664,35 +686,60 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })
         if (backgrounded.length === 0) return
-        yield* result.synthetic({
-          sessionID,
-          text: [
-            "User requested that active blocking work be moved to the background.",
-            "",
-            "Backgrounded work:",
-            ...backgrounded.map((job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`),
-            "",
-            "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
-          ].join("\n"),
-        })
+        yield* result
+          .synthetic({
+            sessionID,
+            text: [
+              "User requested that active blocking work be moved to the background.",
+              "",
+              "Backgrounded work:",
+              ...backgrounded.map((job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`),
+              "",
+              "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
+            ].join("\n"),
+          })
+          .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),
-      synthetic: Effect.fn("V2Session.synthetic")(function* (input) {
-        yield* result.get(input.sessionID)
-        yield* events.publish(SessionEvent.Synthetic, {
-          sessionID: input.sessionID,
-          text: input.text,
-          description: input.description,
-          metadata: input.metadata,
-        })
-        if (input.resume === false) return
-        yield* execution
-          .resume(input.sessionID)
-          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
-      }),
+      synthetic: Effect.fn("V2Session.synthetic")((input) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* result.get(input.sessionID)
+            const inputID = input.id ?? SessionMessage.ID.create()
+            const admittedInput = SessionInput.Message.make({
+              type: "synthetic",
+              data: {
+                text: input.text,
+                description: input.description,
+                metadata: input.metadata,
+              },
+              delivery: input.delivery ?? "steer",
+            })
+            const admitted = yield* SessionInput.admit(db, events, {
+              id: inputID,
+              sessionID: input.sessionID,
+              input: admittedInput,
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInput.LifecycleConflict
+                  ? new SyntheticConflictError({ sessionID: input.sessionID, inputID })
+                  : Effect.die(defect),
+              ),
+            )
+            if (
+              admitted.type !== "synthetic" ||
+              !SessionInput.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
+            )
+              return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
+            if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
+              yield* execution.wake(input.sessionID)
+            return admitted
+          }),
+        ),
+      ),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
@@ -710,10 +757,12 @@ const layer = Layer.effect(
         clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          return yield* SessionRevert.clear(session).pipe(
+          const revert = yield* SessionRevert.clear(session).pipe(
             Effect.provideService(EventV2.Service, events),
             Effect.provide(locations.get(session.location)),
           )
+          yield* execution.wake(sessionID)
+          return revert
         }),
         commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
           const session = yield* result.get(sessionID)

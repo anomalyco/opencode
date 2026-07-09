@@ -18,6 +18,7 @@ import simplifySessionInputMigration from "@opencode-ai/core/database/migration/
 import resetSessionEventsMigration from "@opencode-ai/core/database/migration/20260703200000_reset_v2_session_events"
 import durableSessionInboxMigration from "@opencode-ai/core/database/migration/20260707010146_durable_session_inbox"
 import migratePrelaunchV2StateMigration from "@opencode-ai/core/database/migration/20260707120000_migrate_prelaunch_v2_state"
+import genericSessionInputMigration from "@opencode-ai/core/database/migration/20260709013000_generic_session_input"
 import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import addSessionForkMigration from "@opencode-ai/core/database/migration/20260706223930_add-session-fork"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -369,7 +370,7 @@ describe("DatabaseMigration", () => {
           { name: "event_aggregate_type_seq_idx" },
           { name: "session_input_session_admitted_seq_idx" },
           { name: "session_input_session_pending_compaction_idx" },
-          { name: "session_input_session_pending_type_delivery_seq_idx" },
+          { name: "session_input_session_pending_delivery_seq_idx" },
           { name: "session_input_session_promoted_seq_idx" },
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
@@ -607,7 +608,7 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO event (id, aggregate_id, seq, type, data, created) VALUES ('event', 'session', 9, 'session.updated.1', '{}', 1)`,
         )
         yield* db.run(
-          sql`INSERT INTO session_input (id, session_id, type, prompt, delivery, admitted_seq, time_created) VALUES ('input', 'session', 'prompt', '{}', 'steer', 9, 1)`,
+          sql`INSERT INTO session_input (id, session_id, type, data, delivery, admitted_seq, time_created) VALUES ('input', 'session', 'user', '{}', 'steer', 9, 1)`,
         )
         yield* db.run(
           sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('projected', 'session', 'user', 9, 1, 1, '{}')`,
@@ -695,6 +696,56 @@ describe("DatabaseMigration", () => {
             delivery: "steer",
             admitted_seq: 4,
             promoted_seq: null,
+          },
+        ])
+      }),
+    )
+  })
+
+  test("migrates prompt inbox rows and lifecycle events to generic user input", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('session')`)
+        yield* db.run(
+          sql`CREATE TABLE session_input (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, prompt text, delivery text, admitted_seq integer NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, type, prompt, delivery, admitted_seq, promoted_seq, time_created) VALUES ('input', 'session', 'prompt', '{"text":"hello"}', 'queue', 4, NULL, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, type, prompt, delivery, admitted_seq, promoted_seq, time_created) VALUES ('empty', 'session', 'prompt', NULL, 'steer', 6, NULL, 2)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, created integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('admitted', 'session', 4, 1, 'session.prompt.admitted.1', '{"sessionID":"session","inputID":"input","prompt":{"text":"hello"},"delivery":"queue"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('promoted', 'session', 5, 2, 'session.prompt.promoted.1', '{"sessionID":"session","inputID":"input"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('empty-admitted', 'session', 6, 2, 'session.prompt.admitted.1', '{"sessionID":"session","inputID":"empty","prompt":null,"delivery":"steer"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('empty-promoted', 'session', 7, 2, 'session.prompt.promoted.1', '{"sessionID":"session","inputID":"empty"}')`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [genericSessionInputMigration])
+
+        expect(yield* db.all(sql`SELECT id, type, data, delivery FROM session_input ORDER BY admitted_seq`)).toEqual([
+          { id: "input", type: "user", data: '{"text":"hello"}', delivery: "queue" },
+        ])
+        expect(yield* db.all(sql`SELECT type, data FROM event ORDER BY seq`)).toEqual([
+          {
+            type: "session.input.admitted.1",
+            data: '{"sessionID":"session","inputID":"input","input":{"type":"user","data":{"text":"hello"},"delivery":"queue"}}',
+          },
+          {
+            type: "session.input.promoted.1",
+            data: '{"sessionID":"session","inputID":"input"}',
           },
         ])
       }),
