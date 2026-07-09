@@ -7,7 +7,6 @@ import type { Component, ComponentProps, JSX, ValidComponent } from "solid-js"
 import { splitProps } from "solid-js"
 import type { ContentProps, DescriptionProps, DynamicProps, LabelProps, OverlayProps } from "@corvu/drawer"
 import DrawerPrimitive from "@corvu/drawer"
-import { cn } from "@/lib/utils"
 
 const Drawer = DrawerPrimitive
 
@@ -33,10 +32,10 @@ const DrawerOverlay = <T extends ValidComponent = "div">(props: DynamicProps<T, 
   }
   return (
     <DrawerPrimitive.Overlay
-      class={cn(
-        "fixed inset-0 z-[100] bg-v2-overlay-simple-overlay-scrim opacity-0 backdrop-blur-none transition-[opacity,backdrop-filter] duration-300 data-[opening]:opacity-100 data-[opening]:backdrop-blur-[4px] data-[closing]:opacity-0 data-[closing]:backdrop-blur-none",
-        props.class,
-      )}
+      class={props.class}
+      classList={{
+        "fixed inset-0 z-[100] bg-v2-overlay-simple-overlay-scrim opacity-0 backdrop-blur-none transition-[opacity,backdrop-filter] duration-300 data-[opening]:opacity-100 data-[opening]:backdrop-blur-[4px] data-[closing]:opacity-0 data-[closing]:backdrop-blur-none": true,
+      }}
       style={overlayStyle()}
       {...rest}
     />
@@ -54,10 +53,10 @@ const DrawerContent = <T extends ValidComponent = "div">(props: DynamicProps<T, 
     <DrawerPortal>
       <DrawerOverlay />
       <DrawerPrimitive.Content
-        class={cn(
-          "group/drawer-content fixed inset-y-[6px] right-[6px] left-auto z-[100] flex h-auto max-h-[calc(100vh-12px)] w-[560px] max-w-[calc(100vw-12px)] flex-col items-start rounded-[8px] bg-v2-background-bg-base p-0 shadow-[var(--v2-elevation-overlay)] data-[transitioning]:transition-transform data-[transitioning]:duration-300 md:select-none",
-          props.class,
-        )}
+        class={props.class}
+        classList={{
+          "group/drawer-content fixed inset-y-[6px] right-[6px] left-auto z-[100] flex h-auto max-h-[calc(100vh-12px)] w-[560px] max-w-[calc(100vw-12px)] flex-col items-start rounded-[8px] bg-v2-background-bg-base p-0 shadow-[var(--v2-elevation-overlay)] data-[transitioning]:transition-transform data-[transitioning]:duration-300 md:select-none": true,
+        }}
         {...rest}
       >
         {props.children}
@@ -68,12 +67,12 @@ const DrawerContent = <T extends ValidComponent = "div">(props: DynamicProps<T, 
 
 const DrawerHeader: Component<ComponentProps<"div">> = (props) => {
   const [, rest] = splitProps(props, ["class"])
-  return <div class={cn("grid gap-1.5 p-4 text-center sm:text-left", props.class)} {...rest} />
+  return <div class={props.class} classList={{ "grid gap-1.5 p-4 text-center sm:text-left": true }} {...rest} />
 }
 
 const DrawerFooter: Component<ComponentProps<"div">> = (props) => {
   const [, rest] = splitProps(props, ["class"])
-  return <div class={cn("mt-auto flex flex-col gap-2 p-4", props.class)} {...rest} />
+  return <div class={props.class} classList={{ "mt-auto flex flex-col gap-2 p-4": true }} {...rest} />
 }
 
 type DrawerTitleProps<T extends ValidComponent = "div"> = LabelProps<T> & { class?: string }
@@ -82,7 +81,8 @@ const DrawerTitle = <T extends ValidComponent = "div">(props: DynamicProps<T, Dr
   const [, rest] = splitProps(props as DrawerTitleProps, ["class"])
   return (
     <DrawerPrimitive.Label
-      class={cn("text-base font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base", props.class)}
+      class={props.class}
+      classList={{ "text-base font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base": true }}
       {...rest}
     />
   )
@@ -98,7 +98,10 @@ const DrawerDescription = <T extends ValidComponent = "div">(
   const [, rest] = splitProps(props as DrawerDescriptionProps, ["class"])
   return (
     <DrawerPrimitive.Description
-      class={cn("text-[13px] font-[440] leading-[140%] tracking-[-0.04px] text-v2-text-text-muted", props.class)}
+      class={props.class}
+      classList={{
+        "text-[13px] font-[440] leading-[140%] tracking-[-0.04px] text-v2-text-text-muted": true,
+      }}
       {...rest}
     />
   )
