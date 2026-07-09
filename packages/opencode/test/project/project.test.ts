@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
+import fs from "fs/promises"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
@@ -431,6 +432,45 @@ describe("Project.discover", () => {
       expect(updated!.icon?.url).toStartWith("data:")
       expect(updated!.icon?.url).toContain("base64")
       expect(updated!.icon?.color).toBeUndefined()
+    }),
+  )
+
+  it.live("should discover favicon.png in public", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const result = yield* project.fromDirectory(tmp)
+
+      const publicDir = path.join(tmp, "public")
+      const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      yield* Effect.promise(() => fs.mkdir(publicDir, { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(publicDir, "favicon.png"), pngData))
+
+      yield* project.discover(result.project)
+
+      const updated = yield* project.get(result.project.id)
+      expect(updated).toBeDefined()
+      expect(updated!.icon?.url).toStartWith("data:")
+      expect(updated!.icon?.url).toContain("base64")
+    }),
+  )
+
+  it.live("should not discover favicon in arbitrary nested directories", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const result = yield* project.fromDirectory(tmp)
+
+      const nestedDir = path.join(tmp, "data", "free-runtime", "stale-leases", "one", "two", "three")
+      const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      yield* Effect.promise(() => fs.mkdir(nestedDir, { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(nestedDir, "favicon.png"), pngData))
+
+      yield* project.discover(result.project)
+
+      const updated = yield* project.get(result.project.id)
+      expect(updated).toBeDefined()
+      expect(updated!.icon).toBeUndefined()
     }),
   )
 

@@ -32,6 +32,21 @@ export const Event = {
 
 type Row = typeof ProjectTable.$inferSelect
 
+const ICON_DISCOVERY_PATHS = [
+  "favicon",
+  "public/favicon",
+  "public/assets/favicon",
+  "static/favicon",
+  "static/assets/favicon",
+  "assets/favicon",
+  "src/favicon",
+  "src/assets/favicon",
+  "app/favicon",
+  "resources/favicon",
+]
+const ICON_DISCOVERY_EXTENSIONS = ["ico", "png", "svg", "jpg", "jpeg", "webp"]
+const ICON_DISCOVERY_PATTERN = `{${ICON_DISCOVERY_PATHS.join(",")}}.{${ICON_DISCOVERY_EXTENSIONS.join(",")}}`
+
 export function fromRow(row: Row): Info {
   const icon =
     row.icon_url || row.icon_url_override || row.icon_color
@@ -315,7 +330,7 @@ const layer = Layer.effect(
       if (input.icon?.url) return
 
       const matches = yield* fs
-        .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+        .glob(ICON_DISCOVERY_PATTERN, {
           cwd: input.worktree,
           absolute: true,
           include: "file",
