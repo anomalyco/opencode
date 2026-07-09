@@ -8,6 +8,7 @@ import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
+import { Todo } from "../session/todo"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
@@ -78,6 +79,44 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+const TODO_UPDATE_FAILED =
+  "[!] Automatic todo update failed. If you were tracking this in your todo list, please mark it as completed manually."
+
+function completeMatchingParentTodo(input: {
+  parentID: SessionID
+  description: string
+  text: string
+  todo: Todo.Interface
+}) {
+  return Effect.gen(function* () {
+    const exit = yield* markMatchingParentTodoComplete(input).pipe(Effect.exit)
+    if (Exit.isSuccess(exit)) return input.text
+    if (input.text.length === 0) return TODO_UPDATE_FAILED
+    return [input.text, TODO_UPDATE_FAILED].join("\n\n")
+  })
+}
+
+function markMatchingParentTodoComplete(input: { parentID: SessionID; description: string; todo: Todo.Interface }) {
+  return Effect.gen(function* () {
+    const description = normalizeTodoText(input.description)
+    if (description.length === 0) return
+    const todos = yield* input.todo.get(input.parentID)
+    const updated = todos.map((todo) => {
+      if (todo.status !== "pending" && todo.status !== "in_progress") return todo
+      const content = normalizeTodoText(todo.content)
+      if (content.length === 0) return todo
+      if (!content.includes(description) && !description.includes(content)) return todo
+      return { ...todo, status: "completed" as const }
+    })
+    if (updated.every((todo, index) => todo.status === todos[index]?.status)) return
+    yield* input.todo.update({ sessionID: input.parentID, todos: updated })
+  })
+}
+
+function normalizeTodoText(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim()
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -85,6 +124,7 @@ export const TaskTool = Tool.define(
     const background = yield* BackgroundJob.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
+    const todo = yield* Todo.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
@@ -231,8 +271,19 @@ export const TaskTool = Tool.define(
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (jobID: string) {
         yield* background.wait({ id: jobID }).pipe(
           Effect.flatMap((result) => {
-            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
-            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+            const info = result.info
+            if (info?.status === "completed") {
+              return Effect.gen(function* () {
+                const text = yield* completeMatchingParentTodo({
+                  parentID: ctx.sessionID,
+                  description: params.description,
+                  text: info.output ?? "",
+                  todo,
+                })
+                yield* inject("completed", text)
+              })
+            }
+            if (info?.status === "error") return inject("error", info.error ?? "")
             return Effect.void
           }),
           Effect.forkIn(scope, { startImmediately: true }),
@@ -313,10 +364,16 @@ export const TaskTool = Tool.define(
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            const text = yield* completeMatchingParentTodo({
+              parentID: ctx.sessionID,
+              description: params.description,
+              text: result?.output ?? "",
+              todo,
+            })
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: renderOutput({ sessionID: nextSession.id, state: "completed", text }),
             }
           }),
         (_, exit) =>

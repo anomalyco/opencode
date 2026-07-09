@@ -11,6 +11,7 @@ import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Session } from "@/session/session"
+import { Todo } from "@/session/todo"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
@@ -47,6 +48,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       SessionRunState.node,
       SessionStatus.node,
       Truncate.node,
+      Todo.node,
       ToolRegistry.node,
       Database.node,
       RuntimeFlags.node,
@@ -388,6 +390,45 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("execute marks the matching parent todo completed when the subagent completes", () =>
+    Effect.gen(function* () {
+      const todos = yield* Todo.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      yield* todos.update({
+        sessionID: chat.id,
+        todos: [
+          { content: "Create hello.txt file", status: "pending", priority: "high" },
+          { content: "Run tests", status: "pending", priority: "medium" },
+        ],
+      })
+
+      yield* def.execute(
+        {
+          description: "Create hello.txt",
+          prompt: "Create hello.txt in the workspace",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(yield* todos.get(chat.id)).toEqual([
+        { content: "Create hello.txt file", status: "completed", priority: "high" },
+        { content: "Run tests", status: "pending", priority: "medium" },
+      ])
+    }),
+  )
+
   it.instance(
     "execute shapes child permissions for task, todowrite, and primary tools",
     () =>
@@ -695,6 +736,59 @@ describe("tool.task", () => {
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
       expect(waited.info?.output).toBe("background done")
+    }),
+  )
+
+  background.instance("background completion marks the matching parent todo completed", () =>
+    Effect.gen(function* () {
+      const todos = yield* Todo.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const injected = defer<SessionPrompt.PromptInput>()
+      yield* todos.update({
+        sessionID: chat.id,
+        todos: [
+          { content: "Create hello.txt file", status: "pending", priority: "high" },
+          { content: "Run tests", status: "pending", priority: "medium" },
+        ],
+      })
+
+      yield* def.execute(
+        {
+          description: "Create hello.txt",
+          prompt: "Create hello.txt in the workspace",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps({ text: "background done" }),
+              prompt: (input) => {
+                if (input.sessionID === chat.id) {
+                  injected.resolve(input)
+                  return Effect.succeed(reply(input, "injected"))
+                }
+                return Effect.succeed(reply(input, "background done"))
+              },
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      yield* Effect.promise(() => injected.promise)
+      expect(yield* todos.get(chat.id)).toEqual([
+        { content: "Create hello.txt file", status: "completed", priority: "high" },
+        { content: "Run tests", status: "pending", priority: "medium" },
+      ])
     }),
   )
 
