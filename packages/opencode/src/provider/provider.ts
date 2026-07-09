@@ -207,6 +207,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
+    meta: () =>
+      Effect.succeed({
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+      }),
     xai: () =>
       Effect.succeed({
         autoload: false,
