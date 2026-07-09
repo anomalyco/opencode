@@ -12,7 +12,7 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 import { getWorkerPool } from "../../pierre/worker"
-import "./session-review-v2.css"
+import { SessionFilePanelV2, SessionFilePanelV2Empty } from "./session-file-panel-v2"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN = 200
@@ -45,6 +45,11 @@ export type SessionReviewV2SidebarProps = {
   filter: string
   onFilterChange: (value: string) => void
   onFilterKeyDown?: JSX.EventHandlerUnion<HTMLInputElement, KeyboardEvent>
+  filterAutofocus?: boolean
+  filterRef?: (element: HTMLInputElement) => void
+  filterControls?: string
+  filterActiveDescendant?: string
+  filterExpanded?: boolean
   width?: number
   onWidthChange?: (width: number) => void
   minWidth?: number
@@ -69,55 +74,62 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 
   return (
     <div data-component="session-review-v2-sidebar-root">
-      <aside
-        data-slot="session-review-v2-sidebar"
-        data-resizing={resizing() ? "" : undefined}
-        aria-hidden={!props.open}
-        inert={!props.open}
-        style={{ width: props.open ? `${width()}px` : "0px" }}
-      >
-        <div data-slot="session-review-v2-sidebar-header">
-          <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
-          {props.stats}
-        </div>
-        <div data-slot="session-review-v2-sidebar-filter">
-          <TextInputV2
-            type="search"
-            value={props.filter}
-            onInput={(event) => props.onFilterChange(event.currentTarget.value)}
-            onKeyDown={props.onFilterKeyDown}
-            showClearButton={props.filter.length > 0}
-            clearLabel={i18n.t("ui.list.clearFilter")}
-            onClearClick={() => props.onFilterChange("")}
-            placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
-            aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
-            leadingIcon={
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
-                  stroke="currentColor"
-                  stroke-linecap="square"
-                />
-              </svg>
-            }
-          />
-        </div>
-        <ScrollView
-          data-slot="session-review-v2-sidebar-tree"
-          class="group/file-tree-v2"
-          thumbVisibility="scroll"
-          viewportRef={props.viewportRef}
+      <Show when={props.open}>
+        <aside
+          data-slot="session-review-v2-sidebar"
+          data-resizing={resizing() ? "" : undefined}
+          style={{ width: `${width()}px` }}
         >
-          {props.children}
-        </ScrollView>
-      </aside>
+          <div data-slot="session-review-v2-sidebar-header">
+            <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
+            {props.stats}
+          </div>
+          <div data-slot="session-review-v2-sidebar-filter">
+            <TextInputV2
+              type="search"
+              value={props.filter}
+              onInput={(event) => props.onFilterChange(event.currentTarget.value)}
+              onKeyDown={props.onFilterKeyDown}
+              autofocus={props.filterAutofocus}
+              ref={props.filterRef}
+              role={props.filterControls ? "combobox" : undefined}
+              aria-autocomplete={props.filterControls ? "list" : undefined}
+              aria-controls={props.filterControls}
+              aria-activedescendant={props.filterActiveDescendant}
+              aria-expanded={props.filterControls ? props.filterExpanded : undefined}
+              showClearButton={props.filter.length > 0}
+              clearLabel={i18n.t("ui.list.clearFilter")}
+              onClearClick={() => props.onFilterChange("")}
+              placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
+              aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
+              leadingIcon={
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
+                    stroke="currentColor"
+                    stroke-linecap="square"
+                  />
+                </svg>
+              }
+            />
+          </div>
+          <ScrollView
+            data-slot="session-review-v2-sidebar-tree"
+            class="group/file-tree-v2"
+            thumbVisibility="scroll"
+            viewportRef={props.viewportRef}
+          >
+            {props.children}
+          </ScrollView>
+        </aside>
+      </Show>
       <Show when={props.open && props.onWidthChange}>
         <div data-slot="session-review-v2-sidebar-resize" onPointerDown={() => setResizing(true)}>
           <ResizeHandle
@@ -185,130 +197,125 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
     cycle(event.key === "<" ? prev() : next())
   })
 
-  return (
-    <div data-component="session-review-v2">
-      <div data-slot="session-review-v2-body">
-        {props.sidebar}
-
-        <div data-slot="session-review-v2-preview">
-          <Show when={props.hasDiffs} fallback={props.empty}>
-            <div data-slot="session-review-v2-toolbar">
-              <div data-slot="session-review-v2-toolbar-group" class="session-review-v2-toolbar-group--start">
-                {props.sidebarToggle}
-                <Show when={showCollapsedMeta()}>
-                  <div data-slot="session-review-v2-toolbar-collapsed-meta">
-                    <Show when={title()}>
-                      <div data-slot="session-review-v2-toolbar-title">{title()}</div>
-                    </Show>
-                    {stats()}
-                    <Show when={canCycle()}>
-                      <span data-slot="session-review-v2-file-position">
-                        {fileIndex() + 1}/{props.files.length}
-                      </span>
-                    </Show>
-                  </div>
-                </Show>
-                <div data-slot="session-review-v2-toolbar-group">
-                  <TooltipV2
-                    openDelay={2000}
-                    value={
-                      <>
-                        {i18n.t("ui.sessionReviewV2.previousFile")}
-                        <KeybindV2 keys={["<"]} variant="neutral" />
-                      </>
-                    }
-                  >
-                    <IconButton
-                      icon="arrow-left"
-                      variant="ghost"
-                      size="small"
-                      class="session-review-v2-file-nav-button"
-                      disabled={!canCycle()}
-                      onClick={() => {
-                        const file = prev()
-                        if (!file) return
-                        props.onSelectFile(file)
-                      }}
-                      aria-label={i18n.t("ui.sessionReviewV2.previousFile")}
-                    />
-                  </TooltipV2>
-                  <TooltipV2
-                    openDelay={2000}
-                    value={
-                      <>
-                        {i18n.t("ui.sessionReviewV2.nextFile")}
-                        <KeybindV2 keys={[">"]} variant="neutral" />
-                      </>
-                    }
-                  >
-                    <IconButton
-                      icon="arrow-right"
-                      variant="ghost"
-                      size="small"
-                      class="session-review-v2-file-nav-button"
-                      disabled={!canCycle()}
-                      onClick={() => {
-                        const file = next()
-                        if (!file) return
-                        props.onSelectFile(file)
-                      }}
-                      aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
-                    />
-                  </TooltipV2>
-                </div>
-              </div>
-              <div data-slot="session-review-v2-toolbar-group" class="session-review-v2-toolbar-group--segments">
-                <SegmentedControlV2
-                  value={props.expandMode}
-                  onChange={(value) => {
-                    if (value !== "expand" && value !== "collapse") return
-                    props.onExpandModeChange(value)
-                  }}
-                  class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
-                  aria-label={i18n.t("ui.sessionReviewV2.expandMode")}
-                >
-                  <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.showAllLines")}>
-                    <SegmentedControlItemV2 value="expand" aria-label={i18n.t("ui.sessionReviewV2.showAllLines")}>
-                      <Icon name="expand" />
-                    </SegmentedControlItemV2>
-                  </TooltipV2>
-                  <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
-                    <SegmentedControlItemV2 value="collapse" aria-label={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
-                      <Icon name="collapse" />
-                    </SegmentedControlItemV2>
-                  </TooltipV2>
-                </SegmentedControlV2>
-                <Show when={props.onDiffStyleChange}>
-                  <SegmentedControlV2
-                    value={props.diffStyle}
-                    onChange={(value) => {
-                      if (value !== "unified" && value !== "split") return
-                      props.onDiffStyleChange?.(value)
-                    }}
-                    class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
-                    aria-label={i18n.t("ui.sessionReviewV2.diffView")}
-                  >
-                    <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
-                      <SegmentedControlItemV2 value="unified" aria-label={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
-                        <Icon name="unified" />
-                      </SegmentedControlItemV2>
-                    </TooltipV2>
-                    <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.splitDiff")}>
-                      <SegmentedControlItemV2 value="split" aria-label={i18n.t("ui.sessionReviewV2.splitDiff")}>
-                        <Icon name="split" />
-                      </SegmentedControlItemV2>
-                    </TooltipV2>
-                  </SegmentedControlV2>
-                </Show>
-              </div>
-            </div>
-            <Show when={props.activeFile} fallback={<div data-slot="session-review-v2-empty">{props.empty}</div>}>
-              {props.preview}
-            </Show>
+  const toolbarStart = () => (
+    <>
+      {props.sidebarToggle}
+      <Show when={showCollapsedMeta()}>
+        <div data-slot="session-review-v2-toolbar-collapsed-meta">
+          <Show when={title()}>
+            <div data-slot="session-review-v2-toolbar-title">{title()}</div>
+          </Show>
+          {stats()}
+          <Show when={canCycle()}>
+            <span data-slot="session-review-v2-file-position">
+              {fileIndex() + 1}/{props.files.length}
+            </span>
           </Show>
         </div>
+      </Show>
+      <div class="flex items-center">
+        <TooltipV2
+          openDelay={2000}
+          value={
+            <>
+              {i18n.t("ui.sessionReviewV2.previousFile")}
+              <KeybindV2 keys={["<"]} variant="neutral" />
+            </>
+          }
+        >
+          <IconButton
+            icon="arrow-left"
+            variant="ghost"
+            size="small"
+            class="session-review-v2-file-nav-button"
+            disabled={!canCycle()}
+            onClick={() => cycle(prev())}
+            aria-label={i18n.t("ui.sessionReviewV2.previousFile")}
+          />
+        </TooltipV2>
+        <TooltipV2
+          openDelay={2000}
+          value={
+            <>
+              {i18n.t("ui.sessionReviewV2.nextFile")}
+              <KeybindV2 keys={[">"]} variant="neutral" />
+            </>
+          }
+        >
+          <IconButton
+            icon="arrow-right"
+            variant="ghost"
+            size="small"
+            class="session-review-v2-file-nav-button"
+            disabled={!canCycle()}
+            onClick={() => cycle(next())}
+            aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
+          />
+        </TooltipV2>
       </div>
-    </div>
+    </>
+  )
+
+  const toolbarEnd = () => (
+    <>
+      <SegmentedControlV2
+        value={props.expandMode}
+        onChange={(value) => {
+          if (value !== "expand" && value !== "collapse") return
+          props.onExpandModeChange(value)
+        }}
+        class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
+        aria-label={i18n.t("ui.sessionReviewV2.expandMode")}
+      >
+        <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.showAllLines")}>
+          <SegmentedControlItemV2 value="expand" aria-label={i18n.t("ui.sessionReviewV2.showAllLines")}>
+            <Icon name="expand" />
+          </SegmentedControlItemV2>
+        </TooltipV2>
+        <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
+          <SegmentedControlItemV2 value="collapse" aria-label={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
+            <Icon name="collapse" />
+          </SegmentedControlItemV2>
+        </TooltipV2>
+      </SegmentedControlV2>
+      <Show when={props.onDiffStyleChange}>
+        <SegmentedControlV2
+          value={props.diffStyle}
+          onChange={(value) => {
+            if (value !== "unified" && value !== "split") return
+            props.onDiffStyleChange?.(value)
+          }}
+          class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
+          aria-label={i18n.t("ui.sessionReviewV2.diffView")}
+        >
+          <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
+            <SegmentedControlItemV2 value="unified" aria-label={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
+              <Icon name="unified" />
+            </SegmentedControlItemV2>
+          </TooltipV2>
+          <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.splitDiff")}>
+            <SegmentedControlItemV2 value="split" aria-label={i18n.t("ui.sessionReviewV2.splitDiff")}>
+              <Icon name="split" />
+            </SegmentedControlItemV2>
+          </TooltipV2>
+        </SegmentedControlV2>
+      </Show>
+    </>
+  )
+
+  return (
+    <SessionFilePanelV2
+      sidebar={props.sidebar}
+      toolbar={props.hasDiffs}
+      toolbarStart={toolbarStart()}
+      toolbarEnd={toolbarEnd()}
+    >
+      <Show when={props.hasDiffs} fallback={props.empty}>
+        <Show when={props.activeFile} fallback={<SessionFilePanelV2Empty>{props.empty}</SessionFilePanelV2Empty>}>
+          {props.preview}
+        </Show>
+      </Show>
+    </SessionFilePanelV2>
   )
 }
 

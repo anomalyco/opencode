@@ -28,6 +28,7 @@ import {
 import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
+import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
 import {
   applyThemePreference,
   Footer,
@@ -149,6 +150,11 @@ export default function StatsLab() {
                     labs={catalog()?.labs ?? []}
                     market={homeStats()?.market["2M"] ?? []}
                   />
+                  <ComparisonCardsSection
+                    pairs={labComparisonPairs(data(), stats()?.models ?? [])}
+                    title={`${data().name} Model Comparisons`}
+                    description="Model pairs from this lab."
+                  />
                 </>
               )}
             </Show>
@@ -158,6 +164,7 @@ export default function StatsLab() {
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
           links={labFooterLinks()}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
         />
       </div>
     </main>
@@ -729,6 +736,31 @@ function LabEmptyState(props: { title: string; description: string }) {
       <strong>{props.title}</strong>
       <p>{props.description}</p>
     </div>
+  )
+}
+
+function labComparisonPairs(lab: ModelCatalogLab, usage: LabUsageModelEntry[]) {
+  const usageRefs = usage.slice(0, 4).map((model) => ({
+    name: model.model,
+    lab: model.provider,
+    slug: model.slug,
+    labName: model.author,
+    metric: formatTokens(model.tokens),
+  }))
+  const refs = usageRefs.length > 1 ? usageRefs : lab.models.slice(0, 4).map(modelRefFromCatalog)
+  return uniqueComparisonPairs(
+    (
+      [
+        [0, 1, "Most-used lab pair"],
+        [0, 2, "Lab alternative"],
+        [1, 2, "Adjacent lab pair"],
+        [2, 3, "Same lab pair"],
+      ] as const
+    ).flatMap(([firstIndex, secondIndex, detail]) => {
+      const first = refs[firstIndex]
+      const second = refs[secondIndex]
+      return first && second ? [{ first, second, detail }] : []
+    }),
   )
 }
 
