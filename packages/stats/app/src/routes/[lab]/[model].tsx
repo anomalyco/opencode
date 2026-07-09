@@ -34,6 +34,12 @@ import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
+  ComparisonCardsSection,
+  modelRefFromCatalog,
+  uniqueComparisonPairs,
+  type ComparisonModelRef,
+} from "../compare-cards"
+import {
   applyThemePreference,
   Footer,
   getGitHubStars,
@@ -189,6 +195,11 @@ export default function StatsModel() {
                 <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
+                <ComparisonCardsSection
+                  pairs={modelComparisonPairs(catalog(), catalogEntry() ?? null, stats() ?? null)}
+                  title="Compare This Model"
+                  description="Other models to compare with this one."
+                />
               </>
             </Show>
           </Show>
@@ -197,6 +208,7 @@ export default function StatsModel() {
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
           links={modelFooterLinks()}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
         />
       </div>
     </main>
@@ -1143,10 +1155,16 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean }) {
         href={language.route(`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`)}
         data-active={props.active ? "true" : undefined}
       >
-        <span>{String(props.peer.rank).padStart(2, "0")}</span>
-        <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
-        <strong>{props.peer.model}</strong>
-        <em>{props.peer.author}</em>
+        <span data-slot="model-peer-rank" aria-label={props.active ? `Rank ${props.peer.rank}` : undefined}>
+          <Show when={!props.active}>{String(props.peer.rank).padStart(2, "0")}</Show>
+        </span>
+        <span data-slot="model-peer-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
+        </span>
+        <span data-slot="model-peer-copy">
+          <strong>{props.peer.model}</strong>
+          <em>{props.peer.author}</em>
+        </span>
         <b>{formatTokens(props.peer.tokens)}</b>
       </a>
     </li>
@@ -1164,6 +1182,55 @@ function ModelEmptyState(props: { title: string; description: string; compact?: 
       <p>{props.description}</p>
     </div>
   )
+}
+
+function modelComparisonPairs(
+  catalog: ModelCatalog | undefined,
+  catalogEntry: ModelCatalogEntry | null,
+  data: StatsModelData | null,
+) {
+  const current = modelComparisonRef(catalogEntry, data)
+  if (!current) return []
+  const peerPairs = (data?.peers ?? [])
+    .filter((peer) => peer.model !== data?.model)
+    .slice(0, 3)
+    .map((peer) => ({
+      first: current,
+      second: {
+        name: peer.model,
+        lab: peer.provider,
+        slug: peer.slug,
+        labName: peer.author,
+        metric: `#${peer.rank} / ${formatTokens(peer.tokens)}`,
+      },
+      detail: "Usage peer",
+    }))
+  const catalogPairs = (
+    catalogEntry && catalog ? (catalog.labs.find((lab) => lab.id === catalogEntry.lab)?.models ?? []) : []
+  )
+    .filter((model) => model.id !== catalogEntry?.id)
+    .slice(0, 3)
+    .map((model) => ({
+      first: current,
+      second: modelRefFromCatalog(model),
+      detail: "Same lab pair",
+    }))
+  return uniqueComparisonPairs([...peerPairs, ...catalogPairs])
+}
+
+function modelComparisonRef(
+  catalogEntry: ModelCatalogEntry | null,
+  data: StatsModelData | null,
+): ComparisonModelRef | undefined {
+  if (catalogEntry) return modelRefFromCatalog(catalogEntry)
+  if (!data) return undefined
+  return {
+    name: data.model,
+    lab: data.provider,
+    slug: data.slug,
+    labName: data.author,
+    metric: `#${data.rank}`,
+  }
 }
 
 function getProviderIconId(author: string) {

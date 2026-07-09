@@ -216,6 +216,7 @@ export function Footer(props: {
   themePreference: ThemePreference
   onThemePreferenceChange: (preference: ThemePreference) => void
   links?: readonly HeaderLink[]
+  bridge?: HeaderLink | null
 }) {
   const i18n = useI18n()
   const language = useLanguage()
@@ -241,10 +242,14 @@ export function Footer(props: {
     { href: githubLink.href, label: i18n.t("header.github") },
     { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
   ]
+  const bridge = () =>
+    props.bridge === undefined
+      ? { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown").toUpperCase() }
+      : props.bridge
 
   return (
     <footer data-component="footer">
-      <SectionBridge label={i18n.t("nav.geoBreakdown").toUpperCase()} href="#geo-breakdown" />
+      <Show when={bridge()}>{(link) => <SectionBridge label={link().label} href={link().href} />}</Show>
       <div data-slot="footer-grid">
         <a data-slot="footer-mark" href="https://opencode.ai" aria-label={i18n.t("footer.homeAria")}>
           <OpenCodeMark />
