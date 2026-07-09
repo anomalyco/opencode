@@ -15,7 +15,7 @@
 // The tick counter prevents stale idle events from resolving the wrong turn.
 // We also re-check live session status before resolving an idle event so a
 // delayed idle from an older turn cannot complete a newer busy turn.
-import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Event, GlobalEvent, OpencodeClient, Session } from "@opencode-ai/sdk/v2"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import {
@@ -388,6 +388,42 @@ function traceTabs(trace: Trace | undefined, prev: FooterSubagentTab[], next: Fo
   }
 }
 
+const collectDescendantSessions = Effect.fn("RunStreamTransport.collectDescendantSessions")(function* (
+  sdk: OpencodeClient,
+  rootSessionID: string,
+) {
+  const visited = new Set<string>([rootSessionID])
+  const descendants: Session[] = []
+  let frontier = [rootSessionID]
+
+  while (frontier.length > 0) {
+    const levels = yield* Effect.all(
+      frontier.map((sessionID) =>
+        Effect.promise(() => sdk.session.children({ sessionID })).pipe(
+          Effect.map((item) => item.data ?? []),
+          Effect.orElseSucceed(() => []),
+        ),
+      ),
+      { concurrency: "unbounded" },
+    )
+
+    frontier = []
+    for (const children of levels) {
+      for (const child of children) {
+        if (visited.has(child.id)) {
+          continue
+        }
+
+        visited.add(child.id)
+        descendants.push(child)
+        frontier.push(child.id)
+      }
+    }
+  }
+
+  return descendants
+})
+
 function createLayer(input: StreamInput) {
   return Layer.fresh(
     Layer.effect(
@@ -684,14 +720,7 @@ function createLayer(input: StreamInput) {
                     : Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT)
                   : SUBAGENT_BOOTSTRAP_LIMIT,
               ),
-              Effect.promise(() =>
-                input.sdk.session.children({
-                  sessionID: input.sessionID,
-                }),
-              ).pipe(
-                Effect.map((item) => item.data ?? []),
-                Effect.orElseSucceed(() => []),
-              ),
+              collectDescendantSessions(input.sdk, input.sessionID),
               Effect.promise(() => input.sdk.permission.list()).pipe(
                 Effect.map((item) => item.data ?? []),
                 Effect.orElseSucceed(() => []),
