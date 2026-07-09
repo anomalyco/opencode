@@ -28,6 +28,7 @@ import {
 import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
+import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
 import {
   applyThemePreference,
   Footer,
@@ -149,6 +150,11 @@ export default function StatsLab() {
                     labs={catalog()?.labs ?? []}
                     market={homeStats()?.market["2M"] ?? []}
                   />
+                  <ComparisonCardsSection
+                    pairs={labComparisonPairs(data(), stats()?.models ?? [])}
+                    title={`${data().name} Model Comparisons`}
+                    description="Model pairs from this lab."
+                  />
                 </>
               )}
             </Show>
@@ -158,6 +164,7 @@ export default function StatsLab() {
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
           links={labFooterLinks()}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
         />
       </div>
     </main>
@@ -559,24 +566,28 @@ function LabModelRow(props: {
 }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const showTooltip = (x: number, y: number) => {
+  const showTooltip = (target: HTMLAnchorElement) => {
+    const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth
     const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight
+    const anchorX = viewportWidth > 0 ? Math.min(Math.max(rect.left + 320, 24), viewportWidth - 24) : rect.left + 320
     props.onTooltipChange({
       model: props.model,
-      placement: viewportWidth > 0 && x > viewportWidth - 280 ? "left" : "right",
+      placement: viewportWidth > 0 && anchorX > viewportWidth - 280 ? "left" : "right",
       usage: props.usage,
-      x,
-      y: viewportHeight > 0 ? Math.min(Math.max(y, 96), viewportHeight - 128) : y,
+      x: anchorX,
+      y:
+        viewportHeight > 0
+          ? Math.min(Math.max(rect.top + rect.height / 2, 96), viewportHeight - 128)
+          : rect.top + rect.height / 2,
     })
   }
   const showPointerTooltip: JSX.EventHandler<HTMLAnchorElement, PointerEvent> = (event) => {
     if (event.pointerType === "touch") return
-    showTooltip(event.clientX, event.clientY)
+    showTooltip(event.currentTarget)
   }
   const showFocusTooltip: JSX.EventHandler<HTMLAnchorElement, FocusEvent> = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    showTooltip(rect.left + rect.width * 0.58, rect.top + rect.height / 2)
+    showTooltip(event.currentTarget)
   }
   return (
     <a
@@ -587,11 +598,12 @@ function LabModelRow(props: {
       onBlur={() => props.onTooltipChange(undefined)}
       onFocus={showFocusTooltip}
       onPointerEnter={showPointerTooltip}
+      onPointerDown={() => props.onTooltipChange(undefined)}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
         props.onTooltipChange(undefined)
       }}
-      onPointerMove={showPointerTooltip}
+      onClick={() => props.onTooltipChange(undefined)}
     >
       <span data-slot="lab-model-cell" data-column="model" role="cell">
         <span data-slot="lab-model-avatar" aria-hidden="true">
@@ -727,6 +739,31 @@ function LabEmptyState(props: { title: string; description: string }) {
   )
 }
 
+function labComparisonPairs(lab: ModelCatalogLab, usage: LabUsageModelEntry[]) {
+  const usageRefs = usage.slice(0, 4).map((model) => ({
+    name: model.model,
+    lab: model.provider,
+    slug: model.slug,
+    labName: model.author,
+    metric: formatTokens(model.tokens),
+  }))
+  const refs = usageRefs.length > 1 ? usageRefs : lab.models.slice(0, 4).map(modelRefFromCatalog)
+  return uniqueComparisonPairs(
+    (
+      [
+        [0, 1, "Most-used lab pair"],
+        [0, 2, "Lab alternative"],
+        [1, 2, "Adjacent lab pair"],
+        [2, 3, "Same lab pair"],
+      ] as const
+    ).flatMap(([firstIndex, secondIndex, detail]) => {
+      const first = refs[firstIndex]
+      const second = refs[secondIndex]
+      return first && second ? [{ first, second, detail }] : []
+    }),
+  )
+}
+
 type RelatedLabEntry = { lab: ModelCatalogLab; share: number; tokens: number }
 
 function relatedLabs(current: ModelCatalogLab, labs: ModelCatalogLab[], market: MarketDay[]): RelatedLabEntry[] {
@@ -851,7 +888,7 @@ function trimNumber(value: number, digits: number) {
 
 function usageStripHeight(value: number, max: number) {
   if (value <= 0 || max <= 0) return 0
-  return Math.max(1, (value / max) * 40)
+  return Math.max(2, (value / max) * 76)
 }
 
 function usageLineY(value: number, max: number) {

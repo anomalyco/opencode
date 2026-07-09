@@ -229,26 +229,40 @@ export function TabNavItem(props: {
             event.preventDefault()
             event.stopPropagation()
           }}
+          onMouseDown={(event) => {
+            // Navigate on mousedown to shave the press-release delay off tab switches.
+            if (event.button !== 0) return
+            if (editing()) return
+            if (props.suppressNavigation?.()) return
+            props.onNavigate()
+          }}
           onClick={(event) => {
             event.preventDefault()
+            // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+            if (event.detail > 0) return
             if (editing()) return
             if (props.suppressNavigation?.()) return
             props.onNavigate()
           }}
           class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base group-data-[editing='true']:text-v2-text-text-base [-webkit-user-drag:none]"
         >
-          <Show when={props.session()}>
-            {(session) => (
-              <span data-slot="project-avatar-slot">
+          <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
+            <Show
+              when={props.session()}
+              fallback={
+                <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
+              }
+            >
+              {(session) => (
                 <SessionTabAvatar
                   project={project()}
                   directory={session().directory}
                   sessionId={session().id}
                   server={props.server}
                 />
-              </span>
-            )}
-          </Show>
+              )}
+            </Show>
+          </span>
           <span
             ref={(el) => {
               titleEl = el
@@ -368,8 +382,16 @@ export function DraftTabItem(props: {
           event.preventDefault()
           event.stopPropagation()
         }}
+        onMouseDown={(event) => {
+          // Navigate on mousedown to shave the press-release delay off tab switches.
+          if (event.button !== 0) return
+          if (props.suppressNavigation?.()) return
+          props.onNavigate()
+        }}
         onClick={(event) => {
           event.preventDefault()
+          // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+          if (event.detail > 0) return
           if (props.suppressNavigation?.()) return
           props.onNavigate()
         }}

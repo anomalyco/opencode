@@ -185,6 +185,14 @@
     background-color 0.15s ease,
     color 0.15s ease;
 
+  [data-component="task-tool-surface"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
   [data-slot="basic-tool-tool-info-structured"] {
     flex: 1 1 auto;
     min-width: 0;
@@ -230,6 +238,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
+    color: var(--task-agent-legacy-color, var(--text-strong));
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
@@ -243,6 +252,76 @@
 
     [data-component="task-tool-action"] {
       opacity: 1;
+    }
+  }
+}
+
+body[data-new-layout] {
+  [data-component="task-tool-card"] {
+    gap: 8px;
+    padding: 0;
+    border-radius: 0;
+    border: 0;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+
+    [data-component="task-tool-surface"] {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--v2-background-bg-layer-01);
+    }
+
+    [data-component="task-tool-spinner"],
+    [data-component="task-tool-icon"] {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+
+      [data-component="icon"] {
+        color: var(--task-agent-color, var(--v2-icon-icon-base));
+      }
+    }
+
+    [data-component="task-tool-title"] {
+      height: 20px;
+      font-family: var(--v2-font-family-sans, "Inter", sans-serif);
+      font-style: normal;
+      font-weight: 530;
+      font-size: 13px;
+      line-height: 20px;
+      letter-spacing: -0.04px;
+      color: var(--v2-text-text-base);
+      flex: none;
+      flex-grow: 0;
+    }
+
+    [data-slot="basic-tool-tool-subtitle"] {
+      font-family: var(--v2-font-family-sans, "Inter", sans-serif);
+      font-style: normal;
+      font-weight: 440;
+      font-size: 13px;
+      line-height: 20px;
+      letter-spacing: -0.04px;
+      color: var(--v2-text-text-base);
+      font-variation-settings: "slnt" 0;
+      flex: none;
+      flex-grow: 0;
+    }
+
+    [data-component="session-progress-indicator-v2"] {
+      color: var(--task-agent-color, light-dark(var(--v2-text-text-base), #ffffff));
+    }
+
+    &:hover,
+    &:focus-visible {
+      border-color: transparent;
+      background: transparent;
+
+      [data-component="task-tool-surface"] {
+        background: var(--v2-background-bg-layer-01);
+      }
     }
   }
 }
