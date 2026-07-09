@@ -26,6 +26,7 @@ let params: { id?: string } = {}
 let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let autoAcceptDirectory = false
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 const prompt = {
@@ -119,6 +120,8 @@ beforeAll(async () => {
 
   mock.module("@/context/permission", () => ({
     usePermission: () => ({
+      isAutoAccepting: () => false,
+      isAutoAcceptingDirectory: () => autoAcceptDirectory,
       enableAutoAccept(sessionID: string, directory: string) {
         enabledAutoAccept.push({ sessionID, directory })
       },
@@ -246,6 +249,7 @@ beforeEach(() => {
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  autoAcceptDirectory = false
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
@@ -256,7 +260,6 @@ describe("prompt submit worktree selection", () => {
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
-      autoAccept: () => false,
       mode: () => "shell",
       working: () => false,
       editor: () => undefined,
@@ -289,12 +292,13 @@ describe("prompt submit worktree selection", () => {
   })
 
   test("applies auto-accept to newly created sessions", async () => {
+    autoAcceptDirectory = true
+
     const submit = createPromptSubmit({
       prompt,
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
-      autoAccept: () => true,
       mode: () => "shell",
       working: () => false,
       editor: () => undefined,
@@ -323,7 +327,6 @@ describe("prompt submit worktree selection", () => {
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
-      autoAccept: () => false,
       mode: () => "normal",
       working: () => false,
       editor: () => undefined,
@@ -352,7 +355,6 @@ describe("prompt submit worktree selection", () => {
       info: () => ({ id: "session-1" }),
       imageAttachments: () => [],
       commentCount: () => 0,
-      autoAccept: () => false,
       mode: () => "normal",
       working: () => false,
       editor: () => undefined,
@@ -384,7 +386,6 @@ describe("prompt submit worktree selection", () => {
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
-      autoAccept: () => false,
       mode: () => "normal",
       working: () => false,
       editor: () => undefined,

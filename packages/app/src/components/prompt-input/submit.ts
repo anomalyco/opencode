@@ -175,7 +175,6 @@ type PromptSubmitInput = {
   info: Accessor<{ id: string } | undefined>
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
-  autoAccept: Accessor<boolean>
   mode: Accessor<"normal" | "shell">
   working: Accessor<boolean>
   editor: () => HTMLDivElement | undefined
@@ -314,7 +313,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const projectDirectory = sdk().directory
     const isNewSession = !params.id
-    const shouldAutoAccept = isNewSession && input.autoAccept()
+    const shouldAutoAccept = isNewSession && permission.isAutoAcceptingDirectory(projectDirectory)
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
     let sessionDirectory = projectDirectory
