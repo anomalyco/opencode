@@ -1,10 +1,15 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Deferred, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Entry } from "@opencode-ai/core/filesystem"
+import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Location } from "@opencode-ai/core/location"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
+import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
@@ -40,5 +45,47 @@ describe("Ripgrep", () => {
         expect(result[0]?.submatches[0]?.text).toBe("needle")
       }),
     ),
+  )
+})
+
+describe("FileSystemSearch", () => {
+  it.live("indexes unique parent directories from ripgrep entries", () =>
+    Effect.gen(function* () {
+      const indexed = yield* Deferred.make<"indexed">()
+      const entries = [
+        Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" }),
+        Entry.make({ path: RelativePath.make("src/components/button.ts"), type: "file" }),
+        Entry.make({ path: RelativePath.make("src/components/card.ts"), type: "file" }),
+      ]
+      const fakeRipgrep = Layer.succeed(
+        Ripgrep.Service,
+        Ripgrep.Service.of({
+          find: (input) =>
+            Effect.gen(function* () {
+              yield* Effect.forEach(entries, (entry) => input.onEntry?.(entry) ?? Effect.void)
+              yield* Deferred.succeed(indexed, "indexed")
+              return entries
+            }),
+          glob: () => Effect.succeed([]),
+          grep: () => Effect.succeed([]),
+        }),
+      )
+      const activeLocation = Layer.succeed(
+        Location.Service,
+        Location.Service.of(location({ directory: AbsolutePath.make("/workspace") })),
+      )
+      const searchLayer = FileSystemSearch.ripgrepLayer.pipe(
+        Layer.provide(Layer.mergeAll(LayerNode.compile(FSUtil.node), activeLocation, fakeRipgrep)),
+      )
+
+      yield* Effect.gen(function* () {
+        const service = yield* FileSystemSearch.Service
+        expect(yield* Deferred.await(indexed).pipe(Effect.timeout("1 second"))).toBe("indexed")
+        const result = yield* service.find({ query: "src", type: "directory", limit: 10 })
+        expect(result.map((item) => item.path).sort()).toEqual(
+          [RelativePath.make("src" + path.sep), RelativePath.make("src/components" + path.sep)].sort(),
+        )
+      }).pipe(Effect.provide(searchLayer))
+    }),
   )
 })
