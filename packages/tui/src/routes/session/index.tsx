@@ -2816,7 +2816,7 @@ export function parseQuestions(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.flatMap((item) => {
     const question = stringValue(recordValue(item)?.question)
-    return question ? [{ question }] : []
+    return question ? [{ question: question.replace(/\r/g, "") }] : []
   })
 }
 
