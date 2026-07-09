@@ -155,6 +155,26 @@ describe("AgentV2", () => {
     }),
   )
 
+  it.effect("preserves V1 shell access for explore", () =>
+    Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const explore = yield* agent.get(AgentV2.ID.make("explore"))
+      expect(explore).toBeDefined()
+      expect(PermissionV2.evaluate("shell", "git status", explore!.permissions).effect).toBe("allow")
+    }),
+  )
+
   it.effect("denies the subagent tool for built-in subagents", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service

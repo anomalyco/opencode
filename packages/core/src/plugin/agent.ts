@@ -177,6 +177,7 @@ export const Plugin = define({
               { action: "*", resource: "*", effect: "deny" },
               { action: "grep", resource: "*", effect: "allow" },
               { action: "glob", resource: "*", effect: "allow" },
+              { action: "shell", resource: "*", effect: "allow" },
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },
               { action: "read", resource: "*", effect: "allow" },
