@@ -45,7 +45,6 @@ import { useEditorContext } from "../../context/editor"
 import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
-import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { Sidebar } from "./sidebar"
@@ -1929,9 +1928,6 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
         <Match when={display() === "patch"}>
           <ApplyPatch {...toolprops} />
         </Match>
-        <Match when={display() === "todowrite"}>
-          <TodoWrite {...toolprops} />
-        </Match>
         <Match when={display() === "question"}>
           <Question {...toolprops} />
         </Match>
@@ -2631,32 +2627,6 @@ function ApplyPatch(props: ToolProps) {
   )
 }
 
-function TodoWrite(props: ToolProps) {
-  const todos = createMemo(() => parseTodos(props.input.todos))
-  return (
-    <Switch>
-      <Match when={parseTodos(props.metadata.todos).length}>
-        <BlockTool title="# Todos" part={props.part}>
-          <box>
-            <For each={todos()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
-          </box>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool
-          icon="⚙"
-          pending="Updating todos..."
-          failure="Todo update failed"
-          complete={false}
-          part={props.part}
-        >
-          Updating todos...
-        </InlineTool>
-      </Match>
-    </Switch>
-  )
-}
-
 function Question(props: ToolProps) {
   const { theme } = useTheme()
   const questions = createMemo(() => parseQuestions(props.input.questions))
@@ -2757,7 +2727,6 @@ const toolDisplays = new Set([
   "subagent",
   "execute",
   "patch",
-  "todowrite",
   "question",
   "skill",
 ])
@@ -2836,16 +2805,6 @@ export function parseApplyPatchFiles(value: unknown) {
     )
       return []
     return [{ type, relativePath, filePath, patch, additions, deletions, movePath: stringValue(file.movePath) }]
-  })
-}
-
-export function parseTodos(value: unknown) {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((item) => {
-    const todo = recordValue(item)
-    const status = stringValue(todo?.status)
-    const content = stringValue(todo?.content)
-    return status && content ? [{ status, content }] : []
   })
 }
 

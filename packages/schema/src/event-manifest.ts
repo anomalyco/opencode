@@ -73,7 +73,6 @@ const featureDefinitions = Event.inventory(
 export const ServerDefinitions = Event.inventory(
   ...foundationDefinitions,
   ...featureDefinitions,
-  ...SessionTodo.Event.Definitions,
   // Current events the TUI consumes from the public stream.
   ...SessionStatusEvent.Definitions,
   ...TuiEvent.Definitions,

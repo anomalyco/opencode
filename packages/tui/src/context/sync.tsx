@@ -16,7 +16,6 @@ import type {
   QuestionRequest,
   Session,
   FileDiffInfo,
-  Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore } from "solid-js/store"
@@ -50,7 +49,6 @@ export const {
       config: Config
       session: Session[]
       session_diff: Record<string, FileDiffInfo[]>
-      todo: Record<string, Todo[]>
       message: Record<string, Message[]>
       part: Record<string, Part[]>
       lsp: LspStatus[]
@@ -76,7 +74,6 @@ export const {
       config: {},
       session: [],
       session_diff: {},
-      todo: {},
       message: {},
       part: {},
       lsp: [],

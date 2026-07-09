@@ -5469,17 +5469,6 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "todo.updated"
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly sessionID: string
-        readonly todos: ReadonlyArray<{ readonly content: string; readonly status: string; readonly priority: string }>
-      }
-    }
-  | {
-      readonly id: string
-      readonly created: number
-      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.status"
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {

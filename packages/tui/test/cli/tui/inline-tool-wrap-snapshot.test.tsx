@@ -11,7 +11,6 @@ import {
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
-  parseTodos,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -162,9 +161,6 @@ describe("TUI inline tool wrapping", () => {
         deletions: 0,
         movePath: undefined,
       },
-    ])
-    expect(parseTodos([null, { status: "pending" }, { status: "pending", content: "Safe" }])).toEqual([
-      { status: "pending", content: "Safe" },
     ])
     expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
     expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])

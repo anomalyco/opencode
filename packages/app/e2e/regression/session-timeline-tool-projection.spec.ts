@@ -17,13 +17,11 @@ test("renders every tool error outcome without leaking hidden tools", async ({ p
       error: "The user dismissed this question",
     }),
     toolPart("prt_question_error", "question", "error", questionInput(), { error: "Question transport failed" }),
-    toolPart("prt_todo_error", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
   )
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
   await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(ordinary.length + 1)
   await expect(page.getByText(/dismissed/i)).toBeVisible()
-  await expect(page.locator('[data-timeline-part-id="prt_todo_error"]')).toHaveCount(0)
   for (let index = 0; index < ordinary.length; index++) {
     await expect(page.locator(`[data-timeline-part-id="prt_error_${index}"]`)).toBeVisible()
   }

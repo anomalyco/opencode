@@ -32,7 +32,6 @@ import { SessionRunnerLLM } from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionCompaction } from "./session/compaction"
 import { SessionTitle } from "./session/title"
-import { SessionTodo } from "./session/todo"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { Snapshot } from "./snapshot"
@@ -78,7 +77,6 @@ const locationServiceNodes = [
   Image.node,
   SkillGuidance.node,
   ReferenceGuidance.node,
-  SessionTodo.node,
   InstructionEntry.node,
   Form.node,
   QuestionV2.node,

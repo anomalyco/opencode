@@ -24,7 +24,6 @@ import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Reference } from "@opencode-ai/schema/reference"
-import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Skill } from "@opencode-ai/schema/skill"
 import { AbsolutePath, DateTimeUtcFromMillis, optional, statics } from "@opencode-ai/schema/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -46,7 +45,6 @@ test("Core reuses the canonical shared schemas", async () => {
     coreReference,
     coreSessionInput,
     coreSessionMessage,
-    coreSessionTodo,
     coreSkill,
     coreV2Schema,
     coreSchema,
@@ -67,7 +65,6 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/reference"),
     import("@opencode-ai/core/session/input"),
     import("@opencode-ai/core/session/message"),
-    import("@opencode-ai/core/session/todo"),
     import("@opencode-ai/core/skill"),
     import("@opencode-ai/core/v2-schema"),
     import("@opencode-ai/core/schema"),
@@ -158,8 +155,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.Assistant, SessionMessage.Assistant],
     [coreSessionMessage.Compaction, SessionMessage.Compaction],
     [coreSessionMessage.Info, SessionMessage.Info],
-    [coreSessionTodo.Info, SessionTodo.Info],
-    [coreSessionTodo.Event, SessionTodo.Event],
     [coreSkill.DirectorySource, Skill.DirectorySource],
     [coreSkill.UrlSource, Skill.UrlSource],
     [coreSkill.EmbeddedSource, Skill.EmbeddedSource],

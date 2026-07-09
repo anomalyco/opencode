@@ -9,7 +9,6 @@ import type {
   Session,
   SessionStatus,
   FileDiffInfo,
-  Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -140,7 +139,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     info: {} as Record<string, Session | undefined>,
     session_status: {} as Record<string, SessionStatus>,
     session_diff: {} as Record<string, FileDiffInfo[]>,
-    todo: {} as Record<string, Todo[]>,
     permission: {} as Record<string, PermissionRequest[]>,
     question: {} as Record<string, QuestionRequest[]>,
     message: {} as Record<string, Message[]>,
@@ -153,7 +151,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
   const requests = new Map<string, Promise<Session>>()
   const inflight = new Map<string, Promise<void>>()
   const inflightDiff = new Map<string, Promise<void>>()
-  const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const messageLoads = new Map<string, MessageLoadState>()
   const pendingParts = new Map<string, Map<string, Set<string>>>()
@@ -199,7 +196,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
         ...requests.keys(),
         ...inflight.keys(),
         ...inflightDiff.keys(),
-        ...inflightTodo.keys(),
         ...messageLoads.keys(),
         ...optimistic.keys(),
         ...Object.entries(data.permission)
@@ -254,8 +250,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
         !requests.has(sessionID) &&
         !messageLoads.has(sessionID) &&
         !inflight.has(sessionID) &&
-        !inflightDiff.has(sessionID) &&
-        !inflightTodo.has(sessionID)
+        !inflightDiff.has(sessionID)
       )
         generations.delete(sessionID)
     }
@@ -418,7 +413,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
       requests.delete(sessionID)
       inflight.delete(sessionID)
       inflightDiff.delete(sessionID)
-      inflightTodo.delete(sessionID)
       messageLoads.delete(sessionID)
       pendingParts.delete(sessionID)
       orphanParts.delete(sessionID)
@@ -448,7 +442,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
       ...requests.keys(),
       ...inflight.keys(),
       ...inflightDiff.keys(),
-      ...inflightTodo.keys(),
       ...messageLoads.keys(),
       ...optimistic.keys(),
       ...Object.entries(data.permission)
@@ -771,11 +764,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
       case "session.diff": {
         const props = event.properties as { sessionID: string; diff: FileDiffInfo[] }
         setData("session_diff", props.sessionID, reconcile(cleanDiffs(props.diff), { key: "file" }))
-        return
-      }
-      case "todo.updated": {
-        const props = event.properties as { sessionID: string; todos: Todo[] }
-        setData("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
         return
       }
       case "session.status": {
@@ -1137,17 +1125,6 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
         return retry(() => client.session.diff({ sessionID })).then((result) => {
           if (generations.get(sessionID) !== active) return
           setData("session_diff", sessionID, reconcile(cleanDiffs(result.data), { key: "file" }))
-        })
-      })
-    },
-    todo(sessionID: string, options?: { force?: boolean }) {
-      touch(sessionID)
-      if (data.todo[sessionID] !== undefined && !options?.force) return Promise.resolve()
-      return runInflight(inflightTodo, sessionID, () => {
-        const active = generation(sessionID)
-        return retry(() => client.session.todo({ sessionID })).then((result) => {
-          if (generations.get(sessionID) !== active) return
-          setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
         })
       })
     },

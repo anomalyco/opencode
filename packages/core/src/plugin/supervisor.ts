@@ -30,7 +30,6 @@ import { PluginPromise } from "../plugin/promise"
 import { Reference } from "../reference"
 import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
-import { SessionTodo } from "../session/todo"
 import { Shell } from "../shell"
 import { SkillV2 } from "../skill"
 import { ReadToolFileSystem } from "../tool/read-filesystem"
@@ -368,7 +367,6 @@ export const node = makeLocationNode({
     Reference.node,
     Ripgrep.node,
     SessionInstructions.node,
-    SessionTodo.node,
     Shell.node,
     SkillV2.node,
     ToolRegistry.toolsNode,

@@ -151,7 +151,6 @@ function setup(sessions: Record<string, Session>) {
         return response()
       },
       diff: async () => ({ data: [] }),
-      todo: async () => ({ data: [] }),
     },
   } as unknown as OpencodeClient
   return { get, messages, store: createServerSession(client) }

@@ -384,7 +384,7 @@ Change:
 - Add Location-scoped pending permission requests with `once`, `always`, and `reject` replies.
 - Attach optional originating tool message and call IDs.
 - Preserve authored ordered rules and saved approvals as separate inputs to evaluation.
-- Establish action and resource conventions for `read`, `glob`, `grep`, `edit`, `external_directory`, `bash`, `todowrite`, and `webfetch` approvals.
+- Establish action and resource conventions for `read`, `glob`, `grep`, `edit`, `external_directory`, `bash`, and `webfetch` approvals.
 
 Reason:
 
@@ -580,37 +580,15 @@ Compatibility:
 - These are additive experimental V2 contracts.
 - No database migration is required because pending questions are intentionally in-memory Location state.
 
-## 2026-06-03: Core-Owned Todo Update Event
-
-Affected schema:
-
-- Core-owned `SessionTodo.Info`.
-- Global `todo.updated` event registration.
-
-Change:
-
-- Register the todo update event from Core session-todo ownership and expose the existing todo item shape to the Core V2 tool.
-
-Reason:
-
-- Embedded V2 `todowrite` execution needs Core-owned persistence and update publication without importing legacy application orchestration.
-
-Compatibility:
-
-- The todo table and public todo update event shape are preserved.
-- No database migration is required.
-
 ## 2026-06-03: Added Core V2 Tool Schemas
 
 Affected schema:
 
-- New `todowrite` tool parameters and success payload.
 - New `question` tool parameters and success payload.
 - New `webfetch` tool parameters and success payload.
 
 Change:
 
-- Add a todo replacement-list tool using `SessionTodo.Info` items.
 - Add a question tool using ordered `QuestionV2.Prompt` values and ordered answer arrays.
 - Add an HTTP(S) fetch tool with explicit `text`, `markdown`, and `html` formats, bounded timeout input, and optional managed output resource metadata.
 

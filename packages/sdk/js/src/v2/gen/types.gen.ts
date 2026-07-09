@@ -8703,7 +8703,6 @@ export type V2EventV2 =
   | FormCreatedV2
   | FormRepliedV2
   | FormCancelledV2
-  | TodoUpdatedV2
   | SessionStatusV22
   | SessionIdleV2
   | TuiPromptAppendV2
@@ -10671,20 +10670,6 @@ export type FormCancelledV2 = {
   data: {
     id: string
     sessionID: string
-  }
-}
-
-export type TodoUpdatedV2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "todo.updated"
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    todos: Array<Todo>
   }
 }
 

@@ -927,13 +927,6 @@ sessionID -&gt; { directory, workspaceID? }</code></pre>
                 <td>Create a user message and queue the agent loop.</td>
               </tr>
               <tr>
-                <td class="operation"><code>session.todo</code></td>
-                <td class="body"><code>{ sessionID: SessionID }</code></td>
-                <td><span class="context-tag session">session</span></td>
-                <td class="route"><code>GET /api/session/:sessionID/todo</code></td>
-                <td>Return todos associated with the session.</td>
-              </tr>
-              <tr>
                 <td class="operation"><code>session.update</code></td>
                 <td class="body">
                   <code>{ sessionID: SessionID title?: string archived?: number permission?: PermissionRule[] }</code>
@@ -1143,7 +1136,6 @@ type SyncStore = {
 
   session: Record&lt;SessionID, Session &amp; { context: RuntimeContext }&gt;
   session_diff: Record&lt;SessionID, Snapshot.FileDiff[]&gt;
-  todo: Record&lt;SessionID, Todo[]&gt;
   permission: Record&lt;SessionID, PermissionRequest[]&gt;
   question: Record&lt;SessionID, QuestionRequest[]&gt;
 
