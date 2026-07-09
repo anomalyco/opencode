@@ -6,7 +6,8 @@ It records current behavior, intentional boundaries, durable rationale, and mate
 Completed implementation history, branch names, test counts, and closed findings belong in git, not here. Remove
 completed work instead of preserving checked-off chronology.
 
-Detailed package API documentation lives in [README.md](./README.md). OpenAPI-specific follow-ups live in
+Detailed package API documentation lives in [README.md](./README.md), and the checkable language/runtime matrix lives
+in [interpreter-support.md](./interpreter-support.md). OpenAPI-specific follow-ups live in
 [src/openapi/TODO.md](./src/openapi/TODO.md).
 
 ## How CodeMode Works
@@ -140,31 +141,5 @@ represent accurately rather than guessing semantics.
 
 ## Remaining Work
 
-Keep only material unresolved work here. Small isolated defects should be GitHub issues; adapter-only work belongs in
-the adapter TODO. Delete entries when completed.
-
-### DSL expansion
-
-The supported JavaScript subset should grow when common model-generated code improves tool orchestration. These are
-current omissions to implement, not intentional product boundaries.
-
-- [ ] Design proper multi-stage promise pipelines. Supporting `.then`, `.catch`, and `.finally` should preserve promise
-      assimilation, cancellation, failure handling, and concurrent per-item pipelines rather than adding syntax-only
-      shims. Consider `Promise.any` in the same pass.
-- [ ] Support async iteration and `for await...of`. Define behavior first for the runtime's supported promise and
-      collection values, then extend it to bounded host streams when a stream boundary exists.
-- [ ] Support callback-bearing standard-library variants that models commonly generate: the mapper argument to
-      `Array.from(...)` and replacers for `JSON.stringify(...)`, including Effect-aware callbacks where needed.
-- [ ] Add `Object.is` after runtime method and tool references have stable identity semantics.
-- [ ] Add deterministic modern collection conveniences where they improve orchestration: `Object.groupBy`, Set
-      composition methods, and `Array.prototype.toSpliced`.
-- [ ] Decide whether iterable `Math.sumPrecise` belongs in the runtime.
-- [ ] Refine diagnostics so user throws, expected tool failures, unexpected host/tool defects, and genuine interpreter
-      defects are distinguishable without leaking private causes.
-
-### Tool and result contracts
-
-- [ ] Design explicit tagged representations and size rules before allowing Blob, File, ArrayBuffer, typed arrays, or
-      host streams to cross the sandbox boundary.
-- [ ] Define one consistent policy for tool path segments named `__proto__`, `constructor`, or `prototype`. They must
-      either be safely callable, rejected before catalog generation, or use one documented escaping rule.
+The [interpreter support checklist](./interpreter-support.md) owns concrete DSL, standard-library, semantic-correctness,
+diagnostic, and data-boundary work. OpenAPI adapter work remains in [src/openapi/TODO.md](./src/openapi/TODO.md).
