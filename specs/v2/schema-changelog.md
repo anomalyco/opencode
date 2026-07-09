@@ -9,7 +9,7 @@
 
 Compatibility:
 
-- `20260709190621_session_pending_table` deletes consumed rows, sweeps every historical index name on `session_input` (interim v2 builds shipped differing sets), renames the table, and drops `promoted_seq`. Pending rows survive the migration.
+- `20260709190621_session_pending_table` drops `session_input` (including consumed ledger rows, any in-flight pending work, and whatever historical index variant the database carried) and creates the empty `session_pending` table. V2 storage is beta; no compatibility or data retention is attempted.
 - Durable event names and payloads are unchanged; `session.input.admitted` still records the full admitted message including delivery.
 - Promise, Effect, and legacy JavaScript SDK surfaces are regenerated; `SessionInput*` generated schema names become `SessionPending*` while event-derived names keep their `session.input.*` vocabulary.
 

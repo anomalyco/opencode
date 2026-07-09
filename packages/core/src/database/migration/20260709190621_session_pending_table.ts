@@ -5,18 +5,22 @@ export default {
   id: "20260709190621_session_pending_table",
   up(tx) {
     return Effect.gen(function* () {
-      // The table becomes pending-only: promoted and settled rows are consumed
-      // state whose durable truth lives in `session_message` and the event log.
-      yield* tx.run(`DELETE FROM \`session_input\` WHERE \`promoted_seq\` IS NOT NULL;`)
-      // Databases migrated through interim v2 builds carry index sets from any
-      // point in history, and the partial index embeds the qualified table
-      // name, so every index must drop before the rename and the column drop.
-      const indexes = yield* tx.all<{ name: string }>(
-        `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'session_input' AND name NOT LIKE 'sqlite_%'`,
-      )
-      for (const index of indexes) yield* tx.run(`DROP INDEX IF EXISTS \`${index.name}\`;`)
-      yield* tx.run(`ALTER TABLE \`session_input\` RENAME TO \`session_pending\`;`)
-      yield* tx.run(`ALTER TABLE \`session_pending\` DROP COLUMN \`promoted_seq\`;`)
+      // Beta reset: session_input becomes the pending-only session_pending
+      // table. Dropping the old table discards consumed ledger rows and any
+      // in-flight pending work along with every historical index variant.
+      yield* tx.run(`DROP TABLE \`session_input\`;`)
+      yield* tx.run(`
+        CREATE TABLE \`session_pending\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`type\` text NOT NULL,
+          \`data\` text NOT NULL,
+          \`delivery\` text,
+          \`admitted_seq\` integer NOT NULL,
+          \`time_created\` integer NOT NULL,
+          CONSTRAINT \`fk_session_pending_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
       yield* tx.run(
         `CREATE INDEX \`session_pending_session_delivery_seq_idx\` ON \`session_pending\` (\`session_id\`,\`delivery\`,\`admitted_seq\`);`,
       )

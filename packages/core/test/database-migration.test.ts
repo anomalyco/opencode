@@ -786,7 +786,7 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("prunes consumed rows while renaming the durable inbox to session_pending", async () => {
+  test("replaces the durable inbox with the empty session_pending table", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -795,29 +795,13 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`CREATE TABLE session_input (id text PRIMARY KEY, session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE, type text NOT NULL, data text NOT NULL, delivery text, admitted_seq integer NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
         )
-        // Interim v2 builds shipped differing index sets; this legacy
-        // `type_delivery` variant exists on real databases and references
-        // `promoted_seq`, so the migration must sweep unknown index names.
+        // Interim v2 builds shipped differing index sets on real databases;
+        // dropping the table removes whatever variant exists.
         yield* db.run(
           sql`CREATE INDEX session_input_session_pending_type_delivery_seq_idx ON session_input (session_id, promoted_seq, type, delivery, admitted_seq)`,
         )
         yield* db.run(
-          sql`CREATE UNIQUE INDEX session_input_session_pending_compaction_idx ON session_input (session_id) WHERE "session_input"."type" = 'compaction' and "session_input"."promoted_seq" is null`,
-        )
-        yield* db.run(
-          sql`CREATE UNIQUE INDEX session_input_session_admitted_seq_idx ON session_input (session_id, admitted_seq)`,
-        )
-        yield* db.run(
-          sql`CREATE UNIQUE INDEX session_input_session_promoted_seq_idx ON session_input (session_id, promoted_seq)`,
-        )
-        yield* db.run(
           sql`INSERT INTO session_input (id, session_id, type, data, delivery, admitted_seq, promoted_seq, time_created) VALUES ('pending', 'session', 'user', '{"text":"hello"}', 'steer', 4, NULL, 1)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_input (id, session_id, type, data, delivery, admitted_seq, promoted_seq, time_created) VALUES ('promoted', 'session', 'user', '{"text":"done"}', 'queue', 2, 3, 1)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_input (id, session_id, type, data, delivery, admitted_seq, promoted_seq, time_created) VALUES ('settled', 'session', 'compaction', '{}', NULL, 1, 2, 1)`,
         )
 
         yield* DatabaseMigration.applyOnly(db, [sessionPendingTableMigration])
@@ -825,18 +809,7 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_input'`),
         ).toBeUndefined()
-        expect(
-          yield* db.all(sql`SELECT id, type, data, delivery, admitted_seq, time_created FROM session_pending`),
-        ).toEqual([
-          {
-            id: "pending",
-            type: "user",
-            data: '{"text":"hello"}',
-            delivery: "steer",
-            admitted_seq: 4,
-            time_created: 1,
-          },
-        ])
+        expect(yield* db.all(sql`SELECT id FROM session_pending`)).toEqual([])
         expect(
           (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_pending)`)).map((column) => column.name),
         ).toEqual(["id", "session_id", "type", "data", "delivery", "admitted_seq", "time_created"])
