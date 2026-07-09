@@ -107,17 +107,30 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
   return result
 }
 
+// Returns the specs of plugin entries that resolved to no hooks so the caller
+// can surface a warning. A falsy hooks entry must never reach the hooks array:
+// consumers dereference entries directly (e.g. hook.provider in the Provider
+// state build), so one undefined entry breaks provider listing for the whole
+// instance. Legacy modules are the common source — every function export is
+// loaded as a plugin, so a stray helper export lands here with an undefined
+// return value.
 async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+  const skipped: string[] = []
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
     await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
-    return
+    const init = await (plugin as PluginModule).server(input, load.options)
+    if (init) hooks.push(init)
+    else skipped.push(load.spec)
+    return skipped
   }
 
   for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+    const init = await server(input, load.options)
+    if (init) hooks.push(init)
+    else skipped.push(load.spec)
   }
+  return skipped
 }
 
 const layer = Layer.effect(
@@ -171,7 +184,10 @@ const layer = Layer.effect(
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
-          if (init._tag === "Some") hooks.push(init.value)
+          if (init._tag === "Some") {
+            if (init.value) hooks.push(init.value)
+            else yield* Effect.logWarning("internal plugin returned no hooks", { name: plugin.name })
+          }
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
@@ -224,6 +240,13 @@ const layer = Layer.effect(
               return message
             },
           }).pipe(
+            Effect.tap((skipped) =>
+              skipped.length
+                ? Effect.logWarning("plugin returned no hooks — export a Plugin function or a PluginModule default", {
+                    path: load.spec,
+                  })
+                : Effect.void,
+            ),
             Effect.tapError((error) => Effect.logError("failed to load plugin", { path: load.spec, error })),
             Effect.catch(() => {
               // TODO: make proper events for this
