@@ -31,6 +31,73 @@ const layer = LayerNode.compile(
 const it = testEffect(layer)
 const worktreeIt = testEffect(Layer.mergeAll(layer, testInstanceStoreLayer))
 
+let fakeGitCalls: string[] = []
+const unexpectedGitCall = (name: string) => Effect.die(new Error(`unexpected Git.${name} call`))
+const fakeGit = Layer.succeed(
+  Git.Service,
+  Git.Service.of({
+    run: () => unexpectedGitCall("run"),
+    branch: () => Effect.succeed("main"),
+    prefix: () => Effect.succeed(""),
+    defaultBranch: () => Effect.succeed({ name: "main", ref: "main" }),
+    hasHead: () =>
+      Effect.sync(() => {
+        fakeGitCalls.push("hasHead")
+        return false
+      }),
+    mergeBase: () => unexpectedGitCall("mergeBase"),
+    show: () => unexpectedGitCall("show"),
+    status: () =>
+      Effect.sync(() => {
+        fakeGitCalls.push("status")
+        return [
+          { file: "a.txt", code: "??", status: "added" },
+          { file: "b.txt", code: "??", status: "added" },
+        ] satisfies Git.Item[]
+      }),
+    diff: () => unexpectedGitCall("diff"),
+    stats: () => unexpectedGitCall("stats"),
+    patch: () => unexpectedGitCall("patch"),
+    patchAll: () => unexpectedGitCall("patchAll"),
+    patchUntracked: () => unexpectedGitCall("patchUntracked"),
+    diffUntracked: (_cwd, files) =>
+      Effect.sync(() => {
+        fakeGitCalls.push(`diffUntracked:${files.join(",")}`)
+        return {
+          patch: {
+            text:
+              "diff --git a/a.txt b/a.txt\n" +
+              "new file mode 100644\n" +
+              "index 0000000..5626abf\n" +
+              "--- /dev/null\n" +
+              "+++ b/a.txt\n" +
+              "@@ -0,0 +1 @@\n" +
+              "+alpha\n" +
+              "diff --git a/b.txt b/b.txt\n" +
+              "new file mode 100644\n" +
+              "index 0000000..f719efd\n" +
+              "--- /dev/null\n" +
+              "+++ b/b.txt\n" +
+              "@@ -0,0 +1 @@\n" +
+              "+beta\n",
+            truncated: false,
+          },
+          stats: [
+            { file: "a.txt", additions: 1, deletions: 0 },
+            { file: "b.txt", additions: 1, deletions: 0 },
+          ],
+        }
+      }),
+    statUntracked: () => unexpectedGitCall("statUntracked"),
+    applyPatch: () => unexpectedGitCall("applyPatch"),
+  }),
+)
+const fakeGitIt = testEffect(
+  LayerNode.compile(LayerNode.group([Vcs.node, EventV2Bridge.node, FSUtil.node, CrossSpawnSpawner.node]), [
+    [Git.node, fakeGit],
+  ]),
+)
+
 const git = Effect.fn("VcsTest.git")(function* (cwd: string, args: string[]) {
   const result = yield* Git.Service.use((git) => git.run(args, { cwd }))
   if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString("utf8")}`)
@@ -232,6 +299,55 @@ describe("Vcs diff", () => {
           ]),
         )
         expect(diff.find((item) => item.file === "file.txt")?.patch).toContain("diff --git")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "diff('git') returns no-HEAD untracked patches without touching the index",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "a.txt"), "one\ntwo\n")
+        yield* write(path.join(test.directory, "b.txt"), "three\n")
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
+        const status = yield* Git.Service.use((git) => git.status(test.directory))
+        const a = diff.find((item) => item.file === "a.txt")
+        const b = diff.find((item) => item.file === "b.txt")
+
+        expect(a).toEqual(expect.objectContaining({ additions: 2, deletions: 0, status: "added" }))
+        expect(a?.patch).toContain("diff --git")
+        expect(a?.patch).toContain("new file mode")
+        expect(a?.patch).toContain("+one")
+        expect(b).toEqual(expect.objectContaining({ additions: 1, deletions: 0, status: "added" }))
+        expect(status).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ file: "a.txt", code: "??" }),
+            expect.objectContaining({ file: "b.txt", code: "??" }),
+          ]),
+        )
+      }),
+    { init: (directory) => git(directory, ["init"]) },
+  )
+
+  fakeGitIt.instance(
+    "diff('git') batches no-HEAD untracked patch and stat checks",
+    () =>
+      Effect.gen(function* () {
+        fakeGitCalls = []
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
+
+        expect(diff).toEqual([
+          expect.objectContaining({ file: "a.txt", additions: 1, deletions: 0, status: "added" }),
+          expect.objectContaining({ file: "b.txt", additions: 1, deletions: 0, status: "added" }),
+        ])
+        expect(diff[0]?.patch).toContain("+alpha")
+        expect(diff[1]?.patch).toContain("+beta")
+        expect(fakeGitCalls).toEqual(["hasHead", "status", "diffUntracked:a.txt,b.txt"])
       }),
     { git: true },
   )

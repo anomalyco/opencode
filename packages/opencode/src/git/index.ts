@@ -2,6 +2,9 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Effect, Layer, Context, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
 
 const cfg = [
   "--no-optional-locks",
@@ -86,6 +89,11 @@ export interface Interface {
   readonly patch: (cwd: string, ref: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchAll: (cwd: string, ref: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
+  readonly diffUntracked: (
+    cwd: string,
+    files: string[],
+    options?: PatchOptions,
+  ) => Effect.Effect<{ patch: Patch; stats: Stat[] }>
   readonly statUntracked: (cwd: string, file: string) => Effect.Effect<Stat | undefined>
   readonly applyPatch: (cwd: string, patch: string) => Effect.Effect<Result>
 }
@@ -134,6 +142,8 @@ const layer = Layer.effect(
     const text = Effect.fn("Git.text")(function* (args: string[], opts: Options) {
       return (yield* run(args, opts)).text()
     })
+
+    const pathspecs = (files: string[]) => stdin(files.map((file) => `:(top,literal)${file}`).join("\0") + "\0")
 
     const lines = Effect.fn("Git.lines")(function* (args: string[], opts: Options) {
       return (yield* text(args, opts))
@@ -298,6 +308,68 @@ const layer = Layer.effect(
       return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
     })
 
+    const diffUntracked = Effect.fn("Git.diffUntracked")(function* (
+      cwd: string,
+      files: string[],
+      options?: PatchOptions,
+    ) {
+      if (files.length === 0) {
+        return { patch: { text: "", truncated: false }, stats: [] } satisfies { patch: Patch; stats: Stat[] }
+      }
+
+      return yield* Effect.acquireUseRelease(
+        Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-git-index-"))),
+        (dir) =>
+          Effect.gen(function* () {
+            const env = { GIT_INDEX_FILE: path.join(dir, "index") }
+
+            yield* run(["add", "--intent-to-add", "--pathspec-from-file=-", "--pathspec-file-nul"], {
+              cwd,
+              env,
+              stdin: pathspecs(files),
+            })
+
+            const [patch, stats] = yield* Effect.all(
+              [
+                run(
+                  ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, "--", "."],
+                  {
+                    cwd,
+                    env,
+                    maxOutputBytes: options?.maxOutputBytes,
+                  },
+                ),
+                text(["diff", "--numstat", "-z", "--", "."], { cwd, env }),
+              ],
+              { concurrency: 2 },
+            )
+
+            return {
+              patch: { text: patch.text(), truncated: patch.truncated },
+              stats: nuls(stats).flatMap((item) => {
+                const a = item.indexOf("\t")
+                const b = item.indexOf("\t", a + 1)
+                if (a === -1 || b === -1) return []
+                const file = item.slice(b + 1)
+                if (!file) return []
+                const additions = item.slice(0, a)
+                const deletions = item.slice(a + 1, b)
+                const added = additions === "-" ? 0 : Number.parseInt(additions || "0", 10)
+                const deleted = deletions === "-" ? 0 : Number.parseInt(deletions || "0", 10)
+                return [
+                  {
+                    file,
+                    additions: Number.isFinite(added) ? added : 0,
+                    deletions: Number.isFinite(deleted) ? deleted : 0,
+                  } satisfies Stat,
+                ]
+              }),
+            } satisfies { patch: Patch; stats: Stat[] }
+          }),
+        (dir) => Effect.promise(() => fs.rm(dir, { recursive: true, force: true })),
+      )
+    })
+
     const statUntracked = Effect.fn("Git.statUntracked")(function* (cwd: string, file: string) {
       const result = yield* run(["diff", "--no-index", "--numstat", "--", "/dev/null", file], {
         cwd,
@@ -337,6 +409,7 @@ const layer = Layer.effect(
       patch,
       patchAll,
       patchUntracked,
+      diffUntracked,
       statUntracked,
       applyPatch,
     })

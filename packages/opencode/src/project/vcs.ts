@@ -15,6 +15,8 @@ type DiffOptions = {
   readonly context?: number
 }
 
+type PatchBatch = { patches: Map<string, string>; capped: boolean; includesUntracked: boolean }
+
 const emptyPatch = (file: string) => formatPatch(structuredPatch(file, file, "", "", "", "", { context: 0 }))
 
 const nums = (list: Git.Stat[]) =>
@@ -28,7 +30,11 @@ const merge = (...lists: Git.Item[][]) => {
   return [...out.values()]
 }
 
-const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
+const emptyBatch = (includesUntracked = false): PatchBatch => ({
+  patches: new Map<string, string>(),
+  capped: false,
+  includesUntracked,
+})
 
 const parseQuotedPath = (value: string) => {
   let out = ""
@@ -101,7 +107,7 @@ const batchPatches = Effect.fnUntraced(function* (
   list: Git.Item[],
   options?: DiffOptions,
 ) {
-  if (list.length === 0) return { patches: new Map<string, string>(), capped: false }
+  if (list.length === 0) return emptyBatch()
 
   const result = yield* git.patchAll(cwd, ref, {
     context: options?.context ?? PATCH_CONTEXT_LINES,
@@ -116,6 +122,40 @@ const batchPatches = Effect.fnUntraced(function* (
       return acc
     }, new Map<string, string>()),
     capped: result.truncated,
+    includesUntracked: false,
+  }
+})
+
+const batchUntracked = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  list: Git.Item[],
+  options?: DiffOptions,
+) {
+  const added = list.filter((item) => item.status === "added")
+  if (added.length === 0) return { batch: emptyBatch(true), stats: [] }
+
+  const result = yield* git.diffUntracked(
+    cwd,
+    added.map((item) => item.file),
+    {
+      context: options?.context ?? PATCH_CONTEXT_LINES,
+      maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
+    },
+  )
+
+  return {
+    batch: {
+      patches: splitGitPatch(result.patch).reduce((acc, patch, index) => {
+        const file = fileFromPatchChunk(patch) ?? added[index]?.file
+        if (!file) return acc
+        acc.set(file, (acc.get(file) ?? "") + patch)
+        return acc
+      }, new Map<string, string>()),
+      capped: result.patch.truncated,
+      includesUntracked: true,
+    } satisfies PatchBatch,
+    stats: result.stats,
   }
 })
 
@@ -151,7 +191,7 @@ const patchForItem = Effect.fnUntraced(function* (
   cwd: string,
   ref: string | undefined,
   item: Git.Item,
-  batch: { patches: Map<string, string>; capped: boolean },
+  batch: PatchBatch,
   capped: boolean,
   options?: DiffOptions,
 ) {
@@ -159,7 +199,7 @@ const patchForItem = Effect.fnUntraced(function* (
 
   const batched = batch.patches.get(item.file)
   if (batched !== undefined) return batched
-  if (item.code !== "??" && batch.capped) return emptyPatch(item.file)
+  if (batch.capped && (item.code !== "??" || batch.includesUntracked)) return emptyPatch(item.file)
   return yield* nativePatch(git, cwd, ref, item, options)
 })
 
@@ -169,7 +209,7 @@ const files = Effect.fnUntraced(function* (
   ref: string | undefined,
   list: Git.Item[],
   map: Map<string, { additions: number; deletions: number }>,
-  batch: { patches: Map<string, string>; capped: boolean },
+  batch: PatchBatch,
   options?: DiffOptions,
 ) {
   const next: FileDiff[] = []
@@ -228,7 +268,11 @@ const track = Effect.fnUntraced(function* (
   ref: string | undefined,
   options?: DiffOptions,
 ) {
-  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd), new Map(), emptyBatch(), options)
+  if (!ref) {
+    const list = yield* git.status(cwd)
+    const { batch, stats } = yield* batchUntracked(git, cwd, list, options)
+    return yield* files(git, cwd, ref, list, nums(stats), batch, options)
+  }
   return yield* diffAgainstRef(git, cwd, ref, options)
 })
 
