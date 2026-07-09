@@ -1,8 +1,6 @@
 import type { Model } from "@opencode-ai/sdk/v2"
 import { Option, Schema } from "effect"
 
-const billingNumber = Schema.optional(Schema.NullOr(Schema.Finite))
-
 const item = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
   id: Schema.String,
@@ -16,38 +14,30 @@ const item = Schema.Struct({
     }),
   ),
   billing: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        token_prices: Schema.optional(
-          Schema.NullOr(
-            Schema.Struct({
-              batch_size: billingNumber,
-              default: Schema.optional(
-                Schema.NullOr(
-                  Schema.Struct({
-                    cache_price: billingNumber,
-                    input_price: billingNumber,
-                    output_price: billingNumber,
-                  }),
-                ),
-              ),
-            }),
-          ),
-        ),
-      }),
-    ),
+    Schema.Struct({
+      token_prices: Schema.optional(
+        Schema.Struct({
+          batch_size: Schema.Number,
+          default: Schema.Struct({
+            cache_price: Schema.Number,
+            input_price: Schema.Number,
+            output_price: Schema.Number,
+          }),
+        }),
+      ),
+    }),
   ),
   capabilities: Schema.Struct({
     family: Schema.String,
     limits: Schema.optional(
       Schema.Struct({
-        max_context_window_tokens: Schema.optional(Schema.Finite),
-        max_output_tokens: Schema.optional(Schema.Finite),
-        max_prompt_tokens: Schema.optional(Schema.Finite),
+        max_context_window_tokens: Schema.optional(Schema.Number),
+        max_output_tokens: Schema.optional(Schema.Number),
+        max_prompt_tokens: Schema.optional(Schema.Number),
         vision: Schema.optional(
           Schema.Struct({
-            max_prompt_image_size: Schema.Finite,
-            max_prompt_images: Schema.Finite,
+            max_prompt_image_size: Schema.Number,
+            max_prompt_images: Schema.Number,
             supported_media_types: Schema.Array(Schema.String),
           }),
         ),
@@ -55,8 +45,8 @@ const item = Schema.Struct({
     ),
     supports: Schema.Struct({
       adaptive_thinking: Schema.optional(Schema.Boolean),
-      max_thinking_budget: Schema.optional(Schema.Finite),
-      min_thinking_budget: Schema.optional(Schema.Finite),
+      max_thinking_budget: Schema.optional(Schema.Number),
+      min_thinking_budget: Schema.optional(Schema.Number),
       reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
       streaming: Schema.optional(Schema.Boolean),
       structured_outputs: Schema.optional(Schema.Boolean),
@@ -108,7 +98,8 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
         ? "chat"
         : undefined
   const prices = remote.billing?.token_prices
-  const batch = prices?.batch_size
+  // Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
+  const usdPerMillion = prices && prices.batch_size > 0 ? 10_000 / prices.batch_size : 0
 
   const model: CopilotModel = {
     id: key,
@@ -151,10 +142,10 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
     family: prev?.family ?? remote.capabilities.family,
     name: prev?.name ?? remote.name,
     cost: {
-      input: convertCost(prices?.default?.input_price, batch),
-      output: convertCost(prices?.default?.output_price, batch),
+      input: (prices?.default.input_price ?? 0) * usdPerMillion,
+      output: (prices?.default.output_price ?? 0) * usdPerMillion,
       cache: {
-        read: convertCost(prices?.default?.cache_price, batch),
+        read: (prices?.default.cache_price ?? 0) * usdPerMillion,
         // `/models` exposes cached-input reads only; per-request billing accounts for cache writes.
         write: 0,
       },
@@ -208,14 +199,6 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
   }
 
   return model
-}
-
-// Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
-function convertCost(value: number | null | undefined, batch: number | null | undefined) {
-  if (value === null || value === undefined || value < 0 || batch === null || batch === undefined || batch <= 0)
-    return 0
-  const result = (value / batch) * 10_000
-  return Number.isFinite(result) ? result : 0
 }
 
 function usable(item: Item): item is SelectableItem {
