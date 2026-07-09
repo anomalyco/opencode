@@ -48,6 +48,19 @@ export function recentModels(
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
+export function nextVariantInCycle(variants: string[], current: string | undefined) {
+  const cycleVariants = variants.filter((variant) => variant !== "default")
+  if (cycleVariants.length === 0) return null
+  if (!current || current === "default") {
+    return cycleVariants[0]
+  }
+  const index = cycleVariants.indexOf(current)
+  if (index === -1 || index === cycleVariants.length - 1) {
+    return undefined
+  }
+  return cycleVariants[index + 1]
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -388,19 +401,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           },
           cycle() {
-            const variants = this.list()
-            if (variants.length === 0) return
-            const current = this.current()
-            if (!current) {
-              this.set(variants[0])
-              return
-            }
-            const index = variants.indexOf(current)
-            if (index === -1 || index === variants.length - 1) {
-              this.set(undefined)
-              return
-            }
-            this.set(variants[index + 1])
+            const nextVariant = nextVariantInCycle(this.list(), this.current())
+            if (nextVariant === null) return
+            this.set(nextVariant)
           },
         },
       }

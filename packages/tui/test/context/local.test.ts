@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { parseModel, recentModels } from "../../src/context/local"
+import { nextVariantInCycle, parseModel, recentModels } from "../../src/context/local"
 
 test("parses model IDs containing slashes", () => {
   expect(parseModel("provider/family/model")).toEqual({
@@ -19,4 +19,17 @@ test("moves a model to the front, deduplicates, and limits recents", () => {
     ...recent.slice(0, 5),
     ...recent.slice(6, 10),
   ])
+})
+
+test("cycles non-default variants when a default variant exists", () => {
+  const variants = ["high", "max", "default", "none"]
+
+  expect(nextVariantInCycle(variants, "default")).toBe("high")
+  expect(nextVariantInCycle(variants, "high")).toBe("max")
+  expect(nextVariantInCycle(variants, "max")).toBe("none")
+  expect(nextVariantInCycle(variants, "none")).toBeUndefined()
+})
+
+test("does not cycle when only the default variant exists", () => {
+  expect(nextVariantInCycle(["default"], "default")).toBeNull()
 })
