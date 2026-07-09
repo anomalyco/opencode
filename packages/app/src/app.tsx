@@ -12,6 +12,7 @@ import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import {
   type Component,
   createEffect,
@@ -174,6 +175,7 @@ function LegacyServerLayout(props: ParentProps<{ serverScoped?: JSX.Element }>) 
 
 function DraftRoute() {
   const [search] = useSearchParams<{ draftId?: string }>()
+  const settings = useSettings()
   const tabs = useTabs()
   return (
     <Show when={tabs.ready()}>
@@ -182,7 +184,14 @@ function DraftRoute() {
         keyed
         fallback={<Navigate href="/" />}
       >
-        {(draft) => <ResolvedDraftRoute draft={draft} />}
+        {(draft) => (
+          <Show
+            when={settings.general.newLayoutDesigns()}
+            fallback={<Navigate href={`/${base64Encode(draft.directory)}/session`} />}
+          >
+            <ResolvedDraftRoute draft={draft} />
+          </Show>
+        )}
       </Show>
     </Show>
   )
