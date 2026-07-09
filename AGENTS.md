@@ -2,6 +2,12 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## CodeGraph — Navegación Estructural
+
+Este proyecto está indexado con CodeGraph (`.codegraph/codegraph.db`):
+- **Archivos**: 2,239 | **Nodos**: 36,173 | **Aristas**: 37,276
+- Usar `codegraph_explore` con `projectPath: "/home/servidor/Descargas/opencode"` para consultar símbolos.
+
 ## Branch Names
 
 Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
@@ -157,3 +163,24 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+## Repos Relacionados
+
+| Repo | Stack | Ubicación | Rol |
+|------|-------|-----------|-----|
+| **POS Cuentas Corrientes** | Angular 21, TypeScript, SCSS | `~/Descargas/POSCuentasCorrientes/` | Frontend cuentas corrientes y admin chatbot |
+| **POS Frontend Reform** | Angular | `~/Descargas/POSFrontReform/` | Frontend POS (punto de venta, caja) |
+| **POS Backend** | .NET 8, Clean Architecture, EF Core | `~/Descargas/PosBackend/` | API de ventas, auth JWT, cuentas corrientes |
+| **Chatbot Backend** | Python 3.10, FastAPI, SQLAlchemy async | `/media/servidor/d0a196c3-2d36-4431-b15d-8ea078ad8222/EcEnlacesChacoPython/` | API chatbot WhatsApp, admin panel, leads |
+| **Landing Page** | Angular 19, Express SSR | `~/Descargas/LandingPage/` | Landing page institucional Enlaces Chaco |
+| **EC File Manager** | .NET, Python | `~/Descargas/ECFileManager/` | Gestor de archivos |
+| **Proyecto Personalidad IA** | .NET 9/10, Clean Architecture | `~/Descargas/ProyectoPersonalidadIA/` | Sistema de personalidad IA |
+
+### URLs por entorno
+
+| Servicio | Staging | Producción |
+|----------|---------|------------|
+| POS Cuentas Corrientes | `poscuentascorrientes-stage.up.railway.app` | `www.enlaceschaco.ar` |
+| POS Frontend Reform | `posfrontreform-stage.up.railway.app` | — |
+| POS Backend | `posbackend-staging.up.railway.app/api` | `posbackend-production-e8e4.up.railway.app/api` |
+| Chatbot API | `ecchatbot.enlaceschaco.ar/admin` | `ecchatbot.enlaceschaco.ar/admin` |
