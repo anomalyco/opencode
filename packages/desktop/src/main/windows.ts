@@ -1,14 +1,33 @@
 import windowState from "electron-window-state"
-import { app, BrowserWindow, net, nativeImage, nativeTheme, protocol } from "electron"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
+import { randomUUID } from "node:crypto"
+import { rmSync } from "node:fs"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import { exportDebugLogs, write as writeLog } from "./logging"
+import { getStore, removeStoreFile } from "./store"
+import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
+import { createUnresponsiveSampler } from "./unresponsive"
+import { createWindowRegistry } from "./window-registry"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
+const notificationPermission = "notifications"
+const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
+const oc2Theme = oc2ThemeJson as DesktopTheme
+const oc2Background = {
+  light: resolveThemeVariant(oc2Theme.light, false)["background-base"],
+  dark: resolveThemeVariant(oc2Theme.dark, true)["background-base"],
+}
+const documentPolicyHeader = "Document-Policy"
+const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -22,11 +41,40 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let backgroundColor: string | undefined
+let relaunchHandler = () => {
+  setAppQuitting()
+  app.relaunch()
+  app.exit(0)
+}
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
+const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
+const windowIDs = new WeakMap<BrowserWindow, string>()
+const registry = createWindowRegistry<BrowserWindow>({
+  read: () => getStore().get(WINDOW_IDS_KEY),
+  write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
+  cleanup: (id) => {
+    rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
+    removeStoreFile(windowDataFile(id))
+  },
+})
 const titlebarHeight = 40
+const maxZoomLevel = 10
+const minZoomLevel = 0.2
+
+export function setRelaunchHandler(handler: () => void) {
+  relaunchHandler = handler
+}
+
+export function setAppQuitting(quitting = true) {
+  registry.setQuitting(quitting)
+}
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.setBackgroundColor(color)
+    if (process.platform === "darwin") win.invalidateShadow()
+  })
 }
 
 export function getBackgroundColor(): string | undefined {
@@ -46,6 +94,10 @@ function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
 }
 
+function defaultBackgroundColor() {
+  return oc2Background[tone()]
+}
+
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
   const mode = theme.mode ?? tone()
   return {
@@ -57,6 +109,13 @@ function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
   titlebarThemes.set(win, theme)
+  // macOS draws the window frame hairline and shadow using the NSWindow
+  // appearance, which follows nativeTheme rather than the rendered content.
+  // Align it with the app theme so a light app on a dark system does not get
+  // the dark-appearance border and shadow. A "system" scheme must map to
+  // "system" (not the resolved mode) or prefers-color-scheme stops tracking
+  // OS appearance changes in the renderer.
+  if (process.platform === "darwin") nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
   updateTitlebar(win)
 }
 
@@ -65,14 +124,46 @@ export function updateTitlebar(win: BrowserWindow) {
   win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
 }
 
+export function setPinchZoomEnabled(enabled: boolean) {
+  getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
+  for (const win of BrowserWindow.getAllWindows()) {
+    pinchZoomEnabled.set(win, enabled)
+    win.webContents.send("pinch-zoom-enabled-changed", enabled)
+    if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    updateZoom(win)
+  }
+}
+
+export function getPinchZoomEnabled() {
+  return getStore().get(PINCH_ZOOM_ENABLED_KEY) === true
+}
+
+export function getWindowID(win: BrowserWindow) {
+  return windowIDs.get(win)
+}
+
+export function getLastFocusedWindow() {
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused) return focused
+  const win = registry.lastFocused()
+  if (!win || win.isDestroyed()) return null
+  return win
+}
+
+export function restoreMainWindows() {
+  const ids = registry.persisted()
+  return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
+}
+
 export function setDockIcon() {
   if (process.platform !== "darwin") return
   const icon = nativeImage.createFromPath(join(iconsDir(), "dock.png"))
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
-export function createMainWindow() {
+export function createMainWindow(id: string = randomUUID()) {
   const state = windowState({
+    file: windowStateFile(id),
     defaultWidth: 1280,
     defaultHeight: 800,
   })
@@ -84,13 +175,14 @@ export function createMainWindow() {
     width: state.width,
     height: state.height,
     show: false,
+    autoHideMenuBar: true,
     title: "OpenCode",
     icon: iconPath(),
-    backgroundColor,
+    backgroundColor: backgroundColor ?? defaultBackgroundColor(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
-          trafficLightPosition: { x: 12, y: 14 },
+          trafficLightPosition: { x: 14, y: 14 },
         }
       : {}),
     ...(process.platform === "win32"
@@ -108,7 +200,8 @@ export function createMainWindow() {
     },
   })
 
-  allowClipboardWrite(win)
+  allowRendererPermissions(win)
+  wireWindowRecovery(win, id)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -118,12 +211,12 @@ export function createMainWindow() {
 
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const { responseHeaders = {} } = details
-    upsertKeyValue(responseHeaders, "Access-Control-Allow-Origin", ["*"])
-    upsertKeyValue(responseHeaders, "Access-Control-Allow-Headers", ["*"])
+    addRendererHeaders(details.url, responseHeaders)
     callback({ responseHeaders })
   })
 
   state.manage(win)
+  registerWindow(win, id)
   loadWindow(win, "index.html")
   wireZoom(win)
 
@@ -134,55 +227,64 @@ export function createMainWindow() {
   return win
 }
 
-export function createLoadingWindow() {
-  const mode = tone()
-  const win = new BrowserWindow({
-    width: 640,
-    height: 480,
-    resizable: false,
-    center: true,
-    show: true,
-    icon: iconPath(),
-    backgroundColor,
-    ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
-    ...(process.platform === "win32"
-      ? {
-          frame: false,
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
-        }
-      : {}),
-    webPreferences: {
-      preload: join(root, "../preload/index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  })
+function registerWindow(win: BrowserWindow, id: string) {
+  windowIDs.set(win, id)
+  registry.register(id, win)
 
-  allowClipboardWrite(win)
+  win.on("focus", () => registry.focused(id))
+  // Windows never emits before-quit on OS shutdown/logoff, but each window
+  // gets session-end before it closes; flag the quit so ids stay persisted.
+  win.on("session-end", () => registry.setQuitting())
+  win.on("closed", () => registry.closed(id))
+}
 
-  loadWindow(win, "loading.html")
+function windowStateFile(id: string) {
+  return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+}
 
-  return win
+// Mirrors windowStorage() in packages/app/src/utils/persist.ts, which names
+// the per-window renderer store this window persists its tabs into.
+function windowDataFile(id: string) {
+  return `opencode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
 }
 
 export function registerRendererProtocol() {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
-  protocol.handle(rendererProtocol, (request) => {
+  protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
+      writeLog("protocol", "rejected host", { url: request.url }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
     const rel = relative(rendererRoot, file)
     if (rel.startsWith("..") || isAbsolute(rel)) {
+      writeLog("protocol", "rejected path", { url: request.url, file }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
-    return net.fetch(pathToFileURL(file).toString())
+    try {
+      const response = await net.fetch(pathToFileURL(file).toString())
+      if (response.status >= 400) {
+        writeLog(
+          "protocol",
+          "fetch failed",
+          {
+            url: request.url,
+            file,
+            status: response.status,
+            statusText: response.statusText,
+          },
+          "error",
+        )
+      }
+      return addDocumentPolicy(response, file)
+    } catch (error) {
+      writeLog("protocol", "fetch error", { url: request.url, file, error }, "error")
+      return new Response("Not found", { status: 404 })
+    }
   })
 }
 
@@ -197,24 +299,158 @@ function loadWindow(win: BrowserWindow, html: string) {
   void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 
-function allowClipboardWrite(win: BrowserWindow) {
+function wireWindowRecovery(win: BrowserWindow, name: string) {
+  let showing = false
+  const sampler = createUnresponsiveSampler(win, name)
+
+  const handle = async (button: string | undefined, wait: boolean) => {
+    if (button === "Export Logs") {
+      const sampling = sampler.stopAndFlush()
+      await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }, "error"))
+      if (wait && sampling) sampler.start()
+      return true
+    }
+    if (button === "Relaunch") {
+      sampler.stopAndFlush()
+      relaunchHandler()
+      return false
+    }
+    if (button === "Quit") {
+      sampler.stopAndFlush()
+      app.quit()
+    }
+    return false
+  }
+
+  const show = async (message: string, detail: string, wait: boolean) => {
+    if (showing || win.isDestroyed()) return
+    showing = true
+    try {
+      while (!win.isDestroyed()) {
+        const buttons = wait ? ["Relaunch", "Export Logs", "Keep Waiting"] : ["Relaunch", "Export Logs", "Quit"]
+        const result = await dialog.showMessageBox(win, {
+          type: "warning",
+          buttons,
+          defaultId: 0,
+          cancelId: 2,
+          message,
+          detail,
+        })
+        if (await handle(buttons[result.response], wait)) continue
+        return
+      }
+    } finally {
+      showing = false
+    }
+  }
+
+  const failed = (
+    event: string,
+    errorCode: number,
+    errorDescription: string,
+    validatedURL: string,
+    isMainFrame: boolean,
+  ) => {
+    writeLog(
+      "window",
+      "renderer load failed",
+      {
+        window: name,
+        event,
+        errorCode,
+        errorDescription,
+        validatedURL,
+        currentURL: win.webContents.getURL(),
+        isMainFrame,
+      },
+      "error",
+    )
+
+    if (!isMainFrame || errorCode === -3) return
+    void show(
+      "OpenCode failed to load",
+      [`Window: ${name}`, `URL: ${validatedURL}`, `Error: ${errorCode} ${errorDescription}`].join("\n"),
+      false,
+    )
+  }
+
+  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    failed("did-fail-load", errorCode, errorDescription, validatedURL, isMainFrame)
+  })
+  win.webContents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
+  })
+  win.webContents.on("render-process-gone", (_event, details) => {
+    sampler.stopAndFlush()
+    writeLog(
+      "window",
+      "renderer process gone",
+      { window: name, currentURL: win.webContents.getURL(), details },
+      "error",
+    )
+    void show(
+      "OpenCode window terminated unexpectedly",
+      [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"),
+      false,
+    )
+  })
+  win.on("unresponsive", () => {
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    sampler.start()
+    void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
+  })
+  win.on("responsive", () => {
+    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    sampler.stopAndFlush()
+  })
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
+      writeLog("pty", "console", { window: name, level, message, line, sourceId })
+    }
+  })
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
+  })
+}
+
+function addDocumentPolicy(response: Response, file: string) {
+  if (!file.toLowerCase().endsWith(".html")) return response
+  const headers = new Headers(response.headers)
+  headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+function allowRendererPermissions(win: BrowserWindow) {
+  const webContentsId = win.webContents.id
+
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      permission === clipboardWritePermission &&
+      rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
-        webContents.id === win.webContents.id,
+        webContents.id === webContentsId,
     )
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    if (permission !== clipboardWritePermission) return false
-    if (webContents && webContents.id !== win.webContents.id) return false
+    if (!rendererPermissions.has(permission)) return false
+    if (webContents && webContents.id !== webContentsId) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
   })
 }
 
 function isTrustedRendererUrl(value?: string) {
+  return isRendererUrl(value)
+}
+
+function addRendererHeaders(value: string, headers: Record<string, any>) {
+  upsertKeyValue(headers, "Access-Control-Allow-Origin", ["*"])
+  upsertKeyValue(headers, "Access-Control-Allow-Headers", ["*"])
+  if (isRendererUrl(value, true)) upsertKeyValue(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
+}
+
+function isRendererUrl(value?: string, html = false) {
   if (!value || !URL.canParse(value)) return false
   const url = new URL(value)
+  if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false
@@ -222,11 +458,27 @@ function isTrustedRendererUrl(value?: string) {
 }
 
 function wireZoom(win: BrowserWindow) {
+  pinchZoomEnabled.set(win, getPinchZoomEnabled())
   win.webContents.setZoomFactor(1)
-  win.webContents.on("zoom-changed", () => {
-    win.webContents.setZoomFactor(1)
-    updateTitlebar(win)
+  win.webContents.on("zoom-changed", (event, zoomDirection) => {
+    event.preventDefault()
+    if (pinchZoomEnabled.get(win)) {
+      win.webContents.setZoomFactor(clampZoom(win.webContents.getZoomFactor() + (zoomDirection === "in" ? 0.2 : -0.2)))
+      updateZoom(win)
+      return
+    }
+    if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    updateZoom(win)
   })
+}
+
+function clampZoom(value: number) {
+  return Math.min(Math.max(value, minZoomLevel), maxZoomLevel)
+}
+
+function updateZoom(win: BrowserWindow) {
+  updateTitlebar(win)
+  win.webContents.send("zoom-factor-changed", win.webContents.getZoomFactor())
 }
 
 function upsertKeyValue(obj: Record<string, any>, keyToChange: string, value: any) {

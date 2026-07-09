@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Latch, Ref, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Latch, Ref, Scope } from "effect"
 import { Runner } from "@/effect/runner"
 import { it } from "../lib/effect"
 
@@ -302,31 +302,10 @@ describe("Runner", () => {
 
       const exit = yield* runner.startShell(Effect.succeed("second")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Runner.Busy)
 
       yield* Deferred.succeed(gate, undefined)
       yield* Fiber.await(sh)
-    }),
-  )
-
-  it.live(
-    "shell rejects via busy callback and cancel still stops the first shell",
-    Effect.gen(function* () {
-      const s = yield* Scope.Scope
-      const runner = Runner.make<string>(s, {
-        busy: () => {
-          throw new Error("busy")
-        },
-      })
-
-      const sh = yield* runner.startShell(Effect.never.pipe(Effect.as("aborted"))).pipe(Effect.forkChild)
-      yield* waitForState(runner, "Shell")
-
-      const exit = yield* runner.startShell(Effect.succeed("second")).pipe(Effect.exit)
-      expect(Exit.isFailure(exit)).toBe(true)
-
-      yield* runner.cancel
-      const done = yield* Fiber.await(sh)
-      expect(Exit.isFailure(done)).toBe(true)
     }),
   )
 

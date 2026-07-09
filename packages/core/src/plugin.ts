@@ -1,146 +1,167 @@
 export * as PluginV2 from "./plugin"
 
-import { createDraft, finishDraft, type Draft } from "immer"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { type ProviderV2 } from "./provider"
-import { Context, Effect, Layer, Schema } from "effect"
-import type { ModelV2 } from "./model"
+import { makeLocationNode } from "./effect/app-node"
+import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
+import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
+import { Plugin } from "@opencode-ai/schema/plugin"
+import { AgentV2 } from "./agent"
+import { AISDK } from "./aisdk"
+import { Catalog } from "./catalog"
+import { CommandV2 } from "./command"
+import { EventV2 } from "./event"
+import { Integration } from "./integration"
+import { KeyedMutex } from "./effect/keyed-mutex"
+import { PluginHost } from "./plugin/host"
+import { Reference } from "./reference"
+import { SkillV2 } from "./skill"
+import { State } from "./state"
 
-export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
+export const ID = Plugin.ID
 export type ID = typeof ID.Type
-
-type HookSpec = {
-  "provider.update": {
-    input: {}
-    output: {
-      provider: ProviderV2.Info
-      cancel: boolean
-    }
-  }
-  "model.update": {
-    input: {}
-    output: {
-      model: ModelV2.Info
-      cancel: boolean
-    }
-  }
-  "aisdk.language": {
-    input: {
-      model: ModelV2.Info
-      sdk: any
-      options: Record<string, any>
-    }
-    output: {
-      language?: LanguageModelV3
-    }
-  }
-  "aisdk.sdk": {
-    input: {
-      model: ModelV2.Info
-      package: string
-      options: Record<string, any>
-    }
-    output: {
-      sdk?: any
-    }
-  }
-}
-
-export type Hooks = {
-  [Name in keyof HookSpec]: Readonly<HookSpec[Name]["input"]> & {
-    -readonly [Field in keyof HookSpec[Name]["output"]]: HookSpec[Name]["output"][Field] extends object
-      ? Draft<HookSpec[Name]["output"][Field]>
-      : HookSpec[Name]["output"][Field]
-  }
-}
-
-export type HookFunctions = {
-  [key in keyof Hooks]?: (input: Hooks[key]) => Effect.Effect<void>
-}
-
-export type HookInput<Name extends keyof Hooks> = HookSpec[Name]["input"]
-export type HookOutput<Name extends keyof Hooks> = HookSpec[Name]["output"]
-
-export type Effect = Effect.Effect<HookFunctions | void, never, never>
-
-export function define<R>(input: { id: ID; effect: Effect.Effect<HookFunctions | void, never, R> }) {
-  return input
-}
+export const Event = Plugin.Event
 
 export interface Interface {
-  readonly add: (input: { id: ID; effect: Effect }) => Effect.Effect<void>
+  readonly add: (id: ID, effect: PluginRuntime["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
-  readonly trigger: <Name extends keyof Hooks>(
-    name: Name,
-    input: HookInput<Name>,
-    output: HookOutput<Name>,
-  ) => Effect.Effect<HookInput<Name> & HookOutput<Name>>
+  readonly wait: (id: ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    let hooks: {
-      id: ID
-      hooks: HookFunctions
-    }[] = []
+    const events = yield* EventV2.Service
+    const locks = KeyedMutex.makeUnsafe<ID>()
+    const scope = yield* Scope.make()
+    const active = new Map<ID, Scope.Closeable>()
+    const loading = new Set<ID>()
+    const waiters = new Map<ID, Set<Deferred.Deferred<void>>>()
+    const failures = new Map<ID, Exit.Exit<void, never>>()
+    let host: Parameters<PluginRuntime["effect"]>[0]
 
-    const svc = Service.of({
-      add: Effect.fn("Plugin.add")(function* (input) {
-        const result = yield* input.effect
-        if (!result) return
-        hooks = [
-          ...hooks.filter((item) => item.id !== input.id),
-          {
-            id: input.id,
-            hooks: result,
-          },
-        ]
-      }),
-      trigger: Effect.fn("Plugin.trigger")(function* (name, input, output) {
-        const draftEntries = new Map<string, ReturnType<typeof createDraft>>()
-        const event = {
-          ...input,
-          ...output,
-        } as Record<string, unknown>
+    const add = Effect.fn("Plugin.add")(function* (id: ID, effect: PluginRuntime["effect"]) {
+      if (loading.has(id)) return yield* Effect.die(`Plugin load cycle detected for ${id}`)
 
-        for (const [field, value] of Object.entries(output)) {
-          if (value && typeof value === "object") {
-            draftEntries.set(field, createDraft(value))
-            event[field] = draftEntries.get(field)
-          }
-        }
+      yield* locks.withLock(id)(
+        Effect.sync(() => {
+          loading.add(id)
+          failures.delete(id)
+        }).pipe(
+          Effect.andThen(
+            State.batch(
+              Effect.gen(function* () {
+                const existing = active.get(id)
+                active.delete(id)
+                if (existing) yield* Scope.close(existing, Exit.void).pipe(Effect.ignore)
 
-        for (const item of hooks) {
-          const match = item.hooks[name]
-          if (!match) continue
-          yield* match(event as any).pipe(
-            Effect.withSpan(`Plugin.hook.${name}`, {
-              attributes: {
-                plugin: item.id,
-                hook: name,
-              },
-            }),
-          )
-        }
-
-        for (const [field, draft] of draftEntries) {
-          event[field] = finishDraft(draft)
-        }
-
-        return event as any
-      }),
-      remove: Effect.fn("Plugin.remove")(function* (id) {
-        hooks = hooks.filter((item) => item.id !== id)
-      }),
+                const child = yield* Scope.fork(scope)
+                yield* effect(host).pipe(
+                  Scope.provide(child),
+                  Effect.withSpan("Plugin.load", { attributes: { "plugin.id": id } }),
+                  Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
+                )
+                yield* events.publish(Event.Added, { id })
+                active.set(id, child)
+                yield* Effect.forEach(waiters.get(id) ?? [], (waiter) => Deferred.succeed(waiter, undefined), {
+                  discard: true,
+                })
+                waiters.delete(id)
+              }),
+            ),
+          ),
+          Effect.onExit((exit) => {
+            if (Exit.isSuccess(exit)) return Effect.void
+            failures.set(id, exit)
+            return Effect.forEach(waiters.get(id) ?? [], (waiter) => Deferred.done(waiter, exit), {
+              discard: true,
+            }).pipe(Effect.ensuring(Effect.sync(() => waiters.delete(id))))
+          }),
+          Effect.ensuring(Effect.sync(() => loading.delete(id))),
+        ),
+      )
     })
-    return svc
+
+    const remove = Effect.fn("Plugin.remove")(function* (id: ID) {
+      if (loading.has(id)) return yield* Effect.die(`Cannot remove plugin ${id} while it is loading`)
+
+      yield* locks.withLock(id)(
+        State.batch(
+          Effect.gen(function* () {
+            const current = active.get(id)
+            active.delete(id)
+            failures.delete(id)
+            if (current) yield* Scope.close(current, Exit.void).pipe(Effect.ignore)
+          }),
+        ),
+      )
+    })
+
+    const wait = Effect.fn("Plugin.wait")(function* (id: ID) {
+      const waiter = yield* Deferred.make<void>()
+      const pending = yield* locks.withLock(id)(
+        Effect.sync(() => {
+          if (active.has(id)) return false
+          const failure = failures.get(id)
+          if (failure) return failure
+          const current = waiters.get(id) ?? new Set()
+          current.add(waiter)
+          waiters.set(id, current)
+          return true
+        }),
+      )
+      if (!pending) return
+      if (typeof pending !== "boolean") return yield* pending
+      yield* Deferred.await(waiter).pipe(
+        Effect.ensuring(
+          locks.withLock(id)(
+            Effect.sync(() => {
+              const current = waiters.get(id)
+              current?.delete(waiter)
+              if (current?.size === 0) waiters.delete(id)
+            }),
+          ),
+        ),
+      )
+    })
+
+    yield* Effect.addFinalizer((exit) =>
+      Effect.gen(function* () {
+        active.clear()
+        yield* State.batch(Scope.close(scope, exit))
+      }),
+    )
+
+    const service = Service.of({
+      add,
+      remove,
+      wait,
+    })
+    host = yield* PluginHost.make(service)
+    return service
   }),
 )
 
-export const defaultLayer = layer
+export const locationLayer = layer.pipe(
+  Layer.provideMerge(AgentV2.locationLayer),
+  Layer.provideMerge(AISDK.locationLayer),
+  Layer.provideMerge(Catalog.locationLayer),
+  Layer.provideMerge(CommandV2.locationLayer),
+  Layer.provideMerge(Integration.locationLayer),
+  Layer.provideMerge(Reference.locationLayer),
+)
 
-// opencode
-// sdcok
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    EventV2.node,
+    AgentV2.node,
+    AISDK.node,
+    Catalog.node,
+    CommandV2.node,
+    Integration.node,
+    Reference.node,
+    SkillV2.node,
+  ],
+})

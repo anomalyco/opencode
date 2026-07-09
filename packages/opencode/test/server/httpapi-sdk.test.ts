@@ -1,20 +1,22 @@
 import { afterEach, describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer } from "effect"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
-import { HttpRouter } from "effect/unstable/http"
+import { HttpServer } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { validateSession } from "../../src/cli/cmd/tui/validate-session"
-import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { validateSession } from "../../src/cli/tui/validate-session"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import { Server } from "../../src/server/server"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import type { Config } from "@/config/config"
 import { Session as SessionNs } from "@/session/session"
 import { errorMessage } from "../../src/util/error"
@@ -22,16 +24,19 @@ import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
+import { testProviderConfig } from "../lib/test-provider"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { Database } from "@opencode-ai/core/database/database"
+import { httpApiLayer } from "./httpapi-layer"
 
-const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const it = testEffect(
-  Layer.mergeAll(
-    AppFileSystem.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
-  ),
+const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const appLayer = AppNodeBuilder.build(
+  LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, InstanceStore.node, Database.node, SessionNs.node]),
+  [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
+const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
@@ -44,92 +49,63 @@ type SdkResult = { response: Response; data?: unknown; error?: unknown }
 type Captured = { status: number; data?: unknown; error?: unknown }
 type ProjectFixture = { sdk: Sdk; directory: string }
 type LlmProjectFixture = ProjectFixture & { llm: TestLLMServer["Service"] }
-type TestServices = AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpawner | InstanceStore.Service
+type TestServices =
+  | FSUtil.Service
+  | ChildProcessSpawner.ChildProcessSpawner
+  | InstanceStore.Service
+  | SessionNs.Service
+  | HttpServer.HttpServer
 type TestScope = Scope.Scope | TestServices
-
-function app(serverPath: ServerPath, input?: { password?: string; username?: string }) {
-  Flag.OPENCODE_SERVER_PASSWORD = input?.password
-  Flag.OPENCODE_SERVER_USERNAME = input?.username
-  if (serverPath === "default") return Server.Default().app
-
-  const handler = HttpRouter.toWebHandler(
-    ExperimentalHttpApiServer.routes.pipe(
-      Layer.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input?.password,
-            OPENCODE_SERVER_USERNAME: input?.username,
-          }),
-        ),
-      ),
-    ),
-    { disableLogger: true },
-  ).handler
-  return {
-    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
-    request(input: string | URL | Request, init?: RequestInit) {
-      return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
-    },
-  }
-}
 
 function client(
   serverPath: ServerPath,
   directory?: string,
-  input?: { password?: string; username?: string; headers?: Record<string, string> },
+  input?: {
+    password?: string
+    username?: string
+    headers?: Record<string, string>
+    workspaceID?: string
+    onRequest?: (request: Request) => void
+  },
 ) {
-  return createOpencodeClient({
-    baseUrl: "http://localhost",
-    directory,
-    headers: input?.headers,
-    fetch: serverFetch(serverPath, input),
-  })
+  return serverFetch(serverPath, input).pipe(
+    Effect.map((fetch) =>
+      createOpencodeClient({
+        baseUrl: "http://localhost",
+        directory,
+        experimental_workspaceID: input?.workspaceID,
+        headers: input?.headers,
+        fetch,
+      }),
+    ),
+  )
 }
 
-function serverFetch(serverPath: ServerPath, input?: { password?: string; username?: string }) {
-  const serverApp = app(serverPath, input)
-  return Object.assign(
-    async (request: RequestInfo | URL, init?: RequestInit) =>
-      await serverApp.fetch(request instanceof Request ? request : new Request(request, init)),
-    { preconnect: globalThis.fetch.preconnect },
-  ) satisfies typeof globalThis.fetch
+function serverFetch(
+  serverPath: ServerPath,
+  input?: { password?: string; username?: string; onRequest?: (request: Request) => void },
+) {
+  return HttpServer.HttpServer.use((server) =>
+    Effect.sync(() => {
+      void serverPath
+      Flag.OPENCODE_SERVER_PASSWORD = input?.password
+      Flag.OPENCODE_SERVER_USERNAME = input?.username
+      const baseUrl = HttpServer.formatAddress(server.address)
+      return Object.assign(
+        async (request: RequestInfo | URL, init?: RequestInit) => {
+          const source = request instanceof Request ? request : new Request(request, init)
+          input?.onRequest?.(source)
+          const url = new URL(source.url)
+          return globalThis.fetch(new Request(new URL(`${url.pathname}${url.search}`, baseUrl), source))
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      ) satisfies typeof globalThis.fetch
+    }),
+  )
 }
 
 function authorization(username: string, password: string) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-}
-
-function providerConfig(url: string) {
-  return {
-    formatter: false,
-    lsp: false,
-    provider: {
-      test: {
-        name: "Test",
-        id: "test",
-        env: [],
-        npm: "@ai-sdk/openai-compatible",
-        models: {
-          "test-model": {
-            id: "test-model",
-            name: "Test Model",
-            attachment: false,
-            reasoning: false,
-            temperature: false,
-            tool_call: true,
-            release_date: "2025-01-01",
-            limit: { context: 100000, output: 10000 },
-            cost: { input: 0, output: 0 },
-            options: {},
-          },
-        },
-        options: {
-          apiKey: "test-key",
-          baseURL: url,
-        },
-      },
-    },
-  }
 }
 
 function call<T>(request: () => Promise<T>) {
@@ -226,7 +202,7 @@ function httpapiInstance<A, E>(
   options: {
     serverPath: ServerPath
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -236,40 +212,32 @@ function httpapiInstance<A, E>(
     Effect.gen(function* () {
       const instance = yield* TestInstance
       yield* options.setup?.(instance.directory) ?? Effect.void
-      return yield* run({ sdk: client(options.serverPath, instance.directory), directory: instance.directory })
+      return yield* run({ sdk: yield* client(options.serverPath, instance.directory), directory: instance.directory })
     }),
     { git: options.git ?? true, config: { formatter: false, lsp: false, ...options.config } },
   )
 }
 
 function serverPathParity<A, E>(name: string, scenario: (serverPath: ServerPath) => Effect.Effect<A, E, TestScope>) {
-  it.live(
-    name,
-    Effect.gen(function* () {
-      const standard = yield* scenario("default")
-      yield* resetState()
-      const raw = yield* scenario("raw")
-      expect(raw).toEqual(standard)
-    }),
-  )
+  it.live(name, scenario("raw"))
 }
 
 function withProject<A, E, E2 = never>(
   serverPath: ServerPath,
   options: {
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E2, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
 ) {
   return Effect.gen(function* () {
     const directory = yield* tmpdirScoped({
-      git: options.git ?? true,
+      git: options.git ?? false,
       config: { formatter: false, lsp: false, ...options.config },
     })
     yield* options.setup?.(directory) ?? Effect.void
-    return yield* run({ sdk: client(serverPath, directory), directory })
+    return yield* run({ sdk: yield* client(serverPath, directory), directory })
   })
 }
 
@@ -283,7 +251,7 @@ function withStandardProject<A, E>(
 function withFakeLlm<A, E>(serverPath: ServerPath, run: (input: LlmProjectFixture) => Effect.Effect<A, E, TestScope>) {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
-    return yield* withProject(serverPath, { config: providerConfig(llm.url) }, (input) => run({ ...input, llm }))
+    return yield* withProject(serverPath, { config: testProviderConfig(llm.url) }, (input) => run({ ...input, llm }))
   }).pipe(Effect.provide(TestLLMServer.layer))
 }
 
@@ -297,7 +265,7 @@ function withFakeLlmProject<A, E>(
     return yield* withProject(
       serverPath,
       {
-        config: providerConfig(llm.url),
+        config: testProviderConfig(llm.url),
         setup: options.setup,
       },
       (input) => run({ ...input, llm }),
@@ -306,7 +274,7 @@ function withFakeLlmProject<A, E>(
 }
 
 function writeStandardFiles(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     Effect.all([
       fs.writeWithDirs(path.join(dir, "hello.txt"), "hello"),
       fs.writeWithDirs(path.join(dir, "needle.ts"), "export const needle = 'sdk-parity'\n"),
@@ -315,7 +283,7 @@ function writeStandardFiles(dir: string) {
 }
 
 function writeProjectSkill(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     fs.writeWithDirs(
       path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
       `---
@@ -342,9 +310,9 @@ function seedMessage(directory: string, sessionID: string) {
             role: "user",
             time: { created: Date.now() },
             agent: "test",
-            model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
             tools: {},
-          } satisfies MessageV2.User)
+          } satisfies SessionV1.User)
           const part = yield* svc.updatePart({
             id: PartID.ascending(),
             sessionID: id,
@@ -354,7 +322,7 @@ function seedMessage(directory: string, sessionID: string) {
           })
           return { message, part }
         }),
-      ).pipe(Effect.provide(SessionNs.defaultLayer)),
+      ),
     ),
   )
 }
@@ -370,7 +338,7 @@ describe("HttpApi SDK", () => {
   httpapi(
     "uses the generated SDK for global and control routes",
     Effect.gen(function* () {
-      const sdk = client("raw")
+      const sdk = yield* client("raw")
       const health = yield* call(() => sdk.global.health())
       const log = yield* call(() => sdk.app.log({ service: "httpapi-sdk-test", level: "info", message: "hello" }))
 
@@ -410,9 +378,39 @@ describe("HttpApi SDK", () => {
       }),
   )
 
+  httpapi(
+    "routes configured SDK directory and workspace for v2 location GETs",
+    withProject("raw", { setup: writeStandardFiles }, ({ directory }) =>
+      Effect.gen(function* () {
+        const workspaceID = "wrk_sdk"
+        let request: Request | undefined
+        const sdk = yield* client("raw", directory, {
+          workspaceID,
+          onRequest: (value) => (request = value),
+        })
+        const found = yield* pollWithTimeout(
+          call(() => sdk.v2.fs.find({ query: "hello", type: "file" })).pipe(
+            Effect.map((result) => (result.data?.data.length ? result : undefined)),
+          ),
+          "SDK file search index was not ready",
+        )
+        const url = new URL(request!.url)
+
+        expect(found.response.status).toBe(200)
+        expect(found.data).toMatchObject({ data: [{ path: "hello.txt", type: "file" }] })
+        expect(url.searchParams.get("directory")).toBe(directory)
+        expect(url.searchParams.get("workspace")).toBe(workspaceID)
+        expect(url.searchParams.get("location[directory]")).toBe(directory)
+        expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
+        expect(request!.headers.has("x-opencode-directory")).toBe(false)
+        expect(request!.headers.has("x-opencode-workspace")).toBe(false)
+      }),
+    ),
+  )
+
   serverPathParity("matches generated SDK global and control behavior", (serverPath) =>
     Effect.gen(function* () {
-      const sdk = client(serverPath)
+      const sdk = yield* client(serverPath)
       const health = yield* capture(() => sdk.global.health())
       const log = yield* capture(() => sdk.app.log({ service: "sdk-parity", level: "info", message: "hello" }))
       const invalidAuth = yield* capture(() => sdk.auth.set({ providerID: "test" }))
@@ -426,9 +424,11 @@ describe("HttpApi SDK", () => {
   )
 
   serverPathParity("matches generated SDK global event stream", (serverPath) =>
-    firstEvent((signal) => client(serverPath).global.event({ signal })).pipe(
-      Effect.map((event) => ({ type: record(record(event).payload).type })),
-    ),
+    Effect.gen(function* () {
+      const sdk = yield* client(serverPath)
+      const event = yield* firstEvent((signal) => sdk.global.event({ signal }))
+      return { type: record(record(event).payload).type }
+    }),
   )
 
   serverPathParity("matches generated SDK instance event stream", (serverPath) =>
@@ -473,12 +473,13 @@ describe("HttpApi SDK", () => {
     withStandardProject(serverPath, ({ directory }) =>
       Effect.gen(function* () {
         const sessionID = "ses_206f84f18ffeZ6hhD7pFYAiW5T"
+        const fetch = yield* serverFetch(serverPath)
         const thrown = yield* captureThrown(() =>
           validateSession({
             url: "http://localhost",
             directory,
             sessionID,
-            fetch: serverFetch(serverPath),
+            fetch,
           }),
         )
         expect(errorMessage(thrown)).toBe(`Session not found: ${sessionID}`)
@@ -492,21 +493,18 @@ describe("HttpApi SDK", () => {
     { serverPath: "raw", setup: writeStandardFiles },
     ({ directory }) =>
       Effect.gen(function* () {
-        const missing = yield* capture(() =>
-          client("raw", directory, { password: "secret" }).file.read({ path: "hello.txt" }),
-        )
-        const bad = yield* capture(() =>
-          client("raw", directory, {
-            password: "secret",
-            headers: { authorization: authorization("opencode", "wrong") },
-          }).file.read({ path: "hello.txt" }),
-        )
-        const good = yield* capture(() =>
-          client("raw", directory, {
-            password: "secret",
-            headers: { authorization: authorization("opencode", "secret") },
-          }).file.read({ path: "hello.txt" }),
-        )
+        const missingSdk = yield* client("raw", directory, { password: "secret" })
+        const missing = yield* capture(() => missingSdk.file.read({ path: "hello.txt" }))
+        const badSdk = yield* client("raw", directory, {
+          password: "secret",
+          headers: { authorization: authorization("opencode", "wrong") },
+        })
+        const bad = yield* capture(() => badSdk.file.read({ path: "hello.txt" }))
+        const goodSdk = yield* client("raw", directory, {
+          password: "secret",
+          headers: { authorization: authorization("opencode", "secret") },
+        })
+        const good = yield* capture(() => goodSdk.file.read({ path: "hello.txt" }))
 
         return {
           statuses: statuses({ missing, bad, good }),
@@ -516,7 +514,7 @@ describe("HttpApi SDK", () => {
   )
 
   serverPathParity("matches generated SDK instance read routes", (serverPath) =>
-    withStandardProject(serverPath, ({ sdk, directory }) =>
+    withProject(serverPath, { git: true, setup: writeStandardFiles }, ({ sdk, directory }) =>
       Effect.gen(function* () {
         const project = yield* capture(() => sdk.project.current())
         const projects = yield* capture(() => sdk.project.list())
@@ -561,6 +559,7 @@ describe("HttpApi SDK", () => {
           foundFile: JSON.stringify(findFiles.data).includes("hello.txt"),
           foundText: JSON.stringify(findText.data ?? null).includes("sdk-parity"),
           listedFile: JSON.stringify(files.data).includes("hello.txt"),
+          vcs: { hasBranch: typeof record(vcs.data).branch === "string" },
         }
       }),
     ),
@@ -667,6 +666,70 @@ describe("HttpApi SDK", () => {
           updatedText: firstPartText(updated.data),
           partCountAfterDelete: array(record(withoutPart.data).parts).length,
         }
+      }),
+    ),
+  )
+
+  // Regression: EventV2 must publish on the same ProjectBus the /event handler
+  // subscribes to, AND the /event stream must forward handler ALS/context into the
+  // body-pump fiber. Drives the full SDK → /event → Session.updatePart → sync.run →
+  // bus.publish → SDK subscriber path. Goes red if either the publisher uses a
+  // different bus instance (Bug 2 / pre-#27825) or the stream loses context (Bug 1 /
+  // pre-#27425).
+  serverPathParity("streams sync-backed part updates to /event subscribers", (serverPath) =>
+    withStandardProject(serverPath, ({ sdk, directory }) =>
+      Effect.gen(function* () {
+        const session = yield* capture(() => sdk.session.create({ title: "sync-backed part event" }))
+        const sessionID = String(record(session.data).id)
+        const seeded = yield* seedMessage(directory, sessionID)
+
+        const controller = new AbortController()
+        yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
+        const events = yield* call(() => sdk.event.subscribe(undefined, { signal: controller.signal }))
+        yield* Effect.addFinalizer(() =>
+          call(async () => void (await events.stream.return?.(undefined))).pipe(Effect.ignore),
+        )
+
+        const ready = yield* Deferred.make<void>()
+        const received = yield* Deferred.make<unknown>()
+
+        yield* call(async () => {
+          for await (const event of events.stream) {
+            const payload = record(event).payload ?? event
+            const type = record(payload).type
+            if (type === "server.connected") {
+              Deferred.doneUnsafe(ready, Effect.void)
+              continue
+            }
+            if (type === MessageV2.Event.PartUpdated.type) {
+              Deferred.doneUnsafe(received, Effect.succeed(payload))
+              return
+            }
+          }
+        }).pipe(Effect.forkScoped)
+
+        yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for /event server.connected", "2 seconds")
+
+        const updated = yield* capture(() =>
+          sdk.part.update({
+            sessionID,
+            messageID: seeded.message.id,
+            partID: seeded.part.id,
+            part: { ...seeded.part, text: "updated via sync" } as NonNullable<
+              Parameters<Sdk["part"]["update"]>[0]["part"]
+            >,
+          }),
+        )
+        expect(updated.status).toBe(200)
+
+        const event = yield* awaitWithTimeout(
+          Deferred.await(received),
+          "timed out waiting for message.part.updated bus payload over /event",
+          "5 seconds",
+        )
+        const properties = record(record(event).properties)
+        expect(record(properties.part)).toMatchObject({ id: seeded.part.id, type: "text" })
+        return { type: record(event).type, partType: record(properties.part).type }
       }),
     ),
   )
@@ -823,7 +886,7 @@ describe("HttpApi SDK", () => {
   )
 
   serverPathParity("matches generated SDK project git initialization", (serverPath) =>
-    withProject(serverPath, { git: false }, ({ sdk, directory }) =>
+    withProject(serverPath, {}, ({ sdk, directory }) =>
       Effect.gen(function* () {
         const before = yield* capture(() => sdk.project.current())
         const init = yield* capture(() => sdk.project.initGit())

@@ -1,0 +1,77 @@
+[data-slot="titlebar-tab-item"] {
+  user-select: none;
+}
+
+[data-slot="titlebar-tab-item"] a {
+  outline: none;
+}
+
+[data-slot="titlebar-v2"]
+  [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
+    :disabled
+  ) {
+  outline: none;
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-slot="titlebar-tab-item"]
+  [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+  opacity: 1;
+}
+
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible) [data-slot="titlebar-tab-close"] {
+  right: 0;
+  left: auto;
+}
+
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible)
+  [data-slot="titlebar-tab-close-fade"] {
+  background-image: var(--active-bg);
+}
+
+@keyframes titlebar-tab-fade-left {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes titlebar-tab-fade-right {
+  from {
+    visibility: visible;
+  }
+  to {
+    visibility: hidden;
+  }
+}
+
+/* The narrow ranges preserve the binary thresholds of scrollLeft > 0 and
+   remaining scroll distance > 1px. Hidden defaults make an inactive timeline
+   (no overflow) a no-op. Unsupported browsers also degrade to no fades. */
+[data-slot="titlebar-tabs"] {
+  timeline-scope: --titlebar-tabs-scroll;
+
+  [data-slot^="titlebar-tabs-fade-"] {
+    visibility: hidden;
+  }
+}
+
+@supports (animation-timeline: --titlebar-tabs-scroll) and (timeline-scope: --titlebar-tabs-scroll) {
+  [data-slot="titlebar-tabs-scroll"] {
+    scroll-timeline: --titlebar-tabs-scroll x;
+  }
+
+  [data-slot="titlebar-tabs-fade-left"] {
+    animation: titlebar-tab-fade-left linear both;
+    animation-timeline: --titlebar-tabs-scroll;
+    animation-range: 0 0.1px;
+  }
+
+  [data-slot="titlebar-tabs-fade-right"] {
+    animation: titlebar-tab-fade-right linear both;
+    animation-timeline: --titlebar-tabs-scroll;
+    animation-range: calc(100% - 1.1px) calc(100% - 1px);
+  }
+}

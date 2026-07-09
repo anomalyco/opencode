@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
-import { InstanceBootstrap } from "../../src/project/bootstrap-service"
-import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
-import { TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 let bootstrapRun: Effect.Effect<void> = Effect.void
@@ -16,7 +16,9 @@ const noopBootstrap = Layer.succeed(
 )
 
 const it = testEffect(
-  Layer.mergeAll(InstanceStore.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(Layer.provide(noopBootstrap)),
+  LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+  ]),
 )
 
 const setBootstrap = (run: Effect.Effect<void>) =>
@@ -37,7 +39,7 @@ const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) 
   )
 
 describe("InstanceStore", () => {
-  it.live("loads instance context without installing ALS for the caller", () =>
+  it.live("loads instance context", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const store = yield* InstanceStore.Service
@@ -45,7 +47,6 @@ describe("InstanceStore", () => {
 
       expect(ctx.directory).toBe(dir)
       expect(ctx.worktree).toBe(dir)
-      expect(() => Instance.current).toThrow()
     }),
   )
 
@@ -63,7 +64,6 @@ describe("InstanceStore", () => {
       yield* store.load({ directory: dir })
 
       expect(initializedDirectory).toBe(dir)
-      expect(() => Instance.current).toThrow()
     }),
   )
 
@@ -244,21 +244,5 @@ describe("InstanceStore", () => {
       yield* store.disposeAll()
       expect(disposed).toEqual([dir1, dir2])
     }),
-  )
-
-  it.instance(
-    "provides legacy Promise callers with instance ALS",
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const ctx = yield* InstanceRef
-        if (!ctx) throw new Error("InstanceRef not provided")
-
-        const directory = yield* Effect.promise(() => Promise.resolve(Instance.restore(ctx, () => Instance.directory)))
-
-        expect(directory).toBe(test.directory)
-        expect(() => Instance.current).toThrow()
-      }),
-    { git: true },
   )
 })

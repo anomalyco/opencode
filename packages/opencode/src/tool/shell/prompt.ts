@@ -7,30 +7,22 @@ import { ShellID } from "./id"
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
 
-const descriptions = {
-  bash: "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-  powershell:
-    'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: Get-ChildItem -LiteralPath "."\nOutput: Lists current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: New-Item -ItemType Directory -Path "tmp"\nOutput: Creates directory tmp',
-  cmd: 'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: dir\nOutput: Lists current directory\n\nInput: if exist "package.json" type "package.json"\nOutput: Prints package.json when it exists\n\nInput: mkdir tmp\nOutput: Creates directory tmp',
-}
-
 export type Limits = {
   maxLines: number
   maxBytes: number
 }
 
-export function parameterSchema(description: string) {
+export function parameterSchema() {
   return Schema.Struct({
     command: Schema.String.annotate({ description: "The command to execute" }),
     timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
-    description: Schema.String.annotate({ description }),
   })
 }
 
-export const Parameters = parameterSchema(descriptions.bash)
+export const Parameters = parameterSchema()
 export type Parameters = Schema.Schema.Type<typeof Parameters>
 
 function renderPrompt(template: string, values: Record<string, string>) {
@@ -83,7 +75,7 @@ function chainGuidance(name: string) {
   return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
 }
 
-function bashCommandSection(chain: string, limits: Limits) {
+function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
   return `Before executing the command, please follow these steps:
 
 1. Directory Verification:
@@ -102,8 +94,7 @@ function bashCommandSection(chain: string, limits: Limits) {
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
-  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
   - Avoid using Bash with the \`find\`, \`grep\`, \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`echo\` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
@@ -127,7 +118,13 @@ Usage notes:
     </bad-example>`
 }
 
-function powershellCommandSection(name: string, chain: string, pathSep: string, limits: Limits) {
+function powershellCommandSection(
+  name: string,
+  chain: string,
+  pathSep: string,
+  limits: Limits,
+  defaultTimeoutMs: number,
+) {
   return `${powershellNotes(name)}
 
 Before executing the command, please follow these steps:
@@ -148,8 +145,7 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
-  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`Select-Object -First\`, \`Select-Object -Last\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
   - Avoid using Shell with PowerShell file/content cmdlets unless explicitly instructed or when these cmdlets are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
@@ -173,7 +169,7 @@ Usage notes:
     </bad-example>`
 }
 
-function cmdCommandSection(chain: string, limits: Limits) {
+function cmdCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
   return `# cmd.exe shell notes
 - Use double quotes for paths with spaces.
 - Use %VAR% for environment variables.
@@ -198,8 +194,7 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
-  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`more\` or other pagination commands to limit output; the full output will already be captured to a file for more precise searching.
 
   - Avoid using Shell with cmd.exe file/content commands unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
@@ -223,7 +218,7 @@ Usage notes:
     </bad-example>`
 }
 
-function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
+function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
   const isPowerShell = PS.has(name)
   const chain = chainGuidance(name)
   if (CMD.has(name)) {
@@ -231,12 +226,11 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
       intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
       workdirSection:
         "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
-      commandSection: cmdCommandSection(chain, limits),
+      commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs),
       gitCommands: "git commands",
       gitCommandRestriction: "git commands",
       createPrInstruction: "Create PR using a temporary body file so cmd.exe quoting stays simple.",
       createPrExample: `(\n  echo ## Summary\n  echo - ^<1-3 bullet points^>\n) > pr-body.txt\ngh pr create --title "the pr title" --body-file pr-body.txt`,
-      parameterDescription: descriptions.cmd,
     }
   }
   if (isPowerShell) {
@@ -244,7 +238,13 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
       intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
       workdirSection:
         "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
-      commandSection: powershellCommandSection(name, chain, platform === "win32" ? "\\" : "/", limits),
+      commandSection: powershellCommandSection(
+        name,
+        chain,
+        platform === "win32" ? "\\" : "/",
+        limits,
+        defaultTimeoutMs,
+      ),
       gitCommands: "git commands",
       gitCommandRestriction: "git commands",
       createPrInstruction: "Create PR using gh pr create with a PowerShell here-string to pass the body correctly.",
@@ -252,7 +252,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
 ## Summary
 - <1-3 bullet points>
 '@`,
-      parameterDescription: descriptions.powershell,
     }
   }
   return {
@@ -260,7 +259,7 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
       "Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.",
     workdirSection:
       "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.",
-    commandSection: bashCommandSection(chain, limits),
+    commandSection: bashCommandSection(chain, limits, defaultTimeoutMs),
     gitCommands: "bash commands",
     gitCommandRestriction: "git bash commands",
     createPrInstruction:
@@ -268,12 +267,11 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
     createPrExample: `gh pr create --title "the pr title" --body "$(cat <<'EOF'
 ## Summary
 <1-3 bullet points>`,
-    parameterDescription: descriptions.bash,
   }
 }
 
-export function render(name: string, platform: NodeJS.Platform, limits: Limits) {
-  const selected = profile(name, platform, limits)
+export function render(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
+  const selected = profile(name, platform, limits, defaultTimeoutMs)
   return {
     description: renderPrompt(DESCRIPTION, {
       intro: selected.intro,
@@ -288,7 +286,7 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits) 
       createPrInstruction: selected.createPrInstruction,
       createPrExample: selected.createPrExample,
     }),
-    parameters: parameterSchema(selected.parameterDescription),
+    parameters: parameterSchema(),
   }
 }
 

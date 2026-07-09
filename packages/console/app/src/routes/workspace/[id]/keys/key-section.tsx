@@ -4,7 +4,6 @@ import { IconCopy, IconCheck } from "~/component/icon"
 import { Key } from "@opencode-ai/console-core/key.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
-import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./key-section.module.css"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { useI18n } from "~/context/i18n"
@@ -124,7 +123,6 @@ export function KeySection() {
                 <th>{i18n.t("workspace.keys.table.name")}</th>
                 <th>{i18n.t("workspace.keys.table.key")}</th>
                 <th>{i18n.t("workspace.keys.table.createdBy")}</th>
-                <th>{i18n.t("workspace.keys.table.lastUsed")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -156,9 +154,6 @@ export function KeySection() {
                         </Show>
                       </td>
                       <td data-slot="key-user-email">{key.email}</td>
-                      <td data-slot="key-last-used" title={key.timeUsed ? formatDateUTC(key.timeUsed) : undefined}>
-                        {key.timeUsed ? formatDateForTable(key.timeUsed) : "-"}
-                      </td>
                       <td data-slot="key-actions">
                         <form action={removeKey} method="post">
                           <input type="hidden" name="id" value={key.id} />

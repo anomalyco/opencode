@@ -15,12 +15,11 @@ type Usage = {
 export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   format: "openai",
   modifyUrl: (providerApi: string) => providerApi + "/responses",
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+  modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
   modifyBody: (body: Record<string, any>) => body,
   createBinaryStreamDecoder: () => undefined,
-  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 
@@ -43,6 +42,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
       retrieve: () => usage,
     }
   },
+  extractUsage: (response: any) => response.usage ?? response.response?.usage,
   normalizeUsage: (usage: Usage) => {
     const inputTokens = usage.input_tokens ?? 0
     const outputTokens = usage.output_tokens ?? 0
