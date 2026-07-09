@@ -21,11 +21,10 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
     const dir = session?.directory || props.api.state.path.directory || paths.cwd
     const out = abbreviateHome(dir, paths.home)
     const branch = session?.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
-    const text = branch ? out + ":" + branch : out
-    const list = text.split("/")
+    const list = out.split("/")
     return {
       parent: list.slice(0, -1).join("/"),
-      name: list.at(-1) ?? "",
+      name: (list.at(-1) ?? "") + (branch ? ":" + branch : ""),
     }
   })
 
@@ -65,7 +64,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
         </box>
       </Show>
       <text>
-        <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
+        <span style={{ fg: theme().textMuted }}>{path().parent}{path().parent ? "/" : ""}</span>
         <span style={{ fg: theme().text }}>{path().name}</span>
       </text>
       <text fg={theme().textMuted}>
