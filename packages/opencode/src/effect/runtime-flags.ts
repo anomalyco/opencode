@@ -54,6 +54,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalNativeLlm: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
   experimentalWebSockets: bool("OPENCODE_EXPERIMENTAL_WEBSOCKETS"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
+  subagentModel: Config.string("OPENCODE_SUBAGENT_MODEL").pipe(Config.option),
 }) {}
 
 export type Info = Context.Service.Shape<typeof Service>
