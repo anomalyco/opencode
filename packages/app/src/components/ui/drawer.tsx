@@ -55,9 +55,7 @@ const DrawerContent = <T extends ValidComponent = "div">(props: DynamicProps<T, 
       <DrawerOverlay />
       <DrawerPrimitive.Content
         class={cn(
-          "group/drawer-content fixed z-[100] flex flex-col items-start p-0 data-[transitioning]:transition-transform data-[transitioning]:duration-300 md:select-none",
-          "data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:mt-24 data-[side=bottom]:h-auto data-[side=bottom]:rounded-t-[10px] data-[side=bottom]:border-t data-[side=bottom]:border-v2-border-border-muted data-[side=bottom]:bg-v2-background-bg-base data-[side=bottom]:shadow-[var(--v2-elevation-overlay)] data-[side=bottom]:after:absolute data-[side=bottom]:after:inset-x-0 data-[side=bottom]:after:top-full data-[side=bottom]:after:h-1/2 data-[side=bottom]:after:bg-inherit",
-          "data-[side=right]:top-[6px] data-[side=right]:right-[6px] data-[side=right]:bottom-[6px] data-[side=right]:left-auto data-[side=right]:h-auto data-[side=right]:max-h-[calc(100vh-12px)] data-[side=right]:w-[560px] data-[side=right]:max-w-[calc(100vw-12px)] data-[side=right]:rounded-[8px] data-[side=right]:bg-[#FFFFFF] data-[side=right]:shadow-[var(--v2-elevation-overlay)]",
+          "group/drawer-content fixed inset-y-[6px] right-[6px] left-auto z-[100] flex h-auto max-h-[calc(100vh-12px)] w-[560px] max-w-[calc(100vw-12px)] flex-col items-start rounded-[8px] bg-v2-background-bg-base p-0 shadow-[var(--v2-elevation-overlay)] data-[transitioning]:transition-transform data-[transitioning]:duration-300 md:select-none",
           props.class,
         )}
         {...rest}
