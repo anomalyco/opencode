@@ -160,8 +160,10 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {props.diffs.length} {language.t("ui.sessionTurn.diffs.changed")}{" "}
-          {language.t(props.diffs.length === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+          {language.t(
+            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
+            { count: String(props.diffs.length) },
+          )}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
