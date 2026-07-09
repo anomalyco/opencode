@@ -1443,7 +1443,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("surfaces error event details even when they arrive nested under response.error", () =>
+  it.effect("surfaces error event details nested under response.error", () =>
     Effect.gen(function* () {
       // Some OpenAI-compatible proxies and older SDK versions wrap the
       // top-level error fields into a nested `response.error` payload
@@ -1456,6 +1456,29 @@ describe("OpenAI Responses route", () => {
             sseEvents({
               type: "error",
               response: { error: { code: "context_length_exceeded", message: "prompt too long" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "context_length_exceeded: prompt too long",
+          classification: "context-overflow",
+        },
+      ])
+    }),
+  )
+
+  it.effect("surfaces error event details nested under error", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              error: { code: "context_length_exceeded", message: "prompt too long" },
             }),
           ),
         ),
