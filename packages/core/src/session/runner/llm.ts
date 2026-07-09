@@ -34,7 +34,7 @@ import { InstructionCheckpoint } from "../instruction-checkpoint"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
-import { SessionInput } from "../input"
+import { SessionPending } from "../pending"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
@@ -203,7 +203,7 @@ const layer = Layer.effect(
 
     const attemptStep = Effect.fn("SessionRunner.attemptStep")(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionInput.Delivery | undefined,
+      promotion: SessionPending.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
       assistantMessageID?: SessionMessage.ID,
@@ -226,10 +226,10 @@ const layer = Layer.effect(
       let currentStep = step
       if (promotion) {
         let promoted = 0
-        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
+        if (promotion === "steer") promoted = yield* SessionPending.promoteSteers(db, events, session.id)
         if (promotion === "queue") {
-          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
-          promoted += yield* SessionInput.promoteSteers(db, events, session.id)
+          promoted += Number(yield* SessionPending.promoteNextQueued(db, events, session.id))
+          promoted += yield* SessionPending.promoteSteers(db, events, session.id)
         }
         if (promoted > 0) currentStep = 1
       }
@@ -285,7 +285,7 @@ const layer = Layer.effect(
       const advertisedTools = new Set(hookedRequest.tools.map((tool) => tool.name))
       // Automatic compaction completed; rebuild the request from compacted history.
       if (
-        !(yield* SessionInput.pendingCompaction(db, session.id)) &&
+        !(yield* SessionPending.compaction(db, session.id)) &&
         (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request: hookedRequest }))
       )
         return { _tag: "RestartAfterCompaction", step: currentStep } as const
@@ -550,7 +550,7 @@ const layer = Layer.effect(
 
     const runStep = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionInput.Delivery | undefined,
+      promotion: SessionPending.Delivery | undefined,
       step: number,
     ) {
       // Compaction restarts rebuild the request from compacted history without re-promoting.
@@ -595,7 +595,7 @@ const layer = Layer.effect(
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
     ) {
-      const pending = yield* SessionInput.pendingCompaction(db, sessionID)
+      const pending = yield* SessionPending.compaction(db, sessionID)
       if (!pending) return false
       const session = yield* getSession(sessionID)
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -611,7 +611,7 @@ const layer = Layer.effect(
           ).pipe(Effect.exit)
           if (Exit.isSuccess(compacted) && compacted.value) return true
           if (Exit.isFailure(compacted)) {
-            const unsettled = yield* SessionInput.pendingCompaction(db, sessionID)
+            const unsettled = yield* SessionPending.compaction(db, sessionID)
             if (unsettled)
               yield* events.publish(SessionEvent.Compaction.Failed, {
                 sessionID,
@@ -621,7 +621,7 @@ const layer = Layer.effect(
               })
             return yield* Effect.failCause(compacted.cause)
           }
-          const unsettled = yield* SessionInput.pendingCompaction(db, sessionID)
+          const unsettled = yield* SessionPending.compaction(db, sessionID)
           if (unsettled)
             yield* events.publish(SessionEvent.Compaction.Failed, {
               sessionID,
@@ -640,11 +640,11 @@ const layer = Layer.effect(
       readonly force: boolean
     }) {
       yield* runPendingCompaction(input.sessionID)
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
+      const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")
+      const hasQueue = hasSteer ? false : yield* SessionPending.has(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
-      let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
+      let promotion: SessionPending.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       while (shouldRun) {
         let needsContinuation = true
@@ -664,16 +664,16 @@ const layer = Layer.effect(
           needsContinuation = result.needsContinuation
           step = result.step + 1
           if (needsContinuation) {
-            promotion = (yield* SessionInput.pendingCompaction(db, input.sessionID)) ? undefined : "steer"
+            promotion = (yield* SessionPending.compaction(db, input.sessionID)) ? undefined : "steer"
             continue
           }
           yield* runPendingCompaction(input.sessionID)
           promotion = "steer"
-          needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          needsContinuation = yield* SessionPending.has(db, input.sessionID, "steer")
         }
         yield* runPendingCompaction(input.sessionID)
-        const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-        const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")
+        const hasQueue = hasSteer ? false : yield* SessionPending.has(db, input.sessionID, "queue")
         shouldRun = hasSteer || hasQueue
         promotion = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       }

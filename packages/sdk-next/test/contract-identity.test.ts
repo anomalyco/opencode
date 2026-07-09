@@ -4,7 +4,7 @@ import { Location as CoreLocation } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionInput as CoreSessionInput } from "@opencode-ai/core/session/input"
+import { SessionPending as CoreSessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
@@ -12,7 +12,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionInput } from "@opencode-ai/schema/session-input"
+import { SessionPending } from "@opencode-ai/schema/session-pending"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Api } from "@opencode-ai/server/api"
@@ -48,8 +48,8 @@ test("re-exports canonical contracts directly from Schema", () => {
     "Reference",
     "RelativePath",
     "Session",
-    "SessionInput",
     "SessionMessage",
+    "SessionPending",
     "Skill",
     "Tool",
   ])
@@ -63,9 +63,9 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(ProjectV2.Current).toBe(Project.Current)
   expect(ProjectV2.Directory).toBe(Project.Directory)
   expect(ProjectV2.Directories).toBe(Project.Directories)
-  expect(CoreSessionInput.Message).toBe(SessionInput.Message)
-  expect(CoreSessionInput.User).toBe(SessionInput.User)
-  expect(CoreSessionInput.Synthetic).toBe(SessionInput.Synthetic)
+  expect(CoreSessionPending.Message).toBe(SessionPending.Message)
+  expect(CoreSessionPending.User).toBe(SessionPending.User)
+  expect(CoreSessionPending.Synthetic).toBe(SessionPending.Synthetic)
   expect(CoreSessionMessage.Info).toBe(SessionMessage.Info)
   expect(CoreSessionMessage.AssistantText).toBe(SessionMessage.AssistantText)
   expect(Api.groups["server.session"].identifier).toBe("server.session")

@@ -198,7 +198,7 @@ _Avoid_: Response envelope
 - `sessions.context({ sessionID })` preserves the existing message-only operation. It returns projected **Session History**; it does not include or represent the complete **Model Context**, whose system text, **Instruction Baseline**, tools, and step-local additions remain separate.
 - **Open question**: Should a future, separately named operation expose complete **Model Context**, including the instruction baseline, applied instruction metadata, tools, and step-local additions?
 - `sessions.prompt(...)` exposes `resume?: boolean`. Omitting it preserves durable admission followed by an advisory execution wake; `resume: false` requests durable admit-only behavior.
-- The public operation remains `sessions.prompt(...)`; `SessionInput.admit` is the internal primitive, while the public `Admission` result and `resume` option express its durable admission semantics.
+- The public operation remains `sessions.prompt(...)`; `SessionPending.admit` is the internal primitive, while the public `Admission` result and `resume` option express its durable admission semantics.
 - `sessions.create(...)` accepts an optional `location`. Omission resolves through the connected OpenCode instance's default or current location; an explicit value selects a known location. Networked and embedded transports use the same handler semantics.
 - `sessions.switchAgent({ sessionID, agent })` is part of the common client alongside `sessions.switchModel(...)`. It affects subsequent Session activity and fails with `SessionNotFoundError` for an unknown Session.
 - The **Embedded OpenCode** Layer delegates to the same scoped creation path; it does not define a second implementation.

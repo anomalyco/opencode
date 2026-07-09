@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
-import type { SessionInput } from "./input"
+import type { SessionPending } from "./pending"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
@@ -13,7 +13,7 @@ import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { Instructions } from "../instructions/index"
 import type { Session } from "@opencode-ai/schema/session"
-import type { SyntheticData, UserData } from "@opencode-ai/schema/session-input"
+import type { SyntheticData, UserData } from "@opencode-ai/schema/session-pending"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
@@ -126,35 +126,28 @@ export const SessionMessageTable = sqliteTable(
   ],
 )
 
-export const SessionInputTable = sqliteTable(
-  "session_input",
+export const SessionPendingTable = sqliteTable(
+  "session_pending",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionInput.Info["type"]>().notNull(),
+    type: text().$type<SessionPending.Info["type"]>().notNull(),
     data: text({ mode: "json" }).$type<UserData | SyntheticData | Record<string, never>>().notNull(),
-    delivery: text().$type<SessionInput.Delivery>(),
+    delivery: text().$type<SessionPending.Delivery>(),
     admitted_seq: integer().notNull(),
-    promoted_seq: integer(),
     time_created: integer()
       .notNull()
       .$default(() => Date.now()),
   },
   (table) => [
-    index("session_input_session_pending_delivery_seq_idx").on(
-      table.session_id,
-      table.promoted_seq,
-      table.delivery,
-      table.admitted_seq,
-    ),
-    uniqueIndex("session_input_session_pending_compaction_idx")
+    index("session_pending_session_delivery_seq_idx").on(table.session_id, table.delivery, table.admitted_seq),
+    uniqueIndex("session_pending_session_compaction_idx")
       .on(table.session_id)
-      .where(sql`${table.type} = 'compaction' and ${table.promoted_seq} is null`),
-    uniqueIndex("session_input_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
-    uniqueIndex("session_input_session_promoted_seq_idx").on(table.session_id, table.promoted_seq),
+      .where(sql`${table.type} = 'compaction'`),
+    uniqueIndex("session_pending_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
   ],
 )
 

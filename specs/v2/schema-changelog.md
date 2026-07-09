@@ -1,5 +1,18 @@
 # V2 Schema Changelog
 
+## 2026-07-09: Make Session Input Storage Pending-Only And Rename It To Session Pending
+
+- Rename the `SessionInput` schema namespace to `SessionPending` and the `session_input` table to `session_pending`.
+- Make the table pending-only: promotion consumes the user or synthetic row in the same event transaction that projects the message, and compaction settlement deletes the barrier row. Drop the `promoted_seq` column and the retained `promotedSeq`/`handledSeq` wire fields.
+- Add `GET /api/session/:sessionID/pending` (`v2.session.pending.list`) returning durable admitted work not yet visible in projected history, ordered by admission.
+- Reconcile exact retry of an already-promoted input against the projected `session_message` row plus the durable `session.input.admitted` event instead of a retained row; settled compaction retries reconcile against `session.compaction.admitted`. Fork-copied history reconciles from the projected message alone because fork aggregates carry no admitted events.
+
+Compatibility:
+
+- `20260709190621_session_pending_table` deletes consumed rows, sweeps every historical index name on `session_input` (interim v2 builds shipped differing sets), renames the table, and drops `promoted_seq`. Pending rows survive the migration.
+- Durable event names and payloads are unchanged; `session.input.admitted` still records the full admitted message including delivery.
+- Promise, Effect, and legacy JavaScript SDK surfaces are regenerated; `SessionInput*` generated schema names become `SessionPending*` while event-derived names keep their `session.input.*` vocabulary.
+
 ## 2026-07-05: Rename Session Context Contracts To Instructions
 
 - Rename the System Context algebra to `Instructions`, API-managed `SessionContextEntry` records to `InstructionEntry`, and the session-owned context checkpoint to `InstructionCheckpoint`.

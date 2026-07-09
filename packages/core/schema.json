@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "01451b27-1e51-4657-b2d0-4b457dffa3ec",
-  "prevIds": ["8c1748cc-f978-4df4-879d-fe7fda5c4c34"],
+  "id": "2c759c08-79c8-4179-9e15-d2fea45c9dec",
+  "prevIds": ["01451b27-1e51-4657-b2d0-4b457dffa3ec"],
   "ddl": [
     {
       "name": "workspace",
@@ -65,11 +65,11 @@
       "entityType": "tables"
     },
     {
-      "name": "session_input",
+      "name": "session_message",
       "entityType": "tables"
     },
     {
-      "name": "session_message",
+      "name": "session_pending",
       "entityType": "tables"
     },
     {
@@ -988,86 +988,6 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "session_id",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "type",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "data",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "delivery",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "admitted_seq",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "promoted_seq",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_created",
-      "entityType": "columns",
-      "table": "session_input"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
       "table": "session_message"
     },
     {
@@ -1129,6 +1049,76 @@
       "name": "data",
       "entityType": "columns",
       "table": "session_message"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_pending"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_pending"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "entityType": "columns",
+      "table": "session_pending"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "entityType": "columns",
+      "table": "session_pending"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "delivery",
+      "entityType": "columns",
+      "table": "session_pending"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "admitted_seq",
+      "entityType": "columns",
+      "table": "session_pending"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "session_pending"
     },
     {
       "type": "text",
@@ -1616,9 +1606,9 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_session_input_session_id_session_id_fk",
+      "name": "fk_session_message_session_id_session_id_fk",
       "entityType": "fks",
-      "table": "session_input"
+      "table": "session_message"
     },
     {
       "columns": ["session_id"],
@@ -1627,9 +1617,9 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_session_message_session_id_session_id_fk",
+      "name": "fk_session_input_session_id_session_id_fk",
       "entityType": "fks",
-      "table": "session_message"
+      "table": "session_pending"
     },
     {
       "columns": ["project_id"],
@@ -1761,15 +1751,15 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "session_input_pk",
-      "table": "session_input",
+      "name": "session_message_pk",
+      "table": "session_message",
       "entityType": "pks"
     },
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "session_message_pk",
-      "table": "session_message",
+      "name": "session_input_pk",
+      "table": "session_pending",
       "entityType": "pks"
     },
     {
@@ -1909,82 +1899,6 @@
           "isExpression": false
         },
         {
-          "value": "promoted_seq",
-          "isExpression": false
-        },
-        {
-          "value": "delivery",
-          "isExpression": false
-        },
-        {
-          "value": "admitted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "session_input_session_pending_delivery_seq_idx",
-      "entityType": "indexes",
-      "table": "session_input"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": "\"session_input\".\"type\" = 'compaction' and \"session_input\".\"promoted_seq\" is null",
-      "origin": "manual",
-      "name": "session_input_session_pending_compaction_idx",
-      "entityType": "indexes",
-      "table": "session_input"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
-          "value": "admitted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "origin": "manual",
-      "name": "session_input_session_admitted_seq_idx",
-      "entityType": "indexes",
-      "table": "session_input"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
-          "value": "promoted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "origin": "manual",
-      "name": "session_input_session_promoted_seq_idx",
-      "entityType": "indexes",
-      "table": "session_input"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
           "value": "seq",
           "isExpression": false
         }
@@ -2057,6 +1971,60 @@
     {
       "columns": [
         {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "delivery",
+          "isExpression": false
+        },
+        {
+          "value": "admitted_seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_pending_session_delivery_seq_idx",
+      "entityType": "indexes",
+      "table": "session_pending"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": "\"session_pending\".\"type\" = 'compaction'",
+      "origin": "manual",
+      "name": "session_pending_session_compaction_idx",
+      "entityType": "indexes",
+      "table": "session_pending"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "admitted_seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_pending_session_admitted_seq_idx",
+      "entityType": "indexes",
+      "table": "session_pending"
+    },
+    {
+      "columns": [
+        {
           "value": "project_id",
           "isExpression": false
         }
@@ -2111,5 +2079,5 @@
       "table": "session"
     }
   ],
-  "renames": []
+  "renames": ["session_input->session_pending"]
 }

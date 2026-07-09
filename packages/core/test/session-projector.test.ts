@@ -20,11 +20,11 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { fromRow } from "@opencode-ai/core/session/info"
-import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { Shell } from "@opencode-ai/schema/shell"
 import {
   InstructionCheckpointTable,
-  SessionInputTable,
+  SessionPendingTable,
   SessionMessageTable,
   SessionTable,
 } from "@opencode-ai/core/session/sql"
@@ -77,7 +77,7 @@ describe("SessionProjector", () => {
         .run()
       const events = yield* EventV2.Service
       const inputID = SessionMessage.ID.make("msg_manual_compaction")
-      yield* SessionInput.admitCompaction(db, events, { id: inputID, sessionID })
+      yield* SessionPending.admitCompaction(db, events, { id: inputID, sessionID })
 
       yield* events.publish(SessionEvent.Compaction.Failed, {
         sessionID,
@@ -85,7 +85,7 @@ describe("SessionProjector", () => {
         error: { type: "compaction.failed", message: "Auto compaction failed" },
       })
 
-      expect(yield* SessionInput.pendingCompaction(db, sessionID)).toMatchObject({ id: inputID })
+      expect(yield* SessionPending.compaction(db, sessionID)).toMatchObject({ id: inputID })
     }),
   )
 
@@ -316,7 +316,7 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
-  it.effect("marks an inbox row promoted with the PromptPromoted event sequence", () =>
+  it.effect("consumes the pending row and projects the message at promotion", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -338,7 +338,7 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
       const id = SessionMessage.ID.make("msg_admitted")
-      const admitted = yield* SessionInput.admit(db, events, {
+      const admitted = yield* SessionPending.admit(db, events, {
         id,
         sessionID,
         input: { type: "user", data: { text: "promote me" }, delivery: "steer" },
@@ -351,8 +351,11 @@ describe("SessionProjector", () => {
       })
 
       expect(
-        yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
-      ).toMatchObject({ promoted_seq: event.durable?.seq })
+        yield* db.select().from(SessionPendingTable).where(eq(SessionPendingTable.id, id)).get().pipe(Effect.orDie),
+      ).toBeUndefined()
+      expect(
+        yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ session_id: sessionID, type: "user", seq: event.durable?.seq })
     }),
   )
 

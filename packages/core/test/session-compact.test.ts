@@ -15,7 +15,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -106,7 +106,7 @@ describe("SessionV2.compact", () => {
 
       expect(second.id).toBe(first.id)
       expect(requests).toHaveLength(0)
-      expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, created.id)).toMatchObject({
+      expect(yield* SessionPending.compaction((yield* Database.Service).db, created.id)).toMatchObject({
         id: first.id,
       })
       expect((yield* session.context(created.id)).find((message) => message.id === first.id)).toBeUndefined()
