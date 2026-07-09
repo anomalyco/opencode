@@ -461,7 +461,7 @@ export const {
         .catch(() => emptyConsoleState)
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
-      const vcsPromise = sdk.client.vcs.get({ workspace }).then((x) => x.data)
+      const vcsPromise = sdk.client.vcs.get({ workspace }).then((x) => x.data).catch(() => undefined)
       await Promise.all([
         providersPromise,
         providerListPromise,
