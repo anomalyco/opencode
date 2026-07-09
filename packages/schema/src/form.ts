@@ -94,13 +94,13 @@ export const MultiselectField = Schema.Struct({
 }).annotate({ identifier: "Form.MultiselectField" })
 export interface MultiselectField extends Schema.Schema.Type<typeof MultiselectField> {}
 
-export const LinkField = Schema.Struct({
-  type: Schema.Literal("link"),
+export const ExternalField = Schema.Struct({
+  type: Schema.Literal("external"),
   url: Schema.String,
   title: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
-}).annotate({ identifier: "Form.LinkField" })
-export interface LinkField extends Schema.Schema.Type<typeof LinkField> {}
+}).annotate({ identifier: "Form.ExternalField" })
+export interface ExternalField extends Schema.Schema.Type<typeof ExternalField> {}
 
 export const Field = Schema.Union([
   StringField,
@@ -108,9 +108,9 @@ export const Field = Schema.Union([
   IntegerField,
   BooleanField,
   MultiselectField,
-  LinkField,
+  ExternalField,
 ]).pipe(Schema.toTaggedUnion("type"), Schema.annotate({ identifier: "Form.Field" }))
-export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField | LinkField
+export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField | ExternalField
 
 export const Fields = Schema.NonEmptyArray(Field).annotate({ identifier: "Form.Fields" })
 export type Fields = typeof Fields.Type

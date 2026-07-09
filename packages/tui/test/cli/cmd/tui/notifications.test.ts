@@ -77,15 +77,12 @@ function question(id: string, sessionID = "session"): QuestionRequest {
   }
 }
 
-function form(
-  id: string,
-  sessionID = "session",
-): Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"] {
+function form(id: string, sessionID = "session"): Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"] {
   return {
     id,
     sessionID,
     title: "Input requested",
-    fields: [{ type: "link", url: "https://example.com" }],
+    fields: [{ type: "external", url: "https://example.com" }],
   }
 }
 

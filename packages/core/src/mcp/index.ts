@@ -311,7 +311,7 @@ export const layer = Layer.effect(
                   elicitationID: input.params.elicitationId,
                   message: input.params.message,
                 },
-                fields: [{ type: "link", url: input.params.url }],
+                fields: [{ type: "external", url: input.params.url }],
               })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),

@@ -224,12 +224,14 @@ export const locationLayer = layer
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })
 
 function validateAnswer(form: Info, answer: Answer) {
-  const fields = new Map(form.fields.flatMap((field) => (field.type === "link" ? [] : [[field.key, field] as const])))
+  const fields = new Map(
+    form.fields.flatMap((field) => (field.type === "external" ? [] : [[field.key, field] as const])),
+  )
   for (const key of Object.keys(answer)) {
     if (!fields.has(key)) return `Unknown form field: ${key}`
   }
   for (const field of form.fields) {
-    if (field.type === "link") continue
+    if (field.type === "external") continue
     const value = answer[field.key]
     const active = isActive(field, answer)
     if (value === undefined) {
@@ -242,7 +244,7 @@ function validateAnswer(form: Info, answer: Answer) {
   }
 }
 
-type InputField = Exclude<Form.Field, Form.LinkField>
+type InputField = Exclude<Form.Field, Form.ExternalField>
 
 function isActive(field: InputField, answer: Answer) {
   if (!field.when) return true
@@ -265,7 +267,7 @@ function validateFields(fields: ReadonlyArray<Form.Field>) {
   if (fields.length === 0) return "Form must have at least one field"
   const earlier = new Map<string, InputField>()
   for (const field of fields) {
-    if (field.type === "link") continue
+    if (field.type === "external") continue
     if (earlier.has(field.key)) return `Duplicate form field key: ${field.key}`
     for (const when of field.when ?? []) {
       const target = earlier.get(when.key)

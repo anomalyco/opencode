@@ -58,13 +58,13 @@ describe("Form", () => {
       yield* service.reply({ id: created.id, answer: { name: "Ava" } })
       expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { name: "Ava" } })
 
-      const linkOnly = yield* service.create({
+      const externalOnly = yield* service.create({
         sessionID: "global",
         title: "External setup",
-        fields: [{ type: "link", url: "https://example.com/setup" }],
+        fields: [{ type: "external", url: "https://example.com/setup" }],
       })
-      yield* service.reply({ id: linkOnly.id, answer: {} })
-      expect(yield* service.state(linkOnly.id)).toEqual({ status: "answered", answer: {} })
+      yield* service.reply({ id: externalOnly.id, answer: {} })
+      expect(yield* service.state(externalOnly.id)).toEqual({ status: "answered", answer: {} })
     }),
   )
 
@@ -267,14 +267,14 @@ describe("Form", () => {
     }),
   )
 
-  it.effect("treats link fields as non-answerable", () =>
+  it.effect("treats external fields as non-answerable", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service
       const created = yield* service.create({
         sessionID: "global",
         title: "External setup",
         fields: [
-          { type: "link", url: "https://example.com/setup", title: "Open setup" },
+          { type: "external", url: "https://example.com/setup", title: "Open setup" },
           { key: "name", type: "string", required: true },
         ],
       })

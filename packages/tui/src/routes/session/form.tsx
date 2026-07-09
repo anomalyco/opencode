@@ -15,19 +15,19 @@ import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const FORM_MODE = "form"
 
-type Field = Exclude<FormField, { type: "link" }>
-type LinkField = Extract<FormField, { type: "link" }>
+type Field = Exclude<FormField, { type: "external" }>
+type ExternalField = Extract<FormField, { type: "external" }>
 
 function isField(field: FormField): field is Field {
-  return field.type !== "link"
+  return field.type !== "external"
 }
 
-function isLink(field: FormField): field is LinkField {
-  return field.type === "link"
+function isExternal(field: FormField): field is ExternalField {
+  return field.type === "external"
 }
 
 function fieldLabel(field: FormField) {
-  return field.title ?? (field.type === "link" ? field.url : field.key)
+  return field.title ?? (field.type === "external" ? field.url : field.key)
 }
 
 function truncate(label: string, max: number) {
@@ -193,7 +193,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
   const fields = createMemo(() => {
     const answers: Record<string, FormValue | undefined> = {}
     return props.form.fields.filter((field) => {
-      if (field.type === "link") return true
+      if (field.type === "external") return true
       const active = (field.when ?? []).every((when) => {
         const value = answers[when.key]
         if (value === undefined) return false
@@ -208,7 +208,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
     const list = fields()
     if (list.length !== 1) return false
     const field = list[0]!
-    if (field.type === "link") return false
+    if (field.type === "external") return false
     return field.type === "boolean" || (field.type === "string" && field.options !== undefined)
   })
   const answerable = createMemo(() => fields().filter(isField))
@@ -229,9 +229,9 @@ function FieldsPrompt(props: { form: FormInfo }) {
     const current = field()
     return current && isField(current) ? current : undefined
   })
-  const linkField = createMemo(() => {
+  const externalField = createMemo(() => {
     const current = field()
-    return current && isLink(current) ? current : undefined
+    return current && isExternal(current) ? current : undefined
   })
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
   const rows = createMemo(() => {
@@ -263,7 +263,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
   const multi = createMemo(() => answerField()?.type === "multiselect")
   const actionLabel = createMemo(() => {
     if (confirm()) return answerable().length === 0 ? "I finished" : "submit"
-    if (linkField()) return "open link"
+    if (externalField()) return "open link"
     if (multi()) return "toggle"
     if (single()) return "submit"
     return "confirm"
@@ -487,8 +487,8 @@ function FieldsPrompt(props: { form: FormInfo }) {
     void sdk.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
   }
 
-  function openLink() {
-    const current = linkField()
+  function openExternal() {
+    const current = externalField()
     if (!current) return
     const index = store.tab
     setStore("error", "")
@@ -497,8 +497,8 @@ function FieldsPrompt(props: { form: FormInfo }) {
       .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
   }
 
-  function copyLink() {
-    const current = linkField()
+  function copyExternal() {
+    const current = externalField()
     if (!current || !clipboard.write) return
     void clipboard
       .write(current.url)
@@ -657,10 +657,10 @@ function FieldsPrompt(props: { form: FormInfo }) {
           group: "Form",
           cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
-        ...(linkField()
+        ...(externalField()
           ? [
-              { key: "return", desc: "Open link", group: "Form", cmd: openLink },
-              { key: "c", desc: "Copy link", group: "Form", cmd: copyLink },
+              { key: "return", desc: "Open link", group: "Form", cmd: openExternal },
+              { key: "c", desc: "Copy link", group: "Form", cmd: copyExternal },
               { key: "escape", desc: "Dismiss form", group: "Form", cmd: cancel },
               ...tuiConfig.keybinds.get("app.exit"),
             ]
@@ -764,7 +764,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
-                const isAnswered = () => item.type !== "link" && store.answers[item.key] !== undefined
+                const isAnswered = () => item.type !== "external" && store.answers[item.key] !== undefined
                 return (
                   <box
                     paddingLeft={1}
@@ -808,23 +808,23 @@ function FieldsPrompt(props: { form: FormInfo }) {
           </box>
         </Show>
 
-        <Show when={!confirm() && linkField()}>
-          {(link) => (
+        <Show when={!confirm() && externalField()}>
+          {(external) => (
             <box paddingLeft={1} gap={1}>
-              <Show when={link().title}>
-                <text fg={theme.text}>{link().title}</text>
+              <Show when={external().title}>
+                <text fg={theme.text}>{external().title}</text>
               </Show>
-              <Show when={link().description}>
-                <text fg={theme.textMuted}>{link().description}</text>
+              <Show when={external().description}>
+                <text fg={theme.textMuted}>{external().description}</text>
               </Show>
               <text
                 fg={theme.primary}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
-                  openLink()
+                  openExternal()
                 }}
               >
-                {link().url}
+                {external().url}
               </text>
             </box>
           )}
@@ -1025,7 +1025,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
               {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
             </text>
           </Show>
-          <Show when={!confirm() && !textual() && !linkField()}>
+          <Show when={!confirm() && !textual() && !externalField()}>
             <text fg={theme.text}>
               {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
             </text>
@@ -1040,13 +1040,13 @@ function FieldsPrompt(props: { form: FormInfo }) {
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               if (confirm()) submit()
-              if (linkField()) openLink()
+              if (externalField()) openExternal()
             }}
           >
             enter <span style={{ fg: theme.textMuted }}>{actionLabel()}</span>
           </text>
-          <Show when={linkField() && clipboard.write}>
-            <text fg={theme.text} onMouseUp={copyLink}>
+          <Show when={externalField() && clipboard.write}>
+            <text fg={theme.text} onMouseUp={copyExternal}>
               c <span style={{ fg: theme.textMuted }}>copy</span>
             </text>
           </Show>

@@ -3545,8 +3545,8 @@ export type FormMultiselectField = {
   default?: Array<string>
 }
 
-export type FormLinkField = {
-  type: "link"
+export type FormExternalField = {
+  type: "external"
   url: string
   title?: string
   description?: string
@@ -3558,7 +3558,7 @@ export type FormField =
   | FormIntegerField
   | FormBooleanField
   | FormMultiselectField
-  | FormLinkField
+  | FormExternalField
 
 export type FormFields = Array<FormField>
 
@@ -10622,7 +10622,7 @@ export type FormField1 =
   | FormIntegerField1
   | FormBooleanField1
   | FormMultiselectField1
-  | FormLinkField
+  | FormExternalField
 
 export type FormFields1 = [FormField1, FormField1]
 

@@ -61,8 +61,8 @@ describe("contract hygiene", () => {
       Schema.decodeUnknownSync(Form.Info)({
         id: Form.ID.create(),
         sessionID: "global",
-        title: "Link form",
-        fields: [{ type: "link", url: "https://example.com" }],
+        title: "External form",
+        fields: [{ type: "external", url: "https://example.com" }],
       }).fields,
     ).toHaveLength(1)
   })
@@ -92,7 +92,7 @@ describe("contract hygiene", () => {
       Form.Field,
       Form.Fields,
       Form.Info,
-      Form.LinkField,
+      Form.ExternalField,
       Mcp.Resource,
       Mcp.ResourceTemplate,
       Mcp.ResourceCatalog,
