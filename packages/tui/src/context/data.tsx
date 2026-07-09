@@ -26,6 +26,7 @@ import type {
   SkillInfo,
   V2Event,
 } from "@opencode-ai/sdk/v2"
+import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
@@ -174,6 +175,30 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       const created = new Map<string, number>()
       messageIndex.set(sessionID, created)
       return created
+    }
+
+    // Delta batching: buffer incoming delta events for a short window and flush
+    // them in a single batched store update. This prevents UI freeze when large
+    // responses arrive in rapid bursts — each individual delta no longer triggers
+    // a separate re-render.
+    type DeltaEntry = { apply: () => void }
+    const deltaBuffer: DeltaEntry[] = []
+    let deltaTimer: ReturnType<typeof setTimeout> | undefined
+
+    function flushDeltaBuffer() {
+      deltaTimer = undefined
+      if (deltaBuffer.length === 0) return
+      const entries = deltaBuffer.splice(0)
+      batch(() => {
+        for (const entry of entries) entry.apply()
+      })
+    }
+
+    function bufferDelta(entry: DeltaEntry) {
+      deltaBuffer.push(entry)
+      if (!deltaTimer) {
+        deltaTimer = setTimeout(flushDeltaBuffer, 16)
+      }
     }
 
     // Walk parentID upward through loaded session info to the family root. When a
@@ -475,9 +500,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.text.delta":
-          message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-            if (match) match.text += event.data.delta
+          bufferDelta({
+            apply() {
+              message.update(event.data.sessionID, (draft, index) => {
+                const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
+                if (match) match.text += event.data.delta
+              })
+            },
           })
           break
         case "session.text.ended":
@@ -498,12 +527,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.tool.input.delta":
-          message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestTool(
-              message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
-            )
-            if (match?.state.status === "streaming") match.state.input += event.data.delta
+          bufferDelta({
+            apply() {
+              message.update(event.data.sessionID, (draft, index) => {
+                const match = message.latestTool(
+                  message.assistant(draft, index, event.data.assistantMessageID),
+                  event.data.callID,
+                )
+                if (match?.state.status === "streaming") match.state.input += event.data.delta
+              })
+            },
           })
           break
         case "session.tool.input.ended":
@@ -589,9 +622,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.reasoning.delta":
-          message.update(event.data.sessionID, (draft, index) => {
-            const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-            if (match) match.text += event.data.delta
+          bufferDelta({
+            apply() {
+              message.update(event.data.sessionID, (draft, index) => {
+                const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
+                if (match) match.text += event.data.delta
+              })
+            },
           })
           break
         case "session.reasoning.ended":
@@ -1117,6 +1154,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         handleEvent(details)
       }),
     )
+
+    onCleanup(() => {
+      if (deltaTimer) {
+        clearTimeout(deltaTimer)
+        flushDeltaBuffer()
+      }
+    })
 
     return result
   },
