@@ -198,11 +198,11 @@ const OpenAIResponsesStreamItem = Schema.Struct({
 })
 type OpenAIResponsesStreamItem = Schema.Schema.Type<typeof OpenAIResponsesStreamItem>
 
-// OpenAI Responses surfaces provider failures in two related shapes. The
-// streaming `error` event carries the details at the top level
-// (`{ type: "error", code, message, param, sequence_number }`), while
-// `response.failed` carries them under `response.error`. We capture both so
-// the parser can surface a useful provider-error message in either path.
+// The Responses schema puts streaming error details at the top level and
+// response failures under `response.error`. The official SDK also recognizes
+// an event-level HTTP-style `error` envelope, so accept all three shapes here.
+// https://github.com/openai/openai-openapi/blob/5162af98d3147432c14680df789e8e12d4891e6b/openapi.yaml#L67234-L67382
+// https://github.com/openai/openai-node/blob/61539248cbe04665de68a71e6fd878127ae4db87/src/core/streaming.ts#L58-L85
 const OpenAIResponsesErrorPayload = Schema.Struct({
   code: optionalNull(Schema.String),
   message: optionalNull(Schema.String),
@@ -227,10 +227,10 @@ const OpenAIResponsesEvent = Schema.Struct({
       [Schema.Record(Schema.String, Schema.Unknown)],
     ),
   ),
-  code: Schema.optional(Schema.String),
+  code: optionalNull(Schema.String),
   message: Schema.optional(Schema.String),
-  param: Schema.optional(Schema.String),
-  error: Schema.optional(OpenAIResponsesErrorPayload),
+  param: optionalNull(Schema.String),
+  error: optionalNull(OpenAIResponsesErrorPayload),
 })
 type OpenAIResponsesEvent = Schema.Schema.Type<typeof OpenAIResponsesEvent>
 
