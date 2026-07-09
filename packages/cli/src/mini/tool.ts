@@ -55,7 +55,6 @@ type ToolInput = ToolDict & {
   content?: string
   command?: string
   workdir?: string
-  todos?: Array<{ status?: string; content?: string }>
   questions?: Array<{ question?: string }>
   diff?: string
 }
@@ -122,7 +121,6 @@ type ToolName =
   | "patch"
   | "batch"
   | "task"
-  | "todowrite"
   | "question"
   | "read"
   | "glob"
@@ -398,25 +396,6 @@ function runTask(p: ToolProps): ToolInline {
   }
 }
 
-function runTodo(p: ToolProps): ToolInline {
-  return {
-    icon: "#",
-    title: "Todos",
-    mode: "block",
-    body: list<{ status?: string; content?: string }>(p.frame.input.todos)
-      .flatMap((item) => {
-        const body = typeof item?.content === "string" ? item.content : ""
-        if (!body) {
-          return []
-        }
-
-        const mark = item.status === "completed" ? "[✓]" : item.status === "in_progress" ? "[•]" : "[ ]"
-        return [`${mark} ${body}`]
-      })
-      .join("\n"),
-  }
-}
-
 function runSkill(p: ToolProps): ToolInline {
   return {
     icon: "→",
@@ -600,28 +579,6 @@ function snapTask(p: ToolProps): ToolSnapshot {
     kind: "task",
     title: `# ${kind} Task`,
     rows,
-    tail: "",
-  }
-}
-
-function snapTodo(p: ToolProps): ToolSnapshot {
-  const items = list<{ status?: string; content?: string }>(p.frame.input.todos).flatMap((item) => {
-    const content = typeof item?.content === "string" ? item.content : ""
-    if (!content) {
-      return []
-    }
-
-    return [
-      {
-        status: typeof item.status === "string" ? item.status : "",
-        content,
-      },
-    ]
-  })
-
-  return {
-    kind: "todo",
-    items,
     tail: "",
   }
 }
@@ -812,42 +769,6 @@ function scrollTaskFinal(p: ToolProps): string {
   }
 
   return `# ${kind} Task\n${row}`
-}
-
-function scrollTodoStart(_: ToolProps): string {
-  return ""
-}
-
-function scrollTodoFinal(p: ToolProps): string {
-  const items = list<{ status?: string }>(p.input.todos)
-  const time = span(p.frame.state)
-  if (items.length === 0) {
-    if (!time) {
-      return "0 todos"
-    }
-
-    return `0 todos · ${time}`
-  }
-
-  const doneN = items.filter((item) => item.status === "completed").length
-  const runN = items.filter((item) => item.status === "in_progress").length
-  const left = items.length - doneN - runN
-  const tail = [`${items.length} total`]
-  if (doneN > 0) {
-    tail.push(`${doneN} done`)
-  }
-  if (runN > 0) {
-    tail.push(`${runN} active`)
-  }
-  if (left > 0) {
-    tail.push(`${left} pending`)
-  }
-
-  if (time) {
-    tail.push(time)
-  }
-
-  return tail.join(" · ")
 }
 
 function scrollQuestionStart(_: ToolProps): string {
@@ -1130,19 +1051,6 @@ const TOOL_RULES = {
       final: scrollTaskFinal,
     },
     permission: permTask,
-  },
-  todowrite: {
-    view: {
-      output: false,
-      final: true,
-      snap: "structured",
-    },
-    run: runTodo,
-    snap: snapTodo,
-    scroll: {
-      start: scrollTodoStart,
-      final: scrollTodoFinal,
-    },
   },
   question: {
     view: {

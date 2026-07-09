@@ -154,7 +154,6 @@ Le serveur opencode expose les API suivantes.
 | `DELETE` | `/session/:id`                           | Supprimer une session et toutes ses données           | Renvoie `boolean`                                                                    |
 | `PATCH`  | `/session/:id`                           | Mettre à jour les propriétés de la session            | corps : `{ title? }`, renvoie <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | Obtenir les sessions enfants d'une session            | Renvoie <a href={typesUrl}><code>Session[]</code></a>                                |
-| `GET`    | `/session/:id/todo`                      | Obtenez la liste de tâches pour une session           | Renvoie <a href={typesUrl}><code>Todo[]</code></a>                                   |
 | `POST`   | `/session/:id/init`                      | Analysez l'application et créez `AGENTS.md`           | corps : `{ messageID, providerID, modelID }`, renvoie `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Forkez une session existante à un message             | corps : `{ messageID? }`, renvoie <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Abandonner une session en cours                       | Renvoie `boolean`                                                                    |

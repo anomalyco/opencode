@@ -154,7 +154,6 @@ http://<hostname>:<port>/doc
 | `DELETE` | `/session/:id`                           | ลบเซสชันและข้อมูลทั้งหมด           | ส่งคืน `boolean`                                                                 |
 | `PATCH`  | `/session/:id`                           | อัปเดตคุณสมบัติเซสชัน              | body: `{ title? }` ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>             |
 | `GET`    | `/session/:id/children`                  | รับเซสชันย่อยของเซสชัน             | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                              |
-| `GET`    | `/session/:id/todo`                      | รับรายการสิ่งที่ต้องทำสำหรับเซสชัน | ส่งคืน <a href={typesUrl}><code>สิ่งที่ต้องทำ[]</code></a>                       |
 | `POST`   | `/session/:id/init`                      | วิเคราะห์แอปและสร้าง `AGENTS.md`   | เนื้อความ: `{ messageID, providerID, modelID }` ส่งคืน `boolean`                 |
 | `POST`   | `/session/:id/fork`                      | แยกเซสชันที่มีอยู่ไปที่ข้อความ     | body: `{ messageID? }` ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>         |
 | `POST`   | `/session/:id/abort`                     | ยกเลิกเซสชันที่ทำงานอยู่           | ส่งคืน `boolean`                                                                 |

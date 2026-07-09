@@ -154,7 +154,6 @@ For example, `http://localhost:4096/doc`. Use the spec to generate clients or in
 | `DELETE` | `/session/:id`                           | Удалить сессию и все её данные           | Возвращает `boolean`                                                                  |
 | `PATCH`  | `/session/:id`                           | Обновить свойства сессии                 | body: `{ title? }`, возвращает <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | Получить дочерние сессии                 | Возвращает <a href={typesUrl}><code>Session[]</code></a>                              |
-| `GET`    | `/session/:id/todo`                      | Получить список задач для сессии         | Возвращает <a href={typesUrl}><code>Todo[]</code></a>                                 |
 | `POST`   | `/session/:id/init`                      | Анализ приложения и создание `AGENTS.md` | body: `{ messageID, providerID, modelID }`, возвращает `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Ответвление сессии от сообщения          | body: `{ messageID? }`, возвращает <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Прервать запущенную сессию               | Возвращает `boolean`                                                                  |

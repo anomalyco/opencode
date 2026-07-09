@@ -71,7 +71,7 @@ Questo agente è utile quando vuoi che l'LLM analizzi il codice, suggerisca modi
 
 _Mode_: `subagent`
 
-Un agente general-purpose per ricercare domande complesse ed eseguire task multi-step. Ha accesso completo agli strumenti (tranne todo), quindi può modificare file quando serve. Usalo per eseguire più unità di lavoro in parallelo.
+Un agente general-purpose per ricercare domande complesse ed eseguire task multi-step. Ha accesso completo agli strumenti, quindi può modificare file quando serve. Usalo per eseguire più unità di lavoro in parallelo.
 
 ---
 

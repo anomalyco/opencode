@@ -104,11 +104,8 @@ function summaryDiff(value: SummaryDiffInput): value is SummaryDiff {
   )
 }
 
-const hidden = new Set(["todowrite"])
-
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
-    if (hidden.has(part.tool)) return
     if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
     return "visible" as const
   }

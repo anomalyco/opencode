@@ -72,7 +72,7 @@ Cet agent est utile lorsque vous souhaitez que le LLM analyse le code, suggère 
 
 _Mode_ : `subagent`
 
-Un agent polyvalent pour traiter des questions complexes et exécuter des tâches en plusieurs étapes. Dispose d'un accès complet aux outils (sauf todo), il peut donc apporter des modifications aux fichiers en cas de besoin. Utilisez-le pour exécuter plusieurs unités de travail en parallèle.
+Un agent polyvalent pour traiter des questions complexes et exécuter des tâches en plusieurs étapes. Dispose d'un accès complet aux outils, il peut donc apporter des modifications aux fichiers en cas de besoin. Utilisez-le pour exécuter plusieurs unités de travail en parallèle.
 
 ---
 

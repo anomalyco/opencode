@@ -399,25 +399,6 @@ const TOOL_SAMPLES = {
     title: "playwriter",
     metadata: {},
   },
-  todowrite: {
-    tool: "todowrite",
-    input: {
-      todos: [
-        { content: "Create data generators", status: "completed", priority: "high" },
-        { content: "Build UI controls", status: "in_progress", priority: "high" },
-        { content: "Add CSS export", status: "pending", priority: "medium" },
-      ],
-    },
-    output: "",
-    title: "Todos",
-    metadata: {
-      todos: [
-        { content: "Create data generators", status: "completed", priority: "high" },
-        { content: "Build UI controls", status: "in_progress", priority: "high" },
-        { content: "Add CSS export", status: "pending", priority: "medium" },
-      ],
-    },
-  },
 }
 
 // ---------------------------------------------------------------------------

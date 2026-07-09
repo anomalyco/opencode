@@ -16,7 +16,6 @@ import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
 import { PersistedRevert } from "../src/session-revert.js"
-import { SessionTodo } from "../src/session-todo.js"
 import { optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
@@ -52,15 +51,6 @@ describe("contract hygiene", () => {
         settings: { invalid: 1n },
       }),
     ).toThrow()
-  })
-
-  test("todo status and priority preserve arbitrary strings", () => {
-    const decode = Schema.decodeUnknownSync(SessionTodo.Info)
-    expect(decode({ content: "ship", status: "waiting", priority: "urgent" })).toEqual({
-      content: "ship",
-      status: "waiting",
-      priority: "urgent",
-    })
   })
 
   test("current ID constructors expose create", () => {

@@ -1327,23 +1327,6 @@ const scenarios: Scenario[] = [
       )
     }),
   http.protected
-    .get("/session/{sessionID}/todo", "session.todo")
-    .seeded((ctx) =>
-      Effect.gen(function* () {
-        const session = yield* ctx.session({ title: "Todo session" })
-        const todos = [{ content: "cover session todo", status: "pending" as const, priority: "high" as const }]
-        yield* ctx.todos(session.id, todos)
-        return { session, todos }
-      }),
-    )
-    .at((ctx) => ({
-      path: route("/session/{sessionID}/todo", { sessionID: ctx.state.session.id }),
-      headers: ctx.headers(),
-    }))
-    .json(200, (body, ctx) => {
-      check(stable(body) === stable(ctx.state.todos), "todos should match seeded state")
-    }),
-  http.protected
     .get("/session/{sessionID}/diff", "session.diff")
     .seeded((ctx) => ctx.session({ title: "Diff session" }))
     .at((ctx) => ({ path: route("/session/{sessionID}/diff", { sessionID: ctx.state.id }), headers: ctx.headers() }))

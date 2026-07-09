@@ -72,7 +72,7 @@ Denne agent er nyttig, når du vil have LLM til at analysere kode, foreslå ænd
 
 _Tilstand_: `subagent`
 
-En agent til generelt formål at undersøge komplekse spørgsmål og udføre opgaver i flere trin. Har fuld værktøjsadgang (undtagen todo), så den kan foretage filændringer, når det er nødvendigt. Brug dette til at køre flere arbejdsenheder parallelt.
+En agent til generelt formål at undersøge komplekse spørgsmål og udføre opgaver i flere trin. Har fuld værktøjsadgang, så den kan foretage filændringer, når det er nødvendigt. Brug dette til at køre flere arbejdsenheder parallelt.
 
 ---
 

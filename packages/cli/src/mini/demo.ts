@@ -10,7 +10,7 @@
 //   /permission [kind] → triggers a permission request variant
 //   /question [kind]   → triggers a question request variant
 //   /fmt <kind>   → emits a specific tool/text type (text, reasoning, bash,
-//                   write, edit, patch, task, todo, question, error, mix)
+//                   write, edit, patch, task, question, error, mix)
 //
 // Demo mode also handles permission and question replies locally, completing
 // or failing the synthetic tool parts as appropriate.
@@ -30,7 +30,6 @@ const KINDS = [
   "edit",
   "patch",
   "task",
-  "todo",
   "question",
   "error",
   "mix",
@@ -733,30 +732,6 @@ function emitTask(state: State): void {
   })
 }
 
-function emitTodo(state: State): void {
-  const ref = make(state, "todowrite", {
-    todos: [
-      {
-        content: "Trigger permission UI",
-        status: "completed",
-      },
-      {
-        content: "Trigger question UI",
-        status: "in_progress",
-      },
-      {
-        content: "Tune tool formatting",
-        status: "pending",
-      },
-    ],
-  })
-  doneTool(state, ref, {
-    title: "todowrite",
-    output: "",
-    metadata: {},
-  })
-}
-
 function emitQuestionTool(state: State): void {
   const ref = make(state, "question", {
     questions: [
@@ -952,7 +927,6 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
           options: [
             { label: "Diff", description: "Show an edit diff in the footer" },
             { label: "Task", description: "Show a structured task summary" },
-            { label: "Todo", description: "Show a todo snapshot" },
             { label: "Error", description: "Show an error transcript row" },
           ],
           multiple: true,
@@ -992,7 +966,6 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
         options: [
           { label: "Diff", description: "Emit edit diff" },
           { label: "Task", description: "Emit task card" },
-          { label: "Todo", description: "Emit todo card" },
         ],
         multiple: true,
         custom: true,
@@ -1066,11 +1039,6 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
     return true
   }
 
-  if (kind === "todo") {
-    emitTodo(state)
-    return true
-  }
-
   if (kind === "question") {
     emitQuestionTool(state)
     return true
@@ -1091,7 +1059,6 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
     emitEdit(state)
     emitPatch(state)
     emitTask(state)
-    emitTodo(state)
     emitQuestionTool(state)
     emitError(state, "demo mixed scenario error")
     return true

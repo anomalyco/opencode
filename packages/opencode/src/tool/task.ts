@@ -117,9 +117,6 @@ export const TaskTool = Tool.define(
         subagent: next,
       })
       const childToolDenies = [
-        ...(next.permission.some((rule) => rule.permission === "todowrite")
-          ? []
-          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
         ...(next.permission.some((rule) => rule.permission === id)
           ? []
           : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),

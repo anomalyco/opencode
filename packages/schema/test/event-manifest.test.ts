@@ -19,7 +19,6 @@ import { Plugin } from "../src/plugin.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
 import { SessionMessage } from "../src/session-message.js"
-import { SessionTodo } from "../src/session-todo.js"
 import { SessionV1 } from "../src/session-v1.js"
 import { WorkspaceEvent } from "../src/workspace-event.js"
 
@@ -54,7 +53,6 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
-    expect(EventManifest.Server.has("todo.updated")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })
@@ -65,7 +63,6 @@ describe("public event manifest", () => {
     expect(Workspace.Event).toBe(WorkspaceEvent)
     expect(Workspace.Event.Definitions).toBe(WorkspaceEvent.Definitions)
     expect(EventManifest.Latest.get("session.step.ended")).toBe(SessionEvent.Step.Ended)
-    expect(EventManifest.Latest.get("todo.updated")).toBe(SessionTodo.Event.Updated)
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Latest.get("project.updated")).toBe(Project.Event.Updated)
     expect(Agent.Event.Definitions).toEqual([Agent.Event.Updated])

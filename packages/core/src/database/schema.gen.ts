@@ -228,19 +228,6 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`todo\` (
-          \`session_id\` text NOT NULL,
-          \`content\` text NOT NULL,
-          \`status\` text NOT NULL,
-          \`priority\` text NOT NULL,
-          \`position\` integer NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`todo_pk\` PRIMARY KEY(\`session_id\`, \`position\`),
-          CONSTRAINT \`fk_todo_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`session_share\` (
           \`session_id\` text PRIMARY KEY,
           \`id\` text NOT NULL,
@@ -286,7 +273,6 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
-      yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">

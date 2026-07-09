@@ -272,10 +272,6 @@ describe("session HttpApi", () => {
         expect(children.status).toBe(404)
         expect(yield* responseJson(children)).toEqual(missingSessionBody)
 
-        const todo = yield* request(pathFor(SessionPaths.todo, { sessionID: missingSession }), { headers })
-        expect(todo.status).toBe(404)
-        expect(yield* responseJson(todo)).toEqual(missingSessionBody)
-
         const messages = yield* request(pathFor(SessionPaths.messages, { sessionID: missingSession }), { headers })
         expect(messages.status).toBe(404)
         expect(yield* responseJson(messages)).toEqual(missingSessionBody)
@@ -343,10 +339,6 @@ describe("session HttpApi", () => {
             headers,
           })).map((item) => item.id),
         ).toEqual([child.id])
-
-        expect(
-          yield* requestJson<unknown[]>(pathFor(SessionPaths.todo, { sessionID: parent.id }), { headers }),
-        ).toEqual([])
 
         expect(
           yield* requestJson<unknown[]>(pathFor(SessionPaths.diff, { sessionID: parent.id }), { headers }),

@@ -138,8 +138,6 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "Веб-пошук",
   "ui.tool.shell": "Оболонка",
   "ui.tool.patch": "Патч",
-  "ui.tool.todos": "Завдання",
-  "ui.tool.todos.read": "Читати завдання",
   "ui.tool.questions": "Питання",
   "ui.tool.agent": "Агент {{type}}",
   "ui.tool.agent.default": "Агент",

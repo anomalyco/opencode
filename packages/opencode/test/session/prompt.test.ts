@@ -24,7 +24,6 @@ import { Git } from "../../src/git"
 import { Image } from "../../src/image/image"
 
 import { Question } from "../../src/question"
-import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { LLM } from "../../src/session/llm"
@@ -191,7 +190,6 @@ const promptRoot = LayerNode.group([
   Database.node,
   EventV2Bridge.node,
   Question.node,
-  Todo.node,
   ToolRegistry.node,
   Skill.node,
   Git.node,

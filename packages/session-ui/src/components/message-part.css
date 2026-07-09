@@ -590,27 +590,6 @@
   }
 }
 
-[data-component="todos"] {
-  padding: 10px 0 24px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-
-  [data-component="checkbox"] {
-    --checkbox-align: flex-start;
-    --checkbox-offset: 0.5px;
-  }
-
-  [data-slot="message-part-todo-content"] {
-    line-height: var(--line-height-normal);
-
-    &[data-completed="completed"] {
-      text-decoration: line-through;
-      color: var(--v2-text-text-faint);
-    }
-  }
-}
-
 [data-component="context-tool-group-trigger"] {
   width: 100%;
   min-height: 24px;
@@ -694,7 +673,6 @@
 [data-component="bash-output"],
 [data-component="edit-content"],
 [data-component="write-content"],
-[data-component="todos"],
 [data-component="diagnostics"],
 .error-card {
   -webkit-user-select: text;
@@ -1387,10 +1365,6 @@ body:not([data-new-layout]) {
   [data-slot="exa-tool-link"]:hover,
   [data-slot="exa-tool-link"]:visited {
     color: var(--text-interactive-base);
-  }
-
-  [data-slot="message-part-todo-content"][data-completed="completed"] {
-    color: var(--text-weaker);
   }
 
   [data-component="diagnostics"] {

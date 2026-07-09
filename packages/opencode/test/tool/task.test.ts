@@ -388,7 +388,7 @@ describe("tool.task", () => {
   )
 
   it.instance(
-    "execute shapes child permissions for task, todowrite, and primary tools",
+    "execute shapes child permissions for task and primary tools",
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
@@ -420,11 +420,6 @@ describe("tool.task", () => {
         expect(child.parentID).toBe(chat.id)
         expect(child.agent).toBe("reviewer")
         expect(child.permission).toEqual([
-          {
-            permission: "todowrite",
-            pattern: "*",
-            action: "deny",
-          },
           {
             permission: "bash",
             pattern: "*",

@@ -106,8 +106,6 @@ export const dict = {
   "ui.tool.websearch": "웹 검색",
   "ui.tool.shell": "셸",
   "ui.tool.patch": "패치",
-  "ui.tool.todos": "할 일",
-  "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
   "ui.tool.agent": "{{type}} 에이전트",
   "ui.tool.agent.default": "에이전트",

@@ -58,7 +58,7 @@ Dieser Agent ist nützlich, wenn Sie möchten, dass LLM Code analysiert, Änderu
 
 _Modus_: `subagent`
 
-Ein Allzweckagent zur Recherche komplexerer Fragen und zur Ausführung mehrstufiger Aufgaben. Verfügt über vollständigen Zugriff auf das Tool (außer Todo), sodass bei Bedarf Dateiänderungen vorgenommen werden können. Verwenden Sie Matrizen, um mehrere Arbeitseinheiten parallel auszuführen.
+Ein Allzweckagent zur Recherche komplexerer Fragen und zur Ausführung mehrstufiger Aufgaben. Verfügt über vollständigen Zugriff auf das Tool, sodass bei Bedarf Dateiänderungen vorgenommen werden können. Verwenden Sie Matrizen, um mehrere Arbeitseinheiten parallel auszuführen.
 
 ---
 

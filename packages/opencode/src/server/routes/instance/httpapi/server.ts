@@ -38,7 +38,6 @@ import { SessionRunState } from "@/session/run-state"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
-import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
 import { Skill } from "@/skill"
@@ -233,7 +232,6 @@ const app = LayerNode.group([
   Question.node,
   Permission.node,
   PermissionSaved.node,
-  Todo.node,
   Session.node,
   SessionProjector.node,
   SessionStatus.node,

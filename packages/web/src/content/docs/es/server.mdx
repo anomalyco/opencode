@@ -154,7 +154,6 @@ El servidor opencode expone las siguientes API.
 | `DELETE` | `/session/:id`                           | Eliminar una sesión y todos sus datos                  | Devuelve `boolean`                                                                    |
 | `PATCH`  | `/session/:id`                           | Actualizar propiedades de sesión                       | cuerpo: `{ title? }`, devuelve <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | Obtener las sesiones secundarias de una sesión         | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                |
-| `GET`    | `/session/:id/todo`                      | Obtener la lista de tareas pendientes para una sesión  | Devuelve <a href={typesUrl}><code>Todo[]</code></a>                                   |
 | `POST`   | `/session/:id/init`                      | Analizar aplicación y crear `AGENTS.md`                | cuerpo: `{ messageID, providerID, modelID }`, devuelve `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Bifurca una sesión existente en un mensaje             | cuerpo: `{ messageID? }`, devuelve <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Cancelar una sesión en ejecución                       | Devuelve `boolean`                                                                    |

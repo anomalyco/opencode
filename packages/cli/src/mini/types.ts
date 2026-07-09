@@ -199,15 +199,6 @@ export type ToolTaskSnapshot = {
   tail: string
 }
 
-export type ToolTodoSnapshot = {
-  kind: "todo"
-  items: Array<{
-    status: string
-    content: string
-  }>
-  tail: string
-}
-
 export type ToolQuestionSnapshot = {
   kind: "question"
   items: Array<{
@@ -217,12 +208,7 @@ export type ToolQuestionSnapshot = {
   tail: string
 }
 
-export type ToolSnapshot =
-  | ToolCodeSnapshot
-  | ToolDiffSnapshot
-  | ToolTaskSnapshot
-  | ToolTodoSnapshot
-  | ToolQuestionSnapshot
+export type ToolSnapshot = ToolCodeSnapshot | ToolDiffSnapshot | ToolTaskSnapshot | ToolQuestionSnapshot
 
 export type EntryLayout = "inline" | "block"
 
