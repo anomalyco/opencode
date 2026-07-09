@@ -108,7 +108,7 @@ function Probe(props: {
 describe("useEvent", () => {
   test("logs only durable events", async () => {
     const logs: Array<{ message: string; tags: Readonly<Record<string, unknown>> }> = []
-    const { app, emit, sdk, seen } = await mount(undefined, (_level, message, tags) => {
+    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => {
       if (message === "event") logs.push({ message, tags })
     })
     const durable = event(
@@ -133,7 +133,6 @@ describe("useEvent", () => {
           tags: { component: "sdk", type: "session.renamed", aggregateID: "ses_test", seq: 1 },
         },
       ])
-      expect(sdk.event.history().filter((event) => event.type !== "client.connection")).toEqual([durable])
     } finally {
       app.renderer.destroy()
     }
@@ -205,7 +204,7 @@ describe("useEvent", () => {
 
       expect(sdk.client).toBe(replacement.client)
       expect(sdk.api).toBe(replacement.api)
-      const history = sdk.event.history().filter((event) => event.type === "client.connection")
+      const history = sdk.connection.history()
       expect(history.map((event) => [event.data.status, event.data.attempt])).toEqual([
         ["connecting", 0],
         ["connected", 0],
@@ -219,33 +218,21 @@ describe("useEvent", () => {
     }
   })
 
-  test("keeps the latest 500 recorded events and logs dropped events", async () => {
-    const dropped: Readonly<Record<string, unknown>>[] = []
-    const { app, emit, sdk, seen } = await mount(undefined, (_level, message, tags) => {
-      if (message === "event history dropped oldest event") dropped.push(tags)
-    })
+  test("keeps the latest 50 connection events", async () => {
+    const { app, events, sdk } = await mount()
 
     try {
-      Array.from({ length: 500 }, (_, index) => index + 1).forEach((seq) => {
-        emit(
-          event(
-            {
-              id: `evt_renamed_${seq}`,
-              created: seq,
-              type: "session.renamed",
-              durable: { aggregateID: "ses_test", seq, version: 1 },
-              data: { sessionID: "ses_test", title: `Renamed ${seq}` },
-            },
-            { directory: "/tmp/project" },
-          ),
-        )
-      })
-      await wait(() => seen.length === 500, 5_000)
+      await wait(() => sdk.connection.status() === "connected")
+      for (const _ of Array.from({ length: 17 })) {
+        events.disconnect()
+        await wait(() => sdk.connection.status() === "reconnecting")
+        await wait(() => sdk.connection.status() === "connected")
+      }
 
-      expect(sdk.event.history()).toHaveLength(500)
-      expect(sdk.event.history().every((event) => event.type === "session.renamed")).toBe(true)
-      expect(dropped).toHaveLength(2)
-      expect(dropped[0]).toMatchObject({ component: "sdk", type: "client.connection", limit: 500 })
+      const history = sdk.connection.history()
+      expect(history).toHaveLength(50)
+      expect(history[0]?.data.status).toBe("reconnecting")
+      expect(history.at(-1)?.data.status).toBe("connected")
     } finally {
       app.renderer.destroy()
     }

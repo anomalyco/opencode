@@ -777,7 +777,20 @@ export function Session() {
                 )
               : await (async () => {
                   if (options.debug) {
-                    return JSON.stringify({ info: sessionData, events: sdk.event.history() }, null, 2) + EOL
+                    const events: { readonly created: number }[] = []
+                    for await (const event of sdk.api.session.log({ sessionID: sessionData.id, follow: false })) {
+                      if (event.type !== "log.synced") events.push(event)
+                    }
+                    // Durable events stay in aggregate order even when their wall-clock timestamps differ.
+                    sdk.connection.history().forEach((event) => {
+                      const index = events.findIndex((item) => item.created > event.created)
+                      if (index === -1) {
+                        events.push(event)
+                        return
+                      }
+                      events.splice(index, 0, event)
+                    })
+                    return JSON.stringify({ info: sessionData, events }, null, 2) + EOL
                   }
 
                   const messages: unknown[] = []
