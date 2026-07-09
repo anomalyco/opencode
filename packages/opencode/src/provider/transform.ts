@@ -734,7 +734,6 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       high: { reasoningEffort: "high" },
     }
   }
-  if (id.includes("grok")) return {}
 
   switch (model.api.npm) {
     case "@openrouter/ai-sdk-provider":
