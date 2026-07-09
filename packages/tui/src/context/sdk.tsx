@@ -16,10 +16,11 @@ export type SDKConnectionEvent = {
     readonly error?: string
   }
 }
+export type SDKRecordedEvent = SDKConnectionEvent | V2Event
 
 type SDKEventMap = { [Type in V2Event["type"]]: Extract<V2Event, { type: Type }> }
 const connectTimeout = 2_000
-const connectionHistoryLimit = 100
+const eventHistoryLimit = 500
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
@@ -32,7 +33,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   }) => {
     const log = useLog({ component: "sdk" })
     const abort = new AbortController()
-    const history: SDKConnectionEvent[] = []
+    const history: SDKRecordedEvent[] = []
     let client = props.client
     let api = props.api
     const events = createGlobalEmitter<SDKEventMap>()
@@ -46,9 +47,20 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     })
     let stream: AbortController | undefined
 
-    function record(status: SDKConnectionEvent["data"]["status"], attempt: number, error?: string) {
-      history.push({ type: "client.connection", created: Date.now(), data: { status, attempt, error } })
-      if (history.length > connectionHistoryLimit) history.shift()
+    function record(event: SDKRecordedEvent) {
+      history.push(event)
+      if (history.length <= eventHistoryLimit) return
+      const dropped = history.shift()
+      if (!dropped) return
+      log.info("event history dropped oldest event", {
+        type: dropped.type,
+        created: dropped.created,
+        limit: eventHistoryLimit,
+      })
+    }
+
+    function recordConnection(status: SDKConnectionEvent["data"]["status"], attempt: number, error?: string) {
+      record({ type: "client.connection", created: Date.now(), data: { status, attempt, error } })
     }
 
     function start() {
@@ -70,7 +82,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           )
           controller.signal.addEventListener("abort", cancel, { once: true })
           const error = await (async () => {
-            record(attempt === 0 ? "connecting" : "reconnecting", attempt)
+            recordConnection(attempt === 0 ? "connecting" : "reconnecting", attempt)
             log.info("event stream connecting", { attempt })
             const response = await client.v2.event.subscribe({
               signal: connection.signal,
@@ -87,7 +99,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             if (first.value.type !== "server.connected")
               return new Error("Event stream did not start with server.connected")
             clearTimeout(timeout)
-            record("connected", attempt)
+            recordConnection("connected", attempt)
             attempt = 0
             log.info("event stream connected")
             events.emit(first.value.type, first.value)
@@ -97,12 +109,14 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
               const event = await iterator.next()
               if (abort.signal.aborted || controller.signal.aborted) return
               if (event.done) return new Error("Event stream disconnected")
-              if ("durable" in event.value)
+              if ("durable" in event.value) {
+                record(event.value)
                 log.info("event", {
                   type: event.value.type,
                   aggregateID: event.value.durable.aggregateID,
                   seq: event.value.durable.seq,
                 })
+              }
               events.emit(event.value.type, event.value)
             }
           })()
@@ -114,7 +128,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           if (abort.signal.aborted || controller.signal.aborted) return
           attempt += 1
           const message = error instanceof Error ? error.message : String(error)
-          record("disconnected", attempt, message)
+          recordConnection("disconnected", attempt, message)
           log.info("event stream disconnected", {
             attempt,
             error: message,
@@ -158,6 +172,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       event: {
         on: events.on,
         listen: events.listen,
+        history() {
+          return history.slice()
+        },
       },
       connection: {
         status() {
@@ -168,9 +185,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         },
         error() {
           return connection.error
-        },
-        history() {
-          return history.slice()
         },
       },
       reload: props.reload,
