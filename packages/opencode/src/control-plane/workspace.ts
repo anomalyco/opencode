@@ -785,12 +785,19 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceV2.ID) {
-      yield* db
-        .update(SessionTable)
-        .set({ workspace_id: null, directory: "" })
+      const sessions = yield* db
+        .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
+        .from(SessionTable)
         .where(eq(SessionTable.workspace_id, id))
-        .run()
+        .all()
         .pipe(Effect.orDie)
+      const sessionIDs = new Set(sessions.map((sessionInfo) => sessionInfo.id))
+      yield* Effect.forEach(
+        sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
+        (sessionInfo) =>
+          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
+        { discard: true },
+      )
 
       const row = yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return
