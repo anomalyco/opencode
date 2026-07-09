@@ -1083,6 +1083,14 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
+    .get("/api/session/{sessionID}/pending", "v2.session.pending.list")
+    .seeded((ctx) => ctx.session({ title: "Pending list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/pending", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, data(array)),
+  http.protected
     .post("/api/session/{sessionID}/revert/stage", "v2.session.revert.stage")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/revert/stage", { sessionID: "ses_httpapi_missing" }),

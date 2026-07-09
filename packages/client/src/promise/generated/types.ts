@@ -1145,6 +1145,60 @@ export type SessionContextOutput = {
   >
 }["data"]
 
+export type SessionPendingListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionPendingListOutput = {
+  readonly data: ReadonlyArray<
+    | {
+        readonly admittedSeq: number
+        readonly id: string
+        readonly sessionID: string
+        readonly timeCreated: number
+        readonly promotedSeq?: number
+        readonly type: "user"
+        readonly data: {
+          readonly text: string
+          readonly files?: ReadonlyArray<{
+            readonly data: string
+            readonly mime: string
+            readonly source: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
+            readonly name?: string
+            readonly description?: string
+            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+          }>
+          readonly agents?: ReadonlyArray<{
+            readonly name: string
+            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+          }>
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+        readonly delivery: "steer" | "queue"
+      }
+    | {
+        readonly admittedSeq: number
+        readonly id: string
+        readonly sessionID: string
+        readonly timeCreated: number
+        readonly promotedSeq?: number
+        readonly type: "synthetic"
+        readonly data: {
+          readonly text: string
+          readonly description?: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+        readonly delivery: "steer" | "queue"
+      }
+    | {
+        readonly admittedSeq: number
+        readonly id: string
+        readonly sessionID: string
+        readonly timeCreated: number
+        readonly type: "compaction"
+        readonly handledSeq?: number
+      }
+  >
+}["data"]
+
 export type SessionInstructionsEntryListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionInstructionsEntryListOutput = { data: Array<{ key: string; value: JsonValue }> }["data"]

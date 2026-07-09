@@ -926,3 +926,58 @@ describe("SessionV2.prompt", () => {
     }),
   )
 })
+
+describe("SessionV2.pending", () => {
+  it.effect("fails for an unknown session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      expect(yield* session.pending(SessionV2.ID.make("ses_missing")).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.NotFoundError",
+      })
+    }),
+  )
+
+  it.effect("lists admitted work in admission order until promotion", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+
+      const first = yield* session.prompt({ sessionID, text: "First steer", resume: false })
+      const queued = yield* session.synthetic({
+        sessionID,
+        text: "Queued completion",
+        delivery: "queue",
+        resume: false,
+      })
+      const second = yield* session.prompt({ sessionID, text: "Second steer", resume: false })
+
+      expect(yield* session.pending(sessionID)).toMatchObject([
+        { id: first.id, type: "user", delivery: "steer" },
+        { id: queued.id, type: "synthetic", delivery: "queue" },
+        { id: second.id, type: "user", delivery: "steer" },
+      ])
+
+      yield* SessionInput.promoteSteers(db, events, sessionID)
+      expect(yield* session.pending(sessionID)).toMatchObject([{ id: queued.id, type: "synthetic" }])
+
+      yield* SessionInput.promoteNextQueued(db, events, sessionID)
+      expect(yield* session.pending(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("lists an unhandled compaction barrier until it settles", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+
+      const barrier = yield* session.compact({ sessionID })
+      expect(yield* session.pending(sessionID)).toMatchObject([{ id: barrier.id, type: "compaction" }])
+
+      yield* SessionInput.settleCompaction(db, { sessionID, handledSeq: barrier.admittedSeq + 1 })
+      expect(yield* session.pending(sessionID)).toEqual([])
+    }),
+  )
+})

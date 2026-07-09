@@ -188,6 +188,12 @@ export interface Interface {
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   /**
+   * Durable admitted session work not yet visible in projected history,
+   * ordered by admission. Includes unpromoted user and synthetic inputs and
+   * unhandled compaction barriers.
+   */
+  readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInput.Info[], NotFoundError>
+  /**
    * Durable, ordered, gap-free session log read. Replays public durable
    * session events after the exclusive `after` cursor, emits a `Synced`
    * marker at the captured replay watermark, then continues live when `follow`
@@ -480,6 +486,10 @@ const layer = Layer.effect(
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
+      }),
+      pending: Effect.fn("V2Session.pending")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionInput.pending(db, sessionID)
       }),
       log: (input) =>
         Stream.unwrap(
