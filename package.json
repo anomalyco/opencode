@@ -47,6 +47,7 @@
       "@shikijs/stream": "4.2.0",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",
+      "@corvu/drawer": "0.2.4",
       "@types/luxon": "3.7.1",
       "@types/node": "24.12.2",
       "@types/semver": "7.7.1",
