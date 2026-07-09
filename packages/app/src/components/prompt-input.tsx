@@ -46,6 +46,7 @@ import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialo
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import { useCommand } from "@/context/command"
+import { usePermission } from "@/context/permission"
 import { Persist, persisted } from "@/utils/persist"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -210,6 +211,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const comments = useComments()
   const dialog = useDialog()
   const command = useCommand()
+  const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
   const tabs = () => props.controls.session.tabs
@@ -1297,6 +1299,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const variants = createMemo(() => ["default", ...props.controls.model.selection.variant.list()])
   // Check provider variants directly: `variants` also includes the UI-only default option.
   const showVariantControl = createMemo(() => props.controls.model.selection.variant.list().length > 0)
+  const autoAcceptActive = createMemo(() => {
+    const sessionID = props.controls.session.id
+    if (sessionID) return permission.isAutoAccepting(sessionID, sdk().directory)
+    return permission.isAutoAcceptingDirectory(sdk().directory)
+  })
+
+  const toggleAutoAccept = () => {
+    const sessionID = props.controls.session.id
+    if (sessionID) permission.toggleAutoAccept(sessionID, sdk().directory)
+    else permission.toggleAutoAcceptDirectory(sdk().directory)
+
+    const active = sessionID
+      ? permission.isAutoAccepting(sessionID, sdk().directory)
+      : permission.isAutoAcceptingDirectory(sdk().directory)
+    showToast({
+      title: active
+        ? language.t("toast.permissions.autoaccept.on.title")
+        : language.t("toast.permissions.autoaccept.off.title"),
+      description: active
+        ? language.t("toast.permissions.autoaccept.on.description")
+        : language.t("toast.permissions.autoaccept.off.description"),
+    })
+  }
 
   const { abort, handleSubmit } =
     props.submission ??
@@ -1796,6 +1821,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </TooltipV2>
                     </div>
                   </Show>
+                  <TooltipV2
+                    placement="top"
+                    gutter={4}
+                    value={
+                      <>
+                        {language.t(
+                          autoAcceptActive()
+                            ? "command.permissions.autoaccept.disable"
+                            : "command.permissions.autoaccept.enable",
+                        )}
+                        <KeybindV2 keys={command.keybindParts("permissions.autoaccept")} variant="neutral" />
+                      </>
+                    }
+                  >
+                    <IconButton
+                      data-action="prompt-permissions"
+                      type="button"
+                      icon="shield"
+                      variant="ghost"
+                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                      classList={{
+                        "bg-surface-success-base text-icon-success-base": autoAcceptActive(),
+                      }}
+                      style={buttons()}
+                      onClick={toggleAutoAccept}
+                      aria-label={language.t(
+                        autoAcceptActive()
+                          ? "command.permissions.autoaccept.disable"
+                          : "command.permissions.autoaccept.enable",
+                      )}
+                      aria-pressed={autoAcceptActive()}
+                    />
+                  </TooltipV2>
                 </div>
                 <TooltipV2 placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
@@ -2139,6 +2197,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </TooltipKeybind>
                           </div>
                         </Show>
+                        <div
+                          data-component="prompt-permissions-control"
+                          classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
+                        >
+                          <TooltipKeybind
+                            placement="top"
+                            gutter={4}
+                            title={language.t(
+                              autoAcceptActive()
+                                ? "command.permissions.autoaccept.disable"
+                                : "command.permissions.autoaccept.enable",
+                            )}
+                            keybind={command.keybind("permissions.autoaccept")}
+                          >
+                            <IconButton
+                              data-action="prompt-permissions"
+                              type="button"
+                              icon="shield"
+                              variant="ghost"
+                              class="size-8"
+                              classList={{
+                                "text-icon-success-base hover:bg-surface-success-base": autoAcceptActive(),
+                              }}
+                              style={control()}
+                              onClick={toggleAutoAccept}
+                              aria-label={language.t(
+                                autoAcceptActive()
+                                  ? "command.permissions.autoaccept.disable"
+                                  : "command.permissions.autoaccept.enable",
+                              )}
+                              aria-pressed={autoAcceptActive()}
+                            />
+                          </TooltipKeybind>
+                        </div>
                       </Show>
                     </Show>
                   </div>
