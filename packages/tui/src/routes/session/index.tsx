@@ -432,25 +432,38 @@ export function Session() {
       run: () => {
         void (async () => {
           const boundary = session()?.revert?.messageID
-          const list = messages()
-          let target: string | undefined
-          for (let i = list.length - 1; i >= 0; i--) {
-            const message = list[i]
-            if (message.type !== "user" || !message.text.trim()) continue
-            if (boundary && message.id >= boundary) continue
-            target = message.id
-            break
-          }
-          if (!target) {
+          const message = messages().findLast(
+            (message): message is SessionMessageUser =>
+              message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
+          )
+          if (!message) {
             toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
             dialog.clear()
             return
           }
-          const error = await sdk.api.session.revert.stage({ sessionID: route.sessionID, messageID: target }).then(
+          const error = await sdk.api.session.revert.stage({ sessionID: route.sessionID, messageID: message.id }).then(
             () => undefined,
             (error) => error,
           )
-          if (error) toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+          if (error) {
+            toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+            dialog.clear()
+            return
+          }
+          prompt?.set({
+            text: message.text,
+            files: message.files?.map((file) => ({
+              uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
+              name: file.name,
+              description: file.description,
+              mention: file.mention ? { ...file.mention } : undefined,
+            })),
+            agents: message.agents?.map((agent) => ({
+              name: agent.name,
+              mention: agent.mention ? { ...agent.mention } : undefined,
+            })),
+            pasted: [],
+          })
           dialog.clear()
         })()
       },
