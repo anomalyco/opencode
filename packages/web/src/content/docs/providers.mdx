@@ -1447,6 +1447,16 @@ In this example:
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
 
+opencode does not auto-discover models from the endpoint, so each model you want must be listed under `models`. Each model ID must match the `id` returned by `GET /v1/models` — run `curl http://127.0.0.1:1234/v1/models` to list the ids currently available in LM Studio.
+
+#### Tips for reliable local use
+
+- **Match the context limit.** Set each model's `limit.context` (and `limit.output`) to the context length the model is actually loaded with in LM Studio. If it's set too high, prompts can exceed the loaded window and error or get truncated; if it's set too low, opencode compacts the conversation earlier than necessary. LM Studio's native `GET /api/v0/models` endpoint reports both `loaded_context_length` and `max_context_length`.
+- **Loading and saved settings.** With just-in-time (JIT) model loading enabled, the first request auto-loads the model using LM Studio's default load settings, and an already-loaded model ignores a request's load config. To use your saved per-model settings (context length, GPU offload, etc.), load the model in LM Studio before starting opencode, or disable JIT loading. Consider raising LM Studio's idle TTL so the model isn't evicted mid-session.
+- **Use a tool-capable model.** Agentic use requires a model that supports tool calling. `GET /api/v0/models` lists a `capabilities` array for each model — prefer models that include `tool_use`.
+- **Bound runaway loops.** opencode does not cap agentic iterations by default. If a local model gets stuck repeating tool calls, set a step limit on the agents you use, for example `"agent": { "build": { "steps": 40 } }`.
+- **Reduce repetition.** opencode does not send a repetition or frequency penalty, so set one in LM Studio — a small repeat penalty (such as 1.05) together with a non-zero temperature helps avoid loops.
+
 ---
 
 ### Moonshot AI
