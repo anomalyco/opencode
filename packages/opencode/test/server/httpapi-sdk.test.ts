@@ -805,6 +805,34 @@ describe("HttpApi SDK", () => {
     ),
   )
 
+  serverPathParity("settles session status immediately after prompt stream completes", (serverPath) =>
+    withFakeLlm(serverPath, ({ sdk, llm }) =>
+      Effect.gen(function* () {
+        yield* llm.text("status settled", { usage: { input: 5, output: 3 } })
+        const session = yield* capture(() =>
+          sdk.session.create({
+            title: "status settles",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          }),
+        )
+        const sessionID = String(record(session.data).id)
+        const prompt = yield* capture(() =>
+          sdk.session.prompt({
+            sessionID,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hello status" }],
+          }),
+        )
+        const status = yield* capture(() => sdk.session.status())
+
+        expect(prompt.status).toBe(200)
+        expect(status.status).toBe(200)
+        expect(record(status.data)[sessionID]).toBeUndefined()
+      }),
+    ),
+  )
+
   httpapi(
     "includes project skills in REST API prompt context",
     withFakeLlmProject("default", { setup: writeProjectSkill }, ({ sdk, llm }) =>

@@ -303,7 +303,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           sessionID: ctx.params.sessionID,
         })
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
-      return HttpServerResponse.stream(Stream.make(JSON.stringify(message)).pipe(Stream.encodeText), {
+      const body = Stream.make(JSON.stringify(message)).pipe(Stream.encodeText)
+      const settledBody =
+        ctx.payload.noReply === true ? body : body.pipe(Stream.ensuring(runState.settle(ctx.params.sessionID)))
+      return HttpServerResponse.stream(settledBody, {
         contentType: "application/json",
       })
     })

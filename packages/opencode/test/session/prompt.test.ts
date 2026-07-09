@@ -1062,6 +1062,7 @@ it.instance(
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const status = yield* SessionStatus.Service
+      const run = yield* SessionRunState.Service
 
       yield* llm.hang
 
@@ -1070,6 +1071,8 @@ it.instance(
 
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* llm.wait(1)
+      expect((yield* status.get(chat.id)).type).toBe("busy")
+      yield* run.settle(chat.id)
       expect((yield* status.get(chat.id)).type).toBe("busy")
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
