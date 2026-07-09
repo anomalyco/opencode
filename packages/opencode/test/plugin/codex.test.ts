@@ -7,6 +7,7 @@ import {
   renderOAuthError,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
+import { isRecord } from "../../src/util/record"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -173,6 +174,174 @@ describe("plugin.codex", () => {
     )
   })
 
+  test("rewrites GPT-5.6 OAuth requests for Responses Lite", async () => {
+    const requests: Array<{ headers: Headers; body: Record<string, unknown> }> = []
+    using server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        requests.push({
+          headers: new Headers(request.headers),
+          body: await readRequestBody(request),
+        })
+        return Response.json({})
+      },
+    })
+    const providerFetch = await loadCodexFetch(new URL("/backend-api/codex/responses", server.url).toString())
+    const body = JSON.stringify({
+      model: "gpt-5.6-luna",
+      input: [
+        {
+          role: "user",
+          content: [{ type: "input_image", image_url: "data:image/png;base64,test", detail: "high" }],
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_123",
+          output: [{ type: "input_image", image_url: "data:image/png;base64,result", detail: "low" }],
+        },
+      ],
+      instructions: "Be concise.",
+      tools: [
+        {
+          type: "function",
+          name: "noop",
+          description: "No operation",
+          parameters: { type: "object", properties: {}, additionalProperties: false },
+          strict: false,
+        },
+      ],
+      parallel_tool_calls: true,
+      prompt_cache_key: "ses_luna",
+      reasoning: { effort: "high", summary: "auto" },
+      stream: true,
+    })
+    const init = {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "session-id": "ses_luna",
+        "x-session-affinity": "ses_luna",
+      },
+      body,
+    }
+
+    await providerFetch("https://api.openai.com/v1/responses", init)
+    await Promise.all(
+      ["gpt-5.6-sol", "gpt-5.6-terra"].map((model) =>
+        providerFetch("https://api.openai.com/v1/responses", {
+          ...init,
+          headers: {
+            ...init.headers,
+            "session-id": `ses_${model}`,
+            "x-session-affinity": `ses_${model}`,
+          },
+          body: JSON.stringify({ model, input: [], stream: true }),
+        }),
+      ),
+    )
+    await providerFetch("https://api.openai.com/v1/responses", {
+      ...init,
+      body: JSON.stringify({ model: "gpt-5.6-luna", input: [], stream: true }),
+    })
+
+    expect(requests).toHaveLength(4)
+    expect(
+      requests
+        .slice(0, 3)
+        .map((request) => request.body.model)
+        .sort(),
+    ).toEqual(["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"])
+    expect(requests.slice(0, 3).map((request) => request.headers.get("version"))).toEqual([
+      "0.144.0",
+      "0.144.0",
+      "0.144.0",
+    ])
+    expect(
+      requests.slice(0, 3).map((request) => request.headers.get("x-openai-internal-codex-responses-lite")),
+    ).toEqual(["true", "true", "true"])
+    const sessionID = requests[0]?.headers.get("session-id")
+    expect(sessionID).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(requests[3]?.headers.get("session-id")).toBe(sessionID)
+    expect(requests[0]?.headers.get("x-session-affinity")).toBe(sessionID)
+    expect(requests[0]?.body.prompt_cache_key).toBe(sessionID)
+    expect(requests[0]?.body.tool_choice).toBe("auto")
+    expect(requests[0]?.body.parallel_tool_calls).toBe(false)
+    expect(requests[0]?.body.reasoning).toEqual({ effort: "high", summary: "auto", context: "all_turns" })
+    expect(requests[0]?.body.tools).toBeUndefined()
+    expect(requests[0]?.body.instructions).toBeUndefined()
+    expect(requests[0]?.body.input).toEqual([
+      {
+        type: "additional_tools",
+        role: "developer",
+        tools: [
+          {
+            type: "function",
+            name: "noop",
+            description: "No operation",
+            parameters: { type: "object", properties: {}, additionalProperties: false },
+            strict: false,
+          },
+        ],
+      },
+      {
+        type: "message",
+        role: "developer",
+        content: [{ type: "input_text", text: "Be concise." }],
+      },
+      {
+        role: "user",
+        content: [{ type: "input_image", image_url: "data:image/png;base64,test" }],
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_123",
+        output: [{ type: "input_image", image_url: "data:image/png;base64,result" }],
+      },
+    ])
+    expect(requests.slice(1).map((request) => request.body.input)).toEqual([
+      [{ type: "additional_tools", role: "developer", tools: [] }],
+      [{ type: "additional_tools", role: "developer", tools: [] }],
+      [{ type: "additional_tools", role: "developer", tools: [] }],
+    ])
+  })
+
+  test("leaves non-Lite OAuth requests unchanged", async () => {
+    const requests: Array<{ headers: Headers; body: Record<string, unknown> }> = []
+    using server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        requests.push({
+          headers: new Headers(request.headers),
+          body: await readRequestBody(request),
+        })
+        return Response.json({})
+      },
+    })
+    const providerFetch = await loadCodexFetch(new URL("/backend-api/codex/responses", server.url).toString())
+    const body = {
+      model: "gpt-5.5",
+      input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
+      instructions: "Be concise.",
+      tools: [],
+      parallel_tool_calls: true,
+      prompt_cache_key: "ses_legacy",
+      reasoning: { effort: "medium", summary: "auto" },
+      stream: true,
+    }
+
+    await providerFetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "content-type": "application/json", "session-id": "ses_legacy" },
+      body: JSON.stringify(body),
+    })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.headers.get("session-id")).toBe("ses_legacy")
+    expect(requests[0]?.headers.get("version")).toBeNull()
+    expect(requests[0]?.headers.get("x-openai-internal-codex-responses-lite")).toBeNull()
+    expect(requests[0]?.body).toEqual(body)
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     let auth = {
       type: "oauth" as const,
@@ -277,4 +446,29 @@ async function waitFor(predicate: () => boolean) {
     if (Date.now() - started > 1_000) throw new Error("timed out waiting for condition")
     await new Promise((resolve) => setTimeout(resolve, 1))
   }
+}
+
+async function readRequestBody(request: Request) {
+  const body: unknown = await request.json()
+  if (!isRecord(body)) throw new Error("Expected a JSON object")
+  return body
+}
+
+async function loadCodexFetch(endpoint: string) {
+  const hooks = await CodexAuthPlugin({} as never, {
+    codexApiEndpoint: endpoint,
+  })
+  const loaded = await hooks.auth!.loader!(
+    async () =>
+      ({
+        type: "oauth",
+        refresh: "refresh-token",
+        access: "access-token",
+        expires: Date.now() + 60_000,
+        accountId: "account-id",
+      }) as never,
+    {} as never,
+  )
+  if (!loaded.fetch) throw new Error("Expected a provider fetch implementation")
+  return loaded.fetch
 }

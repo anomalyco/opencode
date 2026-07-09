@@ -166,6 +166,47 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("adds Responses Lite client metadata without splitting the session socket", async () => {
+    let connections = 0
+    const requests: unknown[] = []
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.on("message", (data) => {
+        requests.push(JSON.parse(data.toString()))
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${requests.length}` } }))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({ url: server.url })
+    const sessionID = "019f4860-9ca3-7000-81e9-08939c58b0fa"
+
+    const legacy = await fetch(
+      server.url,
+      streamRequest({ "session-id": sessionID, "x-session-affinity": sessionID }),
+    )
+    expect(await legacy.text()).toContain("data: [DONE]")
+    const lite = await fetch(
+      server.url,
+      streamRequest({
+        "session-id": sessionID,
+        "x-session-affinity": sessionID,
+        [OpenAIWebSocketPool.RESPONSES_LITE_HEADER]: "true",
+      }),
+    )
+
+    expect(await lite.text()).toContain("data: [DONE]")
+    expect(connections).toBe(1)
+    expect(requests[0]).not.toHaveProperty(
+      `client_metadata.${OpenAIWebSocketPool.RESPONSES_LITE_CLIENT_METADATA}`,
+    )
+    expect(requests[1]).toMatchObject({
+      type: "response.create",
+      client_metadata: {
+        [OpenAIWebSocketPool.RESPONSES_LITE_CLIENT_METADATA]: "true",
+      },
+    })
+    fetch.close()
+  })
+
   test("rotates a socket that exceeds max connection age", async () => {
     let connections = 0
     await using server = await createWebSocketServer((socket) => {
