@@ -175,12 +175,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       setStore("general", "followup", "steer")
     })
 
-    return {
-      ready,
-      get current() {
-        return store
-      },
-      general: {
+    function createGeneralSettings() {
+      return {
         autoSave: withFallback(() => store.general?.autoSave, defaultSettings.general.autoSave),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)
@@ -252,7 +248,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
         },
+      }
+    }
+
+    return {
+      ready,
+      get current() {
+        return store
       },
+      general: createGeneralSettings(),
       visibility: {
         fileTree: visible(showFileTree),
         search: visible(showSearch),
