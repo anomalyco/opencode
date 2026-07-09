@@ -796,7 +796,7 @@ describe("SessionRunnerLLM", () => {
       response = fragmentFixture("text", "text-build", ["Done"]).completeEvents
       yield* session.resume(sessionID)
 
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", "Initial context"])
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions\n\nInitial context"])
     }),
   )
 
@@ -822,7 +822,7 @@ describe("SessionRunnerLLM", () => {
       response = fragmentFixture("text", "text-reviewer", ["Done"]).completeEvents
       yield* session.resume(sessionID)
 
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions\n\nInitial context"])
       expect((yield* session.messages({ sessionID }))[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
     }),
   )
@@ -851,8 +851,43 @@ describe("SessionRunnerLLM", () => {
       response = fragmentFixture("text", "text-selected", ["Done"]).completeEvents
       yield* session.resume(sessionID)
 
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions\n\nInitial context"])
       expect((yield* session.messages({ sessionID }))[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
+    }),
+  )
+
+  it.effect("preserves the cached system prefix when switching from plan to build", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agents = yield* AgentV2.Service
+      yield* agents.transform((editor) => {
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        })
+        editor.update(AgentV2.ID.make("plan"), (agent) => {
+          agent.system = undefined
+          agent.mode = "primary"
+        })
+      })
+      const session = yield* SessionV2.Service
+      yield* session.switchAgent({ sessionID, agent: "plan" })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Draft a plan" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-plan", ["Plan ready"]).completeEvents
+      yield* session.resume(sessionID)
+      yield* session.switchAgent({ sessionID, agent: "build" })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Build it" }), resume: false })
+      response = fragmentFixture("text", "text-build", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context"],
+        ["Initial context"],
+      ])
+      expect(systemTexts(requests[1])).toEqual(["Build agent instructions"])
+      expect(userTexts(requests[1])).toEqual(["Draft a plan", "Build it"])
     }),
   )
 

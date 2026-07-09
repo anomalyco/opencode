@@ -8,7 +8,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -165,10 +165,31 @@ const layer = Layer.effect(
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
+    const agentSystemContext = (agent: AgentV2.Selection) => {
+      if (!agent.info?.system) return SystemContext.empty
+      return SystemContext.make({
+        key: SystemContext.Key.make("session/agent-system"),
+        codec: Schema.String,
+        load: Effect.succeed(agent.info.system),
+        baseline: String,
+        update: (_previous, current) => current,
+        removed: () =>
+          "Selected-agent system instructions are no longer active. Disregard any earlier selected-agent system instructions.",
+      })
+    }
+
     const loadSystemContext = (agent: AgentV2.Selection) =>
-      Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
-        concurrency: "unbounded",
-      }).pipe(Effect.map(SystemContext.combine))
+      Effect.all(
+        [
+          Effect.succeed(agentSystemContext(agent)),
+          systemContext.load(),
+          skillGuidance.load(agent),
+          referenceGuidance.load(),
+        ],
+        {
+          concurrency: "unbounded",
+        },
+      ).pipe(Effect.map(SystemContext.combine))
 
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
@@ -205,7 +226,7 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline]
+        system: [system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
