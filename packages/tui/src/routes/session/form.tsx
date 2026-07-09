@@ -492,11 +492,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
     if (!current) return
     const index = store.tab
     setStore("error", "")
-    const opening =
-      process.env.OPENCODE_FORM_DEMO === "1" && props.form.metadata?.["kind"] === "form-demo"
-        ? Promise.reject(new Error("Simulated browser launch failure"))
-        : open(current.url)
-    void opening
+    void open(current.url)
       .then(() => selectTab(index + 1))
       .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
   }
