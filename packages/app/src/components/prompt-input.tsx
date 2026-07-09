@@ -58,8 +58,10 @@ import {
   prependHistoryEntry,
   type PromptHistoryComment,
   type PromptHistoryEntry,
+  type PromptHistoryState,
   type PromptHistoryStoredEntry,
   promptLength,
+  sanitizePromptHistoryState,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
@@ -120,8 +122,6 @@ export function createPromptInputHistory(): PromptInputHistory {
   return createPromptInputHistoryStore(normal, setNormal, shell, setShell)
 }
 
-type PromptHistoryState = { entries: PromptHistoryStoredEntry[] }
-
 function createPromptInputHistoryStore(
   normal: Store<PromptHistoryState>,
   setNormal: SetStoreFunction<PromptHistoryState>,
@@ -142,11 +142,11 @@ function createPromptInputHistoryStore(
 
 function createPersistedPromptInputHistory() {
   const [normal, setNormal] = persisted(
-    Persist.global("prompt-history", ["prompt-history.v1"]),
+    { ...Persist.global("prompt-history", ["prompt-history.v1"]), migrate: sanitizePromptHistoryState },
     createStore<PromptHistoryState>({ entries: [] }),
   )
   const [shell, setShell] = persisted(
-    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
+    { ...Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]), migrate: sanitizePromptHistoryState },
     createStore<PromptHistoryState>({ entries: [] }),
   )
   return createPromptInputHistoryStore(normal, setNormal, shell, setShell)

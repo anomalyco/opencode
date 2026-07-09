@@ -4,6 +4,7 @@ import type { SelectedLineRange } from "@/context/file"
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 export const MAX_HISTORY = 100
+export const MAX_HISTORY_INLINE_DATA_URL_LENGTH = 64 * 1024
 
 export type PromptHistoryComment = {
   id: string
@@ -21,6 +22,7 @@ export type PromptHistoryEntry = {
 }
 
 export type PromptHistoryStoredEntry = Prompt | PromptHistoryEntry
+export type PromptHistoryState = { entries: PromptHistoryStoredEntry[] }
 
 export function canNavigateHistoryAtCursor(direction: "up" | "down", text: string, cursor: number, inHistory = false) {
   const position = Math.max(0, Math.min(cursor, text.length))
@@ -41,6 +43,38 @@ export function clonePromptParts(prompt: Prompt): Prompt {
       selection: part.selection ? { ...part.selection } : undefined,
     }
   })
+}
+
+function isInlineDataUrl(value: string | undefined): value is string {
+  return value?.startsWith("data:") === true
+}
+
+export function sanitizePromptForHistory(prompt: Prompt): Prompt {
+  const result: Prompt = []
+  let remainingDataUrlLength = MAX_HISTORY_INLINE_DATA_URL_LENGTH
+  const keepInlineDataUrl = (value: string | undefined) => {
+    if (!isInlineDataUrl(value)) return true
+    if (value.length > remainingDataUrlLength) return false
+    remainingDataUrlLength -= value.length
+    return true
+  }
+
+  for (const part of prompt) {
+    if (part.type === "text" || part.type === "agent") {
+      result.push({ ...part })
+      continue
+    }
+    if (part.type === "image") {
+      if (keepInlineDataUrl(part.dataUrl)) result.push({ ...part })
+      continue
+    }
+    result.push({
+      ...part,
+      selection: part.selection ? { ...part.selection } : undefined,
+      url: keepInlineDataUrl(part.url) ? part.url : undefined,
+    })
+  }
+  return result
 }
 
 function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
@@ -72,6 +106,54 @@ export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): Pr
   }
 }
 
+export function sanitizePromptHistoryEntry(entry: PromptHistoryStoredEntry): PromptHistoryEntry {
+  const normalized = normalizePromptHistoryEntry(entry)
+  return {
+    prompt: sanitizePromptForHistory(normalized.prompt),
+    comments: clonePromptHistoryComments(normalized.comments),
+  }
+}
+
+function hasHistoryContent(entry: PromptHistoryEntry) {
+  const text = entry.prompt
+    .map((part) => ("content" in part ? part.content : ""))
+    .join("")
+    .trim()
+  const hasImages = entry.prompt.some((part) => part.type === "image")
+  const hasComments = entry.comments.some((comment) => !!comment.comment.trim())
+  return !!text || hasImages || hasComments
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isPromptHistoryStoredEntry(value: unknown): value is PromptHistoryStoredEntry {
+  if (Array.isArray(value)) return true
+  return isRecord(value) && Array.isArray(value.prompt) && Array.isArray(value.comments)
+}
+
+function sanitizePromptHistoryEntries(entries: unknown[]) {
+  return entries.flatMap((entry) => {
+    if (!isPromptHistoryStoredEntry(entry)) return []
+    try {
+      const sanitized = sanitizePromptHistoryEntry(entry)
+      return hasHistoryContent(sanitized) ? [sanitized] : []
+    } catch {
+      return []
+    }
+  })
+}
+
+export function sanitizePromptHistoryState(value: unknown): unknown {
+  if (Array.isArray(value)) return { entries: sanitizePromptHistoryEntries(value) }
+  if (!isRecord(value) || !Array.isArray(value.entries)) return value
+  return {
+    ...value,
+    entries: sanitizePromptHistoryEntries(value.entries),
+  }
+}
+
 export function promptLength(prompt: Prompt) {
   return prompt.reduce((len, part) => len + ("content" in part ? part.content.length : 0), 0)
 }
@@ -82,16 +164,17 @@ export function prependHistoryEntry(
   comments: PromptHistoryComment[] = [],
   max = MAX_HISTORY,
 ) {
+  const sanitizedPrompt = sanitizePromptForHistory(prompt)
   const text = prompt
     .map((part) => ("content" in part ? part.content : ""))
     .join("")
     .trim()
-  const hasImages = prompt.some((part) => part.type === "image")
+  const hasImages = sanitizedPrompt.some((part) => part.type === "image")
   const hasComments = comments.some((comment) => !!comment.comment.trim())
   if (!text && !hasImages && !hasComments) return entries
 
   const entry = {
-    prompt: clonePromptParts(prompt),
+    prompt: sanitizedPrompt,
     comments: clonePromptHistoryComments(comments),
   } satisfies PromptHistoryEntry
   const last = entries[0]

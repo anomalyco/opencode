@@ -3,16 +3,24 @@ import type { Prompt } from "@/context/prompt"
 import {
   canNavigateHistoryAtCursor,
   clonePromptParts,
+  MAX_HISTORY_INLINE_DATA_URL_LENGTH,
   normalizePromptHistoryEntry,
   navigatePromptHistory,
   prependHistoryEntry,
   promptLength,
+  sanitizePromptHistoryState,
   type PromptHistoryComment,
+  type PromptHistoryEntry,
+  type PromptHistoryStoredEntry,
 } from "./history"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 const text = (value: string): Prompt => [{ type: "text", content: value, start: 0, end: value.length }]
+const oversizedDataUrl = (mime = "application/pdf") => {
+  const prefix = `data:${mime};base64,`
+  return prefix + "A".repeat(MAX_HISTORY_INLINE_DATA_URL_LENGTH - prefix.length + 1)
+}
 const comment = (id: string, value = "note"): PromptHistoryComment => ({
   id,
   path: "src/a.ts",
@@ -22,6 +30,18 @@ const comment = (id: string, value = "note"): PromptHistoryComment => ({
   origin: "review",
   preview: "const a = 1",
 })
+
+function firstHistoryEntry(entries: PromptHistoryStoredEntry[]) {
+  const entry = entries[0]
+  if (!entry) throw new Error("expected history entry")
+  return entry
+}
+
+function expectHistoryState(value: unknown): asserts value is { entries: PromptHistoryEntry[] } {
+  if (!value || typeof value !== "object" || !("entries" in value) || !Array.isArray(value.entries)) {
+    throw new Error("expected history state")
+  }
+}
 
 describe("prompt-input history", () => {
   test("prependHistoryEntry skips empty prompt and deduplicates consecutive entries", () => {
@@ -39,6 +59,85 @@ describe("prompt-input history", () => {
 
     const dedupedComments = prependHistoryEntry(commentsOnly, DEFAULT_PROMPT, [comment("c1")])
     expect(dedupedComments).toBe(commentsOnly)
+  })
+
+  test("prependHistoryEntry skips oversized inline data-url attachments while keeping text", () => {
+    const added = prependHistoryEntry([], [
+      { type: "text", content: "review this", start: 0, end: 11 },
+      {
+        type: "image",
+        id: "pdf_1",
+        filename: "paper.pdf",
+        mime: "application/pdf",
+        dataUrl: oversizedDataUrl(),
+      },
+    ])
+    const entry = normalizePromptHistoryEntry(firstHistoryEntry(added))
+
+    expect(entry.prompt).toEqual([{ type: "text", content: "review this", start: 0, end: 11 }])
+  })
+
+  test("prependHistoryEntry keeps small inline data-url attachments", () => {
+    const added = prependHistoryEntry([], [
+      { type: "text", content: "see image", start: 0, end: 9 },
+      {
+        type: "image",
+        id: "img_1",
+        filename: "image.png",
+        mime: "image/png",
+        dataUrl: "data:image/png;base64,AAA",
+      },
+    ])
+    const entry = normalizePromptHistoryEntry(firstHistoryEntry(added))
+
+    expect(entry.prompt).toMatchObject([
+      { type: "text", content: "see image" },
+      { type: "image", filename: "image.png", dataUrl: "data:image/png;base64,AAA" },
+    ])
+  })
+
+  test("sanitizePromptHistoryState removes oversized persisted data urls", () => {
+    const migrated = sanitizePromptHistoryState({
+      entries: [
+        {
+          prompt: [
+            { type: "text", content: "old entry", start: 0, end: 9 },
+            {
+              type: "image",
+              id: "pdf_1",
+              filename: "paper.pdf",
+              mime: "application/pdf",
+              dataUrl: oversizedDataUrl(),
+            },
+            {
+              type: "file",
+              path: "paper.pdf",
+              content: "@paper.pdf",
+              start: 10,
+              end: 20,
+              url: oversizedDataUrl(),
+            },
+          ],
+          comments: [comment("c1")],
+        },
+      ],
+    })
+    expectHistoryState(migrated)
+
+    expect(migrated.entries).toHaveLength(1)
+    expect(migrated.entries[0]?.comments).toEqual([comment("c1")])
+    expect(migrated.entries[0]?.prompt).toEqual([
+      { type: "text", content: "old entry", start: 0, end: 9 },
+      {
+        type: "file",
+        path: "paper.pdf",
+        content: "@paper.pdf",
+        start: 10,
+        end: 20,
+        selection: undefined,
+        url: undefined,
+      },
+    ])
   })
 
   test("navigatePromptHistory restores saved prompt when moving down from newest", () => {
