@@ -2795,6 +2795,59 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("safely rejects provider calls for tools excluded by permissions", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const agents = yield* AgentV2.Service
+      const registry = yield* ToolRegistry.Service
+      const executions: string[] = []
+      yield* agents.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.permissions.push({ action: "shell", resource: "*", effect: "deny" })
+        }),
+      )
+      yield* registry.register({
+        shell: Tool.make({
+          description: "Run a shell command",
+          input: Schema.Struct({ command: Schema.String }),
+          output: Schema.Struct({}),
+          execute: ({ command }) =>
+            Effect.sync(() => {
+              executions.push(command)
+              return {}
+            }),
+        }),
+      })
+      yield* admit(session, "Call shell")
+
+      responses = [
+        reply.tool("call-shell", "shell", { command: "git status" }),
+        reply.text("Recovered", "text-after-shell-error"),
+      ]
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("shell")
+      expect(executions).toEqual([])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Call shell" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-shell",
+              state: {
+                status: "error",
+                error: { type: "tool.unknown", message: "Unknown tool: shell" },
+              },
+            },
+          ],
+        },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
   it.effect("returns unexpected local tool defects to the model and continues", () =>
     Effect.gen(function* () {
       const session = yield* setup
