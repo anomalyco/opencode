@@ -104,6 +104,10 @@ export function state(harness: Harness) {
   }
 }
 
+export function matches(harness: Pick<Harness, "screen">, text: string) {
+  return harness.screen().includes(text)
+}
+
 export async function screenshot(harness: Harness, name?: string) {
   await harness.renderOnce()
   const image = SimulationPng.screenshot(harness.renderer)

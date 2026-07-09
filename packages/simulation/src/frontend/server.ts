@@ -21,6 +21,8 @@ async function handle(
     case "ui.state": {
       return SimulationActions.state(harness)
     }
+    case "ui.matches":
+      return SimulationActions.matches(harness, request.params.text)
     case "ui.recording.finish":
       if (!finishRecording) throw new Error("UI recording is not available")
       return finishRecording()
