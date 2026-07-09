@@ -311,8 +311,7 @@ export const layer = Layer.effect(
                   elicitationID: input.params.elicitationId,
                   message: input.params.message,
                 },
-                mode: "url",
-                url: input.params.url,
+                fields: [{ type: "link", url: input.params.url }],
               })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
@@ -330,7 +329,6 @@ export const layer = Layer.effect(
               sessionID: GLOBAL_ELICITATION_SESSION_ID,
               title: `${input.server} is requesting input`,
               metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
-              mode: "form",
               fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
                 toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
               ),

@@ -1510,7 +1510,7 @@ test("adds, dismisses, and refreshes form requests", async () => {
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/session/ses_1/form") return
     return json({
-      data: [{ id: "frm_remote", sessionID: "ses_1", title: "Input requested", mode: "form", fields: [] }],
+      data: [{ id: "frm_remote", sessionID: "ses_1", title: "Input requested", fields: [] }],
     })
   }, events)
   let data!: ReturnType<typeof useData>
@@ -1540,13 +1540,13 @@ test("adds, dismisses, and refreshes form requests", async () => {
       id: "evt_form_created_1",
       created: 0,
       type: "form.created",
-      data: { form: { id: "frm_1", sessionID: "ses_1", title: "Input requested", mode: "form", fields: [] } },
+      data: { form: { id: "frm_1", sessionID: "ses_1", title: "Input requested", fields: [] } },
     })
     emitEvent(events, {
       id: "evt_form_created_duplicate",
       created: 1,
       type: "form.created",
-      data: { form: { id: "frm_1", sessionID: "ses_1", title: "Input requested", mode: "form", fields: [] } },
+      data: { form: { id: "frm_1", sessionID: "ses_1", title: "Input requested", fields: [] } },
     })
     await wait(() => data.session.form.list("ses_1")?.length === 1)
 
@@ -1562,7 +1562,7 @@ test("adds, dismisses, and refreshes form requests", async () => {
       id: "evt_form_created_2",
       created: 3,
       type: "form.created",
-      data: { form: { id: "frm_2", sessionID: "ses_1", title: "Input requested", mode: "form", fields: [] } },
+      data: { form: { id: "frm_2", sessionID: "ses_1", title: "Input requested", fields: [] } },
     })
     emitEvent(events, {
       id: "evt_form_cancelled_2",
@@ -1612,7 +1612,7 @@ test("tracks global forms by location", async () => {
       location: other,
       type: "form.created",
       data: {
-        form: { id: "frm_other", sessionID: "global", title: "Input requested", mode: "form", fields: [] },
+        form: { id: "frm_other", sessionID: "global", title: "Input requested", fields: [] },
       },
     })
 
@@ -1625,7 +1625,7 @@ test("tracks global forms by location", async () => {
       location: { directory },
       type: "form.created",
       data: {
-        form: { id: "frm_default", sessionID: "global", title: "Input requested", mode: "form", fields: [] },
+        form: { id: "frm_default", sessionID: "global", title: "Input requested", fields: [] },
       },
     })
     await wait(() => data.session.form.list("global", { directory })?.length === 1)
@@ -1664,7 +1664,6 @@ test("refreshes global forms for the requested location", async () => {
           id: requestedDirectory === other.directory ? "frm_other" : "frm_default",
           sessionID: "global",
           title: "Input requested",
-          mode: "form",
           fields: [],
         },
       ],
@@ -1743,7 +1742,6 @@ test("refreshes global forms once per loaded location after reconnect", async ()
           id: `frm_${requestedDirectory === other.directory ? "other" : "default"}_${count}`,
           sessionID: "global",
           title: "Input requested",
-          mode: "form",
           fields: [],
         },
       ],
@@ -1803,13 +1801,12 @@ test("refreshes global forms once per loaded location after reconnect", async ()
 test("reconciles all pending form requests when the event stream reconnects", async () => {
   const events = createEventStream()
   let requests = [
-    { id: "frm_old", sessionID: "ses_old", title: "Input requested", mode: "form" as const, fields: [] },
+    { id: "frm_old", sessionID: "ses_old", title: "Input requested", fields: [] },
     {
       id: "frm_keep",
       sessionID: "ses_keep",
       title: "Input requested",
-      mode: "url" as const,
-      url: "https://example.com",
+      fields: [{ type: "link" as const, url: "https://example.com" }],
     },
   ]
   let calls = 0
@@ -1841,7 +1838,7 @@ test("reconciles all pending form requests when the event stream reconnects", as
     await wait(() => data.session.form.list("ses_old")?.[0]?.id === "frm_old")
     expect(data.session.form.list("ses_keep")?.[0]?.id).toBe("frm_keep")
 
-    requests = [{ id: "frm_new", sessionID: "ses_new", title: "Input requested", mode: "form" as const, fields: [] }]
+    requests = [{ id: "frm_new", sessionID: "ses_new", title: "Input requested", fields: [] }]
     events.disconnect()
 
     await wait(() => calls === 2 && data.session.form.list("ses_new")?.[0]?.id === "frm_new")

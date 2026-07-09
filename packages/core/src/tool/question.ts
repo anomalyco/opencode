@@ -86,7 +86,6 @@ export const Plugin = {
                           kind: "question",
                           tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
                         },
-                        mode: "form",
                         fields: input.questions.map(
                           (question, index): Form.Field => ({
                             key: `q${index}`,

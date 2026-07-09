@@ -1408,7 +1408,7 @@ export type GlobalEvent = {
         id: string
         type: "form.created"
         properties: {
-          form: FormFormInfo | FormUrlInfo
+          form: FormInfo
         }
       }
     | {
@@ -3545,22 +3545,27 @@ export type FormMultiselectField = {
   default?: Array<string>
 }
 
-export type FormFormInfo = {
-  id: string
-  sessionID: string
-  title: string
-  metadata?: FormMetadata
-  mode: "form"
-  fields: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
+export type FormLinkField = {
+  type: "link"
+  url: string
+  title?: string
+  description?: string
 }
 
-export type FormUrlInfo = {
+export type FormField =
+  | FormStringField
+  | FormNumberField
+  | FormIntegerField
+  | FormBooleanField
+  | FormMultiselectField
+  | FormLinkField
+
+export type FormInfo = {
   id: string
   sessionID: string
   title: string
   metadata?: FormMetadata
-  mode: "url"
-  url: string
+  fields: Array<FormField>
 }
 
 export type FormValue =
@@ -5836,9 +5841,7 @@ export type FormCreatePayload = {
   id?: string
   title: string
   metadata?: FormMetadata
-  mode: "form" | "url"
-  fields?: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
-  url?: string
+  fields: Array<FormField>
 }
 
 export type FormState =
@@ -6559,7 +6562,7 @@ export type FormCreated = {
   type: "form.created"
   location?: LocationRef
   data: {
-    form: FormFormInfo | FormUrlInfo
+    form: FormInfo
   }
 }
 
@@ -7831,7 +7834,7 @@ export type EventFormCreated = {
   id: string
   type: "form.created"
   properties: {
-    form: FormFormInfo | FormUrlInfo
+    form: FormInfo
   }
 }
 
@@ -9892,33 +9895,19 @@ export type FormMultiselectFieldV2 = {
   default?: Array<string>
 }
 
-export type FormFormInfoV2 = {
+export type FormInfoV2 = {
   id: string
   sessionID: string
   title: string
   metadata?: FormMetadata
-  mode: "form"
-  fields: Array<FormStringFieldV2 | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectFieldV2>
-}
-
-export type FormUrlInfoV2 = {
-  id: string
-  sessionID: string
-  title: string
-  metadata?: FormMetadata
-  mode: "url"
-  url: string
+  fields: Array<FormField>
 }
 
 export type FormCreatePayloadV2 = {
   id?: string | null
   title: string
   metadata?: FormMetadata
-  mode: "form" | "url"
-  fields?: Array<
-    FormStringFieldV2 | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectFieldV2
-  > | null
-  url?: string | null
+  fields: Array<FormField>
 }
 
 export type FormValueV2 =
@@ -10627,22 +10616,20 @@ export type FormMultiselectField1 = {
   default?: Array<string>
 }
 
-export type FormFormInfo1 = {
-  id: string
-  sessionID: string
-  title: string
-  metadata?: FormMetadata1
-  mode: "form"
-  fields: Array<FormStringField1 | FormNumberField1 | FormIntegerField1 | FormBooleanField1 | FormMultiselectField1>
-}
+export type FormField1 =
+  | FormStringField1
+  | FormNumberField1
+  | FormIntegerField1
+  | FormBooleanField1
+  | FormMultiselectField1
+  | FormLinkField
 
-export type FormUrlInfo1 = {
+export type FormInfo1 = {
   id: string
   sessionID: string
   title: string
   metadata?: FormMetadata1
-  mode: "url"
-  url: string
+  fields: Array<FormField1>
 }
 
 export type FormCreatedV2 = {
@@ -10654,7 +10641,7 @@ export type FormCreatedV2 = {
   type: "form.created"
   location?: LocationRefV2
   data: {
-    form: FormFormInfo1 | FormUrlInfo1
+    form: FormInfo1
   }
 }
 
@@ -17207,7 +17194,7 @@ export type V2FormRequestListResponses = {
    */
   200: {
     location: LocationInfoV2
-    data: Array<FormFormInfoV2 | FormUrlInfoV2>
+    data: Array<FormInfoV2>
   }
 }
 
@@ -17244,7 +17231,7 @@ export type V2SessionFormListResponses = {
    * Success
    */
   200: {
-    data: Array<FormFormInfoV2 | FormUrlInfoV2>
+    data: Array<FormInfoV2>
   }
 }
 
@@ -17285,7 +17272,7 @@ export type V2SessionFormCreateResponses = {
    * Success
    */
   200: {
-    data: FormFormInfoV2 | FormUrlInfoV2
+    data: FormInfoV2
   }
 }
 
@@ -17323,7 +17310,7 @@ export type V2SessionFormGetResponses = {
    * Success
    */
   200: {
-    data: FormFormInfoV2 | FormUrlInfoV2
+    data: FormInfoV2
   }
 }
 

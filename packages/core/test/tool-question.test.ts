@@ -158,7 +158,6 @@ describe("QuestionTool", () => {
         sessionID,
         title: "Questions",
         metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
-        mode: "form",
         fields: [
           {
             key: "q0",
@@ -205,7 +204,6 @@ describe("QuestionTool", () => {
         sessionID,
         title: "Questions",
         metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
-        mode: "form",
         fields: [],
       })
     }),

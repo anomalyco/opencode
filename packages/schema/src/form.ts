@@ -94,10 +94,23 @@ export const MultiselectField = Schema.Struct({
 }).annotate({ identifier: "Form.MultiselectField" })
 export interface MultiselectField extends Schema.Schema.Type<typeof MultiselectField> {}
 
-export const Field = Schema.Union([StringField, NumberField, IntegerField, BooleanField, MultiselectField]).pipe(
-  Schema.toTaggedUnion("type"),
-)
-export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField
+export const LinkField = Schema.Struct({
+  type: Schema.Literal("link"),
+  url: Schema.String,
+  title: Schema.String.pipe(optional),
+  description: Schema.String.pipe(optional),
+}).annotate({ identifier: "Form.LinkField" })
+export interface LinkField extends Schema.Schema.Type<typeof LinkField> {}
+
+export const Field = Schema.Union([
+  StringField,
+  NumberField,
+  IntegerField,
+  BooleanField,
+  MultiselectField,
+  LinkField,
+]).pipe(Schema.toTaggedUnion("type"), Schema.annotate({ identifier: "Form.Field" }))
+export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField | LinkField
 
 const InfoBase = {
   id: ID,
@@ -110,22 +123,11 @@ const InfoBase = {
   metadata: Metadata.pipe(optional),
 }
 
-export const FormInfo = Schema.Struct({
+export const Info = Schema.Struct({
   ...InfoBase,
-  mode: Schema.Literal("form"),
   fields: Schema.Array(Field),
-}).annotate({ identifier: "Form.FormInfo" })
-export interface FormInfo extends Schema.Schema.Type<typeof FormInfo> {}
-
-export const UrlInfo = Schema.Struct({
-  ...InfoBase,
-  mode: Schema.Literal("url"),
-  url: Schema.String,
-}).annotate({ identifier: "Form.UrlInfo" })
-export interface UrlInfo extends Schema.Schema.Type<typeof UrlInfo> {}
-
-export const Info = Schema.Union([FormInfo, UrlInfo]).pipe(Schema.toTaggedUnion("mode"))
-export type Info = FormInfo | UrlInfo
+}).annotate({ identifier: "Form.Info" })
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const Value = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Array(Schema.String)]).annotate(
   {

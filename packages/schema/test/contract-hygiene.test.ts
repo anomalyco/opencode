@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
+import { Form } from "../src/form.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -69,6 +70,9 @@ describe("contract hygiene", () => {
     const identifiers = [
       Agent.Color,
       FileSystem.Submatch,
+      Form.Field,
+      Form.Info,
+      Form.LinkField,
       Mcp.Resource,
       Mcp.ResourceTemplate,
       Mcp.ResourceCatalog,

@@ -78,7 +78,6 @@ function form(id: string, sessionID = "session"): Extract<V2Event, { type: "form
     id,
     sessionID,
     title: "Input requested",
-    mode: "form",
     fields: [],
   }
 }

@@ -4,7 +4,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import open from "open"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { FormFormInfo, FormValue } from "@opencode-ai/sdk/v2"
+import type { FormField, FormValue } from "@opencode-ai/sdk/v2"
 import type { FormInfo } from "../../context/data"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
@@ -13,7 +13,16 @@ import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const FORM_MODE = "form"
 
-type Field = FormFormInfo["fields"][number]
+type Field = Exclude<FormField, { type: "link" }>
+type LinkField = Extract<FormField, { type: "link" }>
+
+function isField(field: FormField): field is Field {
+  return field.type !== "link"
+}
+
+function isLink(field: FormField): field is LinkField {
+  return field.type === "link"
+}
 
 function fieldLabel(field: Field) {
   return field.title ?? field.key
@@ -141,10 +150,15 @@ function requestOptions(form: FormInfo) {
 }
 
 export function FormPrompt(props: { form: FormInfo }) {
-  return props.form.mode === "url" ? <UrlPrompt form={props.form} /> : <FieldsPrompt form={props.form} />
+  const links = () => props.form.fields.filter(isLink)
+  return links().length > 0 && links().length === props.form.fields.length ? (
+    <LinkPrompt form={props.form} links={links()} />
+  ) : (
+    <FieldsPrompt form={props.form} />
+  )
 }
 
-function UrlPrompt(props: { form: FormInfo & { mode: "url" } }) {
+function LinkPrompt(props: { form: FormInfo; links: LinkField[] }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const modeStack = useOpencodeModeStack()
@@ -177,7 +191,8 @@ function UrlPrompt(props: { form: FormInfo & { mode: "url" } }) {
         desc: "Open link",
         group: "Form",
         cmd: () => {
-          void open(props.form.url)
+          const link = props.links[0]
+          if (link) void open(link.url)
         },
       },
       {
@@ -206,7 +221,19 @@ function UrlPrompt(props: { form: FormInfo & { mode: "url" } }) {
         <Show when={message()}>
           <text fg={theme.textMuted}>{message()}</text>
         </Show>
-        <text fg={theme.secondary}>{props.form.url}</text>
+        <For each={props.links}>
+          {(link) => (
+            <box gap={1}>
+              <Show when={link.title}>
+                <text fg={theme.text}>{link.title}</text>
+              </Show>
+              <Show when={link.description}>
+                <text fg={theme.textMuted}>{link.description}</text>
+              </Show>
+              <text fg={theme.secondary}>{link.url}</text>
+            </box>
+          )}
+        </For>
       </box>
       <box flexDirection="row" flexShrink={0} gap={2} paddingLeft={2} paddingRight={3} paddingBottom={1}>
         <text fg={theme.text}>
@@ -220,27 +247,28 @@ function UrlPrompt(props: { form: FormInfo & { mode: "url" } }) {
   )
 }
 
-function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
+function FieldsPrompt(props: { form: FormInfo }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const configuredFields = () => props.form.fields.filter(isField)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
     answers: Object.fromEntries(
-      props.form.fields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
+      configuredFields().flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
     ) as Record<string, FormValue | undefined>,
     custom: Object.fromEntries(
-      props.form.fields.flatMap((field) => {
+      configuredFields().flatMap((field) => {
         const value = customDefault(field)
         return value === undefined ? [] : [[field.key, value]]
       }),
     ) as Record<string, string>,
-    selected: selectedRow(props.form.fields[0], props.form.fields[0]?.default),
+    selected: selectedRow(configuredFields()[0], configuredFields()[0]?.default),
     editing: false,
     error: "",
   })
@@ -248,9 +276,10 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   let textarea: TextareaRenderable | undefined
   let review: ScrollBoxRenderable | undefined
 
+  const links = createMemo(() => props.form.fields.filter(isLink))
   const fields = createMemo(() => {
     const answers: Record<string, FormValue | undefined> = {}
-    return props.form.fields.filter((field) => {
+    return configuredFields().filter((field) => {
       const active = (field.when ?? []).every((when) => {
         const value = answers[when.key]
         if (value === undefined) return false
@@ -263,7 +292,6 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   })
   const single = createMemo(() => {
     const list = fields()
-    if (props.form.fields.length !== 1) return false
     if (list.length !== 1) return false
     const field = list[0]!
     return field.type === "boolean" || (field.type === "string" && field.options !== undefined)
@@ -769,6 +797,26 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         <box paddingLeft={1}>
           <text fg={theme.textMuted}>{props.form.title}</text>
         </box>
+        <For each={links()}>
+          {(link) => (
+            <box
+              gap={1}
+              paddingLeft={1}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                void open(link.url)
+              }}
+            >
+              <Show when={link.title}>
+                <text fg={theme.text}>{link.title}</text>
+              </Show>
+              <Show when={link.description}>
+                <text fg={theme.textMuted}>{link.description}</text>
+              </Show>
+              <text fg={theme.secondary}>{link.url}</text>
+            </box>
+          )}
+        </For>
         <Show when={!single() && !tabbed()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
             <text fg={theme.textMuted}>

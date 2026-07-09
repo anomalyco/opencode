@@ -6,8 +6,6 @@
 import type {
   AgentInfo,
   CommandInfo,
-  FormFormInfo,
-  FormUrlInfo,
   IntegrationInfo,
   LocationRef,
   McpServer,
@@ -38,7 +36,7 @@ const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
-export type FormInfo = (FormFormInfo | FormUrlInfo) & { readonly location?: LocationRef }
+export type FormInfo = import("@opencode-ai/sdk/v2").FormInfo & { readonly location?: LocationRef }
 
 type LocationData = {
   agent?: AgentInfo[]
