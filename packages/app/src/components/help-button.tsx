@@ -24,7 +24,8 @@ const helpIcon = (
   </svg>
 )
 
-const triggerClass = "size-7 !rounded-full shrink-0"
+const triggerClass =
+  "size-7 !rounded-full shrink-0 bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]"
 
 // TODO: wire to changelog / seen-state when available
 const showPopover = () => true
@@ -40,7 +41,6 @@ export function HelpButton() {
       aria-label="Open the OpenCode website"
       data-component="icon-button-v2"
       data-size="large"
-      data-variant="neutral"
       class={`${triggerClass} fixed bottom-5 right-5 z-50 flex items-center justify-center`}
       onClick={(event) => {
         event.preventDefault()
