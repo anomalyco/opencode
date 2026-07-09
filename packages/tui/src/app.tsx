@@ -3,7 +3,7 @@ import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
 import { Service } from "@opencode-ai/client/effect"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode, type FormCreateInput } from "@opencode-ai/client/promise"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -144,6 +144,14 @@ const appBindingCommands = [
   "app.toggle.session_directory_filter",
 ] as const
 
+const formDemo: ReadonlyArray<Omit<FormCreateInput, "id" | "sessionID">> = [
+  {
+    title: "Connect your account",
+    metadata: { kind: "form-demo", message: "Authorize OpenCode in your browser to continue." },
+    fields: [{ type: "link", url: "https://opencode.ai" }],
+  },
+]
+
 export type TuiInput = {
   server: {
     endpoint: Service.Endpoint
@@ -196,9 +204,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const api = OpenCode.make(options)
   const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
     Effect.map((response) => response.location.directory),
-    Effect.catch(() =>
-      Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory)),
-    ),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
   )
   const reconnectEndpoint = input.server.reconnect
   const reconnect = reconnectEndpoint
@@ -411,11 +417,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: {
-  onSnapshot?: () => Promise<string[]>
-  pluginHost: TuiPluginHost
-  pair?: DialogPairCredentials
-}) {
+function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost; pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()
@@ -439,6 +441,38 @@ function App(props: {
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
+
+  let formDemoStarted = false
+  createEffect(() => {
+    if (process.env.OPENCODE_FORM_DEMO !== "1") return
+    if (!sync.ready || sdk.connection.status() !== "connected" || formDemoStarted) return
+    formDemoStarted = true
+    const location = data.location.default()
+    const suffix = Date.now()
+    const requestOptions = {
+      headers: {
+        "x-opencode-directory": encodeURIComponent(location.directory),
+        ...(location.workspaceID ? { "x-opencode-workspace": location.workspaceID } : {}),
+      },
+    }
+    void sdk.api.form.request
+      .list({ location: { directory: location.directory, workspace: location.workspaceID } })
+      .then((response) =>
+        Promise.all(
+          response.data
+            .filter((form) => form.id.startsWith("frm_demo_"))
+            .map((form) => sdk.api.form.cancel({ sessionID: form.sessionID, formID: form.id }, requestOptions)),
+        ),
+      )
+      .then(() =>
+        Promise.all(
+          formDemo.map((form, index) =>
+            sdk.api.form.create({ ...form, id: `frm_demo_${suffix}_${index}`, sessionID: "global" }, requestOptions),
+          ),
+        ),
+      )
+      .catch((error) => log.error("Failed to create form demo", { error: errorMessage(error) }))
+  })
 
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
