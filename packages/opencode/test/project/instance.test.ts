@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -20,6 +20,11 @@ const it = testEffect(
     [InstanceStore.bootstrapNode, noopBootstrap],
   ]),
 )
+
+const storeLayer = () =>
+  LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+  ])
 
 const setBootstrap = (run: Effect.Effect<void>) =>
   Effect.acquireRelease(
@@ -115,6 +120,35 @@ describe("InstanceStore", () => {
       expect(initialized).toBe(1)
       yield* Deferred.succeed(release, undefined)
 
+      const [firstCtx, secondCtx] = yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+      expect(secondCtx).toBe(firstCtx)
+      expect(initialized).toBe(1)
+    }),
+  )
+
+  it.live("dedupes concurrent loads across store services while init is in flight", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const firstContext = yield* Layer.build(storeLayer())
+      const secondContext = yield* Layer.build(storeLayer())
+      const firstStore = Context.get(firstContext, InstanceStore.Service)
+      const secondStore = Context.get(secondContext, InstanceStore.Service)
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let initialized = 0
+
+      yield* setBootstrap(
+        Effect.gen(function* () {
+          initialized++
+          yield* Deferred.succeed(started, undefined)
+          yield* Deferred.await(release)
+        }),
+      )
+      const first = yield* firstStore.load({ directory: dir }).pipe(Effect.forkScoped)
+      yield* Deferred.await(started)
+      const second = yield* secondStore.load({ directory: dir }).pipe(Effect.forkScoped)
+
+      yield* Deferred.succeed(release, undefined)
       const [firstCtx, secondCtx] = yield* Effect.all([Fiber.join(first), Fiber.join(second)])
       expect(secondCtx).toBe(firstCtx)
       expect(initialized).toBe(1)
