@@ -283,7 +283,7 @@ export function DialogWorkspaceSelect(props: {
           const status = project.workspace.status(workspace.id)
           return (
             <box alignItems="center" justifyContent="center" height={1}>
-              <text fg={status === "connected" ? theme.success : theme.error}>?</text>
+              <text fg={status === "connected" ? theme.success : theme.error}>•</text>
             </box>
           )
         },
