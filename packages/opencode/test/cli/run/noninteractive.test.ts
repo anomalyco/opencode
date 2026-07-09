@@ -21,7 +21,7 @@ function prompted(inputID: string): V2Event {
   return {
     id: "evt_prompted",
     created: 0,
-    type: "session.prompt.promoted",
+    type: "session.input.promoted",
     durable: { aggregateID: "ses_1", seq: 0, version: 1 },
     data: { sessionID: "ses_1", inputID },
   }
