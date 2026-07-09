@@ -336,7 +336,13 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const outputTokens = safe(input.usage.outputTokens ?? 0)
   const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-  const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
+  const cacheReadInputTokens = safe(
+    Number(
+      input.usage.cacheReadInputTokens ??
+        input.metadata?.["deepseek"]?.["prompt_cache_hit_tokens"] ??
+        0,
+    ),
+  )
   const cacheWriteInputTokens = safe(
     Number(
       input.usage.cacheWriteInputTokens ??
@@ -348,6 +354,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        input.metadata?.["deepseek"]?.["prompt_cache_miss_tokens"] ??
         0,
     ),
   )
