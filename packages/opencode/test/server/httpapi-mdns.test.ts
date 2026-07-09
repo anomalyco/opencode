@@ -4,13 +4,16 @@ import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances } from "../fixture/fixture"
 
-type Event = { kind: "publish"; port: number; name: string } | { kind: "unpublishAll" } | { kind: "destroy" }
+type Event =
+  | { kind: "publish"; port: number; name: string; probe: boolean | undefined }
+  | { kind: "unpublishAll" }
+  | { kind: "destroy" }
 const events: Event[] = []
 
 void mock.module("bonjour-service", () => ({
   Bonjour: class {
-    publish(opts: { port: number; name: string }) {
-      events.push({ kind: "publish", port: opts.port, name: opts.name })
+    publish(opts: { port: number; name: string; probe?: boolean }) {
+      events.push({ kind: "publish", port: opts.port, name: opts.name, probe: opts.probe })
       return { on: () => {} }
     }
     unpublishAll() {
@@ -60,9 +63,11 @@ describe("HttpApi Server.listen mDNS", () => {
       expect(published.length).toBe(1)
       expect(published[0]!.port).toBe(listener.port)
       expect(published[0]!.name).toBe(`opencode-${listener.port}`)
+      expect(published[0]!.probe).toBe(false)
     } finally {
       await withTimeout(listener.stop(true), 10_000, "timed out stopping mdns listener")
     }
+
     expect(events.some((e) => e.kind === "unpublishAll")).toBe(true)
     expect(events.some((e) => e.kind === "destroy")).toBe(true)
   })

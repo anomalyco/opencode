@@ -17,6 +17,7 @@ export function publish(port: number, domain?: string) {
       host,
       port,
       txt: { path: "/" },
+      probe: false,
     })
 
     service.on("error", () => {})
