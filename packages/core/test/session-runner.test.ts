@@ -64,7 +64,7 @@ import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { asc, eq } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
@@ -182,6 +182,20 @@ test("does not apply an ineligible tier without base pricing", () => {
 
 const authorizations: Tool.Context[] = []
 const executions: string[] = []
+const permissionFail = Tool.make({
+  description: "Reject a permission",
+  input: Schema.Struct({}),
+  output: Schema.Struct({}),
+  execute: () =>
+    new ToolFailure({
+      message: "Permission denied: edit",
+      error: new PermissionV2.BlockedError({
+        rules: [],
+        permission: "edit",
+        resources: ["src/index.ts"],
+      }),
+    }),
+})
 const permission = Layer.succeed(
   PermissionV2.Service,
   PermissionV2.Service.of({
@@ -502,6 +516,22 @@ const recordedEventTypes = (id: SessionV2.ID) =>
         Effect.orDie,
         Effect.map((rows) => rows.map((row) => row.type)),
       )
+  })
+
+const recordedToolInputEnds = (id: SessionV2.ID, callID: string) =>
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return (yield* db
+      .select({ data: EventTable.data })
+      .from(EventTable)
+      .where(
+        and(
+          eq(EventTable.aggregate_id, id),
+          eq(EventTable.type, EventV2.versionedType(SessionEvent.Tool.Input.Ended.type, 1)),
+        ),
+      )
+      .all()
+      .pipe(Effect.orDie)).filter((event) => event.data.callID === callID)
   })
 
 const recordedStepSettlementEvents = (id: SessionV2.ID, assistantMessageID: SessionMessage.ID) =>
@@ -2980,22 +3010,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const registry = yield* ToolRegistry.Service
-      yield* registry.register({
-        permissionfail: Tool.make({
-          description: "Reject a permission",
-          input: Schema.Struct({}),
-          output: Schema.Struct({}),
-          execute: () =>
-            new ToolFailure({
-              message: "Permission denied: edit",
-              error: new PermissionV2.BlockedError({
-                rules: [],
-                permission: "edit",
-                resources: ["src/index.ts"],
-              }),
-            }),
-        }),
-      })
+      yield* registry.register({ permissionfail: permissionFail })
       yield* admit(session, "Reject permission")
       responses = [
         reply.tool("call-permission", "permissionfail", {}),
@@ -3033,6 +3048,90 @@ describe("SessionRunnerLLM", () => {
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
     }),
   )
+
+  const rejectPermissionWhileToolInputStreams = (lateEvent: LLMEvent) =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const registry = yield* ToolRegistry.Service
+      const releaseLateEvent = yield* Deferred.make<void>()
+      yield* registry.register({ permissionfail: permissionFail })
+      const events = yield* EventV2.Service
+      const permissionFailed = yield* events
+        .subscribe(SessionEvent.Tool.Failed)
+        .pipe(
+          Stream.filter((event) => event.data.sessionID === sessionID && event.data.callID === "call-permission"),
+          Stream.runHead,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      yield* admit(session, "Reject permission while another tool input streams")
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolInputStart({ id: "call-streaming", name: "echo" }),
+          LLMEvent.toolCall({ id: "call-permission", name: "permissionfail", input: {} }),
+        ]),
+        Stream.fromEffect(Deferred.await(releaseLateEvent)).pipe(Stream.flatMap(() => Stream.make(lateEvent))),
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Fiber.join(permissionFailed).pipe(Effect.timeout("1 second"))
+      yield* Effect.yieldNow
+      const inputEndsBeforeRelease = yield* recordedToolInputEnds(sessionID, "call-streaming")
+      yield* Deferred.succeed(releaseLateEvent, undefined)
+      const exit = yield* Fiber.await(run)
+      return {
+        exit,
+        inputEndsBeforeRelease,
+        context: yield* session.context(sessionID),
+        inputEnds: yield* recordedToolInputEnds(sessionID, "call-streaming"),
+      }
+    })
+
+  for (const testCase of [
+    {
+      name: "does not end concurrent tool input when permission is rejected",
+      event: LLMEvent.toolInputDelta({
+        id: "call-streaming",
+        name: "echo",
+        text: '{"text":"still streaming"}',
+      }),
+      defect: "Tool input delta after end: call-streaming",
+    },
+    {
+      name: "does not duplicate concurrent tool input end when permission is rejected",
+      event: LLMEvent.toolInputEnd({ id: "call-streaming", name: "echo" }),
+      defect: "Duplicate tool input end: call-streaming",
+    },
+  ]) {
+    it.effect(testCase.name, () =>
+      Effect.gen(function* () {
+        const result = yield* rejectPermissionWhileToolInputStreams(testCase.event)
+
+        expect(result.inputEndsBeforeRelease).toHaveLength(0)
+        expect(Exit.isFailure(result.exit)).toBe(true)
+        if (Exit.isFailure(result.exit)) {
+          expect(Cause.pretty(result.exit.cause)).not.toContain(testCase.defect)
+          expect(Cause.hasDies(result.exit.cause)).toBe(false)
+        }
+        expect(result.context).toMatchObject([
+          { type: "user" },
+          {
+            type: "assistant",
+            error: { type: "permission.rejected", message: "Permission denied: edit" },
+            content: [
+              {
+                type: "tool",
+                id: "call-streaming",
+                state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
+              },
+              { type: "tool", id: "call-permission", state: { status: "error" } },
+            ],
+          },
+        ])
+        expect(result.inputEnds).toHaveLength(1)
+      }),
+    )
+  }
 
   it.effect("interrupts runner continuation when a question is cancelled", () =>
     Effect.gen(function* () {

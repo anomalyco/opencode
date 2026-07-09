@@ -256,8 +256,8 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | UserInterruptedError>()
-      const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error | UserInterruptedError>> = []
+      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | StepFailedError>()
+      const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error | StepFailedError>> = []
       let needsContinuation = false
       const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
       const requestEvent: SessionHooks["request"] = {
@@ -364,11 +364,10 @@ const layer = Layer.effect(
                       }),
                       settlement.error,
                     ).pipe(
+                      // Terminal cleanup must own failAssistant because the provider may still be streaming another tool input.
                       Effect.andThen(
                         settlement.error?.type === "permission.rejected"
-                          ? serialized(publisher.failAssistant(settlement.error)).pipe(
-                              Effect.andThen(Effect.fail(new UserInterruptedError())),
-                            )
+                          ? Effect.fail(new StepFailedError({ error: settlement.error }))
                           : Effect.void,
                       ),
                     ),
@@ -464,14 +463,19 @@ const layer = Layer.effect(
               : settled.value.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
           const toolsInterrupted = settledCauses.some(Cause.hasInterrupts)
           const userDeclined = settledCauses.some(isUserDeclined)
-          const permissionRejected = settledCauses.some(
-            (cause) => Option.getOrUndefined(Cause.findErrorOption(cause)) instanceof UserInterruptedError,
-          )
+          const permissionRejected = settledCauses
+            .map((cause) => Option.getOrUndefined(Cause.findErrorOption(cause)))
+            .find(
+              (error): error is StepFailedError =>
+                error instanceof StepFailedError && error.error.type === "permission.rejected",
+            )
 
           if (userDeclined || permissionRejected || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
+            yield* serialized(
+              publisher.failAssistant(permissionRejected?.error ?? { type: "aborted", message: "Step interrupted" }),
+            )
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
