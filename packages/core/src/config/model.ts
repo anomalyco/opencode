@@ -27,12 +27,10 @@ export const Selection = Schema.Union([Short, Explicit])
   .annotate({ identifier: "Config.ModelSelection" })
 
 function parse(input: string): Selection {
-  const providerEnd = input.indexOf("/")
-  const variantStart = input.lastIndexOf("#")
-  const hasVariant = variantStart > providerEnd
+  const ref = Model.Ref.parse(input)
   return {
-    providerID: Provider.ID.make(input.slice(0, providerEnd)),
-    model: Model.ID.make(input.slice(providerEnd + 1, hasVariant ? variantStart : undefined)),
-    ...(hasVariant ? { variant: Model.VariantID.make(input.slice(variantStart + 1)) } : {}),
+    providerID: ref.providerID,
+    model: ref.id,
+    ...(ref.variant ? { variant: ref.variant } : {}),
   }
 }

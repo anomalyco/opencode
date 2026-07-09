@@ -543,73 +543,120 @@ export type SessionPromptInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly id?: {
     readonly id?: string | null
-    readonly prompt: {
-      readonly text: string
-      readonly files?: ReadonlyArray<{
-        readonly uri: string
-        readonly name?: string
-        readonly description?: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-      readonly agents?: ReadonlyArray<{
-        readonly name: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    }
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["id"]
-  readonly prompt: {
+  readonly text: {
     readonly id?: string | null
-    readonly prompt: {
-      readonly text: string
-      readonly files?: ReadonlyArray<{
-        readonly uri: string
-        readonly name?: string
-        readonly description?: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-      readonly agents?: ReadonlyArray<{
-        readonly name: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    }
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
-  }["prompt"]
+  }["text"]
+  readonly files?: {
+    readonly id?: string | null
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["files"]
+  readonly agents?: {
+    readonly id?: string | null
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["agents"]
+  readonly metadata?: {
+    readonly id?: string | null
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["metadata"]
   readonly delivery?: {
     readonly id?: string | null
-    readonly prompt: {
-      readonly text: string
-      readonly files?: ReadonlyArray<{
-        readonly uri: string
-        readonly name?: string
-        readonly description?: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-      readonly agents?: ReadonlyArray<{
-        readonly name: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    }
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["delivery"]
   readonly resume?: {
     readonly id?: string | null
-    readonly prompt: {
-      readonly text: string
-      readonly files?: ReadonlyArray<{
-        readonly uri: string
-        readonly name?: string
-        readonly description?: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-      readonly agents?: ReadonlyArray<{
-        readonly name: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    }
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["resume"]
@@ -620,7 +667,10 @@ export type SessionPromptOutput = {
     readonly admittedSeq: number
     readonly id: string
     readonly sessionID: string
-    readonly prompt: {
+    readonly timeCreated: number
+    readonly promotedSeq?: number
+    readonly type: "user"
+    readonly data: {
       readonly text: string
       readonly files?: ReadonlyArray<{
         readonly data: string
@@ -634,10 +684,9 @@ export type SessionPromptOutput = {
         readonly name: string
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
       }>
+      readonly metadata?: { readonly [x: string]: JsonValue }
     }
     readonly delivery: "steer" | "queue"
-    readonly timeCreated: number
-    readonly promotedSeq?: number
   }
 }["data"]
 
@@ -821,7 +870,10 @@ export type SessionCommandOutput = {
     readonly admittedSeq: number
     readonly id: string
     readonly sessionID: string
-    readonly prompt: {
+    readonly timeCreated: number
+    readonly promotedSeq?: number
+    readonly type: "user"
+    readonly data: {
       readonly text: string
       readonly files?: ReadonlyArray<{
         readonly data: string
@@ -835,10 +887,9 @@ export type SessionCommandOutput = {
         readonly name: string
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
       }>
+      readonly metadata?: { readonly [x: string]: JsonValue }
     }
     readonly delivery: "steer" | "queue"
-    readonly timeCreated: number
-    readonly promotedSeq?: number
   }
 }["data"]
 
@@ -865,33 +916,72 @@ export type SessionSkillOutput = void
 
 export type SessionSyntheticInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly text: {
+  readonly id?: {
+    readonly id?: string | null
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["id"]
+  readonly text: {
+    readonly id?: string | null
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["text"]
   readonly description?: {
+    readonly id?: string | null
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["description"]
   readonly metadata?: {
+    readonly id?: string | null
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["metadata"]
-  readonly resume?: {
+  readonly delivery?: {
+    readonly id?: string | null
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["delivery"]
+  readonly resume?: {
+    readonly id?: string | null
+    readonly text: string
+    readonly description?: string | null
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["resume"]
 }
 
-export type SessionSyntheticOutput = void
+export type SessionSyntheticOutput = {
+  readonly data: {
+    readonly admittedSeq: number
+    readonly id: string
+    readonly sessionID: string
+    readonly timeCreated: number
+    readonly promotedSeq?: number
+    readonly type: "synthetic"
+    readonly data: {
+      readonly text: string
+      readonly description?: string
+      readonly metadata?: { readonly [x: string]: JsonValue }
+    }
+    readonly delivery: "steer" | "queue"
+  }
+}["data"]
 
 export type SessionShellInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -908,11 +998,11 @@ export type SessionCompactInput = {
 
 export type SessionCompactOutput = {
   readonly data: {
-    readonly type: "compaction"
     readonly admittedSeq: number
     readonly id: string
     readonly sessionID: string
     readonly timeCreated: number
+    readonly type: "compaction"
     readonly handledSeq?: number
   }
 }["data"]
@@ -1229,7 +1319,7 @@ export type SessionLogOutput =
           readonly id: string
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.prompt.promoted"
+          readonly type: "session.input.promoted"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: { readonly sessionID: string; readonly inputID: string }
@@ -1238,28 +1328,42 @@ export type SessionLogOutput =
           readonly id: string
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown }
-          readonly type: "session.prompt.admitted"
+          readonly type: "session.input.admitted"
           readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
           readonly location?: { readonly directory: string; readonly workspaceID?: string }
           readonly data: {
             readonly sessionID: string
             readonly inputID: string
-            readonly prompt: {
-              readonly text: string
-              readonly files?: ReadonlyArray<{
-                readonly data: string
-                readonly mime: string
-                readonly source: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
-                readonly name?: string
-                readonly description?: string
-                readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-              }>
-              readonly agents?: ReadonlyArray<{
-                readonly name: string
-                readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-              }>
-            }
-            readonly delivery: "steer" | "queue"
+            readonly input:
+              | {
+                  readonly type: "user"
+                  readonly data: {
+                    readonly text: string
+                    readonly files?: ReadonlyArray<{
+                      readonly data: string
+                      readonly mime: string
+                      readonly source: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
+                      readonly name?: string
+                      readonly description?: string
+                      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+                    }>
+                    readonly agents?: ReadonlyArray<{
+                      readonly name: string
+                      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+                    }>
+                    readonly metadata?: { readonly [x: string]: unknown }
+                  }
+                  readonly delivery: "steer" | "queue"
+                }
+              | {
+                  readonly type: "synthetic"
+                  readonly data: {
+                    readonly text: string
+                    readonly description?: string
+                    readonly metadata?: { readonly [x: string]: unknown }
+                  }
+                  readonly delivery: "steer" | "queue"
+                }
           }
         }
       | {
@@ -4588,7 +4692,7 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.prompt.promoted"
+      readonly type: "session.input.promoted"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: { readonly sessionID: string; readonly inputID: string }
@@ -4597,28 +4701,42 @@ export type EventSubscribeOutput =
       readonly id: string
       readonly created: number
       readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.prompt.admitted"
+      readonly type: "session.input.admitted"
       readonly durable: { readonly aggregateID: string; readonly seq: number; readonly version: 1 }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
       readonly data: {
         readonly sessionID: string
         readonly inputID: string
-        readonly prompt: {
-          readonly text: string
-          readonly files?: ReadonlyArray<{
-            readonly data: string
-            readonly mime: string
-            readonly source: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
-            readonly name?: string
-            readonly description?: string
-            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-          }>
-          readonly agents?: ReadonlyArray<{
-            readonly name: string
-            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-          }>
-        }
-        readonly delivery: "steer" | "queue"
+        readonly input:
+          | {
+              readonly type: "user"
+              readonly data: {
+                readonly text: string
+                readonly files?: ReadonlyArray<{
+                  readonly data: string
+                  readonly mime: string
+                  readonly source: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
+                  readonly name?: string
+                  readonly description?: string
+                  readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+                }>
+                readonly agents?: ReadonlyArray<{
+                  readonly name: string
+                  readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+                }>
+                readonly metadata?: { readonly [x: string]: unknown }
+              }
+              readonly delivery: "steer" | "queue"
+            }
+          | {
+              readonly type: "synthetic"
+              readonly data: {
+                readonly text: string
+                readonly description?: string
+                readonly metadata?: { readonly [x: string]: unknown }
+              }
+              readonly delivery: "steer" | "queue"
+            }
       }
     }
   | {

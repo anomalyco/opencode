@@ -1,25 +1,17 @@
-import { Effect, Option, Redacted } from "effect"
-import path from "node:path"
+import { Effect, Option } from "effect"
 import { Commands } from "../commands"
-import { Env } from "../../env"
 import { Runtime } from "../../framework/runtime"
+import { Server } from "../../services/server"
 
 export default Runtime.handler(Commands.commands.mini, (input) =>
   Effect.gen(function* () {
-    const { runMini } = yield* Effect.promise(() => import("../../mini"))
-    const project = Option.getOrUndefined(input.project)
-    const server = Option.getOrUndefined(input.server)
-    const password = yield* Env.password
+    const { runMini, validateMiniTerminal } = yield* Effect.promise(() => import("../../mini"))
+    yield* Effect.promise(async () => validateMiniTerminal())
+    const serverURL = Option.getOrUndefined(input.server)
+    const server = yield* Server.resolve({ server: serverURL, standalone: input.standalone })
     yield* Effect.promise(() =>
       runMini({
-        attach: server,
-        password: password ? Redacted.value(password) : undefined,
-        directory:
-          server !== undefined
-            ? project
-            : project === undefined
-              ? process.cwd()
-              : path.resolve(process.env.PWD ?? process.cwd(), project),
+        server,
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
         fork: input.fork,

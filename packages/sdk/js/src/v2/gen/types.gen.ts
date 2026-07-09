@@ -23,8 +23,8 @@ export type Event =
   | EventSessionRenamed
   | EventSessionUsageUpdated
   | EventSessionForked
-  | EventSessionPromptPromoted
-  | EventSessionPromptAdmitted
+  | EventSessionInputPromoted
+  | EventSessionInputAdmitted
   | EventSessionExecutionStarted
   | EventSessionExecutionSucceeded
   | EventSessionExecutionFailed
@@ -598,12 +598,6 @@ export type Part =
   | RetryPart
   | CompactionPart
 
-export type Prompt = {
-  text: string
-  files?: Array<PromptFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-}
-
 export type Shell = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
@@ -840,7 +834,7 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.prompt.promoted"
+        type: "session.input.promoted"
         properties: {
           sessionID: string
           inputID: string
@@ -848,12 +842,11 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.prompt.admitted"
+        type: "session.input.admitted"
         properties: {
           sessionID: string
           inputID: string
-          prompt: Prompt
-          delivery: "steer" | "queue"
+          input: SessionInputMessage
         }
       }
     | {
@@ -1696,8 +1689,8 @@ export type GlobalEvent = {
     | SyncEventSessionMoved
     | SyncEventSessionRenamed
     | SyncEventSessionForked
-    | SyncEventSessionPromptPromoted
-    | SyncEventSessionPromptAdmitted
+    | SyncEventSessionInputPromoted
+    | SyncEventSessionInputAdmitted
     | SyncEventSessionExecutionStarted
     | SyncEventSessionExecutionSucceeded
     | SyncEventSessionExecutionFailed
@@ -2851,12 +2844,6 @@ export type MessageNotFoundError = {
   message: string
 }
 
-export type PromptInput = {
-  text: string
-  files?: Array<PromptInputFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-}
-
 export type ConflictError = {
   _tag: "ConflictError"
   message: string
@@ -3033,8 +3020,8 @@ export type V2Event =
   | SessionRenamed
   | SessionUsageUpdated
   | SessionForked
-  | SessionPromptPromoted
-  | SessionPromptAdmitted
+  | SessionInputPromoted
+  | SessionInputAdmitted
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -3364,6 +3351,37 @@ export type PromptAgentAttachment = {
   name: string
   mention?: PromptMention
 }
+
+export type SessionInputUserData = {
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionInputUserMessage = {
+  type: "user"
+  data: SessionInputUserData
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputSyntheticData = {
+  text: string
+  description?: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionInputSyntheticMessage = {
+  type: "synthetic"
+  data: SessionInputSyntheticData
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputMessage = SessionInputUserMessage | SessionInputSyntheticMessage
 
 export type SessionStructuredError = {
   type: string
@@ -3773,11 +3791,11 @@ export type SyncEventSessionForked = {
   }
 }
 
-export type SyncEventSessionPromptPromoted = {
+export type SyncEventSessionInputPromoted = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.prompt.promoted.1"
+    type: "session.input.promoted.1"
     id: string
     seq: number
     aggregateID: string
@@ -3788,19 +3806,18 @@ export type SyncEventSessionPromptPromoted = {
   }
 }
 
-export type SyncEventSessionPromptAdmitted = {
+export type SyncEventSessionInputAdmitted = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.prompt.admitted.1"
+    type: "session.input.admitted.1"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
       inputID: string
-      prompt: Prompt
-      delivery: "steer" | "queue"
+      input: SessionInputMessage
     }
   }
 }
@@ -4433,22 +4450,34 @@ export type PromptInputFileAttachment = {
   mention?: PromptMention
 }
 
-export type SessionInputAdmitted = {
+export type SessionInputUser = {
   admittedSeq: number
   id: string
   sessionID: string
-  prompt: Prompt
-  delivery: "steer" | "queue"
   timeCreated: number
   promotedSeq?: number
+  type: "user"
+  data: SessionInputUserData
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputSynthetic = {
+  admittedSeq: number
+  id: string
+  sessionID: string
+  timeCreated: number
+  promotedSeq?: number
+  type: "synthetic"
+  data: SessionInputSyntheticData
+  delivery: "steer" | "queue"
 }
 
 export type SessionInputCompaction = {
-  type: "compaction"
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
+  type: "compaction"
   handledSeq?: number
 }
 
@@ -4840,13 +4869,13 @@ export type SessionForked = {
   }
 }
 
-export type SessionPromptPromoted = {
+export type SessionInputPromoted = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.promoted"
+  type: "session.input.promoted"
   durable: {
     aggregateID: string
     seq: number
@@ -4859,13 +4888,13 @@ export type SessionPromptPromoted = {
   }
 }
 
-export type SessionPromptAdmitted = {
+export type SessionInputAdmitted = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.admitted"
+  type: "session.input.admitted"
   durable: {
     aggregateID: string
     seq: number
@@ -4875,8 +4904,7 @@ export type SessionPromptAdmitted = {
   data: {
     sessionID: string
     inputID: string
-    prompt: Prompt
-    delivery: "steer" | "queue"
+    input: SessionInputMessage
   }
 }
 
@@ -5522,8 +5550,8 @@ export type SessionEventDurable =
   | SessionRenamed
   | SessionDeleted
   | SessionForked
-  | SessionPromptPromoted
-  | SessionPromptAdmitted
+  | SessionInputPromoted
+  | SessionInputAdmitted
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -7142,23 +7170,22 @@ export type EventSessionForked = {
   }
 }
 
-export type EventSessionPromptPromoted = {
+export type EventSessionInputPromoted = {
   id: string
-  type: "session.prompt.promoted"
+  type: "session.input.promoted"
   properties: {
     sessionID: string
     inputID: string
   }
 }
 
-export type EventSessionPromptAdmitted = {
+export type EventSessionInputAdmitted = {
   id: string
-  type: "session.prompt.admitted"
+  type: "session.input.admitted"
   properties: {
     sessionID: string
     inputID: string
-    prompt: Prompt
-    delivery: "steer" | "queue"
+    input: SessionInputMessage
   }
 }
 
@@ -8595,8 +8622,8 @@ export type V2EventV2 =
   | SessionUsageUpdatedV2
   | SessionDeletedV2
   | SessionForkedV2
-  | SessionPromptPromotedV2
-  | SessionPromptAdmittedV2
+  | SessionInputPromotedV2
+  | SessionInputAdmittedV2
   | SessionExecutionStartedV2
   | SessionExecutionSucceededV2
   | SessionExecutionFailedV2
@@ -8751,22 +8778,34 @@ export type SessionInfoV2 = {
 
 export type PromptBase64V2 = string
 
-export type SessionInputAdmittedV2 = {
+export type SessionInputUserV2 = {
   admittedSeq: number
   id: string
   sessionID: string
-  prompt: Prompt
-  delivery: "steer" | "queue"
   timeCreated: number
   promotedSeq?: number
+  type: "user"
+  data: SessionInputUserData
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputSyntheticV2 = {
+  admittedSeq: number
+  id: string
+  sessionID: string
+  timeCreated: number
+  promotedSeq?: number
+  type: "synthetic"
+  data: SessionInputSyntheticData
+  delivery: "steer" | "queue"
 }
 
 export type SessionInputCompactionV2 = {
-  type: "compaction"
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
+  type: "compaction"
   handledSeq?: number
 }
 
@@ -9065,13 +9104,13 @@ export type SessionForkedV2 = {
   }
 }
 
-export type SessionPromptPromotedV2 = {
+export type SessionInputPromotedV2 = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.promoted"
+  type: "session.input.promoted"
   durable: {
     aggregateID: string
     seq: number
@@ -9084,13 +9123,42 @@ export type SessionPromptPromotedV2 = {
   }
 }
 
-export type SessionPromptAdmittedV2 = {
+export type SessionInputUserData1 = {
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionInputUserMessageV2 = {
+  type: "user"
+  data: SessionInputUserData1
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputSyntheticData1 = {
+  text: string
+  description?: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionInputSyntheticMessageV2 = {
+  type: "synthetic"
+  data: SessionInputSyntheticData1
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputAdmittedV2 = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.admitted"
+  type: "session.input.admitted"
   durable: {
     aggregateID: string
     seq: number
@@ -9100,8 +9168,7 @@ export type SessionPromptAdmittedV2 = {
   data: {
     sessionID: string
     inputID: string
-    prompt: Prompt
-    delivery: "steer" | "queue"
+    input: SessionInputMessage
   }
 }
 
@@ -15574,7 +15641,12 @@ export type V2SessionMoveResponse = V2SessionMoveResponses[keyof V2SessionMoveRe
 export type V2SessionPromptData = {
   body: {
     id?: string | null
-    prompt: PromptInput
+    text: string
+    files?: Array<PromptInputFileAttachment>
+    agents?: Array<PromptAgentAttachment>
+    metadata?: {
+      [key: string]: unknown
+    }
     delivery?: "steer" | "queue" | null
     resume?: boolean | null
   }
@@ -15611,7 +15683,7 @@ export type V2SessionPromptResponses = {
    * Success
    */
   200: {
-    data: SessionInputAdmittedV2
+    data: SessionInputUserV2
   }
 }
 
@@ -15666,7 +15738,7 @@ export type V2SessionCommandResponses = {
    * Success
    */
   200: {
-    data: SessionInputAdmittedV2
+    data: SessionInputUserV2
   }
 }
 
@@ -15713,11 +15785,13 @@ export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkil
 
 export type V2SessionSyntheticData = {
   body: {
+    id?: string | null
     text: string
     description?: string | null
     metadata?: {
       [key: string]: unknown
     }
+    delivery?: "steer" | "queue" | null
     resume?: boolean | null
   }
   path: {
@@ -15740,15 +15814,21 @@ export type V2SessionSyntheticErrors = {
    * SessionNotFoundError
    */
   404: SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictErrorV2
 }
 
 export type V2SessionSyntheticError = V2SessionSyntheticErrors[keyof V2SessionSyntheticErrors]
 
 export type V2SessionSyntheticResponses = {
   /**
-   * <No Content>
+   * Success
    */
-  204: void
+  200: {
+    data: SessionInputSyntheticV2
+  }
 }
 
 export type V2SessionSyntheticResponse = V2SessionSyntheticResponses[keyof V2SessionSyntheticResponses]

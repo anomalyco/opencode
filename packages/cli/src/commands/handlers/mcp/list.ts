@@ -11,8 +11,8 @@ export default Runtime.handler(
   Effect.fn("cli.mcp.list")(function* () {
     const options = yield* ServiceConfig.options()
     const found = yield* Service.discover(options)
-    const transport = found ?? (yield* Service.start(options))
-    const client = createOpencodeClient({ baseUrl: transport.url, headers: transport.headers })
+    const endpoint = found ?? (yield* Service.start(options))
+    const client = createOpencodeClient({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.v2.mcp.list({ location: { directory: process.cwd() } }))
     const servers = (response.data?.data ?? []).toSorted((a, b) => a.name.localeCompare(b.name))
     if (servers.length === 0) {

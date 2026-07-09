@@ -595,13 +595,12 @@ test("completes exploration when a queued prompt is promoted", async () => {
     emitEvent(events, {
       id: "evt_prompt_admitted",
       created: 3,
-      type: "session.prompt.admitted",
+      type: "session.input.admitted",
       durable: durable(sessionID, 2),
       data: {
         sessionID,
         inputID: "message-user",
-        prompt: { text: "Continue" },
-        delivery: "steer",
+        input: { type: "user", data: { text: "Continue" }, delivery: "steer" },
       },
     })
     await wait(() => rows.at(-1)?.type === "message")
@@ -610,7 +609,7 @@ test("completes exploration when a queued prompt is promoted", async () => {
     emitEvent(events, {
       id: "evt_prompt_promoted",
       created: 4,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable(sessionID, 3),
       data: { sessionID, inputID: "message-user" },
     })
@@ -651,9 +650,9 @@ test("removes committed revert messages from local state", async () => {
       emitEvent(events, {
         id: EventV2.ID.create(),
         created: seq,
-        type: "session.prompt.admitted",
+        type: "session.input.admitted",
         durable: durable(sessionID, seq),
-        data: { sessionID, inputID, prompt: { text: inputID }, delivery: "steer" },
+        data: { sessionID, inputID, input: { type: "user", data: { text: inputID }, delivery: "steer" } },
       })
     }
     await wait(() => data.session.message.ids(sessionID).length === 3)
@@ -1817,9 +1816,7 @@ test("reconciles all pending form requests when the event stream reconnects", as
     await wait(() => data.session.form.list("ses_old")?.[0]?.id === "frm_old")
     expect(data.session.form.list("ses_keep")?.[0]?.id).toBe("frm_keep")
 
-    requests = [
-      { id: "frm_new", sessionID: "ses_new", title: "Input requested", mode: "form" as const, fields: [] },
-    ]
+    requests = [{ id: "frm_new", sessionID: "ses_new", title: "Input requested", mode: "form" as const, fields: [] }]
     events.disconnect()
 
     await wait(() => calls === 2 && data.session.form.list("ses_new")?.[0]?.id === "frm_new")
@@ -2022,13 +2019,12 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     emitEvent(events, {
       id: "evt_admitted_1",
       created: 0,
-      type: "session.prompt.admitted",
+      type: "session.input.admitted",
       durable: durable(sessionID),
       data: {
         sessionID,
         inputID: messageID,
-        prompt: { text: "hello" },
-        delivery: "steer",
+        input: { type: "user", data: { text: "hello" }, delivery: "steer" },
       },
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
@@ -2043,7 +2039,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     emitEvent(events, {
       id: "evt_prompted_1",
       created: 0,
-      type: "session.prompt.promoted",
+      type: "session.input.promoted",
       durable: durable(sessionID, 1),
       data: {
         sessionID,
@@ -2051,8 +2047,8 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
       },
     })
 
-    await wait(() => received.at(-1) === "session.prompt.promoted")
-    expect(received.slice(-2)).toEqual(["session.prompt.admitted", "session.prompt.promoted"])
+    await wait(() => received.at(-1) === "session.input.promoted")
+    expect(received.slice(-2)).toEqual(["session.input.admitted", "session.input.promoted"])
     unsubscribe()
     const message = sync.session.message.list(sessionID)?.[0]
     expect(message?.type).toBe("user")

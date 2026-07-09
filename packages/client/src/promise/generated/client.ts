@@ -516,7 +516,15 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
-            body: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
+            body: {
+              id: input["id"],
+              text: input["text"],
+              files: input["files"],
+              agents: input["agents"],
+              metadata: input["metadata"],
+              delivery: input["delivery"],
+              resume: input["resume"],
+            },
             successStatus: 200,
             declaredStatuses: [409, 400, 404, 401],
             empty: false,
@@ -558,22 +566,24 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
       synthetic: (input: SessionSyntheticInput, requestOptions?: RequestOptions) =>
-        request<SessionSyntheticOutput>(
+        request<{ readonly data: SessionSyntheticOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
             body: {
+              id: input["id"],
               text: input["text"],
               description: input["description"],
               metadata: input["metadata"],
+              delivery: input["delivery"],
               resume: input["resume"],
             },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
+            successStatus: 200,
+            declaredStatuses: [409, 404, 400, 401],
+            empty: false,
           },
           requestOptions,
-        ),
+        ).then((value) => value.data),
       shell: (input: SessionShellInput, requestOptions?: RequestOptions) =>
         request<SessionShellOutput>(
           {

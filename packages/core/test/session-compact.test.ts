@@ -17,7 +17,6 @@ import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt } from "@opencode-ai/schema/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
@@ -84,14 +83,16 @@ describe("SessionV2.compact", () => {
       const created = yield* session.create({ location })
 
       const messageID = SessionMessage.ID.create()
-      const prompt = Prompt.make({ text: "Please compact this session history." })
-      yield* events.publish(SessionEvent.PromptAdmitted, {
+      yield* events.publish(SessionEvent.InputAdmitted, {
         sessionID: created.id,
         inputID: messageID,
-        prompt,
-        delivery: "steer",
+        input: {
+          type: "user",
+          data: { text: "Please compact this session history." },
+          delivery: "steer",
+        },
       })
-      yield* events.publish(SessionEvent.PromptPromoted, {
+      yield* events.publish(SessionEvent.InputPromoted, {
         sessionID: created.id,
         inputID: messageID,
       })

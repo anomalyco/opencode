@@ -206,37 +206,39 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.move",
         Effect.fn(function* (ctx) {
-          yield* moveSession.moveSession({
-            sessionID: ctx.params.sessionID,
-            destination: ctx.payload.destination,
-            moveChanges: ctx.payload.moveChanges,
-          }).pipe(
-            Effect.catchTag("Session.NotFoundError", (error) =>
-              Effect.fail(
-                new SessionNotFoundError({
-                  sessionID: error.sessionID,
-                  message: `Session not found: ${error.sessionID}`,
-                }),
+          yield* moveSession
+            .moveSession({
+              sessionID: ctx.params.sessionID,
+              destination: ctx.payload.destination,
+              moveChanges: ctx.payload.moveChanges,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+                ),
               ),
-            ),
-            Effect.catchTag("MoveSession.DestinationProjectMismatchError", () =>
-              Effect.fail(new InvalidRequestError({ message: "Destination directory belongs to another project" })),
-            ),
-            Effect.catchTag("MoveSession.ApplyChangesError", () =>
-              Effect.fail(
-                new InvalidRequestError({
-                  message:
-                    "Unable to apply your changes in the destination directory. The files may conflict with existing changes.",
-                }),
+              Effect.catchTag("MoveSession.DestinationProjectMismatchError", () =>
+                Effect.fail(new InvalidRequestError({ message: "Destination directory belongs to another project" })),
               ),
-            ),
-            Effect.catchTag("MoveSession.CaptureChangesError", (error) =>
-              Effect.fail(new InvalidRequestError({ message: error.message })),
-            ),
-            Effect.catchTag("MoveSession.ResetSourceChangesError", (error) =>
-              Effect.fail(new InvalidRequestError({ message: error.message })),
-            ),
-          )
+              Effect.catchTag("MoveSession.ApplyChangesError", () =>
+                Effect.fail(
+                  new InvalidRequestError({
+                    message:
+                      "Unable to apply your changes in the destination directory. The files may conflict with existing changes.",
+                  }),
+                ),
+              ),
+              Effect.catchTag("MoveSession.CaptureChangesError", (error) =>
+                Effect.fail(new InvalidRequestError({ message: error.message })),
+              ),
+              Effect.catchTag("MoveSession.ResetSourceChangesError", (error) =>
+                Effect.fail(new InvalidRequestError({ message: error.message })),
+              ),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -248,7 +250,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               .prompt({
                 sessionID: ctx.params.sessionID,
                 id: ctx.payload.id,
-                prompt: ctx.payload.prompt,
+                text: ctx.payload.text,
+                files: ctx.payload.files,
+                agents: ctx.payload.agents,
+                metadata: ctx.payload.metadata,
                 delivery: ctx.payload.delivery,
                 resume: ctx.payload.resume,
               })
@@ -270,7 +275,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   ),
                 ),
                 Effect.catchTag("Session.AttachmentError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: error.message, field: "prompt.files" })),
+                  Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
                 ),
               ),
           }
@@ -362,12 +367,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.synthetic",
         Effect.fn(function* (ctx) {
-          yield* session
+          const data = yield* session
             .synthetic({
+              id: ctx.payload.id,
               sessionID: ctx.params.sessionID,
               text: ctx.payload.text,
               description: ctx.payload.description,
               metadata: ctx.payload.metadata,
+              delivery: ctx.payload.delivery,
               resume: ctx.payload.resume,
             })
             .pipe(
@@ -379,8 +386,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   }),
                 ),
               ),
+              Effect.catchTag("Session.SyntheticConflictError", (error) =>
+                Effect.fail(
+                  new ConflictError({
+                    message: `Synthetic input ID conflicts with an existing durable record: ${error.inputID}`,
+                    resource: error.inputID,
+                  }),
+                ),
+              ),
             )
-          return HttpApiSchema.NoContent.make()
+          return { data }
         }),
       )
       .handle(

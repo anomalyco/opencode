@@ -131,7 +131,10 @@ type Endpoint5_10Request = Parameters<RawClient["server.session"]["session.promp
 export type Endpoint5_10Input = {
   readonly sessionID: Endpoint5_10Request["params"]["sessionID"]
   readonly id?: Endpoint5_10Request["payload"]["id"]
-  readonly prompt: Endpoint5_10Request["payload"]["prompt"]
+  readonly text: Endpoint5_10Request["payload"]["text"]
+  readonly files?: Endpoint5_10Request["payload"]["files"]
+  readonly agents?: Endpoint5_10Request["payload"]["agents"]
+  readonly metadata?: Endpoint5_10Request["payload"]["metadata"]
   readonly delivery?: Endpoint5_10Request["payload"]["delivery"]
   readonly resume?: Endpoint5_10Request["payload"]["resume"]
 }
@@ -167,12 +170,14 @@ export type SessionSkillOperation<E = never> = (input: Endpoint5_12Input) => Eff
 type Endpoint5_13Request = Parameters<RawClient["server.session"]["session.synthetic"]>[0]
 export type Endpoint5_13Input = {
   readonly sessionID: Endpoint5_13Request["params"]["sessionID"]
+  readonly id?: Endpoint5_13Request["payload"]["id"]
   readonly text: Endpoint5_13Request["payload"]["text"]
   readonly description?: Endpoint5_13Request["payload"]["description"]
   readonly metadata?: Endpoint5_13Request["payload"]["metadata"]
+  readonly delivery?: Endpoint5_13Request["payload"]["delivery"]
   readonly resume?: Endpoint5_13Request["payload"]["resume"]
 }
-export type Endpoint5_13Output = EffectValue<ReturnType<RawClient["server.session"]["session.synthetic"]>>
+export type Endpoint5_13Output = EffectValue<ReturnType<RawClient["server.session"]["session.synthetic"]>>["data"]
 export type SessionSyntheticOperation<E = never> = (input: Endpoint5_13Input) => Effect.Effect<Endpoint5_13Output, E>
 
 type Endpoint5_14Request = Parameters<RawClient["server.session"]["session.shell"]>[0]

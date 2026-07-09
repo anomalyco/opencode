@@ -5,10 +5,9 @@ import { optional } from "./schema.js"
 import { Event } from "./event.js"
 import { ToolContent } from "./llm.js"
 import { FinishReason } from "./llm.js"
-import { Delivery } from "./session-delivery.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
-import { FileAttachment, Prompt } from "./prompt.js"
+import { FileAttachment } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
@@ -20,6 +19,7 @@ import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
 import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
+import { SessionInput } from "./session-input.js"
 
 export { FileAttachment }
 
@@ -34,12 +34,6 @@ export interface Source extends Schema.Schema.Type<typeof Source> {}
 
 const Base = {
   sessionID: SessionID,
-}
-const PromptFields = {
-  ...Base,
-  inputID: SessionMessage.ID,
-  prompt: Prompt,
-  delivery: Delivery,
 }
 
 const options = {
@@ -120,22 +114,26 @@ export const Forked = Event.durable({
 })
 export type Forked = typeof Forked.Type
 
-export const PromptPromoted = Event.durable({
-  type: "session.prompt.promoted",
+export const InputPromoted = Event.durable({
+  type: "session.input.promoted",
   ...options,
   schema: {
     sessionID: SessionID,
     inputID: SessionMessage.ID,
   },
 })
-export type PromptPromoted = typeof PromptPromoted.Type
+export type InputPromoted = typeof InputPromoted.Type
 
-export const PromptAdmitted = Event.durable({
-  type: "session.prompt.admitted",
+export const InputAdmitted = Event.durable({
+  type: "session.input.admitted",
   ...options,
-  schema: PromptFields,
+  schema: {
+    ...Base,
+    inputID: SessionMessage.ID,
+    input: SessionInput.Message,
+  },
 })
-export type PromptAdmitted = typeof PromptAdmitted.Type
+export type InputAdmitted = typeof InputAdmitted.Type
 
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
@@ -523,8 +521,8 @@ export const Definitions = Event.inventory(
   UsageUpdated,
   Deleted,
   Forked,
-  PromptPromoted,
-  PromptAdmitted,
+  InputPromoted,
+  InputAdmitted,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,

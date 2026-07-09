@@ -457,12 +457,13 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
-    if (event.type === "session.prompt.admitted") {
-      child.prompts.set(event.data.inputID, event.data.prompt.text)
+    if (event.type === "session.input.admitted") {
+      if (event.data.input.type === "user") child.prompts.set(event.data.inputID, event.data.input.data.text)
       return
     }
-    if (event.type === "session.prompt.promoted") {
-      const prompt = child.prompts.get(event.data.inputID) ?? ""
+    if (event.type === "session.input.promoted") {
+      const prompt = child.prompts.get(event.data.inputID)
+      if (prompt === undefined) return
       child.prompts.delete(event.data.inputID)
       if (userFrame(child, event.data.inputID, prompt)) {
         touch(child, event.created)

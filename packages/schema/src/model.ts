@@ -15,7 +15,27 @@ export const Ref = Schema.Struct({
   id: ID,
   providerID: Provider.ID,
   variant: VariantID.pipe(optional),
-}).annotate({ identifier: "Model.Ref" })
+})
+  .annotate({ identifier: "Model.Ref" })
+  .pipe(
+    statics((schema) => ({
+      parse: (input: string) => {
+        const providerEnd = input.indexOf("/")
+        if (providerEnd <= 0) throw new Error(`Invalid model reference: ${input}`)
+        const providerID = input.slice(0, providerEnd)
+        const variantStart = input.indexOf("#", providerEnd + 1)
+        const id = input.slice(providerEnd + 1, variantStart === -1 ? undefined : variantStart)
+        const variant = variantStart === -1 ? undefined : input.slice(variantStart + 1)
+        if (!id || providerID.includes("#") || (variant !== undefined && (!variant || variant.includes("#"))))
+          throw new Error(`Invalid model reference: ${input}`)
+        return schema.make({
+          providerID: Provider.ID.make(providerID),
+          id: ID.make(id),
+          ...(variant ? { variant: VariantID.make(variant) } : {}),
+        })
+      },
+    })),
+  )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))

@@ -29,7 +29,6 @@ import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -72,6 +71,7 @@ const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
 let responseStream: Stream.Stream<LLMEvent, LLMError> | undefined
+let responseStreams: Stream.Stream<LLMEvent, LLMError>[] | undefined
 let streamGate: Deferred.Deferred<void> | undefined
 let streamStarted: Deferred.Deferred<void> | undefined
 let streamFailure: LLMError | undefined
@@ -86,6 +86,7 @@ const client = Layer.succeed(
     prepare: () => Effect.die("unused"),
     stream: ((request: LLMRequest) => {
       requests.push(request)
+      if (responseStreams) return responseStreams.shift() ?? Stream.empty
       if (responseStream) {
         const stream = responseStream
         responseStream = undefined
@@ -389,8 +390,7 @@ const it = testEffect(
 )
 const sessionID = SessionV2.ID.make("ses_runner_test")
 const otherSessionID = SessionV2.ID.make("ses_runner_other")
-const admit = (session: SessionV2.Interface, text: string) =>
-  session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text }), resume: false })
+const admit = (session: SessionV2.Interface, text: string) => session.prompt({ sessionID, text, resume: false })
 
 const insertSession = (id: SessionV2.ID) =>
   Effect.gen(function* () {
@@ -427,6 +427,7 @@ const setup = Effect.gen(function* () {
   responses = undefined
   streamFailure = undefined
   responseStream = undefined
+  responseStreams = undefined
   streamGate = undefined
   streamStarted = undefined
   toolExecutionGate = undefined
@@ -774,7 +775,7 @@ describe("SessionRunnerLLM", () => {
 
       const message = yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Run automatically" }),
+        text: "Run automatically",
       })
       yield* session.wait(sessionID)
 
@@ -782,6 +783,34 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: message.id, type: "user", text: "Run automatically" },
       ])
+    }),
+  )
+
+  it.effect("runs a follow-up when synthetic input arrives during an active continuation", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const secondStarted = yield* Deferred.make<void>()
+      const releaseSecond = yield* Deferred.make<void>()
+      responseStreams = [
+        Stream.fromIterable(reply.tool("call-echo", "echo", { text: "background started" })),
+        Stream.unwrap(
+          Deferred.succeed(secondStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(releaseSecond)),
+            Effect.as(Stream.fromIterable(reply.stop())),
+          ),
+        ),
+        Stream.fromIterable(reply.text("Handled completion", "text-completion")),
+      ]
+      yield* admit(session, "Start background work")
+      const running = yield* session.resume(sessionID).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(secondStarted)
+
+      yield* session.synthetic({ sessionID, text: "Background work completed" })
+      yield* Deferred.succeed(releaseSecond, undefined)
+      yield* Fiber.join(running)
+
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[2]!)).toContain("Background work completed")
     }),
   )
 
@@ -813,7 +842,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({
         id: messageID,
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "First" }),
+        text: "First",
         resume: false,
       })
 
@@ -832,7 +861,7 @@ describe("SessionRunnerLLM", () => {
       ).toBeUndefined()
 
       systemUnavailable = false
-      yield* session.prompt({ id: messageID, sessionID, prompt: PromptInput.Prompt.make({ text: "First" }) })
+      yield* session.prompt({ id: messageID, sessionID, text: "First" })
       yield* session.wait(sessionID)
 
       expect(requests).toHaveLength(1)
@@ -1099,7 +1128,7 @@ describe("SessionRunnerLLM", () => {
         .run()
         .pipe(Effect.orDie)
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Inspect files" }), resume: false })
+      yield* session.prompt({ sessionID, text: "Inspect files", resume: false })
 
       requests.length = 0
       response = []
@@ -1120,7 +1149,7 @@ describe("SessionRunnerLLM", () => {
       const release = yield* Deferred.make<void>()
       pluginFlushHook = Deferred.await(release)
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Wait for plugins" }), resume: false })
+      yield* session.prompt({ sessionID, text: "Wait for plugins", resume: false })
 
       requests.length = 0
       response = []
@@ -1409,9 +1438,10 @@ describe("SessionRunnerLLM", () => {
       expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toBeUndefined()
 
       yield* admit(session, "Steer after compaction")
+      yield* session.synthetic({ sessionID, text: "Completion after compaction", resume: false })
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Queue after compaction" }),
+        text: "Queue after compaction",
         delivery: "queue",
         resume: false,
       })
@@ -1423,6 +1453,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(4)
       expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
       expect(userTexts(requests[2])).toContain("Steer after compaction")
+      expect(userTexts(requests[2])).toContain("Completion after compaction")
       expect(userTexts(requests[3])).toContain("Queue after compaction")
       expect(yield* SessionInput.pendingCompaction((yield* Database.Service).db, sessionID)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toMatchObject({
@@ -1451,7 +1482,7 @@ describe("SessionRunnerLLM", () => {
       const compaction = yield* session.compact({ sessionID })
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Continue after failure" }),
+        text: "Continue after failure",
         delivery: "queue",
         resume: false,
       })
@@ -2189,7 +2220,7 @@ describe("SessionRunnerLLM", () => {
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Change direction" }) })
+      yield* session.prompt({ sessionID, text: "Change direction" })
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       streamGate = undefined
@@ -2221,7 +2252,7 @@ describe("SessionRunnerLLM", () => {
       yield* Deferred.await(streamStarted)
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Wait until continuation ends" }),
+        text: "Wait until continuation ends",
         delivery: "queue",
       })
       yield* Deferred.succeed(streamGate, undefined)
@@ -2250,7 +2281,7 @@ describe("SessionRunnerLLM", () => {
       yield* Deferred.await(streamStarted)
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Run after interrupt" }),
+        text: "Run after interrupt",
         delivery: "queue",
       })
       yield* session.interrupt(sessionID)
@@ -2284,7 +2315,7 @@ describe("SessionRunnerLLM", () => {
       yield* Deferred.await(streamStarted)
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Steer after interrupt" }),
+        text: "Steer after interrupt",
       })
       yield* session.interrupt(sessionID)
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
@@ -2315,8 +2346,8 @@ describe("SessionRunnerLLM", () => {
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Queue first" }), delivery: "queue" })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Queue second" }), delivery: "queue" })
+      yield* session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
+      yield* session.prompt({ sessionID, text: "Queue second", delivery: "queue" })
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       streamGate = undefined
@@ -2335,7 +2366,7 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start steering")
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Queue for later" }),
+        text: "Queue for later",
         delivery: "queue",
         resume: false,
       })
@@ -2362,16 +2393,17 @@ describe("SessionRunnerLLM", () => {
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       while (requests.length < 1) yield* Effect.yieldNow
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Queue first" }), delivery: "queue" })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Queue second" }), delivery: "queue" })
+      yield* session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
+      yield* session.prompt({ sessionID, text: "Queue second", delivery: "queue" })
       streamGate = secondGate
       yield* Deferred.succeed(firstGate, undefined)
       while (requests.length < 2) yield* Effect.yieldNow
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Steer before next queued input" }) })
+      yield* session.prompt({ sessionID, text: "Steer before next queued input" })
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Also steer before next queued input" }),
+        text: "Also steer before next queued input",
       })
+      yield* session.synthetic({ sessionID, text: "Background completion before next queued input" })
       yield* Deferred.succeed(secondGate, undefined)
       yield* Fiber.join(first)
       streamGate = undefined
@@ -2384,12 +2416,14 @@ describe("SessionRunnerLLM", () => {
         "Queue first",
         "Steer before next queued input",
         "Also steer before next queued input",
+        "Background completion before next queued input",
       ])
       expect(userTexts(requests[3]!)).toEqual([
         "Start working",
         "Queue first",
         "Steer before next queued input",
         "Also steer before next queued input",
+        "Background completion before next queued input",
         "Queue second",
       ])
     }),
@@ -2406,8 +2440,8 @@ describe("SessionRunnerLLM", () => {
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "First steer" }) })
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Second steer" }) })
+      yield* session.prompt({ sessionID, text: "First steer" })
+      yield* session.prompt({ sessionID, text: "Second steer" })
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       streamGate = undefined
@@ -2433,7 +2467,7 @@ describe("SessionRunnerLLM", () => {
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Recover with this" }) })
+      yield* session.prompt({ sessionID, text: "Recover with this" })
       yield* Deferred.succeed(streamGate, undefined)
       expect(yield* Fiber.join(first).pipe(Effect.flip)).toBe(streamFailure)
 
@@ -2592,7 +2626,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* session.prompt({
         sessionID,
-        prompt: PromptInput.Prompt.make({ text: "Wait in queue" }),
+        text: "Wait in queue",
         delivery: "queue",
         resume: false,
       })
@@ -2611,7 +2645,7 @@ describe("SessionRunnerLLM", () => {
       const events = yield* EventV2.Service
       const defect = new Error("fail after prompt promotion")
       let fail = true
-      yield* events.project(SessionEvent.PromptPromoted, () => (fail ? Effect.die(defect) : Effect.void))
+      yield* events.project(SessionEvent.InputPromoted, () => (fail ? Effect.die(defect) : Effect.void))
       yield* admit(session, "Recover promoted input")
 
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
@@ -2631,7 +2665,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       const events = yield* EventV2.Service
       yield* events.listen((event) =>
-        event.type === SessionEvent.PromptPromoted.type
+        event.type === SessionEvent.InputPromoted.type
           ? Effect.die("fail after prompt promotion commits")
           : Effect.void,
       )
@@ -2651,7 +2685,7 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Run first")
       yield* session.prompt({
         sessionID: otherSessionID,
-        prompt: PromptInput.Prompt.make({ text: "Run second" }),
+        text: "Run second",
         resume: false,
       })
 
@@ -2686,12 +2720,12 @@ describe("SessionRunnerLLM", () => {
       yield* insertSession(otherLongSessionID)
       yield* session.prompt({
         sessionID: longSessionID,
-        prompt: PromptInput.Prompt.make({ text: "Run long session" }),
+        text: "Run long session",
         resume: false,
       })
       yield* session.prompt({
         sessionID: otherLongSessionID,
-        prompt: PromptInput.Prompt.make({ text: "Run other long session" }),
+        text: "Run other long session",
         resume: false,
       })
 
@@ -3253,7 +3287,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
-      yield* session.prompt({ sessionID, prompt: PromptInput.Prompt.make({ text: "Change direction" }) })
+      yield* session.prompt({ sessionID, text: "Change direction" })
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(run)
       streamGate = undefined

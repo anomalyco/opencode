@@ -146,7 +146,6 @@ import type {
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   PromptAgentAttachment,
-  PromptInput,
   PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
@@ -6131,7 +6130,12 @@ export class Session3 extends HeyApiClient {
     parameters: {
       sessionID: string
       id?: string | null
-      prompt?: PromptInput
+      text?: string
+      files?: Array<PromptInputFileAttachment>
+      agents?: Array<PromptAgentAttachment>
+      metadata?: {
+        [key: string]: unknown
+      }
       delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
@@ -6144,7 +6148,10 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "sessionID" },
             { in: "body", key: "id" },
-            { in: "body", key: "prompt" },
+            { in: "body", key: "text" },
+            { in: "body", key: "files" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "metadata" },
             { in: "body", key: "delivery" },
             { in: "body", key: "resume" },
           ],
@@ -6256,16 +6263,18 @@ export class Session3 extends HeyApiClient {
   /**
    * Add synthetic message
    *
-   * Append a synthetic message to a session and resume execution.
+   * Durably admit synthetic session input and schedule execution unless resume is false.
    */
   public synthetic<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
+      id?: string | null
       text?: string
       description?: string | null
       metadata?: {
         [key: string]: unknown
       }
+      delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
@@ -6276,9 +6285,11 @@ export class Session3 extends HeyApiClient {
         {
           args: [
             { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
             { in: "body", key: "text" },
             { in: "body", key: "description" },
             { in: "body", key: "metadata" },
+            { in: "body", key: "delivery" },
             { in: "body", key: "resume" },
           ],
         },

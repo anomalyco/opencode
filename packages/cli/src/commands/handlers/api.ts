@@ -20,10 +20,10 @@ export default Runtime.handler(
   Effect.fn("cli.api")(function* (input) {
     const options = yield* ServiceConfig.options()
     const found = yield* Service.discover(options)
-    const transport = found ?? (yield* Service.start(options))
+    const endpoint = found ?? (yield* Service.start(options))
     const params = Option.getOrElse(input.param, () => ({}))
-    const request = yield* resolveRequest(transport, input.request, params)
-    const headers = new Headers(transport.headers)
+    const request = yield* resolveRequest(endpoint, input.request, params)
+    const headers = new Headers(Service.headers(endpoint))
     for (const header of input.header) {
       const index = header.indexOf(":")
       if (index < 1) return yield* Effect.fail(new Error(`Invalid header, expected name:value: ${header}`))
@@ -33,7 +33,7 @@ export default Runtime.handler(
     if (body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
 
     const response = yield* Effect.tryPromise(() =>
-      fetch(new URL(request.path, transport.url), {
+      fetch(new URL(request.path, endpoint.url), {
         method: request.method,
         headers,
         body,
@@ -60,7 +60,7 @@ export function rawRequest(input: readonly string[]) {
 }
 
 function resolveRequest(
-  transport: Service.Transport,
+  endpoint: Service.Endpoint,
   input: readonly string[],
   params: Record<string, string>,
 ) {
@@ -68,7 +68,7 @@ function resolveRequest(
   if (raw) return Effect.succeed(raw)
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/openapi.json", transport.url), { headers: transport.headers })
+    const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
     if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
     return resolveOperation((await response.json()) as OpenApi, input[0], params)
   })

@@ -84,6 +84,7 @@ export const AttachCommand = cmd({
     const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
     await Effect.runPromise(
       run({
+        // @ts-expect-error V1 does not consume the V2-only server input.
         client: createOpencodeClient({ baseUrl: args.url, headers, directory }),
         api: OpenCode.make({ baseUrl: args.url, headers }),
         config,

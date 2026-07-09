@@ -15,7 +15,6 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt } from "@opencode-ai/schema/prompt"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -266,28 +265,26 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
 
-      yield* events.publish(SessionEvent.PromptAdmitted, {
+      yield* events.publish(SessionEvent.InputAdmitted, {
         sessionID,
         inputID: SessionMessage.ID.make("msg_first"),
-        prompt: Prompt.make({ text: "first" }),
-        delivery: "steer",
+        input: { type: "user", data: { text: "first" }, delivery: "steer" },
       })
       yield* events.publish(
-        SessionEvent.PromptPromoted,
+        SessionEvent.InputPromoted,
         {
           sessionID,
           inputID: SessionMessage.ID.make("msg_first"),
         },
         { id: EventV2.ID.make("evt_z") },
       )
-      yield* events.publish(SessionEvent.PromptAdmitted, {
+      yield* events.publish(SessionEvent.InputAdmitted, {
         sessionID,
         inputID: SessionMessage.ID.make("msg_second"),
-        prompt: Prompt.make({ text: "second" }),
-        delivery: "steer",
+        input: { type: "user", data: { text: "second" }, delivery: "steer" },
       })
       yield* events.publish(
-        SessionEvent.PromptPromoted,
+        SessionEvent.InputPromoted,
         {
           sessionID,
           inputID: SessionMessage.ID.make("msg_second"),
@@ -344,12 +341,11 @@ describe("SessionProjector", () => {
       const admitted = yield* SessionInput.admit(db, events, {
         id,
         sessionID,
-        prompt: Prompt.make({ text: "promote me" }),
-        delivery: "steer",
+        input: { type: "user", data: { text: "promote me" }, delivery: "steer" },
       })
       if (!admitted) return yield* Effect.die("Prompt admission failed")
 
-      const event = yield* events.publish(SessionEvent.PromptPromoted, {
+      const event = yield* events.publish(SessionEvent.InputPromoted, {
         sessionID,
         inputID: id,
       })

@@ -1,19 +1,18 @@
-import { NodeFileSystem } from "@effect/platform-node"
+import { Service } from "@opencode-ai/client/effect"
 import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
-import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Model } from "@opencode-ai/schema/model"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
-import { Effect } from "effect"
 import { open } from "node:fs/promises"
 import path from "node:path"
-import { Daemon } from "../daemon"
-import { Standalone } from "../services/standalone"
+import { Server } from "../services/server"
 import { loadRunAgents, waitForCatalogReady } from "./catalog.shared"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { toolInlineInfo } from "./tool"
 import { UI } from "./ui"
 
 export type RunCommandInput = {
+  server: Server.Resolved
   message: string[]
   continue?: boolean
   session?: string
@@ -23,14 +22,8 @@ export type RunCommandInput = {
   format: "default" | "json"
   file: string[]
   title?: string
-  server?: string
-  password?: string
-  username?: string
-  directory?: string
-  variant?: string
   thinking?: boolean
-  dangerouslySkipPermissions?: boolean
-  standaloneCommand?: ReadonlyArray<string>
+  auto?: boolean
 }
 
 type FilePart = {
@@ -38,8 +31,6 @@ type FilePart = {
   filename: string
   mime: string
 }
-
-type Transport = { readonly url: string; readonly headers?: HeadersInit }
 
 type Prepared = {
   directory?: string
@@ -56,34 +47,24 @@ export function runNonInteractive(input: RunCommandInput) {
 async function run(input: RunCommandInput) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   const root = process.env.PWD ?? process.cwd()
-  const directory = input.server ? input.directory : localDirectory(input.directory, root)
+  const directory = localDirectory(root)
   const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await Bun.stdin.text())
   if (!message?.trim()) fail("You must provide a message")
-  const files = await Promise.all(
-    input.file.map((file) => prepareFile(file, input.server ? root : (directory ?? root), input.server !== undefined)),
-  )
+  const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
   const prepared = { directory, message, files }
-  if (input.standaloneCommand)
-    return Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const transport = yield* Standalone.transport({ command: input.standaloneCommand })
-          yield* Effect.promise(() => execute(input, prepared, transport))
-        }),
-      ),
-    )
-  const transport = await startTransport(input)
-  return execute(input, prepared, transport)
+  return execute(input, prepared, input.server.endpoint)
 }
 
-async function execute(input: RunCommandInput, prepared: Prepared, transport: Transport) {
-  const client = OpenCode.make({ baseUrl: transport.url, headers: transport.headers })
+async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Service.Endpoint) {
+  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
   const requestedDirectory = prepared.directory ?? (await client.location.get()).directory
   if (!requestedDirectory) fail("Failed to resolve server directory")
   const session = await selectSession(client, requestedDirectory, input)
   const cwd = session?.location.directory ?? requestedDirectory
   const workspace = session?.location.workspaceID
-  const explicitModel = parseModel(input.model)
+  const explicit = parseRunModel(input.model)
+  const explicitModel = explicit?.model
+  const variant = explicit?.variant
   const sessionModel = session?.model ? { providerID: session.model.providerID, modelID: session.model.id } : undefined
   const defaultModel =
     !explicitModel && !sessionModel
@@ -91,8 +72,8 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
           .default({ location: { directory: cwd, workspace } })
           .then((result) => (result.data ? { providerID: result.data.providerID, modelID: result.data.id } : undefined))
       : undefined
-  const model = pickRunModel(explicitModel, input.variant, sessionModel, defaultModel)
-  if (input.variant && !model)
+  const model = pickRunModel(explicitModel, variant, sessionModel, defaultModel)
+  if (variant && !model)
     return reportError(input, "Cannot select a variant before selecting a model", session?.id)
   if (model) {
     await waitForCatalogReady({ sdk: client, directory: cwd, workspace, model })
@@ -100,12 +81,12 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
     if (!available.data.some((item) => item.providerID === model.providerID && item.id === model.modelID))
       return reportError(input, `Model unavailable: ${model.providerID}/${model.modelID}`, session?.id)
   }
-  const agent = await validateAgent(client, cwd, input.agent, input.server)
+  const agent = await validateAgent(client, cwd, input.agent)
   const selected =
     session ??
     (await client.session.create({
       agent,
-      model: model ? { providerID: model.providerID, id: model.modelID, variant: input.variant } : undefined,
+      model: model ? { providerID: model.providerID, id: model.modelID, variant } : undefined,
       location: { directory: cwd },
     }))
   if (!session && input.title !== undefined) {
@@ -122,11 +103,11 @@ async function execute(input: RunCommandInput, prepared: Prepared, transport: Tr
     files: prepared.files,
     agent,
     model,
-    variant: input.variant,
+    variant,
     thinking: input.thinking ?? false,
     format: input.format,
-    dangerouslySkipPermissions: input.dangerouslySkipPermissions ?? false,
-    attached: !input.standaloneCommand,
+    auto: input.auto ?? false,
+    attached: true,
     renderTool,
     renderToolError,
   }).catch((error) => reportError(input, error instanceof Error ? error.message : String(error), selected.id))
@@ -154,47 +135,29 @@ function formatMessage(message: string[]) {
   return value || undefined
 }
 
-function localDirectory(directory: string | undefined, root: string) {
+function localDirectory(root: string) {
   try {
-    process.chdir(directory ? (path.isAbsolute(directory) ? directory : path.join(root, directory)) : root)
+    process.chdir(root)
     return process.cwd()
   } catch {
-    fail(`Failed to change directory to ${directory}`)
+    fail(`Failed to change directory to ${root}`)
   }
 }
 
-function startTransport(input: RunCommandInput) {
-  if (input.server) {
-    return Effect.runPromise(
-      Daemon.transport({
-        mode: "attach",
-        url: input.server,
-        password: input.password,
-        username: input.username,
-      }),
-    )
-  }
-  return Effect.runPromise(
-    Daemon.transport({ mode: "shared" }).pipe(
-      Effect.provide(NodeFileSystem.layer),
-      Effect.provide(Global.layerWith({})),
-    ),
-  )
-}
-
-function parseModel(value?: string) {
+export function parseRunModel(value?: string) {
   if (!value) return
-  const [providerID, ...rest] = value.split("/")
-  const modelID = rest.join("/")
-  if (!providerID || !modelID) fail("--model must use the format provider/model")
-  return { providerID, modelID }
+  const ref = Model.Ref.parse(value)
+  return {
+    model: { providerID: ref.providerID, modelID: ref.id },
+    variant: ref.variant,
+  }
 }
 
-async function validateAgent(client: OpenCodeClient, directory: string, name?: string, server?: string) {
+async function validateAgent(client: OpenCodeClient, directory: string, name?: string) {
   if (!name) return
   const agents = await loadRunAgents(client, directory).catch(() => undefined)
   if (!agents) {
-    warning(`failed to list agents${server ? ` from ${server}` : ""}. Falling back to default agent`)
+    warning("failed to list agents. Falling back to default agent")
     return
   }
   const agent = agents.find((item) => item.id === name)
@@ -222,12 +185,11 @@ async function selectSession(client: OpenCodeClient, directory: string, input: R
   return client.session.fork({ sessionID: selected.id })
 }
 
-async function prepareFile(input: string, directory: string, remote: boolean): Promise<FilePart> {
+async function prepareFile(input: string, directory: string): Promise<FilePart> {
   const file = path.resolve(directory, input)
   const handle = await open(file, "r").catch(() => fail(`File not found: ${input}`))
   try {
     const stat = await handle.stat()
-    if (remote && stat.isDirectory()) fail(`Cannot attach local directory without a shared filesystem: ${input}`)
     if (!stat.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)
       fail(`Cannot attach a directory, special file, or file larger than 10 MiB: ${input}`)
     const content = Buffer.alloc(Number(stat.size))
