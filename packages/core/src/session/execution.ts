@@ -28,7 +28,9 @@ export interface Interface {
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionExecution") {}
 
-export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: "user" | "shutdown" | "superseded") {
+type InterruptReason = "user" | "shutdown" | "superseded"
+
+export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
   if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
   const failure = Cause.squash(exit.cause)
@@ -56,18 +58,14 @@ export const layer = Layer.effect(
       )
     // Starting or finishing on its own clears stale suspension; interruption preserves it because
     // managed-server teardown suspends active Sessions immediately before interrupting their drains.
-    const clearSuspended = (sessionID: SessionSchema.ID) => ({
-      commit: () => store.setSuspended(sessionID, false),
+    const clearSuspensionOnCommit = (sessionID: SessionSchema.ID) => ({
+      commit: () => Effect.asVoid(store.consumeSuspended(sessionID)),
     })
-    const coordinator = yield* SessionRunCoordinator.make<
-      SessionSchema.ID,
-      SessionRunner.RunError,
-      "user" | "shutdown" | "superseded"
-    >({
+    const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          events.publish(SessionEvent.Execution.Started, { sessionID }, clearSuspended(sessionID)),
+          events.publish(SessionEvent.Execution.Started, { sessionID }, clearSuspensionOnCommit(sessionID)),
         ),
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
         const session = yield* store.get(sessionID)
@@ -88,7 +86,7 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
-              yield* events.publish(SessionEvent.Execution.Succeeded, { sessionID }, clearSuspended(sessionID))
+              yield* events.publish(SessionEvent.Execution.Succeeded, { sessionID }, clearSuspensionOnCommit(sessionID))
               return
             }
             if (outcome.type === "interrupted") {
@@ -101,7 +99,7 @@ export const layer = Layer.effect(
                 sessionID,
                 error: outcome.error,
               },
-              clearSuspended(sessionID),
+              clearSuspensionOnCommit(sessionID),
             )
           }),
         ),

@@ -1,6 +1,6 @@
 export * as SessionStore from "./store"
 
-import { and, eq, isNotNull, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
@@ -18,8 +18,9 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  /** Clears suspension, reporting whether this caller consumed it. At most one concurrent caller receives true. */
   readonly consumeSuspended: (sessionID: Session.ID) => Effect.Effect<boolean>
-  readonly setSuspended: (sessionID: Session.ID, suspended: boolean) => Effect.Effect<void>
+  readonly suspend: (sessionIDs: Iterable<Session.ID>) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionStore") {}
@@ -74,16 +75,14 @@ const layer = Layer.effect(
             .pipe(Effect.orDie)) !== undefined
         )
       }),
-      setSuspended: Effect.fn("SessionStore.setSuspended")(function* (sessionID, suspended) {
+      suspend: Effect.fn("SessionStore.suspend")(function* (sessionIDs) {
+        const ids = Array.from(sessionIDs)
+        if (ids.length === 0) return
+        // The null guard preserves the original suspension time if a Session is somehow suspended twice.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: suspended ? Date.now() : null })
-          .where(
-            and(
-              eq(SessionTable.id, sessionID),
-              suspended ? isNull(SessionTable.time_suspended) : isNotNull(SessionTable.time_suspended),
-            ),
-          )
+          .set({ time_suspended: Date.now() })
+          .where(and(inArray(SessionTable.id, ids), isNull(SessionTable.time_suspended)))
           .run()
           .pipe(Effect.orDie)
       }),

@@ -1,6 +1,6 @@
 export * as SessionRestart from "./restart"
 
-import { Cause, Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionExecution } from "../execution"
 import { SessionStore } from "../store"
@@ -28,10 +28,7 @@ export const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     return Service.of({
       suspendActiveSessions: Effect.gen(function* () {
-        const active = yield* execution.active
-        yield* Effect.forEach(Array.from(active), (sessionID) => store.setSuspended(sessionID, true), {
-          discard: true,
-        })
+        yield* store.suspend(yield* execution.active)
       }),
       resumeSuspendedSessions: Effect.gen(function* () {
         const sessions = yield* store.listSuspended()
@@ -40,18 +37,10 @@ export const layer = Layer.effect(
           (sessionID) =>
             Effect.gen(function* () {
               if (!(yield* store.consumeSuspended(sessionID))) return
-              yield* execution.resume(sessionID).pipe(
-                Effect.tapCause((cause) =>
-                  Cause.hasInterruptsOnly(cause)
-                    ? Effect.void
-                    : Effect.logError("Failed to resume suspended Session", cause).pipe(
-                        Effect.annotateLogs({ sessionID }),
-                      ),
-                ),
-                Effect.ignore,
-              )
+              // Drain failures are already logged and durably recorded by the execution layer.
+              yield* Effect.ignore(execution.resume(sessionID))
             }),
-          // Suspensions are consumed one at a time; the bounded concurrency only overlaps the drains.
+          // Each suspension is consumed atomically right before its drain; at most four drains run at once.
           { concurrency: 4, discard: true },
         )
       }),

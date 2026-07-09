@@ -56,41 +56,16 @@ describe("SessionExecution lifecycle", () => {
 
   it.effect("atomically consumes each suspension at most once", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
+      const database = yield* Database.Service
       const store = yield* SessionStore.Service
       const first = SessionV2.ID.make("ses_recover_first")
       const second = SessionV2.ID.make("ses_recover_second")
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values(
-          [first, second].map((id) => ({
-            id,
-            project_id: Project.ID.global,
-            slug: id,
-            directory: "/project",
-            title: id,
-            version: "test",
-            time_suspended: Date.now(),
-          })),
-        )
-        .run()
-        .pipe(Effect.orDie)
+      yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
 
       expect(yield* store.consumeSuspended(first)).toBe(true)
       expect(yield* store.consumeSuspended(first)).toBe(false)
       expect(yield* store.consumeSuspended(second)).toBe(true)
-      expect(
-        (yield* db
-          .select({ timeSuspended: SessionTable.time_suspended })
-          .from(SessionTable)
-          .all()
-          .pipe(Effect.orDie)).map((row) => row.timeSuspended),
-      ).toEqual([null, null])
+      expect(yield* suspensions(database)).toEqual({ [first]: false, [second]: false })
     }),
   )
 
@@ -116,17 +91,17 @@ describe("SessionExecution lifecycle", () => {
       yield* Deferred.await(draining)
 
       yield* restart.suspendActiveSessions
-      expect(yield* suspendedFlags(database)).toEqual({ [interrupted]: true, [completed]: true })
+      expect(yield* suspensions(database)).toEqual({ [interrupted]: true, [completed]: true })
 
-      // A drain that finishes on its own after suspension clears its stale flag.
+      // A drain that finishes on its own after suspension clears its stale suspension.
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(completing)
       yield* execution.awaitIdle(completed)
-      expect((yield* suspendedFlags(database))[completed]).toBe(false)
+      expect((yield* suspensions(database))[completed]).toBe(false)
 
       // Teardown interruption preserves suspension for the next server start.
       yield* Scope.close(scope, Exit.void)
-      expect((yield* suspendedFlags(database))[interrupted]).toBe(true)
+      expect((yield* suspensions(database))[interrupted]).toBe(true)
     }),
   )
 
@@ -144,7 +119,7 @@ describe("SessionExecution lifecycle", () => {
 
       yield* restart.resumeSuspendedSessions
       expect(drained.toSorted()).toEqual([first, second])
-      expect(yield* suspendedFlags(database)).toEqual({ [first]: false, [second]: false })
+      expect(yield* suspensions(database)).toEqual({ [first]: false, [second]: false })
 
       yield* restart.resumeSuspendedSessions
       expect(drained.length).toBe(2)
@@ -182,7 +157,7 @@ function seedSessions(
   })
 }
 
-function suspendedFlags(database: Database.Service["Service"]) {
+function suspensions(database: Database.Service["Service"]) {
   return database.db
     .select({ id: SessionTable.id, suspended: SessionTable.time_suspended })
     .from(SessionTable)

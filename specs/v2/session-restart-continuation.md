@@ -79,11 +79,11 @@ The Session execution layer clears the field through EventV2 live `commit` hooks
 | Execution failed            | `NULL`                                |
 | Execution interrupted (any) | unchanged — interruption preserves it |
 
-Interruption must preserve suspension because managed teardown interrupts drains immediately after suspending them. Every other transition clearing the field closes the races: a drain that finishes on its own between suspension and teardown clears its flag, and an embedded server that completes a suspended Session during the gap clears it on start.
+Interruption must preserve suspension because managed teardown interrupts drains immediately after suspending them. Every other transition clearing the field closes the races: a drain that finishes on its own between suspension and teardown clears its suspension, and an embedded server that completes a suspended Session during the gap clears it on start.
 
 Because the clears are `commit` hooks rather than projections, event replay preserves lifecycle history without recreating or destroying suspension.
 
-## Startup Consumes One Suspension at a Time
+## Startup Consumes Each Suspension Atomically
 
 `resumeSuspendedSessions` reads pending Session IDs through the partial index. Immediately before resuming each Session, it performs a conditional clear:
 
@@ -94,7 +94,7 @@ WHERE id = ? AND time_suspended IS NOT NULL
 RETURNING id;
 ```
 
-Only the process receiving the returned row resumes that Session. A second consumer receives no row. Suspensions are consumed one at a time; only the resulting drains overlap, with bounded concurrency.
+Only the process receiving the returned row resumes that Session. A second consumer receives no row. Each suspension is consumed right before its own drain starts, and at most a handful of resumed drains run at once.
 
 The resume goes through the existing process-local coordinator, which joins duplicate same-process resumes and starts a forced drain while idle.
 
