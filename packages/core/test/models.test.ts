@@ -3,9 +3,9 @@ import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { it } from "./lib/effect"
 import { readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
@@ -28,6 +28,7 @@ afterAll(() => {
 })
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
+const lockDir = path.join(Global.Path.state, "locks", `${Hash.fast(`models-dev:${cacheFile}`)}.lock`)
 
 const fixture: Record<string, ModelsDev.Provider> = {
   acme: {
@@ -72,6 +73,7 @@ const fixture2: Record<string, ModelsDev.Provider> = {
 interface MockState {
   body: string
   status: number
+  stall?: boolean
   calls: Array<{ url: string; userAgent: string | null }>
 }
 
@@ -83,6 +85,7 @@ const makeMockClient = (state: Ref.Ref<MockState>) =>
         calls: [...s.calls, { url: request.url, userAgent: request.headers["user-agent"] ?? null }],
       }))
       const s = yield* Ref.get(state)
+      if (s.stall) return yield* Effect.never
       return HttpClientResponse.fromWeb(request, new Response(s.body, { status: s.status }))
     }),
   )
@@ -114,10 +117,12 @@ const provided = <A, E>(state: Ref.Ref<MockState>, eff: Effect.Effect<A, E, Mode
 
 beforeEach(async () => {
   await rm(cacheFile, { force: true })
+  await rm(lockDir, { recursive: true, force: true })
 })
 
 afterAll(async () => {
   await rm(cacheFile, { force: true })
+  await rm(lockDir, { recursive: true, force: true })
 })
 
 const initialState: MockState = {
@@ -152,6 +157,47 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
+  )
+
+  it.live(
+    "get() falls back when startup fetch stalls and refresh can later replace it",
+    Effect.gen(function* () {
+      const state = yield* Ref.make<MockState>({ ...initialState, stall: true })
+      const context = yield* Layer.build(buildLayer(state))
+      const result = yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          Flag.OPENCODE_DISABLE_MODELS_FETCH = false
+        }),
+        () =>
+          Effect.gen(function* () {
+            const svc = yield* ModelsDev.Service
+            const started = Date.now()
+            const fallback = yield* svc.get()
+            const elapsed = Date.now() - started
+
+            yield* Ref.update(state, (s) => ({
+              ...s,
+              body: JSON.stringify(fixture2),
+              status: 200,
+              stall: false,
+            }))
+            yield* svc.refresh(true)
+            const refreshed = yield* svc.get()
+            return { elapsed, fallback, refreshed }
+          }).pipe(Effect.provide(context)),
+        () =>
+          Effect.sync(() => {
+            Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+          }),
+      )
+
+      expect(result.elapsed).toBeLessThan(5000)
+      expect(result.fallback).toEqual({})
+      expect(result.refreshed).toEqual(fixture2)
+      const final = yield* Ref.get(state)
+      expect(final.calls.length).toBe(2)
+    }),
+    10_000,
   )
 
   it.live("get() recovers from a corrupted cache file by fetching a fresh catalog", () =>

@@ -1,6 +1,6 @@
 import path from "path"
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Global } from "./global"
 import { Flag } from "./flag/flag"
@@ -109,6 +109,10 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
+const Providers = Schema.Record(Schema.String, Provider)
+const decodeProvidersEffect = Schema.decodeUnknownEffect(Providers)
+const decodeProviders = Schema.decodeUnknownSync(Providers)
+
 export const Event = ModelsDev.Event
 
 declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
@@ -141,6 +145,7 @@ const layer = Layer.effect(
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
     )
     const ttl = Duration.minutes(5)
+    const populateFetchTimeout = Duration.seconds(2)
     const lockKey = `models-dev:${filepath}`
 
     const fresh = Effect.fnUntraced(function* () {
@@ -160,22 +165,24 @@ const layer = Layer.effect(
     })
 
     const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
-      Effect.catch((error) => {
-        if (
-          Flag.OPENCODE_MODELS_PATH === undefined &&
-          error._tag === "FileSystemError" &&
-          error.method === "readJson"
-        ) {
+      Effect.flatMap((v) => decodeProvidersEffect(v)),
+      Effect.catch((_error) => {
+        if (Flag.OPENCODE_MODELS_PATH === undefined) {
           return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
         }
         return Effect.succeed(undefined)
       }),
-      Effect.map((v) => v as Record<string, Provider> | undefined),
     )
 
     const loadSnapshot = Effect.sync(() =>
       typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
     )
+
+    const loadCached = Effect.fn("ModelsDev.loadCached")(function* () {
+      const fromDisk = yield* loadFromDisk
+      if (fromDisk) return fromDisk
+      return yield* loadSnapshot
+    })
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
       const text = yield* fetchApi()
@@ -192,20 +199,29 @@ const layer = Layer.effect(
       return text
     })
 
-    const populate = Effect.gen(function* () {
-      const fromDisk = yield* loadFromDisk
-      if (fromDisk) return fromDisk
-      const snapshot = yield* loadSnapshot
-      if (snapshot) return snapshot
-      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-      // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
+    const fetchFromRemote = Effect.gen(function* () {
       const text = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Flock.effect(lockKey)
           return yield* fetchAndWrite()
         }),
       )
-      return JSON.parse(text) as Record<string, Provider>
+      return decodeProviders(JSON.parse(text))
+    })
+
+    const populate = Effect.gen(function* () {
+      const cached = yield* loadCached()
+      if (cached) return cached
+      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+      return yield* fetchFromRemote.pipe(
+        Effect.timeout(populateFetchTimeout),
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            yield* Effect.logWarning("Falling back to cached models.dev catalog", { cause })
+            return (yield* loadCached()) ?? {}
+          }),
+        ),
+      )
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
