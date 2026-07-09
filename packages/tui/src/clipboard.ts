@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process"
-import { readFile, rm } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { access, readFile, rm } from "node:fs/promises"
 import { platform, release, tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -26,9 +27,39 @@ function writeOsc52(text: string) {
   process.stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
 }
 
+async function readClipboardFilePath() {
+  // «class furl» reads public.file-url (Finder Cmd+C) and alias records as a file reference.
+  // Plain text is coercible too, so verify the path exists before trusting it.
+  try {
+    const result = await exec("osascript", [
+      "-e",
+      `try
+	set theFile to the clipboard as «class furl»
+	try
+		return POSIX path of theFile
+	on error
+		set fileList to theFile as list
+		return POSIX path of (item 1 of fileList)
+	end try
+on error
+	return ""
+end try`,
+    ])
+    const filePath = result.stdout.toString().trim()
+    if (!filePath) return undefined
+    await access(filePath)
+    return filePath
+  } catch {
+    return undefined
+  }
+}
+
 export async function read() {
   if (platform() === "darwin") {
-    const file = path.join(tmpdir(), "opencode-clipboard.png")
+    const filePath = await readClipboardFilePath()
+    if (filePath) return { data: filePath, mime: "text/plain" }
+
+    const file = path.join(tmpdir(), `opencode-clipboard-${randomUUID()}.png`)
     try {
       await exec("osascript", [
         "-e",
@@ -42,10 +73,8 @@ export async function read() {
         "-e",
         "close access fileRef",
       ])
-      return { data: (await readFile(file)).toString("base64"), mime: "image/png" }
+      return { data: (await readFile(file)).toString("base64"), mime: "image/png", path: file }
     } catch {
-      // Fall through to text clipboard.
-    } finally {
       await rm(file, { force: true }).catch(() => {})
     }
   }

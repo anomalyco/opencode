@@ -376,6 +376,7 @@ export function Prompt(props: PromptProps) {
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
               filename: "clipboard",
+              filepath: content.path,
               mime: content.mime,
               content: content.data,
             })
@@ -1180,10 +1181,26 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
-    const filepath = pastedFilepath(pastedContent, terminalEnvironment.platform)
+    let filepath = pastedFilepath(pastedContent, terminalEnvironment.platform)
     const isUrl = /^(https?):\/\//.test(filepath)
     if (!isUrl) {
-      const attachment = await readLocalAttachment(filepath)
+      let attachment = await readLocalAttachment(filepath)
+      // Bracketed paste only delivers the clipboard's text flavor, which for a
+      // copied file is the bare filename. Resolve the full path via the platform
+      // clipboard (which can read the file URL) and retry.
+      if (!attachment && clipboard.read) {
+        const clip = await clipboard.read()
+        if (clip?.mime === "text/plain" && clip.data && clip.data !== pastedContent) {
+          const clipPath = pastedFilepath(clip.data, terminalEnvironment.platform)
+          if (clipPath !== filepath) {
+            const retry = await readLocalAttachment(clipPath)
+            if (retry) {
+              attachment = retry
+              filepath = clipPath
+            }
+          }
+        }
+      }
       const filename = path.basename(filepath)
       if (attachment?.type === "text") {
         pasteText(attachment.content, `[SVG: ${filename ?? "image"}]`)
@@ -1244,7 +1261,7 @@ export function Prompt(props: PromptProps) {
     const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
       type: "file" as const,
       mime: file.mime,
-      filename: file.filename,
+      filename: file.filepath ?? file.filename,
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
