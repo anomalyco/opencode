@@ -10,10 +10,11 @@ if (!expectedBunVersion) {
   throw new Error("packageManager field not found in root package.json")
 }
 
-// relax version requirement
-const expectedBunVersionRange = `^${expectedBunVersion}`
+// relax version requirement - skip check for canary
+const isCanary = expectedBunVersion === "canary" || expectedBunVersion.includes("-canary")
+const expectedBunVersionRange = isCanary ? "*" : `^${expectedBunVersion}`
 
-if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
+if (!isCanary && !semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
   throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`)
 }
 
