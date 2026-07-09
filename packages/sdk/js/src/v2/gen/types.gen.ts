@@ -846,7 +846,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           inputID: string
-          input: SessionInputMessage
+          input: SessionPendingMessage
         }
       }
     | {
@@ -3352,7 +3352,7 @@ export type PromptAgentAttachment = {
   mention?: PromptMention
 }
 
-export type SessionInputUserData = {
+export type SessionPendingUserData = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
@@ -3361,13 +3361,13 @@ export type SessionInputUserData = {
   }
 }
 
-export type SessionInputUserMessage = {
+export type SessionPendingUserMessage = {
   type: "user"
-  data: SessionInputUserData
+  data: SessionPendingUserData
   delivery: "steer" | "queue"
 }
 
-export type SessionInputSyntheticData = {
+export type SessionPendingSyntheticData = {
   text: string
   description?: string
   metadata?: {
@@ -3375,13 +3375,13 @@ export type SessionInputSyntheticData = {
   }
 }
 
-export type SessionInputSyntheticMessage = {
+export type SessionPendingSyntheticMessage = {
   type: "synthetic"
-  data: SessionInputSyntheticData
+  data: SessionPendingSyntheticData
   delivery: "steer" | "queue"
 }
 
-export type SessionInputMessage = SessionInputUserMessage | SessionInputSyntheticMessage
+export type SessionPendingMessage = SessionPendingUserMessage | SessionPendingSyntheticMessage
 
 export type SessionStructuredError = {
   type: string
@@ -3560,12 +3560,14 @@ export type FormField =
   | FormMultiselectField
   | FormLinkField
 
+export type FormFields = Array<FormField>
+
 export type FormInfo = {
   id: string
   sessionID: string
   title: string
   metadata?: FormMetadata
-  fields: Array<FormField>
+  fields: FormFields
 }
 
 export type FormValue =
@@ -3822,7 +3824,7 @@ export type SyncEventSessionInputAdmitted = {
     data: {
       sessionID: string
       inputID: string
-      input: SessionInputMessage
+      input: SessionPendingMessage
     }
   }
 }
@@ -4455,35 +4457,32 @@ export type PromptInputFileAttachment = {
   mention?: PromptMention
 }
 
-export type SessionInputUser = {
+export type SessionPendingUser = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
-  promotedSeq?: number
   type: "user"
-  data: SessionInputUserData
+  data: SessionPendingUserData
   delivery: "steer" | "queue"
 }
 
-export type SessionInputSynthetic = {
+export type SessionPendingSynthetic = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
-  promotedSeq?: number
   type: "synthetic"
-  data: SessionInputSyntheticData
+  data: SessionPendingSyntheticData
   delivery: "steer" | "queue"
 }
 
-export type SessionInputCompaction = {
+export type SessionPendingCompaction = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
   type: "compaction"
-  handledSeq?: number
 }
 
 export type SessionMessageAgentSelected = {
@@ -4752,6 +4751,8 @@ export type SessionMessageInfo =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
+export type SessionPendingInfo = SessionPendingUser | SessionPendingSynthetic | SessionPendingCompaction
+
 export type InstructionEntryKey = string
 
 export type InstructionEntryInfo = {
@@ -4909,7 +4910,7 @@ export type SessionInputAdmitted = {
   data: {
     sessionID: string
     inputID: string
-    input: SessionInputMessage
+    input: SessionPendingMessage
   }
 }
 
@@ -5841,7 +5842,7 @@ export type FormCreatePayload = {
   id?: string
   title: string
   metadata?: FormMetadata
-  fields: Array<FormField>
+  fields: FormFields
 }
 
 export type FormState =
@@ -7188,7 +7189,7 @@ export type EventSessionInputAdmitted = {
   properties: {
     sessionID: string
     inputID: string
-    input: SessionInputMessage
+    input: SessionPendingMessage
   }
 }
 
@@ -8781,35 +8782,32 @@ export type SessionInfoV2 = {
 
 export type PromptBase64V2 = string
 
-export type SessionInputUserV2 = {
+export type SessionPendingUserV2 = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
-  promotedSeq?: number
   type: "user"
-  data: SessionInputUserData
+  data: SessionPendingUserData
   delivery: "steer" | "queue"
 }
 
-export type SessionInputSyntheticV2 = {
+export type SessionPendingSyntheticV2 = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
-  promotedSeq?: number
   type: "synthetic"
-  data: SessionInputSyntheticData
+  data: SessionPendingSyntheticData
   delivery: "steer" | "queue"
 }
 
-export type SessionInputCompactionV2 = {
+export type SessionPendingCompactionV2 = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
   type: "compaction"
-  handledSeq?: number
 }
 
 export type SessionMessageAgentSelectedV2 = {
@@ -9126,7 +9124,7 @@ export type SessionInputPromotedV2 = {
   }
 }
 
-export type SessionInputUserData1 = {
+export type SessionPendingUserData1 = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
@@ -9135,13 +9133,13 @@ export type SessionInputUserData1 = {
   }
 }
 
-export type SessionInputUserMessageV2 = {
+export type SessionPendingUserMessageV2 = {
   type: "user"
-  data: SessionInputUserData1
+  data: SessionPendingUserData1
   delivery: "steer" | "queue"
 }
 
-export type SessionInputSyntheticData1 = {
+export type SessionPendingSyntheticData1 = {
   text: string
   description?: string
   metadata?: {
@@ -9149,9 +9147,9 @@ export type SessionInputSyntheticData1 = {
   }
 }
 
-export type SessionInputSyntheticMessageV2 = {
+export type SessionPendingSyntheticMessageV2 = {
   type: "synthetic"
-  data: SessionInputSyntheticData1
+  data: SessionPendingSyntheticData1
   delivery: "steer" | "queue"
 }
 
@@ -9171,7 +9169,7 @@ export type SessionInputAdmittedV2 = {
   data: {
     sessionID: string
     inputID: string
-    input: SessionInputMessage
+    input: SessionPendingMessage
   }
 }
 
@@ -9895,19 +9893,21 @@ export type FormMultiselectFieldV2 = {
   default?: Array<string>
 }
 
+export type FormFieldsV2 = [FormField, FormField]
+
 export type FormInfoV2 = {
   id: string
   sessionID: string
   title: string
   metadata?: FormMetadata
-  fields: Array<FormField>
+  fields: FormFieldsV2
 }
 
 export type FormCreatePayloadV2 = {
   id?: string | null
   title: string
   metadata?: FormMetadata
-  fields: Array<FormField>
+  fields: FormFieldsV2
 }
 
 export type FormValueV2 =
@@ -10624,12 +10624,14 @@ export type FormField1 =
   | FormMultiselectField1
   | FormLinkField
 
+export type FormFields1 = [FormField1, FormField1]
+
 export type FormInfo1 = {
   id: string
   sessionID: string
   title: string
   metadata?: FormMetadata1
-  fields: Array<FormField1>
+  fields: FormFields1
 }
 
 export type FormCreatedV2 = {
@@ -15670,7 +15672,7 @@ export type V2SessionPromptResponses = {
    * Success
    */
   200: {
-    data: SessionInputUserV2
+    data: SessionPendingUserV2
   }
 }
 
@@ -15725,7 +15727,7 @@ export type V2SessionCommandResponses = {
    * Success
    */
   200: {
-    data: SessionInputUserV2
+    data: SessionPendingUserV2
   }
 }
 
@@ -15814,7 +15816,7 @@ export type V2SessionSyntheticResponses = {
    * Success
    */
   200: {
-    data: SessionInputSyntheticV2
+    data: SessionPendingSyntheticV2
   }
 }
 
@@ -15895,7 +15897,7 @@ export type V2SessionCompactResponses = {
    * Success
    */
   200: {
-    data: SessionInputCompactionV2
+    data: SessionPendingCompactionV2
   }
 }
 
@@ -16110,6 +16112,43 @@ export type V2SessionContextResponses = {
 }
 
 export type V2SessionContextResponse = V2SessionContextResponses[keyof V2SessionContextResponses]
+
+export type V2SessionPendingListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/pending"
+}
+
+export type V2SessionPendingListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionPendingListError = V2SessionPendingListErrors[keyof V2SessionPendingListErrors]
+
+export type V2SessionPendingListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionPendingInfo>
+  }
+}
+
+export type V2SessionPendingListResponse = V2SessionPendingListResponses[keyof V2SessionPendingListResponses]
 
 export type V2SessionInstructionsEntryListData = {
   body?: never

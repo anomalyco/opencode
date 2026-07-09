@@ -4,7 +4,7 @@ import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Money } from "@opencode-ai/schema/money"
-import { Context, DateTime, Deferred, Effect, Equal, Fiber, Hash, RcMap, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Equal, Fiber, Hash, RcMap, Schema, Stream } from "effect"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -706,7 +706,7 @@ describe("LocationServiceMap", () => {
                 })
                 .pipe(Effect.asVoid),
           })
-          yield* plugins.activate([{ plugin: reviewer }])
+          yield* plugins.activate([reviewer])
 
           expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",

@@ -1,6 +1,5 @@
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode, type OpenCodeEvent } from "@opencode-ai/client/promise"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { V2Event } from "@opencode-ai/sdk/v2"
 
 export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/tui`
@@ -51,7 +50,7 @@ export function createEventStream() {
   }
 
   return {
-    emit(event: V2Event) {
+    emit(event: OpenCodeEvent) {
       send(v2, pending, event)
     },
     v2() {

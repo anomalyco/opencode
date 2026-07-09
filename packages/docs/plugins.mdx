@@ -2,3 +2,366 @@
 title: "Plugins"
 description: "Extend OpenCode with plugins."
 ---
+
+Plugins extend OpenCode in-process. They can transform agents, models, commands,
+integrations, references, skills, and tools; intercept model requests and tool
+execution; and call a location-scoped subset of the V2 client.
+
+<Warning>
+  The V2 plugin API is beta. Entrypoints, hooks, draft shapes, and configuration
+  may change before the stable release. Use only the `/v2` exports described on
+  this page; the root `@opencode-ai/plugin` API is the legacy API.
+</Warning>
+
+## Load plugins
+
+Plugins can be loaded from npm packages, explicit local paths, or config
+directories. Each module must have one default export containing a unique
+plugin `id` and either a Promise `setup` function or an Effect `effect`
+function.
+
+### Configuration
+
+Add ordered entries to the `plugins` field in `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local.ts",
+    {
+      "package": "./plugins/reviewer.ts",
+      "options": {
+        "agent": "reviewer",
+        "strict": true
+      }
+    }
+  ]
+}
+```
+
+A string is either a package specifier or a local path. Local paths must start
+with `./` or `../` and resolve relative to the configuration file containing
+the entry. Absolute paths and `file://` URLs are also supported. Both scoped
+packages and versioned package specifiers are supported.
+
+Use the object form to pass JSON configuration to the plugin. OpenCode passes
+`options` unchanged as `ctx.options`; omitted options become an empty object.
+The plugin owns validation and defaults for its options.
+
+See [Config](/config#locations) for configuration locations and precedence.
+Entries from all applicable files are processed from lowest to highest
+precedence rather than replacing the entire array.
+
+### Local discovery
+
+OpenCode automatically scans this directory in every discovered OpenCode config
+directory:
+
+```text
+.opencode/plugins/
+```
+
+The equivalent global directory is `~/.config/opencode/plugins/`. Direct `.ts`
+and `.js` children are loaded. An immediate child directory is also loaded as a
+package when OpenCode can resolve a string `exports`, `module`, or `main`
+entrypoint, or an `index.ts` or `index.js` file.
+
+A `plugins/` directory beside a project-root `opencode.json` is not discovered
+automatically. Put it under `.opencode/`, or add its file explicitly with a
+relative config entry.
+
+### Enable and disable
+
+A string beginning with `-` removes a previously selected target. `*` matches
+everything, and a suffix of `.*` matches an ID or target prefix. Directives are
+applied in order:
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    "-opencode.provider.*",
+    "opencode.provider.openai",
+    "-./plugins/old.ts",
+    "-*",
+    "./plugins/only-this-one.ts"
+  ]
+}
+```
+
+Use the same package specifier or resolved local target to remove an external
+plugin. Built-in and embedded plugins can be selected by their plugin ID.
+Explicit config directives run after local auto-discovery, so they can disable
+discovered plugins.
+
+User plugins are activated in configured order between OpenCode's internal
+plugin phases. Hooks run sequentially in registration order, and later hooks
+observe earlier mutations. Do not depend on the internal phase ordering while
+the API is beta.
+
+### Installation and dependencies
+
+OpenCode installs bare package entries and their production dependencies into
+an isolated cache. Package installation does not run lifecycle scripts.
+Published packages should expose their plugin entrypoint and include every
+runtime import in `dependencies`.
+
+Local files and local package directories are imported directly. OpenCode does
+**not** install their dependencies. Install dependencies in a `package.json`
+visible from the plugin file, for example:
+
+```sh
+cd .opencode
+bun add @opencode-ai/plugin@1.17.15 effect@4.0.0-beta.83
+```
+
+`effect` is required for Effect plugins and for the `Schema` values used by
+typed tools. A Promise plugin that does not define tools may only need
+`@opencode-ai/plugin`. Match these versions to the OpenCode release you target.
+
+Configuration and discovered plugin files under watched config directories are
+reloaded when they change. Reloading replaces the active plugin generation and
+releases its scoped registrations. Restart OpenCode after changing an npm
+package version or a local dependency when no watched file changed.
+
+## Create a plugin
+
+The Promise API is the simplest option. Export the result of `Plugin.define`
+as the module default:
+
+```ts title=".opencode/plugins/reviewer.ts"
+import { Plugin } from "@opencode-ai/plugin/v2"
+
+export default Plugin.define({
+  id: "acme.reviewer",
+  setup: async (ctx) => {
+    const description =
+      typeof ctx.options.description === "string"
+        ? ctx.options.description
+        : "Reviews code for regressions"
+
+    await ctx.agent.transform((agents) => {
+      agents.update("reviewer", (agent) => {
+        agent.description = description
+        agent.mode = "subagent"
+      })
+    })
+  },
+})
+```
+
+`setup` runs each time the plugin is activated for a Location. Register
+long-lived behavior during setup; do not wait there on an infinite event
+stream.
+
+### Effect plugins
+
+Use the Effect entrypoint when the implementation benefits from Effect
+composition, fibers, or scoped resources:
+
+```ts title=".opencode/plugins/reviewer-effect.ts"
+import { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.reviewer-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* ctx.agent.transform((agents) => {
+        agents.update("reviewer", (agent) => {
+          agent.description = "Reviews code for regressions"
+          agent.mode = "subagent"
+        })
+      })
+    }),
+})
+```
+
+The plugin effect is scoped. Finalizers, scoped fibers, and registrations are
+released when the plugin reloads or unloads. OpenCode deliberately isolates the
+effect from its private Core services; use only the public `ctx` capabilities.
+
+## Context
+
+Promise methods return Promises; the equivalent Effect methods return
+`Effect`. Read and action methods use the same inputs and location-aware
+responses as the V2 client APIs.
+
+| Capability | Available operations |
+| --- | --- |
+| `ctx.agent` | `list`, `transform`, `reload` |
+| `ctx.catalog.provider` | `list`, `get` |
+| `ctx.catalog.model` | `list`, `default` |
+| `ctx.catalog` | `transform`, `reload` |
+| `ctx.command` | `list`, `transform`, `reload` |
+| `ctx.integration` | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
+| `ctx.plugin` | `list` currently active plugin IDs |
+| `ctx.reference` | `list`, `transform`, `reload` |
+| `ctx.session` | `create`, `get`, `prompt`, `command`, `interrupt`, and `hook` |
+| `ctx.skill` | `list`, `transform`, `reload` |
+| `ctx.tool` | `transform` and `hook` |
+| `ctx.aisdk` | `hook` |
+| `ctx.event` | `subscribe` to the current public server event stream |
+| `ctx.options` | Readonly options from the matching config object |
+
+Unlike the legacy API, V2 does not provide `$`, `directory`, `worktree`, or a
+general SDK client on the context. A plugin is Location-scoped, and the exposed
+domain clients apply that Location by default.
+
+### Transform hooks
+
+Transforms synchronously edit a draft whenever a stateful domain is built.
+Registering or disposing a transform rebuilds the domain from fresh state and
+runs all active transforms in order. Call the domain's `reload()` method when
+external data captured by a transform changes.
+
+| Transform | Draft operations |
+| --- | --- |
+| `agent.transform` | `list`, `get`, `default`, `update`, `remove` |
+| `catalog.transform` | Provider `list`, `get`, `update`, `remove`; model `get`, `update`, `remove`; default model `get`, `set` |
+| `command.transform` | `list`, `get`, `update`, `remove` |
+| `integration.transform` | Integration `list`, `get`, `update`, `remove`; method `list`, `update`, `remove` |
+| `reference.transform` | `add`, `remove`, `list` |
+| `skill.transform` | `source`, `list` |
+| `tool.transform` | `add` |
+
+Hook registrations are owned by the plugin scope. Transform and runtime hook
+calls also return a `Registration` with `dispose` for explicit cleanup. Tool
+contributions currently remain until the owning plugin scope closes, so prefer
+scope cleanup for plugin-wide teardown while this API is beta.
+
+### Runtime hooks
+
+Runtime hooks intercept live operations. Their event objects expose specific
+mutable fields:
+
+| Hook | Mutable fields |
+| --- | --- |
+| `ctx.aisdk.hook("sdk", callback)` | `sdk`, after inspecting `model`, `package`, and `options` |
+| `ctx.aisdk.hook("language", callback)` | `language`, after inspecting `model`, `sdk`, and `options` |
+| `ctx.session.hook("request", callback)` | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes |
+| `ctx.tool.hook("execute.after", callback)` | `result`, `output`, and `outputPaths`, after execution settles |
+
+For example, remove a tool from selected model requests and normalize another
+tool's input:
+
+```ts title=".opencode/plugins/guards.ts"
+import { Plugin } from "@opencode-ai/plugin/v2"
+
+export default Plugin.define({
+  id: "acme.guards",
+  setup: async (ctx) => {
+    await ctx.session.hook("request", (event) => {
+      delete event.tools.write
+    })
+
+    await ctx.tool.hook("execute.before", (event) => {
+      if (event.tool !== "lookup" || typeof event.input !== "object" || event.input === null) return
+      event.input = { ...event.input, source: "plugin" }
+    })
+  },
+})
+```
+
+A hook failure fails the operation it intercepts. Keep runtime hooks fast and
+handle expected errors inside the callback.
+
+## Add a tool
+
+Use `Tool.make` with Effect schemas. Promise tools use async executors:
+
+```ts title=".opencode/plugins/greeting.ts"
+import { Plugin } from "@opencode-ai/plugin/v2"
+import { Tool } from "@opencode-ai/plugin/v2/tool"
+import { Schema } from "effect"
+
+const greeting = Tool.make({
+  description: "Create a greeting",
+  input: Schema.Struct({ name: Schema.String }),
+  output: Schema.String,
+  execute: async ({ name }) => `Hello, ${name}!`,
+})
+
+export default Plugin.define({
+  id: "acme.greeting",
+  setup: async (ctx) => {
+    await ctx.tool.transform((tools) => {
+      tools.add("greeting", greeting)
+    })
+  },
+})
+```
+
+Unsupported characters in tool and group names are normalized to underscores.
+The resulting exposed key must begin with a letter and contain at most 64
+letters, digits, underscores, or hyphens. `tools.add` also accepts
+`{ group, deferred }`:
+
+- `group` prefixes and groups the exposed tool name.
+- `deferred: true` makes the tool available through the deferred `execute`
+  tool instead of exposing it directly.
+
+The executor receives a second context argument containing `sessionID`,
+`agent`, `assistantMessageID`, and `toolCallID`. Use
+`Tool.withPermission(tool, "permission-name")` to assign a permission key.
+Effect plugins import the helper from `@opencode-ai/plugin/v2/effect/tool` and
+return an `Effect` from `execute`.
+
+## Types
+
+`Plugin.define` infers the context and callbacks. The Promise root also
+re-exports the canonical `Agent`, `Command`, `Connection`, `Credential`,
+`Integration`, `Model`, `Provider`, `Reference`, and `Skill` schema namespaces.
+Import narrower API types from their public subpaths when needed:
+
+```ts
+import { Plugin, Model } from "@opencode-ai/plugin/v2"
+import type { Context } from "@opencode-ai/plugin/v2/plugin"
+import type { AgentDraft } from "@opencode-ai/plugin/v2/agent"
+import type { ToolExecuteBeforeEvent } from "@opencode-ai/plugin/v2/tool"
+```
+
+Effect equivalents live below `@opencode-ai/plugin/v2/effect`, such as
+`@opencode-ai/plugin/v2/effect/plugin` and
+`@opencode-ai/plugin/v2/effect/tool`. Avoid importing types or runtime values
+from `@opencode-ai/core` or `@opencode-ai/server`; those are private host
+implementation details.
+
+## Publish a package
+
+A package plugin uses the same default export as a local plugin. A minimal
+manifest is:
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.17.15",
+    "effect": "4.0.0-beta.83"
+  }
+}
+```
+
+Use versions compatible with the OpenCode release you target and test the
+installed package, not only a workspace-linked copy. Because the plugin API is
+beta, publish compatible plugin updates when V2 entrypoints or contracts
+change.
+
+## Verify loading
+
+List active plugin IDs for the current Location through the V2 API:
+
+```sh
+opencode2 api get /api/plugin
+```
+
+If a plugin is absent, check the server log described in
+[Troubleshooting](/troubleshooting#read-logs). Invalid modules and setup failures are
+logged; one failing package does not prevent unrelated valid packages from
+being resolved.

@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { V2Event } from "@opencode-ai/sdk/v2"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { EventV2 } from "@opencode-ai/core/event"
 import { onMount } from "solid-js"
@@ -12,7 +12,7 @@ import { createSessionRows, type SessionRow } from "../../../src/routes/session/
 import { createApi, createClient, createEventStream, createFetch, directory, json } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
-const formFields = [{ type: "link" as const, url: "https://example.com" }]
+const formFields = [{ type: "link", url: "https://example.com" }] satisfies [{ type: "link"; url: string }]
 
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
@@ -22,7 +22,7 @@ async function wait(fn: () => boolean, timeout = 2000) {
   }
 }
 
-function emitEvent(events: ReturnType<typeof createEventStream>, event: V2Event) {
+function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCodeEvent) {
   events.emit({ ...event, location: { directory } })
 }
 

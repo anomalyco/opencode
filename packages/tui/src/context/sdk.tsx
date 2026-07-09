@@ -1,5 +1,5 @@
-import type { OpenCodeClient } from "@opencode-ai/client/promise"
-import type { OpencodeClient, V2Event } from "@opencode-ai/sdk/v2"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -17,7 +17,7 @@ export type SDKConnectionEvent = {
   }
 }
 
-type SDKEventMap = { [Type in V2Event["type"]]: Extract<V2Event, { type: Type }> }
+type SDKEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
 
@@ -72,12 +72,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           const error = await (async () => {
             record(attempt === 0 ? "connecting" : "reconnecting", attempt)
             log.info("event stream connecting", { attempt })
-            const response = await client.v2.event.subscribe({
-              signal: connection.signal,
-              sseMaxRetryAttempts: 0,
-              throwOnError: true,
-            })
-            const iterator = response.stream[Symbol.asyncIterator]()
+            const iterator = api.event.subscribe({ signal: connection.signal })[Symbol.asyncIterator]()
             const first = await iterator.next()
             if (abort.signal.aborted || controller.signal.aborted) return
             if (first.done)

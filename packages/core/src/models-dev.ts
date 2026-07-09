@@ -1,5 +1,5 @@
 import path from "path"
-import { Context, Duration, Effect, Layer, Option, Schedule } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
@@ -15,7 +15,8 @@ import { httpClient } from "./effect/app-node-platform"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 
-export type CatalogModelStatus = "alpha" | "beta" | "deprecated"
+export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
+export type CatalogModelStatus = typeof CatalogModelStatus.Type
 
 const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 

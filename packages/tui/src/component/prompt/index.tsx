@@ -37,7 +37,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { SessionInfo, UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -1027,8 +1027,7 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = created.id
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; prompt state still uses legacy mutable session types.
-      session = structuredClone(created) as SessionInfo
+      session = created
     }
 
     const inputText = expandTrackedPastedText(
@@ -1064,7 +1063,7 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       move.startSubmit()
-      void sdk.client.v2.session.shell({
+      void sdk.api.session.shell({
         sessionID,
         command: inputText,
       })

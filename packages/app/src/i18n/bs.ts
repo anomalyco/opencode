@@ -287,6 +287,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Ukloni aktivnu datoteku iz konteksta",
   "prompt.context.removeFile": "Ukloni datoteku iz konteksta",
   "prompt.action.attachFile": "Priloži datoteku",
+  "prompt.menu.addImagesAndFiles": "Dodaj datoteke i više",
+  "prompt.menu.imagesAndFiles": "Slike i datoteke",
+  "prompt.menu.commands": "Komande",
+  "prompt.menu.context": "Kontekst",
+  "prompt.menu.shellCommand": "Shell naredba",
   "prompt.attachment.remove": "Ukloni prilog",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",
@@ -603,6 +608,8 @@ export const dict = {
   "home.sessions.group.today": "Danas",
   "home.sessions.group.yesterday": "Jučer",
   "home.sessions.group.older": "Starije",
+  "home.providerTip":
+    "Povežite se s više od 75 pružalaca usluga kako biste koristili druge modele, uključujući Claude, GPT, Gemini i druge",
 
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",

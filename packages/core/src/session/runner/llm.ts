@@ -34,7 +34,7 @@ import { InstructionCheckpoint } from "../instruction-checkpoint"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
-import { SessionInput } from "../input"
+import { SessionPending } from "../pending"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
@@ -48,7 +48,7 @@ import { SessionRunnerSystemPrompt } from "./system-prompt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
-import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "../error"
+import { AgentNotFoundError, StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
@@ -203,7 +203,7 @@ const layer = Layer.effect(
 
     const attemptStep = Effect.fn("SessionRunner.attemptStep")(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionInput.Delivery | undefined,
+      promotion: SessionPending.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
       assistantMessageID?: SessionMessage.ID,
@@ -226,10 +226,10 @@ const layer = Layer.effect(
       let currentStep = step
       if (promotion) {
         let promoted = 0
-        if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id)
+        if (promotion === "steer") promoted = yield* SessionPending.promoteSteers(db, events, session.id)
         if (promotion === "queue") {
-          promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
-          promoted += yield* SessionInput.promoteSteers(db, events, session.id)
+          promoted += Number(yield* SessionPending.promoteNextQueued(db, events, session.id))
+          promoted += yield* SessionPending.promoteSteers(db, events, session.id)
         }
         if (promoted > 0) currentStep = 1
       }
@@ -256,8 +256,8 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error | StepFailedError>()
-      const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error | StepFailedError>> = []
+      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
+      const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error>> = []
       let needsContinuation = false
       const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
       const requestEvent: SessionHooks["request"] = {
@@ -285,7 +285,7 @@ const layer = Layer.effect(
       const advertisedTools = new Set(hookedRequest.tools.map((tool) => tool.name))
       // Automatic compaction completed; rebuild the request from compacted history.
       if (
-        !(yield* SessionInput.pendingCompaction(db, session.id)) &&
+        !(yield* SessionPending.compaction(db, session.id)) &&
         (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request: hookedRequest }))
       )
         return { _tag: "RestartAfterCompaction", step: currentStep } as const
@@ -363,13 +363,6 @@ const layer = Layer.effect(
                         output: settlement.output,
                       }),
                       settlement.error,
-                    ).pipe(
-                      // Terminal cleanup must own failAssistant because the provider may still be streaming another tool input.
-                      Effect.andThen(
-                        settlement.error?.type === "permission.rejected"
-                          ? Effect.fail(new StepFailedError({ error: settlement.error }))
-                          : Effect.void,
-                      ),
                     ),
                   ),
                 ),
@@ -463,26 +456,18 @@ const layer = Layer.effect(
               : settled.value.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
           const toolsInterrupted = settledCauses.some(Cause.hasInterrupts)
           const userDeclined = settledCauses.some(isUserDeclined)
-          const permissionRejected = settledCauses
-            .map((cause) => Option.getOrUndefined(Cause.findErrorOption(cause)))
-            .find(
-              (error): error is StepFailedError =>
-                error instanceof StepFailedError && error.error.type === "permission.rejected",
-            )
 
-          if (userDeclined || permissionRejected || streamInterrupted || toolsInterrupted) {
+          if (userDeclined || streamInterrupted || toolsInterrupted) {
             yield* FiberSet.clear(toolFibers)
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-            yield* serialized(
-              publisher.failAssistant(permissionRejected?.error ?? { type: "aborted", message: "Step interrupted" }),
-            )
+            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
           // settles so the model may recover. A typed infrastructure failure (tool output
           // could not be persisted) also fails the assistant and then fails the drain.
           const settledFailure = settledCauses.find(
-            (cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause) && !permissionRejected,
+            (cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause),
           )
           const infraError =
             settledFailure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(settledFailure))
@@ -534,7 +519,6 @@ const layer = Layer.effect(
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (userDeclined) return yield* Effect.interrupt
-          if (permissionRejected) return yield* new UserInterruptedError()
           if ((toolsInterrupted || infraError !== undefined) && settledFailure)
             return yield* Effect.failCause(settledFailure)
           if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
@@ -550,7 +534,7 @@ const layer = Layer.effect(
 
     const runStep = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionInput.Delivery | undefined,
+      promotion: SessionPending.Delivery | undefined,
       step: number,
     ) {
       // Compaction restarts rebuild the request from compacted history without re-promoting.
@@ -595,7 +579,7 @@ const layer = Layer.effect(
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
     ) {
-      const pending = yield* SessionInput.pendingCompaction(db, sessionID)
+      const pending = yield* SessionPending.compaction(db, sessionID)
       if (!pending) return false
       const session = yield* getSession(sessionID)
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -611,7 +595,7 @@ const layer = Layer.effect(
           ).pipe(Effect.exit)
           if (Exit.isSuccess(compacted) && compacted.value) return true
           if (Exit.isFailure(compacted)) {
-            const unsettled = yield* SessionInput.pendingCompaction(db, sessionID)
+            const unsettled = yield* SessionPending.compaction(db, sessionID)
             if (unsettled)
               yield* events.publish(SessionEvent.Compaction.Failed, {
                 sessionID,
@@ -621,7 +605,7 @@ const layer = Layer.effect(
               })
             return yield* Effect.failCause(compacted.cause)
           }
-          const unsettled = yield* SessionInput.pendingCompaction(db, sessionID)
+          const unsettled = yield* SessionPending.compaction(db, sessionID)
           if (unsettled)
             yield* events.publish(SessionEvent.Compaction.Failed, {
               sessionID,
@@ -640,11 +624,11 @@ const layer = Layer.effect(
       readonly force: boolean
     }) {
       yield* runPendingCompaction(input.sessionID)
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
+      const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")
+      const hasQueue = hasSteer ? false : yield* SessionPending.has(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
-      let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
+      let promotion: SessionPending.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       while (shouldRun) {
         let needsContinuation = true
@@ -664,16 +648,16 @@ const layer = Layer.effect(
           needsContinuation = result.needsContinuation
           step = result.step + 1
           if (needsContinuation) {
-            promotion = (yield* SessionInput.pendingCompaction(db, input.sessionID)) ? undefined : "steer"
+            promotion = (yield* SessionPending.compaction(db, input.sessionID)) ? undefined : "steer"
             continue
           }
           yield* runPendingCompaction(input.sessionID)
           promotion = "steer"
-          needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          needsContinuation = yield* SessionPending.has(db, input.sessionID, "steer")
         }
         yield* runPendingCompaction(input.sessionID)
-        const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-        const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")
+        const hasQueue = hasSteer ? false : yield* SessionPending.has(db, input.sessionID, "queue")
         shouldRun = hasSteer || hasQueue
         promotion = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       }

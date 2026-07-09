@@ -513,6 +513,24 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("emits mutable Promise outputs without restricting inputs", () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("create", "/session", {
+            payload: Schema.Struct({ values: Schema.Array(Schema.String) }),
+            success: Schema.Struct({ data: Schema.Array(Schema.Struct({ values: Schema.Array(Schema.String) })) }),
+          }),
+        ),
+      ),
+      { mutableOutputs: true },
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('readonly "values": ReadonlyArray<string>')
+    expect(types).toContain('export type SessionCreateOutput = ({ "data": Array<{ "values": Array<string> }> })["data"]')
+  })
+
   test("expands Promise references only at identifier boundaries", () => {
     const Session = Schema.Struct({ name: Schema.Literal("Session"), id: Schema.String }).annotate({
       identifier: "Session",

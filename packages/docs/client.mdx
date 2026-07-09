@@ -1,0 +1,91 @@
+---
+title: "Client"
+description: "Connect an application to the OpenCode HTTP API."
+---
+
+`@opencode-ai/client` is the generated TypeScript client for the OpenCode HTTP
+API. Use it when your application connects to an OpenCode server over the
+network. Its types and methods are generated from the same contract as the
+[API reference](/api).
+
+<Warning>
+  The V2 API and client are beta. Method names, inputs, and outputs may change
+  before the stable release.
+</Warning>
+
+## Install
+
+```sh
+bun add @opencode-ai/client
+```
+
+The package has two entrypoints:
+
+- `@opencode-ai/client/promise` uses `fetch` and returns Promises or async
+  iterables. It has no Effect runtime dependency.
+- `@opencode-ai/client/effect` returns Effects and Streams, decodes values into
+  the V2 schema types, and requires an `HttpClient` service from Effect.
+
+## Promise client
+
+Create a client with the server URL, then call methods grouped by API resource:
+
+```ts
+import { OpenCode } from "@opencode-ai/client/promise"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+Pass default authentication or application headers to `OpenCode.make` with
+`headers`. You can also supply a custom `fetch` implementation. Each operation
+accepts request options as its final argument for an `AbortSignal` or
+per-request headers.
+
+Streaming endpoints return async iterables:
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+## Effect client
+
+Install the `effect` peer dependency when using the Effect entrypoint. The
+client uses canonical V2 values such as `Location.Ref` and `Session.ID`, and
+returns typed failures in the Effect error channel.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({
+      directory: AbsolutePath.make("/workspace"),
+    }),
+  })
+
+  return yield* client.session.get({ sessionID: session.id })
+})
+
+const session = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer)),
+)
+```
+
+Streaming operations, including `client.event.subscribe()` and
+`client.session.log(...)`, return Effect `Stream` values.

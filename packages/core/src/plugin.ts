@@ -21,7 +21,7 @@ import { ToolHooks } from "./tool/hooks"
 import { PluginHooks } from "./plugin/hooks"
 
 export interface Interface {
-  readonly activate: (plugins: readonly { readonly plugin: Plugin; readonly version?: string }[]) => Effect.Effect<void>
+  readonly activate: (plugins: readonly Plugin[]) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -32,72 +32,72 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const scope = yield* Scope.make()
-    const active = new Map<typeof ID.Type, Scope.Closeable>()
+    const active = new Map<typeof ID.Type, { readonly plugin: Plugin; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
-    let generation: readonly { readonly id: typeof ID.Type; readonly version?: string }[] | undefined = []
     let host: Parameters<Plugin["effect"]>[0]
 
-    const activate = Effect.fn("Plugin.activate")(function* (
-      plugins: readonly { readonly plugin: Plugin; readonly version?: string }[],
-    ) {
-      const definitions = plugins.map((entry) => ({
-        ...entry.plugin,
-        id: ID.make(entry.plugin.id),
-        ...(entry.version === undefined ? {} : { version: entry.version }),
-      }))
+    const load = Effect.fnUntraced(function* (plugin: Plugin) {
+      const child = yield* Scope.fork(scope)
+      const inherit = yield* State.inherit()
+      const loaded = yield* Effect.suspend(() => plugin.effect(host)).pipe(
+        inherit,
+        Effect.updateContext((_context: Context.Context<never>) => Context.make(Scope.Scope, child)),
+        Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
+        Effect.andThen(events.publish(Event.Added, { id: ID.make(plugin.id) })),
+        Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
+        Effect.exit,
+      )
+      if (Exit.isSuccess(loaded)) return child
+      yield* Effect.logWarning("failed to load plugin", {
+        "plugin.id": plugin.id,
+        cause: loaded.cause,
+      })
+      return undefined
+    })
+
+    const activate = Effect.fn("Plugin.activate")(function* (plugins: readonly Plugin[]) {
+      const definitions = plugins.map((plugin) => ({ ...plugin, id: ID.make(plugin.id) }))
       const ids = new Set<typeof ID.Type>()
       for (const definition of definitions) {
-        if (ids.has(definition.id)) return yield* Effect.die(new Error(`Duplicate plugin ID: ${definition.id}`))
+        if (ids.has(definition.id)) yield* Effect.die(new Error(`Duplicate plugin ID: ${definition.id}`))
         ids.add(definition.id)
       }
 
       yield* lock.withPermit(
         Effect.gen(function* () {
-          if (
-            generation !== undefined &&
-            generation.length === definitions.length &&
-            generation.every(
-              (plugin, index) => plugin.id === definitions[index]?.id && plugin.version === definitions[index]?.version,
-            ) &&
-            definitions.every((definition) => active.has(definition.id))
-          ) {
-            return
-          }
-          generation = undefined
           yield* State.batch(
             Effect.gen(function* () {
-              const scopes = Array.from(active.values()).toReversed()
-              active.clear()
-              const inherit = yield* State.inherit()
-              yield* Effect.forEach(scopes, (scope) => Scope.close(scope, Exit.void).pipe(Effect.ignore), {
-                discard: true,
-              })
-
               for (const definition of definitions) {
-                const child = yield* Scope.fork(scope)
-                const loaded = yield* Effect.suspend(() => definition.effect(host)).pipe(
-                  inherit,
-                  Effect.updateContext((_context: Context.Context<never>) => Context.make(Scope.Scope, child)),
-                  Effect.withSpan("Plugin.load", { attributes: { "plugin.id": definition.id } }),
-                  Effect.andThen(events.publish(Event.Added, { id: definition.id })),
-                  Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
-                  Effect.exit,
-                )
-                if (Exit.isFailure(loaded)) {
-                  yield* Effect.logWarning("failed to load plugin", {
-                    "plugin.id": definition.id,
-                    cause: loaded.cause,
-                  })
+                const previous = active.get(definition.id)
+                active.delete(definition.id)
+                if (previous) yield* Scope.close(previous.scope, Exit.void).pipe(Effect.ignore)
+
+                const loaded = yield* load(definition)
+                if (loaded) {
+                  active.set(definition.id, { plugin: definition, scope: loaded })
                   continue
                 }
-                active.set(definition.id, child)
+
+                if (!previous) continue
+                const restored = yield* load(previous.plugin)
+                if (restored) {
+                  active.set(definition.id, { plugin: previous.plugin, scope: restored })
+                  continue
+                }
+                yield* Effect.logError("failed to restore plugin; deactivating", {
+                  "plugin.id": definition.id,
+                })
               }
+
+              const removed = Array.from(active.entries())
+                .filter(([id]) => !ids.has(id))
+                .toReversed()
+              removed.forEach(([id]) => active.delete(id))
+              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void).pipe(Effect.ignore), {
+                discard: true,
+              })
             }),
           )
-          generation = definitions.map((definition) => ({
-            id: definition.id,
-            ...(definition.version === undefined ? {} : { version: definition.version }),
-          }))
           yield* events.publish(Event.Updated, {})
         }),
       )
@@ -106,7 +106,6 @@ const layer = Layer.effect(
     yield* Effect.addFinalizer((exit) =>
       Effect.gen(function* () {
         active.clear()
-        generation = []
         yield* State.batch(Scope.close(scope, exit))
       }),
     )

@@ -196,13 +196,13 @@ function apply(pre: readonly Plugin[], post: readonly Plugin[], operations: read
 
 const load = Effect.fn("PluginSupervisor.load")(function* (plan: readonly Candidate[]) {
   return yield* Effect.forEach(plan, (candidate) => {
-    if (candidate.type === "definition") return Effect.succeed({ plugin: candidate.definition })
+    if (candidate.type === "definition") return Effect.succeed(candidate.definition)
     return Effect.gen(function* () {
       const npm = yield* Npm.Service
       const entrypoint = path.isAbsolute(candidate.specifier)
         ? pathToFileURL(candidate.specifier).href
         : (yield* npm.add(candidate.specifier)).entrypoint
-      if (!entrypoint) return
+      if (!entrypoint) return undefined
       // Bun currently ignores query parameters when caching file:// imports.
       const source =
         candidate.mtime === undefined
@@ -213,12 +213,9 @@ const load = Effect.fn("PluginSupervisor.load")(function* (plan: readonly Candid
       const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
       const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
       return {
-        plugin: {
-          id: plugin.id,
-          effect: (host) => plugin.effect({ ...host, options: candidate.options }),
-        } satisfies Plugin,
-        ...(candidate.mtime === undefined ? {} : { version: String(candidate.mtime) }),
-      }
+        id: plugin.id,
+        effect: (host) => plugin.effect({ ...host, options: candidate.options }),
+      } satisfies Plugin
     }).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
   }).pipe(Effect.map((plugins) => plugins.filter((plugin) => plugin !== undefined)))
 })

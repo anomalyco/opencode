@@ -601,6 +601,23 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.pending.list",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.pending(ctx.params.sessionID).pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+                ),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
         "session.instructions.entry.list",
         Effect.fn(function* (ctx) {
           const instructions = yield* InstructionEntry.Service

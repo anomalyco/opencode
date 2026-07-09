@@ -24,6 +24,8 @@ import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
+type ModelsDevProvider = Parameters<typeof Provider.fromModelsDevProvider>[0]
+
 const originalEnv = new Map<string, string | undefined>()
 
 const rememberEnv = (k: string) => {
@@ -1386,8 +1388,7 @@ test("mode cost preserves over-200k pricing from base model", () => {
         },
       },
     },
-    // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
-  } as unknown as ModelsDev.Provider
+  } as unknown as ModelsDevProvider
 
   const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
   expect(model.cost.input).toEqual(5)
@@ -1416,8 +1417,7 @@ test("models.dev normalization fills required response fields", () => {
         limit: { context: 1_050_000, input: 922_000, output: 128_000 },
       },
     },
-    // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
-  } as unknown as ModelsDev.Provider
+  } as unknown as ModelsDevProvider
 
   const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4"]
   expect(model.api.url).toBe("")
@@ -1426,6 +1426,32 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.capabilities.attachment).toBe(false)
   expect(model.capabilities.toolcall).toBe(true)
   expect(model.release_date).toBe("")
+})
+
+test("public provider info omits invalid models", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "test",
+    name: "Test",
+    env: [],
+    models: {
+      valid: {
+        id: "valid",
+        name: "Valid",
+        cost: { input: 1, output: 1 },
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDevProvider)
+  provider.models.invalid = {
+    ...provider.models.valid,
+    id: ModelV2.ID.make("invalid"),
+    cost: { ...provider.models.valid.cost, input: Number.NaN },
+  }
+
+  const result = Provider.toPublicInfo(provider)
+
+  expect(result.models.valid).toBeDefined()
+  expect(result.models.invalid).toBeUndefined()
 })
 
 it.instance("model variants are generated for reasoning models", () =>

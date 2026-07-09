@@ -8,6 +8,24 @@ export function normalizePath(p: string) {
   return normalizeFileTreeV2Path(p)
 }
 
+export function reviewDiffNeedsLoad(diff: RenderDiff) {
+  if (diff.additions === 0 && diff.deletions === 0) return false
+  return !diff.patch || !/^@@ /m.test(diff.patch)
+}
+
+export function reviewRootDirectory(root: string) {
+  return root === "/" || /^[A-Za-z]:[/\\]?$/.test(root) ? root : root.replace(/[/\\]+$/, "")
+}
+
+export function reviewDiffDirectory(root: string, file: string) {
+  const path = normalizePath(file)
+  const index = path.lastIndexOf("/")
+  const separator = root.includes("\\") ? "\\" : "/"
+  const base = reviewRootDirectory(root)
+  if (index < 0) return base
+  return `${base.endsWith(separator) ? base : base + separator}${path.slice(0, index).replaceAll("/", separator)}`
+}
+
 export function reviewDiffKinds(diffs: RenderDiff[]) {
   const merge = (a: Kind | undefined, b: Kind) => {
     if (!a) return b

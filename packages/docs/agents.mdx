@@ -1,0 +1,284 @@
+---
+title: "Agents"
+description: ""
+---
+
+Agents combine a system prompt, model preference, tool permissions, and display
+metadata into a reusable assistant profile. OpenCode includes agents for common
+workflows, and you can override them or add your own in configuration or
+Markdown files.
+
+## Built-in agents
+
+| Agent | Mode | Purpose |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | Default coding agent. Tools are allowed by default, sensitive environment-file reads ask for approval, and access outside the workspace asks for approval. |
+| **Plan** (`plan`) | `primary` | Planning agent. File edits are denied except for OpenCode plan files. Shell commands are not generally denied. |
+| **General** (`general`) | `subagent` | General-purpose research and multi-step work. It has broad tool access but cannot launch more subagents. |
+| **Explore** (`explore`) | `subagent` | Read-only code and web exploration using `read`, `glob`, `grep`, `webfetch`, and `websearch`. |
+
+OpenCode also has hidden `compaction`, `title`, and `summary` system agents.
+They run internal maintenance tasks and are not selectable. There is no built-in
+`scout` agent in V2.
+
+You can override a built-in agent with an entry of the same ID. Set
+`disabled: true` to remove one.
+
+## Default agent
+
+Set the primary agent used when a session has not selected one:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "reviewer"
+}
+```
+
+The configured agent must exist, must not have `mode: "subagent"`, and must not
+be hidden. If it is unavailable, OpenCode falls back to `build`, then to the
+first visible agent that can run as a primary agent. This selection does not
+rewrite the agent already stored on an existing session.
+
+## Modes
+
+An agent's `mode` controls where it can run:
+
+| Mode | Behavior |
+| --- | --- |
+| `primary` | Can be selected as the main agent for a session. It cannot be launched as a subagent. |
+| `subagent` | Can run in a child session through the `subagent` tool, but cannot be selected as the main agent. |
+| `all` | Can be used either way. This is the default for a custom agent when `mode` is omitted. |
+
+In the TUI, press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle
+through visible primary and `all` agents, or use `/agents` to choose one.
+
+Subagents run in child sessions with fresh context. A primary agent can invoke
+one with the `subagent` tool, either in the foreground or in the background.
+You can also `@` mention a visible subagent to ask the current agent to delegate
+work to it:
+
+```text
+@explore find where authentication errors are handled
+```
+
+The parent agent's `subagent` permission controls which agents it may launch.
+The child currently uses its own configured permissions, not a restricted copy
+of the parent's permissions.
+
+## Configure agents
+
+### Markdown files
+
+The recommended file locations are:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode discovers project `.opencode` directories from the current directory
+up to the project root. The path below `agents/` becomes the agent ID, so
+`.opencode/agents/team/reviewer.md` defines `team/reviewer`.
+
+Frontmatter uses the same fields as an entry under `agents`. The Markdown body
+becomes `system`:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes without modifying files
+mode: subagent
+model: anthropic/claude-sonnet-4-5#high
+color: warning
+steps: 8
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review for correctness, security, regressions, and missing tests.
+List findings in severity order with file and line references.
+```
+
+### JSON or JSONC
+
+Use the `agents` field in any [OpenCode configuration file](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "reviewer",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews changes for correctness, security, and missing tests",
+      "mode": "all",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "system": "Review the current changes. Report findings before any summary.",
+      "color": "warning",
+      "steps": 8,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "*", "effect": "deny" }
+      ]
+    },
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" }
+      ]
+    }
+  }
+}
+```
+
+Agent definitions merge in configuration order. Later scalar fields replace
+earlier values, request maps merge by key, and permission rules are appended.
+Global `permissions` are applied to every agent before its agent-specific rules,
+so a later agent rule can refine a global rule.
+
+## Options
+
+### `description`
+
+Explains the agent's purpose. It is optional, but strongly recommended for
+subagents because OpenCode includes it in the subagent catalog shown to the
+model.
+
+### `mode`
+
+Accepts `primary`, `subagent`, or `all`. The default is `all`.
+
+### `model`
+
+Selects a model using `provider/model` with an optional `#variant`:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": "anthropic/claude-sonnet-4-5#high"
+    }
+  }
+}
+```
+
+The equivalent expanded form is:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "variant": "high"
+      }
+    }
+  }
+}
+```
+
+The TUI uses this as the preferred model when the agent is selected. A child
+session uses its subagent's configured model, or inherits the parent session's
+model when none is configured. In the API, the session's selected model is
+stored separately; creating or switching a primary session with only an agent
+ID does not itself change that session model.
+
+### `system`
+
+Sets the agent's system prompt. A non-empty value replaces OpenCode's
+provider-specific base prompt for that agent. Project instructions, skills,
+references, and other instruction sources are still added separately.
+
+For a Markdown agent, use the document body instead of a `system` frontmatter
+field.
+
+### `permissions`
+
+Permissions are an ordered array of rules:
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "explore", "effect": "allow" },
+        { "action": "shell", "resource": "git *", "effect": "ask" }
+      ]
+    }
+  }
+}
+```
+
+Each rule has:
+
+| Field | Meaning |
+| --- | --- |
+| `action` | Tool or permission action, with `*` wildcards supported. |
+| `resource` | The path, command, agent ID, or other resource matched by the action. Wildcards are supported. |
+| `effect` | `allow`, `ask`, or `deny`. |
+
+The last matching rule wins. Important V2 action names include `shell` for
+shell commands, `edit` for all edit/write/patch tools, and `subagent` for child
+agents. Other tools generally use their tool name, such as `read`, `glob`,
+`grep`, `webfetch`, `websearch`, and `skill`.
+
+<Tip>
+  Put broad wildcard rules first and exceptions afterward. For example, deny
+  all subagents first, then allow `explore`.
+</Tip>
+
+`~` and `$HOME` are expanded in filesystem resources for `read`, `edit`, and
+`external_directory`. Shell resources are raw command text and are not
+expanded.
+
+### `steps`
+
+Sets a positive maximum number of model steps. On the final allowed step,
+OpenCode removes tools and asks the model to summarize its work in text. New
+user input resets the allowance.
+
+### `hidden`
+
+When `true`, removes the agent from normal selectors, `@` autocomplete, and the
+subagent catalog advertised to models. It is a visibility setting, not a
+security boundary.
+
+### `color`
+
+Sets the agent's UI color. Use a six-digit hex color such as `#ff6b6b`, or one
+of `primary`, `secondary`, `accent`, `success`, `warning`, `error`, or `info`.
+
+### `disabled`
+
+When `true`, removes the agent definition at that point in configuration
+loading. This works for built-in and custom agents.
+
+### `request`
+
+The V2 schema accepts per-agent request `headers` and JSON `body` overlays:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 }
+      }
+    }
+  }
+}
+```
+
+<Warning>
+  The current V2 session runner preserves these overlays on the agent
+  definition but does not yet apply them to model requests. Configure effective
+  request settings on the provider, model, or model variant instead. Do not use
+  legacy top-level agent fields such as `temperature`, `top_p`, `prompt`,
+  `permission`, `tools`, `disable`, or `maxSteps` in new V2 configuration.
+</Warning>

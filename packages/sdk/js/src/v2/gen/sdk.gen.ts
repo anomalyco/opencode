@@ -405,6 +405,8 @@ import type {
   V2SessionMessageResponses,
   V2SessionMoveErrors,
   V2SessionMoveResponses,
+  V2SessionPendingListErrors,
+  V2SessionPendingListResponses,
   V2SessionPermissionCreateErrors,
   V2SessionPermissionCreateResponses,
   V2SessionPermissionGetErrors,
@@ -5251,6 +5253,31 @@ export class Revert extends HeyApiClient {
   }
 }
 
+export class Pending extends HeyApiClient {
+  /**
+   * List pending session work
+   *
+   * List durable admitted session work not yet visible in projected history, ordered by admission. Includes unpromoted user and synthetic inputs and unhandled compaction barriers. The runner owns consumption; items disappear once promoted or handled.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<
+      V2SessionPendingListResponses,
+      V2SessionPendingListErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/pending",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Entry extends HeyApiClient {
   /**
    * List instruction entries
@@ -6522,6 +6549,11 @@ export class Session3 extends HeyApiClient {
   private _revert?: Revert
   get revert(): Revert {
     return (this._revert ??= new Revert({ client: this.client }))
+  }
+
+  private _pending?: Pending
+  get pending(): Pending {
+    return (this._pending ??= new Pending({ client: this.client }))
   }
 
   private _instructions?: Instructions

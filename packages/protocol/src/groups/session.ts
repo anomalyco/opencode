@@ -1,5 +1,5 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { SessionInput } from "@opencode-ai/schema/session-input"
+import { SessionPending } from "@opencode-ai/schema/session-pending"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
@@ -294,11 +294,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           ...PromptInput.Prompt.fields,
-          metadata: SessionInput.UserData.fields.metadata,
-          delivery: SessionInput.Delivery.pipe(Schema.optional),
+          metadata: SessionPending.UserData.fields.metadata,
+          delivery: SessionPending.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionInput.User }),
+        success: Schema.Struct({ data: SessionPending.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -321,10 +321,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           model: Model.Ref.pipe(Schema.optional),
           files: PromptInput.Prompt.fields.files,
           agents: PromptInput.Prompt.fields.agents,
-          delivery: SessionInput.Delivery.pipe(Schema.optional),
+          delivery: SessionPending.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionInput.User }),
+        success: Schema.Struct({ data: SessionPending.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
       })
         .middleware(sessionLocationMiddleware)
@@ -365,10 +365,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           text: Schema.String,
           description: Schema.String.pipe(Schema.optional),
           metadata: SessionMessage.Synthetic.fields.metadata,
-          delivery: SessionInput.Delivery.pipe(Schema.optional),
+          delivery: SessionPending.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionInput.Synthetic }),
+        success: Schema.Struct({ data: SessionPending.Synthetic }),
         error: [ConflictError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -404,7 +404,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ id: SessionMessage.ID.pipe(Schema.optional) }),
-        success: Schema.Struct({ data: SessionInput.Compaction }),
+        success: Schema.Struct({ data: SessionPending.Compaction }),
         error: [ConflictError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -479,6 +479,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.context",
             summary: "Get session context",
             description: "Retrieve the active context messages for a session (all messages after the last compaction).",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.pending.list", "/api/session/:sessionID/pending", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(SessionPending.Info) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.pending.list",
+            summary: "List pending session work",
+            description:
+              "List durable admitted session work not yet visible in projected history, ordered by admission. Includes unpromoted user and synthetic inputs and unhandled compaction barriers. The runner owns consumption; items disappear once promoted or handled.",
           }),
         ),
     )

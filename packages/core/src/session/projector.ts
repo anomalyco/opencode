@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -11,14 +11,14 @@ import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
-import { SessionInput } from "./input"
+import { SessionPending } from "./pending"
 import { WorkspaceV2 } from "../workspace"
 import { InstructionCheckpoint } from "./instruction-checkpoint"
 import {
   MessageTable,
   PartTable,
   InstructionCheckpointTable,
-  SessionInputTable,
+  SessionPendingTable,
   SessionMessageTable,
   SessionTable,
 } from "./sql"
@@ -293,25 +293,25 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .run()
       .pipe(Effect.orDie)
 
-    const inputRows = yield* db
+    const pendingRows = yield* db
       .select()
-      .from(SessionInputTable)
+      .from(SessionPendingTable)
       .where(
         and(
-          eq(SessionInputTable.session_id, event.data.parentID),
+          eq(SessionPendingTable.session_id, event.data.parentID),
           inArray(
-            SessionInputTable.id,
+            SessionPendingTable.id,
             rows.map((row) => row.id),
           ),
         ),
       )
       .all()
       .pipe(Effect.orDie)
-    if (inputRows.length > 0) {
+    if (pendingRows.length > 0) {
       yield* db
-        .insert(SessionInputTable)
+        .insert(SessionPendingTable)
         .values(
-          inputRows.flatMap((row) => {
+          pendingRows.flatMap((row) => {
             const id = idMap.get(row.id)
             return id && row.type !== "compaction"
               ? [
@@ -322,7 +322,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
                     data: row.data,
                     delivery: row.delivery,
                     admitted_seq: row.admitted_seq,
-                    promoted_seq: row.promoted_seq,
                     time_created: row.time_created,
                   },
                 ]
@@ -633,10 +632,9 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        const input = yield* SessionInput.projectPromoted(db, {
+        const input = yield* SessionPending.projectPromoted(db, {
           id: event.data.inputID,
           sessionID: event.data.sessionID,
-          promotedSeq: event.durable.seq,
         })
         yield* insertMessage(
           db,
@@ -666,7 +664,7 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        yield* SessionInput.projectAdmitted(db, {
+        yield* SessionPending.projectAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
@@ -679,7 +677,7 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        yield* SessionInput.projectCompactionAdmitted(db, {
+        yield* SessionPending.projectCompactionAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
@@ -727,10 +725,7 @@ const layer = Layer.effectDiscard(
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         if (event.data.reason === "manual")
-          yield* SessionInput.settleCompaction(db, {
-            sessionID: event.data.sessionID,
-            handledSeq: event.durable.seq,
-          })
+          yield* SessionPending.settleCompaction(db, { sessionID: event.data.sessionID })
       }),
     )
     yield* events.project(SessionEvent.Compaction.Failed, (event) =>
@@ -739,10 +734,7 @@ const layer = Layer.effectDiscard(
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         if (event.data.reason === "manual")
-          yield* SessionInput.settleCompaction(db, {
-            sessionID: event.data.sessionID,
-            handledSeq: event.durable.seq,
-          })
+          yield* SessionPending.settleCompaction(db, { sessionID: event.data.sessionID })
       }),
     )
     yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
@@ -786,11 +778,11 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* db
-          .delete(SessionInputTable)
+          .delete(SessionPendingTable)
           .where(
             and(
-              eq(SessionInputTable.session_id, event.data.sessionID),
-              or(gte(SessionInputTable.admitted_seq, boundary.seq), gte(SessionInputTable.promoted_seq, boundary.seq)),
+              eq(SessionPendingTable.session_id, event.data.sessionID),
+              gte(SessionPendingTable.admitted_seq, boundary.seq),
             ),
           )
           .run()
