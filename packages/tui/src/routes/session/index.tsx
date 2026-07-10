@@ -65,6 +65,7 @@ import { DialogExportResult } from "../../ui/dialog-export-result"
 import { sessionEpilogue } from "../../util/presentation"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
+import { userPromptText } from "../../prompt/editor-context"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
@@ -321,7 +322,7 @@ export function Session() {
         const message = messagesList.find((m) => m.id === c.id)
         if (!message) return false
 
-        if (message.type === "user") return Boolean(message.text.trim())
+        if (message.type === "user") return Boolean(userPromptText(message).trim())
         return (
           message.type === "assistant" &&
           message.content.some((content) => content.type === "text" && content.text.trim())
@@ -432,7 +433,7 @@ export function Session() {
         const boundary = session()?.revert?.messageID
         const message = messages().findLast(
           (message): message is SessionMessageUser =>
-            message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
+            message.type === "user" && !!userPromptText(message).trim() && (!boundary || message.id < boundary),
         )
         if (!message) {
           toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
@@ -443,7 +444,7 @@ export function Session() {
           .stage({ sessionID: route.sessionID, messageID: message.id })
           .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         prompt?.set({
-          text: message.text,
+          text: userPromptText(message),
           files: message.files?.map((file) => ({
             uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
             name: file.name,
@@ -656,7 +657,7 @@ export function Session() {
         // Find the most recent user message with non-ignored, non-synthetic text parts
         for (let i = messages.length - 1; i >= 0; i--) {
           const message = messages[i]
-          if (!message || message.type !== "user" || !message.text.trim()) continue
+          if (!message || message.type !== "user" || !userPromptText(message).trim()) continue
           {
             const child = scroll.getChildren().find((child) => {
               return child.id === message.id
@@ -1500,9 +1501,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
   )
   const dialog = useDialog()
   const renderer = useRenderer()
+  const text = createMemo(() => userPromptText(props.message))
 
   return (
-    <Show when={props.message.text.trim() || files().length}>
+    <Show when={text().trim() || files().length}>
       <box
         id={props.message.id}
         border={["left"]}
@@ -1526,7 +1528,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
           flexShrink={0}
         >
-          <text fg={theme.text}>{props.message.text}</text>
+          <text fg={theme.text}>{text()}</text>
           <Show when={files().length}>
             <box
               flexDirection="row"
@@ -2765,7 +2767,7 @@ function formatSessionTranscript(
   assistantMetadata: boolean,
 ) {
   const body = messages.flatMap((message) => {
-    if (message.type === "user") return [`## User\n\n${message.text}`]
+    if (message.type === "user") return [`## User\n\n${userPromptText(message)}`]
     if (message.type === "shell")
       return [`## Shell\n\n\`\`\`\n$ ${message.command}\n${message.output?.output ?? ""}\n\`\`\``]
     if (message.type !== "assistant") return []

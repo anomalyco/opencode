@@ -6,6 +6,7 @@ import { useToast } from "../../ui/toast"
 import { useSDK } from "../../context/sdk"
 import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
+import { userPromptText } from "../../prompt/editor-context"
 
 export function DialogMessage(props: { messageID: string; sessionID: string }) {
   const data = useData()
@@ -38,7 +39,7 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
             if (!value) return
             const text =
               value.type === "user"
-                ? value.text
+                ? userPromptText(value)
                 : value.type === "assistant"
                   ? value.content
                       .filter((content) => content.type === "text")
