@@ -61,17 +61,33 @@ The relevant reducer inputs are:
 ## Sources
 
 ```typescript
-interface Source<A> {
+interface Source {
   readonly key: Key
-  readonly codec: Schema.Codec<A, Json>
-  readonly read: Effect<A | Unavailable | Removed>
-  readonly render: {
-    readonly first: (value: A) => string
-    readonly changed: (previous: A, current: A) => string
-    readonly removed?: (previous: A) => string
+  readonly read: Effect<Json | Unavailable | Removed>
+  readonly first: (value: Json) => string | undefined
+  readonly changed: (previous: Json, current: Json) => string | undefined
+  readonly removed: (previous: Json) => string | undefined
+}
+
+namespace Source {
+  interface Definition<A> {
+    readonly key: Key
+    readonly codec: Schema.Codec<A, Json>
+    readonly read: Effect<A | Unavailable | Removed>
+    readonly render: {
+      readonly first: (value: A) => string
+      readonly changed: (previous: A, current: A) => string
+      readonly removed?: (previous: A) => string
+    }
   }
 }
+
+type Instructions = ReadonlyArray<Source>
+
+declare function make<A>(definition: Source.Definition<A>): Instructions
 ```
+
+Producers author a typed `Source.Definition<A>`. `make` captures its codec and renderers in one JSON-level `Source`, the representation used for heterogeneous composition, durable values, and historical rendering. `Instructions` is an ordered collection of those sources; combining collections preserves order and rejects duplicate keys.
 
 `read` runs once per source at the safe boundary, never at layer construction or request assembly. Codecs must be canonical: object keys are canonicalized by the hash function, while source-owned collections must have deterministic order and values must not contain observation timestamps.
 
