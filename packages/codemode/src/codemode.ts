@@ -13,11 +13,17 @@ export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescr
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
-  /** Maximum wall-clock execution time in milliseconds. No default: absent means no timeout. */
+  /**
+   * Wall-clock milliseconds before execution is interrupted; result delivery additionally
+   * waits for tool interruption cleanup. No default: absent means no timeout.
+   */
   readonly timeoutMs?: number
   /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
-  /** Maximum UTF-8 bytes retained from output payloads. Fixed truncation notices and host formatting are additional. */
+  /**
+   * Maximum UTF-8 bytes retained from the result value and logs; warnings have a separate
+   * budget of the same size. Fixed truncation notices and host formatting are additional.
+   */
   readonly maxOutputBytes?: number
 }
 

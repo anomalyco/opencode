@@ -669,15 +669,12 @@ class PromiseRuntime<R> {
     return [...this.failures].sort(([left], [right]) => left - right).map(([, failure]) => failure)
   }
 
-  // Normal-completion lifecycle. Once the program returns, no future await can exist, so
-  // everything still running - race losers, fail-fast stragglers, and fire-and-forget calls
-  // alike - is interrupted rather than awaited: work whose completion matters must be awaited
-  // by the program. Waiting for any class of leftover instead would let it hold the execution
-  // open (or deadlock it, when queued work needs tool-call permits the leftovers occupy).
-  // interruptAll signals every fiber synchronously before awaiting termination, so no
-  // straggler can spawn new work between interrupts; the loop re-checks as a backstop
-  // because a straggler can create promises before its interrupt lands.
-  drain(): Effect.Effect<Array<Diagnostic>> {
+  // Normal-completion lifecycle: interrupts everything still running and reports the
+  // rejections that already settled un-awaited. interruptAll signals every fiber
+  // synchronously before awaiting termination, so no straggler can spawn new work between
+  // interrupts; the loop re-checks as a backstop because a straggler can create promises
+  // before its interrupt lands.
+  interrupt(): Effect.Effect<Array<Diagnostic>> {
     const self = this
     return Effect.gen(function* () {
       while (self.active.size > 0) {
@@ -2224,9 +2221,9 @@ class Interpreter<R> {
 
   // Promise.* over ordinary runtime values. Combinators accept ANY array (or spreadable
   // collection) mixing promise values and plain data - built inline, beforehand, via spread,
-  // whatever - because tool calls already run eagerly on their own fibers; the combinators
-  // only observe settlements. Joining is therefore sequential (no extra fibers) without
-  // costing parallelism, and the concurrency cap stays where the work is: the fork semaphore.
+  // whatever - because tool calls already run eagerly on their own fibers. Each combinator
+  // returns a real promise whose join runs on its own scope-owned fiber, observing member
+  // settlements; the concurrency cap stays where the work is: the fork semaphore.
   private invokePromiseMethod(
     ref: PromiseMethodReference,
     args: Array<unknown>,
@@ -3505,7 +3502,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set once the program body returned and its value crossed the data boundary, so a timeout
-    // firing during the final drain reports "completed with interrupted background work"
+    // firing during leftover interruption reports "completed with interrupted background work"
     // instead of discarding the computed value as a plain timeout.
     let returned: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
 
@@ -3517,11 +3514,11 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
           const promises = new PromiseRuntime<Services<Tools>>(scope)
           const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, promises, logs)
           const value = yield* interpreter.run(program)
-          // Validate the result before draining so an invalid value is a fatal completion that
-          // closes the promise scope instead of waiting for unrelated work.
+          // Validate the result first so an invalid value is a fatal completion that closes
+          // the promise scope directly instead of taking the normal-completion path.
           const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
           returned = { value: result, promises }
-          const warnings = yield* promises.drain()
+          const warnings = yield* promises.interrupt()
           return {
             ok: true,
             value: result,
@@ -3556,7 +3553,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
                     warnings: [
                       {
                         kind: "TimeoutExceeded",
-                        message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await or explicitly settle all started promises.`,
+                        message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await all started promises.`,
                       },
                       ...returned.promises.diagnostics(),
                     ],

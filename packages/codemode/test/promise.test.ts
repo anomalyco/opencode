@@ -63,7 +63,7 @@ const completedTool = (trace: Trace) =>
     run: () => Effect.succeed(trace.completed),
   })
 
-/** Never settles, and holds interruption cleanup for `cleanupMs` so a drain can outlast a timeout. */
+/** Never settles, and holds interruption cleanup for `cleanupMs` so completion cleanup can outlast a timeout. */
 const stubbornTool = (trace: Trace) =>
   Tool.make({
     description: "Never settle; clean up slowly when interrupted",
@@ -422,7 +422,7 @@ describe("promises at data boundaries", () => {
     expect(diagnostic.message).toContain("un-awaited Promise")
   })
 
-  test("invalid returned data cancels pending work before final draining", async () => {
+  test("invalid returned data cancels pending work", async () => {
     const trace = makeTrace()
     const result = await run(
       `
@@ -889,7 +889,7 @@ describe("timeout interruption of forked calls", () => {
     expect(trace.interrupted).toBe(1)
   })
 
-  test("a timeout during final draining keeps the computed value and warns", async () => {
+  test("a timeout during completion cleanup keeps the computed value and warns", async () => {
     const trace = makeTrace()
     const result = await run(
       `
@@ -905,14 +905,14 @@ describe("timeout interruption of forked calls", () => {
       {
         kind: "TimeoutExceeded",
         message:
-          "The program returned, but background work was still running at the 100ms timeout and was interrupted. Await or explicitly settle all started promises.",
+          "The program returned, but background work was still running at the 100ms timeout and was interrupted. Await all started promises.",
       },
     ])
     expect(trace.interrupted).toBe(1)
     expect(trace.completed).toBe(0)
   })
 
-  test("a timeout during draining reports the timeout warning before settled rejections", async () => {
+  test("a timeout during completion cleanup reports the timeout warning before settled rejections", async () => {
     const result = await run(
       `
         tools.host.fail({})
@@ -928,7 +928,7 @@ describe("timeout interruption of forked calls", () => {
       {
         kind: "TimeoutExceeded",
         message:
-          "The program returned, but background work was still running at the 100ms timeout and was interrupted. Await or explicitly settle all started promises.",
+          "The program returned, but background work was still running at the 100ms timeout and was interrupted. Await all started promises.",
       },
       { kind: "ToolFailure", message: "Unhandled rejection from an un-awaited promise: Lookup refused" },
     ])
