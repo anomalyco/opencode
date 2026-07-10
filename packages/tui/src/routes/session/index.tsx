@@ -1410,7 +1410,7 @@ function UserMessage(props: {
                     const directory = file.mime === "application/x-directory"
                     return (
                       <text fg={theme.text}>
-                        <span style={{ bg: theme.secondary, fg: theme.background }}>
+                        <span style={{ bg: theme.secondary, fg: selectedForeground(theme, theme.secondary) }}>
                           {directory ? " Directory " : " File "}
                         </span>
                         <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>

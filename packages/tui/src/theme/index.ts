@@ -100,14 +100,16 @@ export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
 
   // For transparent backgrounds, calculate contrast based on the actual bg (or fallback to primary)
   if (theme.background.a === 0) {
-    const targetColor = bg ?? theme.primary
-    const { r, g, b } = targetColor
-    const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+    return contrastForeground(bg ?? theme.primary)
   }
 
   // Fall back to background color
   return theme.background
+}
+
+function contrastForeground(bg: RGBA): RGBA {
+  const luminance = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
+  return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
 }
 
 type HexColor = `#${string}`
@@ -275,6 +277,8 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
   if (hasSelectedListItemText) {
     resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+  } else if (resolved.background?.a === 0) {
+    resolved.selectedListItemText = contrastForeground(resolved.primary ?? RGBA.fromInts(0, 0, 0))
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
