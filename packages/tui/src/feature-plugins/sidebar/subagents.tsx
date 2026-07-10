@@ -1,6 +1,6 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createResource, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { useSync } from "../../context/sync"
 import type { BuiltinTuiPlugin } from "../builtins"
 
@@ -15,11 +15,34 @@ function title(item: Session) {
 function View(props: { api: TuiPluginApi; sessionID: string }) {
   const theme = () => props.api.theme.current
   const sync = useSync()
-  const children = createMemo(() =>
-    sync.data.session
-      .filter((item) => item.parentID === props.sessionID)
-      .toSorted((a, b) => a.time.created - b.time.created),
+  const [loaded, { refetch }] = createResource(
+    () => props.sessionID,
+    async (sessionID) => {
+      const result = await props.api.client.session.children({ sessionID }, { throwOnError: true })
+      return result.data ?? []
+    },
   )
+  const children = createMemo(() => {
+    const items = new Map<string, Session>()
+    for (const item of loaded() ?? []) items.set(item.id, item)
+    for (const item of sync.data.session) {
+      if (item.parentID === props.sessionID) items.set(item.id, item)
+    }
+    return [...items.values()].toSorted((a, b) => a.time.created - b.time.created)
+  })
+  const refresh = () => void refetch()
+  const stopUpdated = props.api.event.on("session.updated", (event) => {
+    if (event.properties.info.parentID !== props.sessionID) return
+    refresh()
+  })
+  const stopDeleted = props.api.event.on("session.deleted", (event) => {
+    if (!children().some((item) => item.id === event.properties.info.id)) return
+    refresh()
+  })
+  onCleanup(() => {
+    stopUpdated()
+    stopDeleted()
+  })
   const running = () => children().filter((item) => sync.data.session_status[item.id]?.type !== "idle")
   const idle = () => children().length - running().length
 
