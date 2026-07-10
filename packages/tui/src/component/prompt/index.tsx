@@ -163,15 +163,27 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
+  // Footer live-work counts are for work moved out of the main turn. While this session is
+  // busy, running descendants/shells are the blocking work the user is already watching, so
+  // counting them only produces flicker.
+  const showBackgroundWork = createMemo(() => Boolean(props.sessionID) && status() === "idle")
   const activeSubagents = createMemo(() => {
-    if (!props.sessionID) return 0
+    if (!showBackgroundWork()) return 0
     return data.session
-      .family(props.sessionID)
+      .family(props.sessionID!)
       .filter((id) => id !== props.sessionID && data.session.status(id) === "running").length
   })
-  const runningShells = createMemo(
-    () => data.shell.list(currentLocation()).filter((shell) => shell.metadata.sessionID === props.sessionID).length,
-  )
+  const runningShells = createMemo(() => {
+    if (!showBackgroundWork()) return 0
+    return data.shell
+      .list(currentLocation())
+      .filter((shell) => {
+        if (shell.metadata.sessionID !== props.sessionID) return false
+        // Prefer an explicit background tag when present; otherwise treat idle-parent shells
+        // as background observation candidates (mid-flight backgrounding may omit the tag).
+        return shell.metadata.background !== false
+      }).length
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()

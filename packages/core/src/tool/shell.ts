@@ -196,7 +196,12 @@ export const Plugin = {
                   command: input.command,
                   cwd: target.canonical,
                   timeout,
-                  metadata: { sessionID: context.sessionID },
+                  metadata: {
+                    sessionID: context.sessionID,
+                    // Tag intentional background launches so the TUI footer can distinguish
+                    // observation-only shells from foreground blocking work.
+                    background: input.background === true,
+                  },
                 })
 
                 const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
