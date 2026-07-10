@@ -3,7 +3,7 @@ import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
-import { batch, type Accessor } from "solid-js"
+import { batch, startTransition, type Accessor } from "solid-js"
 import { useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -374,13 +374,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (created) {
         seed(sessionDirectory, created)
         session = created
-        if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
-        local.session.promote(sessionDirectory, session.id)
-        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        const draftID = search.draftId
-        if (draftID) tabs.promoteDraft(draftID, { server: tabs.draft(draftID).server, sessionId: session.id })
-        else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
-        submission.retarget(prompt.capture({ dir: base64Encode(sessionDirectory), id: session.id }))
+        await startTransition(() => {
+          if (!session) return
+          if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
+          local.session.promote(sessionDirectory, session.id)
+          layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+          const draftID = search.draftId
+          if (draftID) tabs.promoteDraft(draftID, { server: tabs.draft(draftID).server, sessionId: session.id })
+          else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+          submission.retarget(prompt.capture({ dir: base64Encode(sessionDirectory), id: session.id }))
+        })
       }
     }
     if (!session) {

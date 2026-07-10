@@ -78,17 +78,21 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 
 const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
 const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
-const externalCommandDirectories = (command: string, cwd: string) => {
+const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectories")(function* (
+  fs: FSUtil.Interface,
+  command: string,
+  cwd: string,
+) {
   const directories = new Set<string>()
   for (const token of shellTokens(command)) {
     const value = unquote(token).replace(/[;,|&]+$/, "")
     if (!path.isAbsolute(value)) continue
-    const resolved = FSUtil.resolve(value)
+    const resolved = yield* fs.resolve(value)
     if (FSUtil.contains(cwd, resolved)) continue
-    directories.add(FSUtil.resolve(path.dirname(resolved)))
+    directories.add(yield* fs.resolve(path.dirname(resolved)))
   }
   return [...directories]
-}
+})
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -131,7 +135,7 @@ const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-              const warnings = externalCommandDirectories(input.command, target.canonical).map(
+              const warnings = (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
                 (directory) =>
                   `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
               )
