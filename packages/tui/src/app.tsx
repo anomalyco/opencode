@@ -59,7 +59,7 @@ import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
-import { isDefaultTitle } from "./util/session"
+import { isDefaultTitle, titleStatusGlyph } from "./util/session"
 import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -445,6 +445,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [titleSpinnerFrame, setTitleSpinnerFrame] = createSignal(0)
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
@@ -459,20 +460,31 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }
 
     if (route.data.type === "session") {
+      const glyph = titleStatusGlyph(sync.data.session_status?.[route.data.sessionID], titleSpinnerFrame())
       const session = sync.session.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle(`OC ${glyph}`)
         return
       }
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`OC ${glyph} | ${title}`)
       return
     }
 
     if (route.data.type === "plugin") {
       renderer.setTerminalTitle(`OC | ${route.data.id}`)
     }
+  })
+
+  // Animate the busy glyph in the terminal title while the current session is working
+  createEffect(() => {
+    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    if (route.data.type !== "session") return
+    const status = sync.data.session_status?.[route.data.sessionID]
+    if (status?.type !== "busy" && status?.type !== "retry") return
+    const interval = setInterval(() => setTitleSpinnerFrame((frame) => frame + 1), 500)
+    onCleanup(() => clearInterval(interval))
   })
 
   const args = useArgs()
