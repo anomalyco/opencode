@@ -128,3 +128,30 @@ export function win32InstallCtrlCGuard() {
 
   return unhook
 }
+
+/**
+ * Detect Windows system dark/light mode from the registry.
+ *
+ * Reads `AppsUseLightTheme` from:
+ *   HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
+ *
+ * Returns `"dark"` when the value is `0`, `"light"` when `1`, or `undefined`
+ * if the query fails (registry key absent on older Windows, non-Windows platform).
+ */
+export function win32SystemTheme(): "dark" | "light" | undefined {
+  if (process.platform !== "win32") return undefined
+  if (typeof Bun === "undefined") return undefined
+  try {
+    const match = (
+      Bun.spawnSync([
+        "reg", "query",
+        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        "/v", "AppsUseLightTheme",
+      ], { encoding: "utf8" }).stdout?.toString() ?? ""
+    ).match(/0x([0-9a-f]+)/i)
+    if (match) return parseInt(match[1], 16) === 0 ? "dark" : "light"
+  } catch {
+    // Registry key may not exist on Windows 8 or earlier.
+  }
+  return undefined
+}

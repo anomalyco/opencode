@@ -19,6 +19,7 @@ import {
   upsertTheme,
   type ThemeJson,
 } from "../theme"
+import { win32SystemTheme } from "../terminal-win32"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -162,7 +163,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             if (store.active === "system") setStore("active", "opencode")
             return
           }
-          const next = store.lock ?? terminalMode(colors) ?? mode
+          // On Windows Terminal the buffer background (OSC 11) is independent
+          // of the system dark/light mode.  The title bar follows the system
+          // theme but the background colour does not change.  Use the Windows
+          // registry value as the authoritative source when available.
+          let next = store.lock ?? terminalMode(colors) ?? mode
+          if (process.platform === "win32") {
+            const winMode = win32SystemTheme()
+            if (winMode) next = winMode
+          }
           if (store.mode !== next) setStore("mode", next)
           const signature = JSON.stringify(colors)
           hasResolvedSystemTheme = true
@@ -245,12 +254,26 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     let unsubscribeRefresh: (() => void) | undefined
     unsubscribeRefresh = themes.subscribeRefresh?.(refresh)
 
+    let winThemeWatcher: ReturnType<typeof setInterval> | undefined
+    if (process.platform === "win32") {
+      let lastWinTheme = win32SystemTheme()
+      winThemeWatcher = setInterval(() => {
+        const current = win32SystemTheme()
+        if (current && current !== lastWinTheme) {
+          lastWinTheme = current
+          if (!store.lock) apply(current)
+        }
+      }, 3000)
+      winThemeWatcher.unref()
+    }
+
     onCleanup(() => {
       renderer.off(CliRenderEvents.THEME_MODE, handle)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
       for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
       themeRefreshTimeouts.length = 0
+      if (winThemeWatcher) clearInterval(winThemeWatcher)
     })
 
     const values = createMemo(() => {
