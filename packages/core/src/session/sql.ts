@@ -160,7 +160,7 @@ export const InstructionEntryTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     key: text().notNull(),
-    value: text({ mode: "json" }).notNull().$type<Schema.Json>(),
+    value: text({ mode: "json" }).$type<Schema.Json>(),
     removed: integer({ mode: "boolean" }).notNull().default(false),
     ...Timestamps,
   },
@@ -169,7 +169,7 @@ export const InstructionEntryTable = sqliteTable(
 
 export const InstructionBlobTable = sqliteTable("instruction_blob", {
   hash: text().$type<Instruction.Hash>().primaryKey(),
-  value: text({ mode: "json" }).notNull().$type<Schema.Json>(),
+  value: text({ mode: "json" }).$type<Schema.Json>(),
 })
 
 export const InstructionStateTable = sqliteTable("instruction_state", {

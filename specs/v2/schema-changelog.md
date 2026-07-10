@@ -12,7 +12,7 @@ Status: **Historical pre-release compatibility ledger.** Older entries retain th
 
 Compatibility:
 
-- `session.instructions.updated.1` migrates to read-only `session.instructions.legacy.1`; no projector runs and migration deletes its projected System rows. The next safe boundary establishes one complete v2 delta.
+- Delete pre-beta `session.instructions.updated.1` events and their event-derived System rows instead of carrying a legacy event schema. The next safe boundary establishes one complete v2 delta.
 - Existing forks are assigned the sequence reserved by their original projection and their durable event is rewritten to v2 with that cutoff.
 - Blob GC is intentionally deferred. A future sync/export boundary must hydrate referenced blobs on the wire and re-hash them on ingestion.
 

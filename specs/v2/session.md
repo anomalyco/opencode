@@ -63,7 +63,7 @@ A normalized content-filter finish fails the Step. Any partial streamed content 
 
 Instruction sync persists values, never rendered privileged prose. The only durable fact is `session.instructions.updated { delta }`, mapping each changed source key to a SHA-256 content hash, with the literal `"removed"` for observed absence. Canonical JSON bodies live once in the machine-local `instruction_blob` store; `instruction_state` is a rebuildable fold cache, never primary state. The runner explicitly combines built-ins, ambient discovery, selected-agent skill guidance, references, MCP guidance, and API-managed instruction entries. There is no instruction registry.
 
-At each Safe Step Boundary the runner reads every source concurrently exactly once, hashes encoded values, and admits one delta atomically with its new blobs before input promotion. The first delta must be complete; an unavailable source blocks only that first delta and otherwise silently retains the stored value. Initial instructions and chronological update messages are rendered from stored values during request assembly and are never persisted; clients display changed keys.
+At each Safe Step Boundary the runner reads every source concurrently exactly once, hashes encoded values, and admits one delta atomically with its new blobs before input promotion. The initial delta must be complete; an unavailable source blocks only that initial delta and otherwise silently retains the stored value. Initial instructions and chronological update messages are rendered from stored values during request assembly and are never persisted; clients display changed keys.
 
 An instruction epoch spans completed compactions. `session.compaction.ended` moves the epoch start to its exact sequence, making current values initial, without reading sources or authoring an instruction event. Session movement and committed revert clear the fold. Forks record an authoritative parent sequence and derive values from the parent's ancestry through that cutoff. Model selection affects request assembly but is not itself an instruction source. See the [instruction sync design](./instruction-sync-proposal.md).
 
@@ -71,7 +71,7 @@ An instruction epoch spans completed compactions. `session.compaction.ended` mov
 
 Before each Step, the runner estimates the complete model-visible request against the selected model's context window and reserved output headroom. When compaction is enabled, model limits are known, and enough older Session History is available, the runner may store a structured rolling summary plus bounded recent context instead of sending an over-budget request.
 
-The full transcript remains durable. Active model history after the checkpoint contains the summary and retained recent context; provider-native continuation state does not cross the compaction boundary.
+The full transcript remains durable. Active model history after the compaction boundary contains the summary and retained recent context; provider-native continuation state does not cross that boundary.
 
 If the provider reports context overflow before durable assistant output or tool execution, the runner may perform one overflow-triggered compaction and rebuild the same logical Step. A second overflow or any overflow after durable output is terminal.
 

@@ -6,11 +6,33 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`ALTER TABLE \`session\` ADD \`fork_seq\` integer;`)
-      yield* tx.run(`ALTER TABLE \`instruction_entry\` ADD \`removed\` integer DEFAULT false NOT NULL;`)
+      yield* tx.run(`PRAGMA foreign_keys=OFF;`)
+      yield* tx.run(`
+        CREATE TABLE \`__new_instruction_entry\` (
+          \`session_id\` text NOT NULL,
+          \`key\` text NOT NULL,
+          \`value\` text,
+          \`removed\` integer DEFAULT false NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`instruction_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
+          CONSTRAINT \`fk_instruction_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        INSERT INTO \`__new_instruction_entry\`(
+          \`session_id\`, \`key\`, \`value\`, \`removed\`, \`time_created\`, \`time_updated\`
+        )
+        SELECT \`session_id\`, \`key\`, \`value\`, false, \`time_created\`, \`time_updated\`
+        FROM \`instruction_entry\`;
+      `)
+      yield* tx.run(`DROP TABLE \`instruction_entry\`;`)
+      yield* tx.run(`ALTER TABLE \`__new_instruction_entry\` RENAME TO \`instruction_entry\`;`)
+      yield* tx.run(`PRAGMA foreign_keys=ON;`)
       yield* tx.run(`
         CREATE TABLE \`instruction_blob\` (
           \`hash\` text PRIMARY KEY,
-          \`value\` text NOT NULL
+          \`value\` text
         );
       `)
       yield* tx.run(`
@@ -23,14 +45,16 @@ export default {
           CONSTRAINT \`fk_instruction_state_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      // Retain legacy prose under a distinct read-only event type so current
-      // clients have one unambiguous instructions.updated payload.
+      // Pre-beta instruction prose is superseded by value deltas. Remove only
+      // messages projected from those events, then remove the obsolete facts.
       yield* tx.run(`
-        UPDATE \`event\`
-        SET \`type\` = 'session.instructions.legacy.1'
-        WHERE \`type\` = 'session.instructions.updated.1';
+        DELETE FROM \`session_message\`
+        WHERE \`id\` IN (
+          SELECT 'msg_' || substr(\`id\`, 5)
+          FROM \`event\`
+          WHERE \`type\` = 'session.instructions.updated.1'
+        );
       `)
-      yield* tx.run(`DELETE FROM \`session_message\` WHERE \`type\` = 'system';`)
       yield* tx.run(`
         UPDATE \`session\`
         SET \`fork_seq\` = COALESCE(
@@ -62,6 +86,7 @@ export default {
           )
         WHERE \`type\` = 'session.forked.1';
       `)
+      yield* tx.run(`DELETE FROM \`event\` WHERE \`type\` = 'session.instructions.updated.1';`)
       yield* tx.run(`DROP TABLE \`instruction_checkpoint\`;`)
     })
   },

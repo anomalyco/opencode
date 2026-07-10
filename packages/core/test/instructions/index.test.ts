@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Cause, Effect, Exit, Option, Schema } from "effect"
 import { Instructions } from "@opencode-ai/core/instructions"
 import { it } from "../lib/effect"
 
@@ -7,7 +7,7 @@ const key = (value: string) => Instructions.Key.make(value)
 const source = (input: {
   key: string
   value: string | Instructions.Unavailable | Instructions.Removed
-  first?: (value: string) => string
+  initial?: (value: string) => string
   changed?: (previous: string, current: string) => string
   removed?: (value: string) => string
 }) =>
@@ -16,7 +16,7 @@ const source = (input: {
     codec: Schema.toCodecJson(Schema.String),
     read: Effect.succeed(input.value),
     render: {
-      first: input.first ?? String,
+      initial: input.initial ?? String,
       changed: input.changed ?? ((_previous, current) => current),
       removed: input.removed,
     },
@@ -34,7 +34,7 @@ describe("Instructions", () => {
           return "2026-07-09"
         }),
         render: {
-          first: (date) => `Today's date: ${date}`,
+          initial: (date) => `Today's date: ${date}`,
           changed: (previous, current) => `The date changed from ${previous} to ${current}`,
         },
       })
@@ -75,7 +75,11 @@ describe("Instructions", () => {
 
       expect(admitted.delta).toEqual({ "core/date": Instructions.hash("2026-07-10") })
       expect(
-        Instructions.renderUpdate(instructions, { "core/date": "2026-07-09" }, { "core/date": "2026-07-10" }),
+        Instructions.renderUpdate(
+          instructions,
+          { "core/date": "2026-07-09" },
+          { "core/date": Option.some("2026-07-10") },
+        ),
       ).toBe("The date changed from 2026-07-09 to 2026-07-10")
     }),
   )
@@ -92,13 +96,42 @@ describe("Instructions", () => {
       )
 
       expect(admitted).toEqual({ delta: { "core/remote": "removed" }, blobs: {} })
-      expect(Instructions.renderUpdate(instructions, { "core/remote": "instructions" }, { "core/remote": null })).toBe(
-        "Stop applying instructions",
-      )
+      expect(
+        Instructions.renderUpdate(instructions, { "core/remote": "instructions" }, { "core/remote": Option.none() }),
+      ).toBe("Stop applying instructions")
     }),
   )
 
-  it.effect("blocks the first delta while any source is unavailable", () =>
+  it.effect("treats JSON null as a value rather than a removal", () =>
+    Effect.gen(function* () {
+      const instructions = Instructions.make<Schema.Json>({
+        key: key("api/value"),
+        codec: Schema.toCodecJson(Schema.Json),
+        read: Effect.succeed(null),
+        render: {
+          initial: String,
+          changed: (_previous, current) => String(current),
+          removed: () => "removed",
+        },
+      })
+      const admitted = yield* Instructions.read(instructions).pipe(
+        Effect.flatMap((observed) => Instructions.diff(observed, { "api/value": Instructions.hash("previous") })),
+      )
+
+      expect(admitted).toEqual({
+        delta: { "api/value": Instructions.hash(null) },
+        blobs: { [Instructions.hash(null)]: null },
+      })
+      expect(
+        Instructions.renderUpdate(instructions, { "api/value": "previous" }, { "api/value": Option.some(null) }),
+      ).toBe("null")
+      expect(Instructions.applyDelta({ "api/value": "previous" }, { "api/value": Option.some(null) })).toEqual({
+        "api/value": null,
+      })
+    }),
+  )
+
+  it.effect("blocks the initial delta while any source is unavailable", () =>
     Effect.gen(function* () {
       const exit = yield* Instructions.read(source({ key: "core/remote", value: Instructions.unavailable })).pipe(
         Effect.flatMap(Instructions.diff),
@@ -133,15 +166,17 @@ describe("Instructions", () => {
     }),
   )
 
-  it.effect("renders a newly added source with its first renderer", () =>
+  it.effect("renders a newly added source with its initial renderer", () =>
     Effect.gen(function* () {
       const instructions = source({
         key: "core/skills",
         value: "effect",
-        first: (skill) => `Available skill: ${skill}`,
+        initial: (skill) => `Available skill: ${skill}`,
       })
 
-      expect(Instructions.renderUpdate(instructions, {}, { "core/skills": "effect" })).toBe("Available skill: effect")
+      expect(Instructions.renderUpdate(instructions, {}, { "core/skills": Option.some("effect") })).toBe(
+        "Available skill: effect",
+      )
     }),
   )
 
@@ -176,10 +211,10 @@ describe("Instructions", () => {
 
   it.effect("rejects empty model-visible renderings", () =>
     Effect.sync(() => {
-      const instructions = source({ key: "core/empty", value: "value", first: () => "" })
+      const instructions = source({ key: "core/empty", value: "value", initial: () => "" })
 
       expect(() => Instructions.renderInitial(instructions, { "core/empty": "value" })).toThrow(
-        "Instruction source core/empty rendered an empty first",
+        "Instruction source core/empty rendered an empty initial",
       )
     }),
   )

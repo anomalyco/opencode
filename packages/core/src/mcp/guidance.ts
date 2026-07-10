@@ -76,7 +76,7 @@ export const layer = Layer.effect(
             codec: Schema.toCodecJson(Schema.Array(Summary)),
             read: Effect.succeed(value),
             render: {
-              first: render,
+              initial: render,
               changed: update,
               removed: () => "MCP server instructions are no longer available.",
             },

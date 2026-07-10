@@ -286,7 +286,7 @@ const systemContext = Layer.mock(InstructionBuiltIns.Service, {
           ),
         ),
         render: {
-          first: String,
+          initial: String,
           changed: (_previous, current) => current,
           removed: () => "System context source removed: test/context",
         },
@@ -303,7 +303,7 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
             codec: Schema.toCodecJson(Schema.String),
             read: Effect.succeed(skillBaselines.get(agent.id)!),
             render: {
-              first: String,
+              initial: String,
               changed: (_previous, current) => current,
               removed: () => "Skill guidance removed",
             },
@@ -1419,6 +1419,33 @@ describe("SessionRunnerLLM", () => {
         { type: "text", text: 'The context under "deploy-target" no longer applies. Disregard it.' },
       ])
       expect(yield* contextEntries.list(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("retains JSON null API entries as values", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const entries = yield* InstructionEntry.Service
+      yield* entries.put({ sessionID, key: "nullable", value: "present" })
+      yield* admit(session, "First")
+      yield* session.resume(sessionID)
+
+      yield* entries.put({ sessionID, key: "nullable", value: null })
+      yield* admit(session, "Second")
+      yield* session.resume(sessionID)
+
+      expect(requests[1]?.messages.at(1)?.content).toEqual([
+        {
+          type: "text",
+          text: [
+            'The context under "nullable" changed and supersedes the previous value:',
+            '<context key="nullable">',
+            "null",
+            "</context>",
+          ].join("\n"),
+        },
+      ])
+      expect(yield* entries.list(sessionID)).toEqual([{ key: "nullable", value: null }])
     }),
   )
 

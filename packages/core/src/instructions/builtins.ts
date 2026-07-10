@@ -30,7 +30,7 @@ const layer = Layer.effect(
           ].join("\n"),
         ),
         render: {
-          first: (environment) =>
+          initial: (environment) =>
             ["Here is some useful information about the environment you are running in:", environment].join("\n"),
           changed: (_previous, environment) => ["The environment you are running in is now:", environment].join("\n"),
         },
@@ -40,7 +40,7 @@ const layer = Layer.effect(
         codec: Schema.toCodecJson(Schema.String),
         read: DateTime.nowAsDate.pipe(Effect.map((date) => date.toDateString())),
         render: {
-          first: (date) => `Today's date: ${date}`,
+          initial: (date) => `Today's date: ${date}`,
           changed: (_previous, date) => `Today's date is now: ${date}`,
         },
       }),

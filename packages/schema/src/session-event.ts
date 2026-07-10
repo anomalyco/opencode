@@ -162,16 +162,6 @@ export namespace Execution {
   export type Interrupted = typeof Interrupted.Type
 }
 
-/** Historical rendered-prose event retained only so persisted logs remain decodable. */
-export const InstructionsUpdatedV1 = Event.durable({
-  type: "session.instructions.legacy",
-  ...options,
-  schema: {
-    ...Base,
-    text: Schema.String,
-  },
-})
-
 export const InstructionsUpdated = Event.durable({
   type: "session.instructions.updated",
   durable: {
@@ -578,7 +568,6 @@ export const Definitions = Event.inventory(
 )
 
 export const DurableDefinitions = Event.inventory(
-  InstructionsUpdatedV1,
   ...Definitions.filter((definition) => definition.durability === "durable"),
 )
 

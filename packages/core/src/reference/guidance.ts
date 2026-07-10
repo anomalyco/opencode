@@ -79,7 +79,7 @@ const layer = Layer.effect(
           codec: Schema.toCodecJson(Schema.Array(Summary)),
           read: Effect.succeed(available.length === 0 ? Instructions.removed : available),
           render: {
-            first: render,
+            initial: render,
             changed: update,
             removed: () =>
               "Project reference guidance is no longer available. Do not use previously listed references.",

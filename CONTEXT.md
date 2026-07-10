@@ -38,13 +38,13 @@ The deterministic instruction text rendered from values at the current **Instruc
 _Avoid_: Live system prompt
 
 **Instruction Epoch**:
-The span between completed compactions. Its start is the last `session.compaction.ended` sequence, or the first complete instruction delta when no prior epoch exists.
+The span between completed compactions. Its start is the last `session.compaction.ended` sequence, or the initial complete instruction delta when no prior epoch exists.
 
 **Instruction Values**:
 The key-to-hash map produced by folding instruction deltas in durable sequence order. Hash bodies live once in the content-addressed instruction blob store.
 
 **Unavailable Instruction Source**:
-An expected temporary inability to read an **Instruction Source** value; the runtime retains its prior effective value and emits no update, while an unavailable source blocks the first complete delta.
+An expected temporary inability to read an **Instruction Source** value; the runtime retains its prior effective value and emits no update, while an unavailable source blocks the initial complete delta.
 
 **Safe Step Boundary**:
 The point during Step preparation, after prior tool settlement and before durable input promotion, where instruction changes may be admitted chronologically.

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Instructions } from "@opencode-ai/core/instructions"
 
 export interface State {
@@ -29,8 +29,11 @@ export const readUpdate = (instructions: Instructions.Instructions, previous: St
       Effect.flatMap((observed) => Instructions.diff(observed, hashes(previous.values))),
     )
     const delta = Object.fromEntries(
-      Object.entries(admission.delta).map(([key, hash]) => [key, hash === "removed" ? null : admission.blobs[hash]]),
-    ) as Readonly<Record<string, Schema.Json | null>>
+      Object.entries(admission.delta).map(([key, hash]) => [
+        key,
+        hash === "removed" ? Option.none() : Option.some(admission.blobs[hash]),
+      ]),
+    ) as Readonly<Record<string, Option.Option<Schema.Json>>>
     const values = Instructions.applyDelta(previous.values, delta)
     return {
       values,

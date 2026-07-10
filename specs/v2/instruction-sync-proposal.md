@@ -23,7 +23,7 @@ Each hash body is canonical JSON stored once in the machine-local `instruction_b
 
 ## Epochs And Folds
 
-An instruction epoch is the span between completed compactions. `epochStart` is the sequence of the last `session.compaction.ended`, or the first complete v2 delta when no epoch exists.
+An instruction epoch is the span between completed compactions. `epochStart` is the sequence of the last `session.compaction.ended`, or the initial complete v2 delta when no epoch exists.
 
 Folding deltas in durable sequence order derives:
 
@@ -64,7 +64,7 @@ The relevant reducer inputs are:
 interface Source {
   readonly key: Key
   readonly read: Effect<Json | Unavailable | Removed>
-  readonly first: (value: Json) => string | undefined
+  readonly initial: (value: Json) => string | undefined
   readonly changed: (previous: Json, current: Json) => string | undefined
   readonly removed: (previous: Json) => string | undefined
 }
@@ -75,7 +75,7 @@ namespace Source {
     readonly codec: Schema.Codec<A, Json>
     readonly read: Effect<A | Unavailable | Removed>
     readonly render: {
-      readonly first: (value: A) => string
+      readonly initial: (value: A) => string
       readonly changed: (previous: A, current: A) => string
       readonly removed?: (previous: A) => string
     }
@@ -91,7 +91,7 @@ Producers author a typed `Source.Definition<A>`. `make` captures its codec and r
 
 `read` runs once per source at the safe boundary, never at layer construction or request assembly. Codecs must be canonical: object keys are canonicalized by the hash function, while source-owned collections must have deterministic order and values must not contain observation timestamps.
 
-`Unavailable` means the read failed temporarily. The first complete delta blocks while any source is unavailable; later boundaries retain its prior hash silently.
+`Unavailable` means the read failed temporarily. The initial complete delta blocks while any source is unavailable; later boundaries retain its prior hash silently.
 
 `Removed` is an observed absence. If the key currently has a value, the next delta stores `"removed"` and assembly calls the source's removal renderer. A source that disappears from a software upgrade does not imply removal; its retained value becomes invisible while its renderer is absent.
 
@@ -102,7 +102,7 @@ Once per physical attempt, before input promotion:
 1. Load the selected agent and compose built-ins, discovery, skill guidance, reference guidance, MCP guidance, and API entries in fixed order.
 2. Read every source concurrently exactly once.
 3. Encode and hash values; compare with `instruction_state.current_values`.
-4. If this is the first v2 boundary, require a complete read and admit one complete delta, including `{}` for a truly empty set.
+4. At the initial v2 boundary, require a complete read and admit one complete delta, including `{}` for a truly empty set.
 5. For later boundaries, insert new blobs and admit one delta only when a hash or explicit removal changed.
 6. Promote pending input.
 7. Read projected messages, epoch values, blobs, and post-epoch deltas in one database transaction.
@@ -120,7 +120,7 @@ The child stores the cutoff as `session.fork_seq`. Its virtual instruction log i
 
 ## API Entries
 
-Each visible entry is one `api/<key>` source. DELETE marks the row as a hidden tombstone rather than physically removing it, preserving the renderer needed to admit and narrate the removal; list responses hide tombstones. A later PUT revives the same source.
+Each visible entry is one `api/<key>` source. DELETE marks the row as a hidden tombstone rather than physically removing it, preserving the renderer needed to admit and narrate the removal; list responses hide tombstones. The nullable value column preserves JSON `null`, while the separate tombstone flag distinguishes removal. A later PUT revives the same source.
 
 PUT measures encoded JSON in UTF-8 and rejects values larger than 8KB with `InstructionEntryValueTooLargeError` (HTTP 413). Values are never truncated.
 
@@ -140,7 +140,7 @@ Instruction deltas do not project `session_message` rows. The TUI derives a non-
 
 ## Migration
 
-`session.instructions.updated.1` migrates to read-only `session.instructions.legacy.1`, so current event clients have one unambiguous update payload. No projector consumes legacy prose. Migration deletes its projected System rows and drops `instruction_checkpoint`; the next safe boundary establishes one complete v2 delta.
+Migration deletes pre-beta `session.instructions.updated.1` events and their event-derived System rows, then drops `instruction_checkpoint`. It leaves unrelated events and System messages intact. The next safe boundary establishes one complete v2 delta.
 
 Existing `session.forked.1` rows migrate to v2 with the event prefix reserved by their original projection as `parentSeq`.
 

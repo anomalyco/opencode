@@ -37,7 +37,7 @@ const layer = Layer.effect(
         codec: Schema.toCodecJson(Files),
         read: Effect.succeed(value),
         render: {
-          first: render,
+          initial: render,
           changed: (_previous, current) =>
             `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
           removed: () => "Previously loaded instructions no longer apply.",

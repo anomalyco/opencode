@@ -1,6 +1,6 @@
 export * as InstructionEntry from "./instruction-entry"
 
-import { and, asc, eq, ne, or } from "drizzle-orm"
+import { and, asc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Database } from "../database/database"
@@ -43,7 +43,7 @@ const source = (entry: Info & { readonly removed: boolean }) =>
     codec: Schema.toCodecJson(Schema.Json),
     read: Effect.succeed(entry.removed ? Instructions.removed : entry.value),
     render: {
-      first: (value) => renderBlock(entry.key, value),
+      initial: (value) => renderBlock(entry.key, value),
       changed: (_previous, value) =>
         [
           `The context under "${entry.key}" changed and supersedes the previous value:`,
@@ -93,13 +93,17 @@ const layer = Layer.effect(
           maxBytes: MaxValueBytes,
           message: `Instruction entry value is ${actualBytes} bytes; the limit is ${MaxValueBytes} bytes`,
         })
+      const changed =
+        input.value === null
+          ? isNotNull(InstructionEntryTable.value)
+          : or(isNull(InstructionEntryTable.value), ne(InstructionEntryTable.value, input.value))
       yield* db
         .insert(InstructionEntryTable)
         .values({ session_id: input.sessionID, key: input.key, value: input.value, removed: false })
         .onConflictDoUpdate({
           target: [InstructionEntryTable.session_id, InstructionEntryTable.key],
           set: { value: input.value, removed: false, time_updated: Date.now() },
-          setWhere: or(eq(InstructionEntryTable.removed, true), ne(InstructionEntryTable.value, input.value)),
+          setWhere: or(eq(InstructionEntryTable.removed, true), changed),
         })
         .run()
         .pipe(Effect.orDie)
@@ -111,7 +115,7 @@ const layer = Layer.effect(
     }) {
       yield* db
         .update(InstructionEntryTable)
-        .set({ value: "", removed: true, time_updated: Date.now() })
+        .set({ value: null, removed: true, time_updated: Date.now() })
         .where(
           and(
             eq(InstructionEntryTable.session_id, input.sessionID),

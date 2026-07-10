@@ -1,7 +1,7 @@
 export * as InstructionState from "./instruction-state"
 
 import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Option, Schema } from "effect"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { EventTable } from "../event/sql"
@@ -219,8 +219,11 @@ function dereference(values: Instructions.Values, blobs: ReadonlyMap<Instruction
 
 function dereferenceDelta(delta: Instructions.Delta, blobs: ReadonlyMap<Instructions.Hash, Schema.Json>) {
   return Object.fromEntries(
-    Object.entries(delta).map(([key, hash]) => [key, hash === "removed" ? null : requireBlob(blobs, hash)]),
-  ) as Readonly<Record<string, Schema.Json | null>>
+    Object.entries(delta).map(([key, hash]) => [
+      key,
+      hash === "removed" ? Option.none() : Option.some(requireBlob(blobs, hash)),
+    ]),
+  ) as Readonly<Record<string, Option.Option<Schema.Json>>>
 }
 
 function requireBlob(blobs: ReadonlyMap<Instructions.Hash, Schema.Json>, hash: Instructions.Hash) {
@@ -229,10 +232,19 @@ function requireBlob(blobs: ReadonlyMap<Instructions.Hash, Schema.Json>, hash: I
   return value
 }
 
-const instructionEventType = EventV2.versionedType(SessionEvent.InstructionsUpdated.type, 2)
-const compactionEventType = EventV2.versionedType(SessionEvent.Compaction.Ended.type, 1)
-const movedEventType = EventV2.versionedType(SessionEvent.Moved.type, 1)
-const revertedEventType = EventV2.versionedType(SessionEvent.RevertEvent.Committed.type, 1)
+const instructionEventType = EventV2.versionedType(
+  SessionEvent.InstructionsUpdated.type,
+  SessionEvent.InstructionsUpdated.durable.version,
+)
+const compactionEventType = EventV2.versionedType(
+  SessionEvent.Compaction.Ended.type,
+  SessionEvent.Compaction.Ended.durable.version,
+)
+const movedEventType = EventV2.versionedType(SessionEvent.Moved.type, SessionEvent.Moved.durable.version)
+const revertedEventType = EventV2.versionedType(
+  SessionEvent.RevertEvent.Committed.type,
+  SessionEvent.RevertEvent.Committed.durable.version,
+)
 const relevantEventTypes = [instructionEventType, compactionEventType, movedEventType, revertedEventType]
 
 type InstructionEventRow = typeof EventTable.$inferSelect
@@ -258,7 +270,9 @@ const eventRows = Effect.fnUntraced(function* (
   types: ReadonlyArray<string>,
   after?: number,
 ): Effect.fn.Return<ReadonlyArray<InstructionEventRow>> {
-  const segments = yield* lineage(db, sessionID)
+  const segments = (yield* lineage(db, sessionID)).filter(
+    (segment) => after === undefined || segment.through === undefined || segment.through > after,
+  )
   return (yield* Effect.forEach(segments, (segment) =>
     db
       .select()

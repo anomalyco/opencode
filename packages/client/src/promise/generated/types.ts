@@ -1216,15 +1216,6 @@ export type SessionLogOutput =
           id: string
           created: number
           metadata?: { [x: string]: unknown }
-          type: "session.instructions.legacy"
-          durable: { aggregateID: string; seq: number; version: 1 }
-          location?: { directory: string; workspaceID?: string }
-          data: { sessionID: string; text: string }
-        }
-      | {
-          id: string
-          created: number
-          metadata?: { [x: string]: unknown }
           type: "session.agent.selected"
           durable: { aggregateID: string; seq: number; version: 1 }
           location?: { directory: string; workspaceID?: string }

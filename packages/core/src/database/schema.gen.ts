@@ -128,14 +128,14 @@ export default {
       yield* tx.run(`
         CREATE TABLE \`instruction_blob\` (
           \`hash\` text PRIMARY KEY,
-          \`value\` text NOT NULL
+          \`value\` text
         );
       `)
       yield* tx.run(`
         CREATE TABLE \`instruction_entry\` (
           \`session_id\` text NOT NULL,
           \`key\` text NOT NULL,
-          \`value\` text NOT NULL,
+          \`value\` text,
           \`removed\` integer DEFAULT false NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,

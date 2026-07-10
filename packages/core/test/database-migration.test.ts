@@ -508,30 +508,52 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("removes legacy projected instruction prose while retaining its durable event", async () => {
+  test("deletes pre-beta instruction events and only their projected messages", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, fork_session_id text)`)
-        yield* db.run(sql`CREATE TABLE instruction_entry (session_id text, key text, value text)`)
+        yield* db.run(
+          sql`CREATE TABLE instruction_entry (session_id text NOT NULL, key text NOT NULL, value text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, PRIMARY KEY(session_id, key))`,
+        )
         yield* db.run(sql`CREATE TABLE instruction_checkpoint (session_id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
         yield* db.run(
-          sql`CREATE TABLE event (aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
         )
         yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY, type text NOT NULL)`)
+        yield* db.run(sql`INSERT INTO session VALUES ('ses_test', NULL)`)
         yield* db.run(
-          sql`INSERT INTO event VALUES ('ses_test', 0, 'session.instructions.updated.1', '{"sessionID":"ses_test","text":"changed"}')`,
+          sql`INSERT INTO event VALUES ('evt_instruction', 'ses_test', 0, 'session.instructions.updated.1', '{"sessionID":"ses_test","text":"changed"}')`,
         )
-        yield* db.run(sql`INSERT INTO session_message VALUES ('msg_system', 'system'), ('msg_user', 'user')`)
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_other', 'ses_test', 1, 'session.synthetic.1', '{"sessionID":"ses_test","text":"keep"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message VALUES ('msg_instruction', 'system'), ('msg_other', 'system'), ('msg_user', 'user')`,
+        )
+        yield* db.run(sql`INSERT INTO instruction_entry VALUES ('ses_test', 'plan', '"ready"', 1, 2)`)
 
         yield* DatabaseMigration.applyOnly(db, [instructionSyncMigration])
 
-        expect(yield* db.get(sql`SELECT type, data FROM event`)).toEqual({
-          type: "session.instructions.legacy.1",
-          data: '{"sessionID":"ses_test","text":"changed"}',
+        expect(yield* db.all(sql`SELECT id, type FROM event`)).toEqual([
+          { id: "evt_other", type: "session.synthetic.1" },
+        ])
+        expect(yield* db.all(sql`SELECT id, type FROM session_message ORDER BY id`)).toEqual([
+          { id: "msg_other", type: "system" },
+          { id: "msg_user", type: "user" },
+        ])
+        expect(yield* db.get(sql`SELECT * FROM instruction_entry`)).toEqual({
+          session_id: "ses_test",
+          key: "plan",
+          value: '"ready"',
+          removed: 0,
+          time_created: 1,
+          time_updated: 2,
         })
-        expect(yield* db.all(sql`SELECT id, type FROM session_message`)).toEqual([{ id: "msg_user", type: "user" }])
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instruction_checkpoint'`),
+        ).toBeUndefined()
       }),
     )
   })
@@ -541,27 +563,33 @@ describe("DatabaseMigration", () => {
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, fork_session_id text)`)
-        yield* db.run(sql`CREATE TABLE instruction_entry (session_id text, key text, value text)`)
+        yield* db.run(
+          sql`CREATE TABLE instruction_entry (session_id text NOT NULL, key text NOT NULL, value text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, PRIMARY KEY(session_id, key))`,
+        )
         yield* db.run(sql`CREATE TABLE instruction_checkpoint (session_id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY, type text NOT NULL)`)
         yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
         yield* db.run(
-          sql`CREATE TABLE event (aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
         )
         yield* db.run(sql`INSERT INTO session VALUES ('ses_child', 'ses_parent')`)
         yield* db.run(sql`INSERT INTO event_sequence VALUES ('ses_child', 8)`)
         yield* db.run(
-          sql`INSERT INTO event VALUES ('ses_child', 0, 'session.forked.1', '{"sessionID":"ses_child","parentID":"ses_parent"}')`,
+          sql`INSERT INTO event VALUES ('evt_fork', 'ses_child', 0, 'session.forked.1', '{"sessionID":"ses_child","parentID":"ses_parent"}')`,
         )
-        yield* db.run(sql`INSERT INTO event VALUES ('ses_child', 6, 'session.input.admitted.1', '{}')`)
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_instruction', 'ses_child', 5, 'session.instructions.updated.1', '{"sessionID":"ses_child","text":"changed"}')`,
+        )
+        yield* db.run(sql`INSERT INTO event VALUES ('evt_input', 'ses_child', 6, 'session.input.admitted.1', '{}')`)
 
         yield* DatabaseMigration.applyOnly(db, [instructionSyncMigration])
 
-        expect(yield* db.get(sql`SELECT fork_seq FROM session`)).toEqual({ fork_seq: 5 })
+        expect(yield* db.get(sql`SELECT fork_seq FROM session`)).toEqual({ fork_seq: 4 })
         expect(yield* db.get(sql`SELECT type, data FROM event WHERE seq = 0`)).toEqual({
           type: "session.forked.2",
-          data: '{"sessionID":"ses_child","parentID":"ses_parent","parentSeq":5}',
+          data: '{"sessionID":"ses_child","parentID":"ses_parent","parentSeq":4}',
         })
+        expect(yield* db.get(sql`SELECT id FROM event WHERE id = 'evt_instruction'`)).toBeUndefined()
       }),
     )
   })

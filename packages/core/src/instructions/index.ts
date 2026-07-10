@@ -33,7 +33,7 @@ export type Removed = typeof removed
 export interface Source {
   readonly key: Key
   readonly read: Effect.Effect<Schema.Json | Unavailable | Removed>
-  readonly first: (value: Schema.Json) => string | undefined
+  readonly initial: (value: Schema.Json) => string | undefined
   readonly changed: (previous: Schema.Json, current: Schema.Json) => string | undefined
   readonly removed: (previous: Schema.Json) => string | undefined
 }
@@ -45,7 +45,7 @@ export declare namespace Source {
     readonly codec: Schema.Codec<A, Schema.Json>
     readonly read: Effect.Effect<A | Unavailable | Removed>
     readonly render: {
-      readonly first: (current: A) => string
+      readonly initial: (current: A) => string
       readonly changed: (previous: A, current: A) => string
       readonly removed?: (previous: A) => string
     }
@@ -88,7 +88,7 @@ export const empty: Instructions = []
 export function make<A>(source: Source.Definition<A>): Instructions {
   const decode = Schema.decodeUnknownOption(source.codec)
   const encode = Schema.encodeSync(source.codec)
-  const first = (value: A) => requireText(source.key, "first", source.render.first(value))
+  const initial = (value: A) => requireText(source.key, "initial", source.render.initial(value))
   const decodeValue = (value: Schema.Json) => Option.getOrUndefined(decode(value))
   return [
     {
@@ -100,15 +100,15 @@ export function make<A>(source: Source.Definition<A>): Instructions {
           return encode(value)
         }),
       ),
-      first: (value) => {
+      initial: (value) => {
         const decoded = decodeValue(value)
-        return decoded === undefined ? undefined : first(decoded)
+        return decoded === undefined ? undefined : initial(decoded)
       },
       changed: (previous, current) => {
         const before = decodeValue(previous)
         const after = decodeValue(current)
         if (after === undefined) return undefined
-        if (before === undefined) return first(after)
+        if (before === undefined) return initial(after)
         return requireText(source.key, "changed", source.render.changed(before, after))
       },
       removed: (previous) => {
@@ -162,7 +162,7 @@ export function renderInitial(value: Instructions, values: Readonly<Record<strin
   return render(
     value.flatMap((source) => {
       if (!Object.hasOwn(values, source.key)) return []
-      const text = source.first(values[source.key])
+      const text = source.initial(values[source.key])
       return text === undefined ? [] : [text]
     }),
   )
@@ -171,20 +171,21 @@ export function renderInitial(value: Instructions, values: Readonly<Record<strin
 export function renderUpdate(
   value: Instructions,
   previous: Readonly<Record<string, Schema.Json>>,
-  delta: Readonly<Record<string, Schema.Json | null>>,
+  delta: Readonly<Record<string, Option.Option<Schema.Json>>>,
 ) {
   return render(
     value.flatMap((source) => {
       if (!Object.hasOwn(delta, source.key)) return []
       const current = delta[source.key]
-      if (current === null) {
+      if (Option.isNone(current)) {
         if (!Object.hasOwn(previous, source.key)) return []
         const text = source.removed(previous[source.key])
         return text === undefined ? [] : [text]
       }
+      const next = current.value
       const text = Object.hasOwn(previous, source.key)
-        ? source.changed(previous[source.key], current)
-        : source.first(current)
+        ? source.changed(previous[source.key], next)
+        : source.initial(next)
       return text === undefined ? [] : [text]
     }),
   )
@@ -194,14 +195,14 @@ export function hash(value: Schema.Json) {
   return Hash.make(createHash("sha256").update(canonical(value)).digest("hex"))
 }
 
-export function applyDelta<A>(
-  values: Readonly<Record<string, A>>,
-  delta: Readonly<Record<string, A | null>>,
-): Readonly<Record<string, A>> {
-  const result: Record<string, A> = { ...values }
+export function applyDelta(
+  values: Readonly<Record<string, Schema.Json>>,
+  delta: Readonly<Record<string, Option.Option<Schema.Json>>>,
+): Readonly<Record<string, Schema.Json>> {
+  const result: Record<string, Schema.Json> = { ...values }
   for (const [key, value] of Object.entries(delta)) {
-    if (value === null) delete result[key]
-    else result[key] = value
+    if (Option.isNone(value)) delete result[key]
+    else result[key] = value.value
   }
   return result
 }

@@ -4774,25 +4774,6 @@ export type InstructionEntryInfo = {
   value: unknown
 }
 
-export type SessionInstructionsLegacy = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.instructions.legacy"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    text: string
-  }
-}
-
 export type SessionAgentSelected = {
   id: string
   created: number
@@ -5586,7 +5567,6 @@ export type SessionRevertCommitted = {
 }
 
 export type SessionEventDurable =
-  | SessionInstructionsLegacy
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -9029,25 +9009,6 @@ export type SessionMessageCompactionFailedV2 = {
  * Instruction entry key (lowercase alphanumerics plus . _ -)
  */
 export type InstructionEntryKeyV2 = string
-
-export type SessionInstructionsLegacyV2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "session.instructions.legacy"
-  durable: {
-    aggregateID: string
-    seq: number
-    version: 1
-  }
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    text: string
-  }
-}
 
 export type SessionAgentSelectedV2 = {
   id: string

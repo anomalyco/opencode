@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "666138ef-82cb-4a9a-a765-e6669a436ff3",
+  "id": "5f0a1db8-d4bf-42c3-becb-96b46fe66bed",
   "prevIds": [
-    "657acb37-95d1-4471-8e5b-b661b37c29cc"
+    "666138ef-82cb-4a9a-a765-e6669a436ff3"
   ],
   "ddl": [
     {
@@ -798,7 +798,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -828,7 +828,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
