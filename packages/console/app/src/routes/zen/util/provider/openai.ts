@@ -4,6 +4,7 @@ type Usage = {
   input_tokens?: number
   input_tokens_details?: {
     cached_tokens?: number
+    cache_write_tokens?: number
   }
   output_tokens?: number
   output_tokens_details?: {
@@ -48,12 +49,13 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
     const outputTokens = usage.output_tokens ?? 0
     const reasoningTokens = usage.output_tokens_details?.reasoning_tokens ?? undefined
     const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? undefined
+    const cacheWriteTokens = usage.input_tokens_details?.cache_write_tokens ?? undefined
     return {
       inputTokens: inputTokens - (cacheReadTokens ?? 0),
       outputTokens,
       reasoningTokens,
       cacheReadTokens,
-      cacheWrite5mTokens: undefined,
+      cacheWrite5mTokens: cacheWriteTokens,
       cacheWrite1hTokens: undefined,
     }
   },

@@ -679,3 +679,22 @@
 [data-component="tabs-drag-preview"] > * {
   position: relative;
 }
+
+body[data-new-layout] #review-panel [data-component="tabs"],
+body[data-new-layout] #terminal-panel [data-component="tabs"],
+body[data-new-layout] #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"],
+body[data-new-layout] #terminal-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] {
+  background-color: var(--v2-background-bg-base);
+
+  [data-slot="tabs-list"] {
+    background-color: var(--v2-background-bg-base);
+
+    > .sticky {
+      background-color: var(--v2-background-bg-base);
+
+      &::before {
+        background: linear-gradient(90deg, transparent, var(--v2-background-bg-base));
+      }
+    }
+  }
+}

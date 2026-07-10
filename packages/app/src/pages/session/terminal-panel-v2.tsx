@@ -195,7 +195,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative shrink-0 overflow-hidden bg-background-stronger"
+      class="relative shrink-0 overflow-hidden bg-v2-background-bg-base"
       classList={{
         "w-full": !isDesktop() || stacked(),
         "min-w-0 h-full flex-1": isDesktop() && opened() && !stacked(),
@@ -237,7 +237,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
           when={terminal.ready()}
           fallback={
             <div class="flex flex-col h-full pointer-events-none">
-              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-background-stronger overflow-hidden">
+              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden">
                 <For each={handoff()}>
                   {(title) => (
                     <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
