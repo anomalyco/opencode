@@ -8,6 +8,10 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
+import { pathToFileURL } from "url"
+import { Global } from "@opencode-ai/core/global"
+import * as ToolHookRecorder from "../fixture/tool-hook-recorder"
+import { markPluginDependenciesReady } from "../fixture/plugin"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -239,7 +243,45 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
   return makePrompt(input)
 }
 
+// Records every `tool.execute.before` / `tool.execute.after` invocation seen
+// by any session (parent or subagent) for the lifetime of a test. Regression
+// coverage for https://github.com/anomalyco/opencode/issues/5894 (plugin
+// hooks not firing for tool calls made from within a subagent) relies on
+// this to prove which session a given tool call's hook fired for.
+type RecordedHook = { hook: "before" | "after"; tool: string; sessionID: string }
+const pluginHookCalls: RecordedHook[] = []
+const pluginHooksNode = LayerNode.make({
+  service: Plugin.Service,
+  layer: Layer.mock(Plugin.Service, {
+    trigger: (((name: string, input: { tool: string; sessionID: string }, output: unknown) =>
+      Effect.sync(() => {
+        if (name === "tool.execute.before" || name === "tool.execute.after")
+          pluginHookCalls.push({
+            hook: name === "tool.execute.before" ? "before" : "after",
+            tool: input.tool,
+            sessionID: input.sessionID,
+          })
+        return output
+      })) as unknown) as Plugin.Interface["trigger"],
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  }),
+  deps: [],
+})
+
+function makeHttpWithPluginHooks(input?: { mcpInstructions?: MCP.ServerInstructions[] }) {
+  const root = LayerNode.group([promptRoot, testLLMServerNode])
+  return LayerNode.compile(root, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, pluginHooksNode],
+  ])
+}
+
 const it = testEffect(makeHttp())
+const withPluginHooks = testEffect(makeHttpWithPluginHooks())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
 const withMcpInstructions = testEffect(
@@ -300,6 +342,20 @@ function providerCfg(url: string) {
         },
       },
     },
+  }
+}
+
+// Same as providerCfg, but also registers a *real* file-based plugin
+// (loaded through the actual PluginLoader / Plugin.node, no mocking at all)
+// that records every tool.execute.before/after call it observes. Used for
+// end-to-end regression coverage of #5894.
+const toolHookRecorderPluginUrl = pathToFileURL(
+  path.join(import.meta.dir, "..", "fixture", "tool-hook-recorder-plugin.ts"),
+).href
+function providerCfgWithRealPlugin(url: string) {
+  return {
+    ...providerCfg(url),
+    plugin: [toolHookRecorderPluginUrl],
   }
 }
 
@@ -1050,6 +1106,125 @@ it.instance(
 
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
+    }),
+  10_000,
+)
+
+withPluginHooks.instance(
+  "subagent tool calls fire tool.execute.before/after under the subagent's own session (regression for #5894)",
+  () =>
+    Effect.gen(function* () {
+      pluginHookCalls.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const registry = yield* ToolRegistry.Service
+      const { read } = yield* registry.named()
+      const originalRead = read.execute
+      read.execute = (_args, _ctx) =>
+        Effect.succeed({
+          title: "stub",
+          metadata: { preview: "", truncated: false, loaded: [] },
+          output: "stubbed read output",
+        })
+      yield* Effect.addFinalizer(() => Effect.sync(() => void (read.execute = originalRead)))
+
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      // Parent turn: delegate to a "general" subagent via the task tool.
+      yield* llm.tool("task", {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+      })
+      // Subagent turn: the subagent itself calls a regular tool.
+      yield* llm.tool("read", { filePath: "/tmp/whatever.txt" })
+      // Subagent's final turn after its own tool call completes.
+      yield* llm.text("subagent done")
+      // Parent's final turn after the task tool completes.
+      yield* llm.text("done")
+
+      yield* user(chat.id, "hello")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      const childSessionID = kids[0]!.id
+
+      const beforeToolsBySession = new Map<string, string[]>()
+      for (const call of pluginHookCalls) {
+        if (call.hook !== "before") continue
+        const list = beforeToolsBySession.get(call.sessionID) ?? []
+        list.push(call.tool)
+        beforeToolsBySession.set(call.sessionID, list)
+      }
+
+      // The hook must fire for the "task" tool call made by the parent...
+      expect(beforeToolsBySession.get(chat.id)).toEqual(expect.arrayContaining(["task"]))
+      // ...AND for the "read" tool call made by the subagent itself, under
+      // the subagent's OWN sessionID. This is exactly the scenario reported
+      // in #5894 ("Plugin hooks don't intercept subagent tool calls"): if
+      // that regression were present, this list would be empty even though
+      // the subagent's read call completed successfully.
+      expect(beforeToolsBySession.get(childSessionID)).toEqual(expect.arrayContaining(["read"]))
+    }),
+  10_000,
+)
+
+it.instance(
+  "a real file-based plugin (no mocking) sees subagent tool calls too (end-to-end regression for #5894)",
+  () =>
+    Effect.gen(function* () {
+      ToolHookRecorder.reset()
+      const { directory: dir } = yield* TestInstance
+      yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
+      yield* Effect.promise(() => markPluginDependenciesReady(Global.Path.config))
+      const { llm } = yield* useServerConfig(providerCfgWithRealPlugin)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const registry = yield* ToolRegistry.Service
+      const { read } = yield* registry.named()
+      const originalRead = read.execute
+      read.execute = (_args, _ctx) =>
+        Effect.succeed({
+          title: "stub",
+          metadata: { preview: "", truncated: false, loaded: [] },
+          output: "stubbed read output",
+        })
+      yield* Effect.addFinalizer(() => Effect.sync(() => void (read.execute = originalRead)))
+
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.tool("task", {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+      })
+      yield* llm.tool("read", { filePath: "/tmp/whatever.txt" })
+      yield* llm.text("subagent done")
+      yield* llm.text("done")
+
+      yield* user(chat.id, "hello")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      const childSessionID = kids[0]!.id
+
+      const readCallsForChild = ToolHookRecorder.calls.filter(
+        (call) => call.hook === "before" && call.tool === "read" && call.sessionID === childSessionID,
+      )
+      // A real plugin loaded via the actual PluginLoader (not Layer.mock)
+      // must still see the subagent's own "read" tool call, scoped to the
+      // subagent's sessionID. This removes any doubt that the Layer.mock in
+      // the previous test was masking a real-world loading difference.
+      expect(readCallsForChild.length).toBeGreaterThan(0)
     }),
   10_000,
 )
