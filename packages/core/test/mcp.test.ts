@@ -28,7 +28,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { Deferred, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { location } from "./fixture/location"
 import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
@@ -146,13 +146,11 @@ function resourceServer(
   )
 }
 
-function resourceMcpLayer(
-  url: string,
-  form: Partial<Form.Interface> = { ask: () => Effect.die("Empty MCP elicitation must not create a form") },
-) {
+function resourceMcpLayer(url: string, onFormCreated?: (form: Form.Info) => Effect.Effect<void>) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
   return MCP.layer.pipe(
+    Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(
@@ -174,14 +172,16 @@ function resourceMcpLayer(
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(EventV2.Service, {
           subscribe: () => Stream.never,
-          publish: (definition, data) =>
-            Effect.succeed({
+          publish: (definition, data) => {
+            const event = {
               id: EventV2.ID.create(),
               type: definition.type,
               data,
-            } as EventV2.Payload<typeof definition>),
+            } as EventV2.Payload<typeof definition>
+            if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
+            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
+          },
         }),
-        Layer.mock(Form.Service, form),
         Layer.mock(Integration.Service, {
           connection: {
             active: unusedIntegration,
@@ -538,7 +538,10 @@ test("accepts empty MCP elicitations without creating forms", async () => {
         const server = yield* resourceServer({ resources: false, emptyElicitation: true })
         const result = yield* Effect.gen(function* () {
           const service = yield* MCP.Service
-          return yield* service.callTool({ server: "resources", name: "empty-elicitation" })
+          const forms = yield* Form.Service
+          const result = yield* service.callTool({ server: "resources", name: "empty-elicitation" })
+          expect(yield* forms.list()).toEqual([])
+          return result
         }).pipe(Effect.provide(resourceMcpLayer(server.url)))
 
         expect(result.structured).toEqual({ action: "accept", content: {} })
@@ -552,32 +555,24 @@ test("acknowledges completed MCP URL elicitations without returning internal con
     Effect.scoped(
       Effect.gen(function* () {
         const server = yield* resourceServer({ resources: false, urlElicitation: true })
-        const asked = yield* Deferred.make<Form.CreateInput>()
-        const terminal = yield* Deferred.make<Form.TerminalState>()
-        const replied = yield* Deferred.make<Form.ReplyInput>()
-        const call = yield* Effect.gen(function* () {
+        const created = yield* Deferred.make<Form.Info>()
+        const result = yield* Effect.gen(function* () {
           const service = yield* MCP.Service
-          return yield* service.callTool({ server: "resources", name: "url-elicitation" })
+          const forms = yield* Form.Service
+          const call = yield* service.callTool({ server: "resources", name: "url-elicitation" }).pipe(Effect.forkScoped)
+
+          const form = yield* Deferred.await(created)
+          expect(form.fields).toEqual([{ key: "elicitation", type: "external", url: "https://example.com/authorize" }])
+
+          yield* Effect.promise(server.completeElicitation)
+          const result = yield* Fiber.join(call)
+          expect(yield* forms.state(form.id)).toEqual({ status: "answered", answer: { elicitation: true } })
+          return result
         }).pipe(
-          Effect.provide(
-            resourceMcpLayer(server.url, {
-              ask: (input) => Deferred.succeed(asked, input).pipe(Effect.andThen(Deferred.await(terminal))),
-              reply: (input) =>
-                Effect.gen(function* () {
-                  yield* Deferred.succeed(replied, input)
-                  yield* Deferred.succeed(terminal, { status: "answered", answer: input.answer })
-                }),
-            }),
-          ),
-          Effect.forkScoped,
+          Effect.provide(resourceMcpLayer(server.url, (form) => Deferred.succeed(created, form).pipe(Effect.asVoid))),
         )
 
-        const form = yield* Deferred.await(asked)
-        expect(form.fields).toEqual([{ key: "elicitation", type: "external", url: "https://example.com/authorize" }])
-
-        yield* Effect.promise(server.completeElicitation)
-        expect((yield* Deferred.await(replied)).answer).toEqual({ elicitation: true })
-        expect((yield* Fiber.join(call)).structured).toEqual({ action: "accept" })
+        expect(result.structured).toEqual({ action: "accept" })
       }),
     ),
   )

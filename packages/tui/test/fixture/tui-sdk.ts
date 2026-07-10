@@ -5,9 +5,11 @@ export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/tui`
 
 export function json(data: unknown, init?: ResponseInit) {
+  const headers = new Headers(init?.headers)
+  if (!headers.has("content-type")) headers.set("content-type", "application/json")
   return new Response(JSON.stringify(data), {
     ...init,
-    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    headers,
   })
 }
 
@@ -63,14 +65,15 @@ export function createEventStream() {
   }
 }
 
-export type FetchHandler = (url: URL) => Response | Promise<Response> | undefined
+export type FetchHandler = (url: URL, request: Request) => Response | undefined | Promise<Response | undefined>
 
 export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventStream>) {
   const session = [] as URL[]
-  const fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(input instanceof Request ? input.url : String(input))
+  async function fetch(input: RequestInfo | URL, init?: RequestInit) {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const url = new URL(request.url)
     if (url.pathname === "/session") session.push(url)
-    const overridden = await override?.(url)
+    const overridden = await override?.(url, request)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.v2()
 
@@ -122,7 +125,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/session") return json([])
     if (url.pathname === "/vcs") return json({ branch: "main" })
     throw new Error(`unexpected request: ${url.pathname}`)
-  }) as typeof globalThis.fetch
+  }
+  fetch.preconnect = () => {}
   return { fetch, session }
 }
 

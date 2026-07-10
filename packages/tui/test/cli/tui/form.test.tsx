@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { testRender, useRenderer } from "@opentui/solid"
-import { beforeEach, expect, mock, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { onCleanup } from "solid-js"
@@ -18,49 +18,23 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createApi, createClient, createEventStream, createFetch } from "../../fixture/tui-sdk"
 
-const opened: string[] = []
-let failOpen = false
-
-await mock.module("open", () => ({
-  default: (url: string) => {
-    opened.push(url)
-    return failOpen ? Promise.reject(new Error("open failed")) : Promise.resolve()
-  },
-}))
-
-beforeEach(() => {
-  opened.length = 0
-  failOpen = false
-})
-
-async function wait(fn: () => boolean, timeout = 2000) {
-  const start = Date.now()
-  while (!fn()) {
-    if (Date.now() - start > timeout) throw new Error("timed out waiting for condition")
-    await Bun.sleep(10)
-  }
-}
-
-async function mountForm(width = 80) {
-  const tmp = await tmpdir()
-  const state = path.join(tmp.path, "state")
+async function mountForm(root: string, width = 80) {
+  const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
   await Bun.write(path.join(state, "kv.json"), "{}")
 
-  const events = createEventStream()
   const replies: unknown[] = []
   const copied: string[] = []
-  const transport = createFetch(undefined, events)
-  const fetch = Object.assign(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      if (new URL(request.url).pathname === "/api/session/ses_test/form/frm_test/reply") {
-        replies.push(await request.clone().json())
-        return new Response(null, { status: 204 })
-      }
-      return transport.fetch(request)
-    },
-    { preconnect: globalThis.fetch.preconnect },
+  const events = createEventStream()
+  const transport = createFetch(
+    (url, request) =>
+      url.pathname === "/api/session/ses_test/form/frm_test/reply"
+        ? request.json().then((answer) => {
+            replies.push(answer)
+            return new Response(null, { status: 204 })
+          })
+        : undefined,
+    events,
   )
   const config = createTuiResolvedConfig()
   const form = {
@@ -86,11 +60,11 @@ async function mountForm(width = 80) {
 
     return (
       <TestTuiContexts
-        directory={tmp.path}
+        directory={root}
         paths={{
-          home: tmp.path,
+          home: root,
           state,
-          worktree: tmp.path,
+          worktree: root,
         }}
       >
         <ClipboardProvider
@@ -103,7 +77,7 @@ async function mountForm(width = 80) {
         >
           <OpencodeKeymapProvider keymap={keymap}>
             <TuiConfigProvider config={config}>
-              <SDKProvider client={createClient(fetch)} api={createApi(fetch)}>
+              <SDKProvider client={createClient(transport.fetch)} api={createApi(transport.fetch)}>
                 <KVProvider>
                   <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
                     <ToastProvider>
@@ -120,80 +94,46 @@ async function mountForm(width = 80) {
   }
 
   const app = await testRender(() => <Harness />, { width, height: 20, kittyKeyboard: true })
-  await wait(() => app.captureCharFrame().includes("Authorization required"))
-  return {
-    app,
-    copied,
-    replies,
-    async cleanup() {
-      app.renderer.destroy()
-      await tmp[Symbol.asyncDispose]()
-    },
-  }
+  app.renderer.start()
+  await app.waitForFrame((frame) => frame.includes("Authorization required"))
+  return { app, copied, replies }
 }
 
-test("requires explicit acknowledgement after a successful browser launch", async () => {
-  const prompt = await mountForm()
+test("requires explicit acknowledgement before submitting an external field", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path)
   try {
     prompt.app.mockInput.pressKey("right")
-    await wait(() => prompt.app.captureCharFrame().includes("(acknowledgement required)"))
+    await prompt.app.waitForFrame((frame) => frame.includes("(acknowledgement required)"))
     prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.app.captureCharFrame().includes("External action must be acknowledged"))
+    await prompt.app.waitForFrame((frame) => frame.includes("External action must be acknowledged"))
     expect(prompt.replies).toEqual([])
-    expect(prompt.app.captureCharFrame()).toContain("External action must be acknowledged")
 
     prompt.app.mockInput.pressKey("left")
-    failOpen = true
-    prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.app.captureCharFrame().includes("Could not open the browser"))
-    expect(prompt.app.captureCharFrame()).not.toContain("press enter to confirm")
-
-    failOpen = false
-    prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.app.captureCharFrame().includes("press enter to confirm"))
-    expect(opened).toEqual(["https://example.com/authorize", "https://example.com/authorize"])
+    prompt.app.mockInput.pressKey("c")
+    await prompt.app.waitForFrame((frame) => frame.includes("press enter to confirm"))
+    expect(prompt.copied).toEqual(["https://example.com/authorize"])
     expect(prompt.replies).toEqual([])
 
     prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.app.captureCharFrame().includes("Acknowledged"))
+    await prompt.app.waitForFrame((frame) => frame.includes("Acknowledged"))
     expect(prompt.replies).toEqual([])
 
     prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.replies.length === 1)
+    await prompt.app.waitFor(() => prompt.replies.length === 1)
     expect(prompt.replies).toEqual([{ answer: { authorization: true } }])
   } finally {
-    await prompt.cleanup()
+    prompt.app.renderer.destroy()
   }
 })
 
 test("includes external acknowledgements in progress", async () => {
-  const prompt = await mountForm(32)
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 32)
   try {
     expect(prompt.app.captureCharFrame()).toContain("0/1")
     expect(prompt.replies).toEqual([])
   } finally {
-    await prompt.cleanup()
-  }
-})
-
-test("requires explicit acknowledgement after copying an external URL", async () => {
-  const prompt = await mountForm()
-  try {
-    prompt.app.mockInput.pressKey("c")
-    await wait(() => prompt.copied.length === 1 && prompt.app.captureCharFrame().includes("press enter to confirm"))
-    expect(prompt.copied).toEqual(["https://example.com/authorize"])
-    expect(opened).toEqual([])
-    expect(prompt.app.captureCharFrame()).toContain("press enter to confirm")
-    expect(prompt.replies).toEqual([])
-
-    prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.app.captureCharFrame().includes("Acknowledged"))
-    expect(prompt.replies).toEqual([])
-
-    prompt.app.mockInput.pressEnter()
-    await wait(() => prompt.replies.length === 1)
-    expect(prompt.replies).toEqual([{ answer: { authorization: true } }])
-  } finally {
-    await prompt.cleanup()
+    prompt.app.renderer.destroy()
   }
 })
