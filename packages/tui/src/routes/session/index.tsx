@@ -191,7 +191,7 @@ export function Session() {
   const paths = useTuiPaths()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
-  const { theme } = useTheme()
+  const { theme, mode } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
   const location = createMemo(() => {
@@ -201,7 +201,7 @@ export function Session() {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id, mode: mode() }))
   })
   onCleanup(() => setEpilogue())
   const children = createMemo(() => {

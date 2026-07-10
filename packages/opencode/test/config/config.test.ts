@@ -323,7 +323,7 @@ it.effect("creates global jsonc config with schema when no global configs exist"
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-      const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
+      const content = yield* FSUtil.use.readFileString(path.join(dir, "mammouth.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
   ),
@@ -339,7 +339,7 @@ it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
         Effect.gen(function* () {
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-          expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
+          expect(yield* FSUtil.use.existsSafe(path.join(dir, "mammouth.jsonc"))).toBe(false)
         }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
       ),
     )
@@ -1464,6 +1464,58 @@ it.instance("local .opencode config can override MCP from project config", () =>
 
     const config = yield* Config.use.get()
     expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
+
+it.instance("Mammouth project config overrides legacy project config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      mcp: {
+        docs: {
+          type: "remote",
+          url: "https://docs.example.com/mcp",
+          enabled: false,
+        },
+      },
+    })
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+            enabled: true,
+          },
+        },
+      },
+      "mammouth.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
+
+it.instance("loads config from a local .mammouth directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      path.join(test.directory, ".mammouth"),
+      {
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+          },
+        },
+      },
+      "mammouth.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.docs).toMatchObject({ type: "remote", url: "https://docs.example.com/mcp" })
   }),
 )
 

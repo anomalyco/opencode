@@ -527,12 +527,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  const connected = useConnected()
   createEffect(
     on(
-      () => sync.status === "complete" && sync.data.provider.length === 0,
-      (isEmpty, wasEmpty) => {
-        // only trigger when we transition into an empty-provider state
-        if (!isEmpty || wasEmpty) return
+      () => sync.status === "complete" && !connected(),
+      (isDisconnected, wasDisconnected) => {
+        // Only trigger when startup completes without a configured provider.
+        // Free OpenCode models remain available but do not count as connected.
+        if (!isDisconnected || wasDisconnected) return
         // TODO: not using sleep would be better
         // using sleep so that focus goes to the prompt input first, then dialog opens
         Bun.sleep(5).then(() => {
@@ -542,7 +544,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     ),
   )
 
-  const connected = useConnected()
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -1045,7 +1046,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     await DialogAlert.show(
       dialog,
       "Update Complete",
-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+      `Successfully updated to Mammouth Code v${result.data.version}. Please restart the application.`,
     )
 
     void exit()

@@ -48,7 +48,7 @@ const TOP_LEVEL = [
   "attach",
   "run",
   "debug",
-  "providers", // aliased to `auth`
+  "providers",
   "agent",
   "upgrade",
   "uninstall",
@@ -105,6 +105,7 @@ describe("opencode CLI help-text snapshots", () => {
         expect(topLevel.stderr).not.toContain("--thinking")
         expect(topLevel.stderr).not.toContain("--variant")
         expect(topLevel.stderr).not.toContain("--demo")
+        expect(topLevel.stderr).not.toContain("[aliases: auth]")
 
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 
