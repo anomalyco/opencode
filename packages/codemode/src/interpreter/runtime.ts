@@ -221,21 +221,17 @@ const normalizeError = (error: unknown): Diagnostic => {
   }
 }
 
-// V8 parity: a combinator subscribes to its members with ordinary reactions, so its own
-// settlement lands one reaction turn after the deciding member. Capturing the exit first
-// confines the delay to the settlement, not the observation of members.
+// V8 parity: a combinator settles one reaction turn after the deciding member, never
+// before reactions already attached to it.
 const settleAfterTurn = <A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.flatMap(Effect.exit(body), (exit) => Effect.andThen(Effect.yieldNow, exit))
 
-// A promise can never resolve with itself (JS rejects the chaining cycle with a TypeError):
-// adopting its own settlement would wait forever.
 const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
 
 type ReactionHandler = CodeModeFunction | CoercionFunction | UriFunction
 
-// Reactions accept the same callables as array-method callbacks; other callables fail
-// loudly, and non-callables are ignored as in JS (`.then(undefined, f)` relies on this).
+// Non-callables are ignored as in JS: `.then(undefined, f)` relies on the passthrough.
 const reactionHandler = (value: unknown, method: string, node: AstNode): ReactionHandler | undefined => {
   if (value instanceof CodeModeFunction || value instanceof CoercionFunction || value instanceof UriFunction) {
     return value
@@ -825,11 +821,9 @@ class Interpreter<R> {
     return this.promises.create(effect)
   }
 
-  // `await promise`: succeed with the fulfilled value or re-raise the failure so try/catch
-  // observes it exactly like a synchronous throw at the await site. Settlement is idempotent
-  // (fiber exits replay), so awaiting the same promise repeatedly never re-runs the call.
-  // The post-settlement yield defers the continuation one reaction turn, as in JS: awaiters
-  // never resume inline, so async functions and handlers interleave in attach order.
+  // Settlement is idempotent (fiber exits replay), so awaiting the same promise repeatedly
+  // never re-runs the call. The post-settlement yield defers the continuation one reaction
+  // turn, as in JS: awaiters never resume inline, so they interleave in attach order.
   private settlePromise(promise: SandboxPromise): Effect.Effect<unknown, unknown, never> {
     const promises = this.promises
     return Effect.suspend(() => {
@@ -1579,8 +1573,7 @@ class Interpreter<R> {
       case "UpdateExpression":
         return this.evaluateUpdateExpression(node)
       case "AwaitExpression": {
-        // `await` resolves a promise and passes anything else through, but always defers
-        // its continuation one reaction turn (in JS every await suspends).
+        // In JS every await suspends, even on a non-promise.
         const self = this
         return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
           value instanceof SandboxPromise ? self.settlePromise(value) : Effect.as(Effect.yieldNow, value),
@@ -2293,10 +2286,7 @@ class Interpreter<R> {
 
     switch (ref.name) {
       case "all": {
-        // Each observation re-raises its member's failure (flatten runs the awaited Exit), so
-        // Effect.all rejects on the first failure without waiting for the rest and preserves
-        // input order when all fulfill. Its failure-time interruption only unsubscribes the
-        // sibling waiters: the underlying fibers stay execution-owned and keep running, as in JS.
+        // Rejects on the first failure; sibling fibers stay execution-owned and keep running, as in JS.
         const observations = items.map((item) =>
           item instanceof SandboxPromise ? Effect.flatten(this.promises.await(item)) : Effect.succeed(item),
         )
@@ -2355,9 +2345,8 @@ class Interpreter<R> {
     }
   }
 
-  // Observes a source settlement as a reaction: teardown interruption propagates without
-  // running handlers, and a real settlement defers one reaction turn so handlers never run
-  // inline (which also guarantees the caller's `box` is assigned before handlers see it).
+  // Teardown interruption propagates without running handlers; a real settlement defers
+  // one reaction turn so handlers never run inline.
   private reactionExit(source: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>, unknown, R> {
     const promises = this.promises
     return Effect.gen(function* () {
@@ -2368,8 +2357,6 @@ class Interpreter<R> {
     })
   }
 
-  // Promise.prototype.then/catch/finally: attaching a reaction marks the source observed
-  // (its rejection now belongs to the chain) and returns a new scope-owned promise.
   private invokePromiseInstanceMethod(
     ref: PromiseInstanceMethodReference,
     args: Array<unknown>,
@@ -2385,9 +2372,6 @@ class Interpreter<R> {
     return this.chainReaction(ref.promise, onFulfilled, onRejected, method, node)
   }
 
-  // The derived promise settles from the matching handler: its return value fulfills
-  // (returned promises are adopted; returning the derived promise itself is a cycle), its
-  // throw rejects, and a missing handler passes the source settlement through.
   private chainReaction(
     source: SandboxPromise,
     onFulfilled: ReactionHandler | undefined,
@@ -2413,8 +2397,6 @@ class Interpreter<R> {
     })
   }
 
-  // Cleanup runs on both outcomes; its fulfillment is discarded and the original settlement
-  // replays, while a throw or returned rejection replaces it, as in JS.
   private chainFinally(
     source: SandboxPromise,
     cleanup: ReactionHandler | undefined,
@@ -2463,9 +2445,7 @@ class Interpreter<R> {
       return yield* invocation.evaluateExpression(fn.body)
     })
     if (!fn.async) return run
-    // An async function's promise adopts a returned promise's settlement - except its own,
-    // which rejects as a JS chaining cycle. Every await yields, so `box.own` is assigned
-    // before the body can return a reference to it.
+    // Every await yields, so `box.own` is assigned before the body can return a reference to it.
     const box: { own?: SandboxPromise } = {}
     return Effect.map(
       this.createPromise(
@@ -3317,9 +3297,7 @@ class Interpreter<R> {
         return new ComputedValue(undefined)
       }
 
-      // Promises expose only the chaining methods; other property reads are a confused
-      // program (`p.value`) where `undefined` would hide the missing await, so they get an
-      // await-hinting error instead of the forgiving unknown-property fallthrough.
+      // Error instead of `undefined` so a missing await never hides.
       if (objectValue instanceof SandboxPromise) {
         if (key === "then" || key === "catch" || key === "finally") {
           return new PromiseInstanceMethodReference(objectValue, key as PromiseInstanceMethodName)
