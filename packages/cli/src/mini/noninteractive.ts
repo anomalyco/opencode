@@ -1,6 +1,7 @@
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
+import { readFile } from "node:fs/promises"
 import { UI } from "./ui"
 import type { MiniToolPart } from "./types"
 
@@ -478,11 +479,11 @@ async function prepareFile(file: File) {
   if (file.mime !== "text/plain") {
     const uri = file.url.startsWith("data:")
       ? file.url
-      : `data:${file.mime};base64,${Buffer.from(await Bun.file(new URL(file.url)).arrayBuffer()).toString("base64")}`
+      : `data:${file.mime};base64,${(await readFile(new URL(file.url))).toString("base64")}`
     return { attachment: { uri, mime: file.mime, name: file.filename } }
   }
   const content = file.url.startsWith("data:")
     ? Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64").toString("utf8")
-    : await Bun.file(new URL(file.url)).text()
+    : await readFile(new URL(file.url), "utf8")
   return { text: `<file name="${file.filename}">\n${content}\n</file>` }
 }

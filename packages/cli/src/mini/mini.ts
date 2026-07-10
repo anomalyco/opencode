@@ -4,6 +4,8 @@ import { ServerConnection } from "../services/server-connection"
 import { waitForCatalogReady } from "./catalog.shared"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./runtime.stdin"
 import type { RunInput, RunTuiConfig } from "./types"
+import { readStdin } from "../util/io"
+import { setTimeout } from "node:timers/promises"
 
 export type MiniCommandInput = {
   server: ServerConnection.Resolved
@@ -22,7 +24,7 @@ export type MiniCommandInput = {
 type Session = Awaited<ReturnType<OpenCodeClient["session"]["get"]>>
 export async function runMini(input: MiniCommandInput) {
   validate(input)
-  const initialInput = mergeInput(process.stdin.isTTY ? undefined : await Bun.stdin.text(), input.prompt)
+  const initialInput = mergeInput(process.stdin.isTTY ? undefined : await readStdin(), input.prompt)
   const runtimeTask = import("./runtime")
   const directory = localDirectory()
 
@@ -123,7 +125,7 @@ async function validateAgent(sdk: OpenCodeClient, directory: string, name?: stri
       return
     }
     if (agent) return name
-    await Bun.sleep(25)
+    await setTimeout(25)
   }
   if (!agents) {
     warning("failed to list agents. Falling back to default agent")

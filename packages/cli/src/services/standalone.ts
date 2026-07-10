@@ -4,7 +4,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { randomBytes } from "node:crypto"
-import path from "node:path"
+import { selfCommand } from "../util/process"
 
 const Ready = Schema.Struct({ url: Schema.String })
 const decodeReady = Schema.decodeUnknownPromise(Schema.fromJsonString(Ready))
@@ -14,10 +14,7 @@ type Options = {
 }
 
 function command(password: string, options: Options) {
-  const compiled = path.basename(process.execPath).replace(/\.exe$/, "") !== "bun"
-  const entrypoint = compiled ? [] : process.argv[1] ? [process.argv[1]] : []
-  if (!compiled && entrypoint.length === 0) throw new Error("Failed to resolve CLI entrypoint")
-  const [executable, ...args] = options.command ?? [process.execPath, ...entrypoint, "serve"]
+  const [executable, ...args] = options.command ?? [...selfCommand(), "serve"]
   if (!executable) throw new Error("Failed to resolve standalone server command")
   return ChildProcess.make(executable, [...args, "--stdio", "--port", "0"], {
     cwd: process.cwd(),
