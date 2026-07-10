@@ -113,6 +113,16 @@ const reply = {
     LLMEvent.finish({ reason: "stop" }),
   ],
   text: (text: string, id: string) => fragmentFixture("text", id, [text]).completeEvents,
+  textWithUsage: (text: string, id: string, inputTokens: number) =>
+    fragmentFixture("text", id, [text]).completeEvents.map((event) =>
+      LLMEvent.is.stepFinish(event)
+        ? LLMEvent.stepFinish({
+            index: event.index,
+            reason: event.reason,
+            usage: { inputTokens, nonCachedInputTokens: inputTokens },
+          })
+        : event,
+    ),
   tool: (id: string, name: string, input: unknown) => [
     LLMEvent.stepStart({ index: 0 }),
     LLMEvent.toolCall({ id, name, input }),
@@ -1696,7 +1706,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("automatically compacts into a completed summary and retained recent turn", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      response = reply.text("Earlier answer", "text-first")
+      response = reply.textWithUsage("Earlier answer", "text-first", 3_950)
       yield* admit(session, "Earlier question ".repeat(180))
       yield* session.resume(sessionID)
 
@@ -1704,7 +1714,7 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       responses = [
         reply.text("## Objective\n- Preserve the task", "text-summary"),
-        reply.text("Continued", "text-final"),
+        reply.textWithUsage("Continued", "text-final", 3_950),
       ]
       yield* admit(session, "Recent exact request ".repeat(180))
       yield* session.resume(sessionID)
@@ -1740,6 +1750,35 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         summary: "## Objective\n- Preserve the updated task",
       })
+    }),
+  )
+
+  it.effect("stops after required automatic compaction fails", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      response = reply.textWithUsage("Earlier answer", "text-before-failed-compaction", 3_950)
+      yield* admit(session, "Earlier question ".repeat(180))
+      yield* session.resume(sessionID)
+
+      currentModel = compactModel
+      requests.length = 0
+      responses = [
+        [LLMEvent.providerError({ message: "Unsupported parameter: max_output_tokens" })],
+        reply.text("Must not run", "text-after-failed-compaction"),
+      ]
+      yield* admit(session, "Recent exact request ".repeat(180))
+      expect(yield* Effect.exit(session.resume(sessionID))).toMatchObject({ _tag: "Failure" })
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.generation).toBeUndefined()
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({
+          type: "compaction",
+          status: "failed",
+          reason: "auto",
+          error: expect.objectContaining({ message: "Unsupported parameter: max_output_tokens" }),
+        }),
+      )
     }),
   )
 

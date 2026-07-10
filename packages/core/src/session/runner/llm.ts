@@ -156,7 +156,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionPending.Delivery | undefined,
       step: number,
-      recoverOverflow?: typeof compaction.compactAfterOverflow,
+      recoverOverflow?: typeof compaction.compact,
       assistantMessageID?: SessionMessage.ID,
     ) {
       const session = yield* getSession(sessionID)
@@ -208,12 +208,12 @@ const layer = Layer.effect(
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error>> = []
       let needsContinuation = false
-      // Automatic compaction completed; rebuild the request from compacted history.
-      if (
-        !(yield* SessionPending.compaction(db, session.id)) &&
-        (yield* compaction.compactIfNeeded({ sessionID: session.id, messages: context, request }))
-      )
-        return { _tag: "RestartAfterCompaction", step: currentStep } as const
+      const compactionInput = { sessionID: session.id, messages: context, request }
+      if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
+        const compacted = yield* compaction.compact(compactionInput)
+        if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
+        return yield* new StepFailedError({ error: compacted.error })
+      }
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
@@ -326,7 +326,8 @@ const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasRetryEvidence() &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
-            (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, request })))
+            (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, request }))).status ===
+              "completed"
           )
             return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
 
@@ -446,7 +447,7 @@ const layer = Layer.effect(
       // Compaction restarts rebuild the request from compacted history without re-promoting.
       // Overflow recovery is one-shot: a post-compaction attempt must not recover another
       // overflow, so the recovery hook is dropped after it fires.
-      let recoverOverflow: typeof compaction.compactAfterOverflow | undefined = compaction.compactAfterOverflow
+      let recoverOverflow: typeof compaction.compact | undefined = compaction.compact
       let currentPromotion = promotion
       let currentStep = step
       let assistantMessageID: SessionMessage.ID | undefined
@@ -486,7 +487,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
     ) {
       const pending = yield* SessionPending.compaction(db, sessionID)
-      if (!pending) return false
+      if (!pending) return
       const session = yield* getSession(sessionID)
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -499,7 +500,7 @@ const layer = Layer.effect(
               })
             }),
           ).pipe(Effect.exit)
-          if (Exit.isSuccess(compacted) && compacted.value) return true
+          if (Exit.isSuccess(compacted)) return
           if (Exit.isFailure(compacted)) {
             const unsettled = yield* SessionPending.compaction(db, sessionID)
             if (unsettled)
@@ -511,15 +512,6 @@ const layer = Layer.effect(
               })
             return yield* Effect.failCause(compacted.cause)
           }
-          const unsettled = yield* SessionPending.compaction(db, sessionID)
-          if (unsettled)
-            yield* events.publish(SessionEvent.Compaction.Failed, {
-              sessionID,
-              reason: "manual",
-              error: { type: "compaction.failed", message: "Compaction could not start" },
-              inputID: unsettled.id,
-            })
-          return true
         }),
       )
     })

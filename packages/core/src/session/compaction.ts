@@ -17,7 +17,6 @@ import { Token } from "../util/token"
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
-const SUMMARY_OUTPUT_TOKENS = 4_096
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -70,28 +69,32 @@ export type AutoInput = {
   readonly request: LLMRequest
 }
 
-type CompactInput = {
-  readonly sessionID: SessionSchema.ID
-  readonly messages: readonly SessionMessage.Info[]
-  readonly model: Model
-  readonly inputID?: SessionMessage.ID
-}
-
 export type ManualInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly inputID: SessionMessage.ID
 }
 
+type Plan = {
+  readonly sessionID: SessionSchema.ID
+  readonly model: Model
+  readonly reason: SessionMessage.Compaction["reason"]
+  readonly prompt: string
+  readonly recent: string
+  readonly inputID?: SessionMessage.ID
+}
+
+export type Outcome =
+  | Pick<SessionMessage.CompactionCompleted, "status">
+  | Pick<SessionMessage.CompactionFailed, "status" | "error">
+
 export interface Interface {
-  readonly compactIfNeeded: (input: AutoInput) => Effect.Effect<boolean>
-  readonly compactAfterOverflow: (input: AutoInput) => Effect.Effect<boolean>
-  readonly compactManual: (input: ManualInput) => Effect.Effect<boolean>
+  readonly required: (input: AutoInput) => boolean
+  readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
+  readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionCompaction") {}
-
-const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -156,30 +159,33 @@ const select = (
 ): { readonly head: string; readonly recent: string } | undefined => {
   const conversation = messages
     .filter((message) => message.type !== "compaction")
-    .map(serialize)
-    .filter(Boolean)
+    .flatMap((message) => {
+      const text = serialize(message)
+      return text ? [{ message, text }] : []
+    })
   if (conversation.length === 0) return undefined
   let total = 0
   let split = conversation.length
-  let splitPrefix = ""
-  let splitSuffix = ""
   for (let index = conversation.length - 1; index >= 0; index--) {
-    const next = total + Token.estimate(conversation[index])
-    if (next > tokens) {
-      const remaining = Math.max(0, tokens - total) * 4
-      if (remaining > 0) {
-        splitPrefix = conversation[index].slice(0, -remaining)
-        splitSuffix = conversation[index].slice(-remaining)
-        split = index + 1
-      }
-      break
-    }
+    const next = total + Token.estimate(conversation[index].text)
+    if (split < conversation.length && next > tokens) break
     total = next
     split = index
   }
+  while (split > 0 && conversation[split].message.type !== "user") split--
+  if (split === 0) {
+    const latestUser = conversation.findLastIndex((item) => item.message.type === "user")
+    if (latestUser > 0) split = latestUser
+  }
   return {
-    head: [...conversation.slice(0, split), splitPrefix].filter(Boolean).join("\n\n"),
-    recent: [splitSuffix, ...conversation.slice(split)].filter(Boolean).join("\n\n"),
+    head: conversation
+      .slice(0, split)
+      .map((item) => item.text)
+      .join("\n\n"),
+    recent: conversation
+      .slice(split)
+      .map((item) => item.text)
+      .join("\n\n"),
   }
 }
 
@@ -192,26 +198,31 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
     ...input.context,
   ].join("\n\n")
 
+const planContent = (messages: readonly SessionMessage.Info[], tokens: number) => {
+  const selected = select(messages, tokens)
+  if (!selected) return
+  const previousSummary = messages.findLast(
+    (message) => message.type === "compaction" && message.status === "completed",
+  )
+  const previousRecent = previousSummary?.type === "compaction" ? previousSummary.recent : ""
+  const summarizeRecent = !previousRecent && !selected.head
+  return {
+    prompt: buildPrompt({
+      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
+      context: summarizeRecent ? [selected.recent] : [previousRecent, selected.head].filter(Boolean),
+    }),
+    recent: summarizeRecent ? "" : selected.recent,
+  }
+}
+
 const make = (dependencies: Dependencies) => {
   const config = dependencies.config
-  const compact = Effect.fn("SessionCompaction.compact")(function* (input: {
-    readonly sessionID: SessionSchema.ID
-    readonly model: Model
-    readonly reason: SessionMessage.Compaction["reason"]
-    readonly previousSummary?: string
-    readonly context: readonly string[]
-    readonly recent: string
-    readonly output?: number
-    readonly inputID?: SessionMessage.ID
-  }) {
-    const output = input.output ?? input.model.route.defaults.limits?.output ?? 0
-    const summaryPrompt = buildPrompt({ previousSummary: input.previousSummary, context: input.context })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+  const execute = Effect.fn("SessionCompaction.execute")(function* (plan: Plan) {
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
-      sessionID: input.sessionID,
-      reason: input.reason,
-      recent: input.recent,
-      inputID: input.inputID,
+      sessionID: plan.sessionID,
+      reason: plan.reason,
+      recent: plan.recent,
+      inputID: plan.inputID,
     })
 
     const chunks: string[] = []
@@ -219,10 +230,9 @@ const make = (dependencies: Dependencies) => {
     const summarized = yield* dependencies.llm
       .stream(
         LLM.request({
-          model: input.model,
-          messages: [Message.user(summaryPrompt)],
+          model: plan.model,
+          messages: [Message.user(plan.prompt)],
           tools: [],
-          generation: { maxTokens: summaryOutput },
         }),
       )
       .pipe(
@@ -235,7 +245,7 @@ const make = (dependencies: Dependencies) => {
           if (LLMEvent.is.textDelta(event)) {
             chunks.push(event.text)
             return dependencies.events.publish(SessionEvent.Compaction.Delta, {
-              sessionID: input.sessionID,
+              sessionID: plan.sessionID,
               text: event.text,
             })
           }
@@ -249,115 +259,71 @@ const make = (dependencies: Dependencies) => {
           }),
         ),
         Effect.onInterrupt(() =>
-          input.reason === "auto"
+          plan.reason === "auto"
             ? dependencies.events.publish(SessionEvent.Compaction.Failed, {
-                sessionID: input.sessionID,
-                reason: input.reason,
+                sessionID: plan.sessionID,
+                reason: plan.reason,
                 error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                inputID: input.inputID,
+                inputID: plan.inputID,
               })
             : Effect.void,
         ),
       )
     const summary = chunks.join("")
     if (!summarized || failure || !summary.trim()) {
+      const error = failure ?? { type: "compaction.failed" as const, message: "Compaction produced no summary" }
       yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
-        sessionID: input.sessionID,
-        reason: input.reason,
-        error: failure ?? { type: "compaction.failed", message: "Compaction produced no summary" },
-        inputID: input.inputID,
+        sessionID: plan.sessionID,
+        reason: plan.reason,
+        error,
+        inputID: plan.inputID,
       })
-      return false
+      return { status: "failed" as const, error }
     }
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
-      sessionID: input.sessionID,
-      reason: input.reason,
+      sessionID: plan.sessionID,
+      reason: plan.reason,
       text: summary,
-      recent: input.recent,
+      recent: plan.recent,
     })
-    return true
+    return { status: "completed" as const }
   })
-  const compactAvailable = Effect.fn("SessionCompaction.compactAvailable")(function* (
-    input: CompactInput & {
-      readonly reason: SessionMessage.Compaction["reason"]
-      readonly output?: number
-    },
-  ) {
-    const selected = select(input.messages, config.tokens)
-    if (!selected) return false
-    const previousSummary = input.messages.find(
-      (message) => message.type === "compaction" && message.status === "completed",
-    )
-    const summarizeRecent = selected.head.length === 0
-    const previousRecent = previousSummary?.type === "compaction" ? previousSummary.recent : ""
-    return yield* compact({
+  const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput) {
+    const content = planContent(input.messages, config.tokens)
+    if (content)
+      return yield* execute({
+        sessionID: input.sessionID,
+        model: input.request.model,
+        reason: "auto",
+        ...content,
+      })
+    const error = { type: "compaction.unavailable" as const, message: "Nothing to compact yet" }
+    yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
       sessionID: input.sessionID,
-      model: input.model,
-      reason: input.reason,
-      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
-      context: (summarizeRecent ? [previousRecent, selected.recent] : [previousRecent, selected.head]).filter(
-        Boolean,
-      ),
-      recent: summarizeRecent ? "" : selected.recent,
-      output: input.output,
-      inputID: input.inputID,
-    })
-  })
-  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: AutoInput) {
-    return yield* compactAvailable({
-      sessionID: input.sessionID,
-      messages: input.messages,
-      model: input.request.model,
       reason: "auto",
-      output: input.request.generation?.maxTokens ?? input.request.model.route.defaults.limits?.output ?? 0,
+      error,
     })
+    return { status: "failed" as const, error }
   })
-  const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: CompactInput) {
-    return yield* compactAvailable({ ...input, reason: "manual" })
-  })
-  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: AutoInput) {
+  const required = (input: AutoInput) => {
     if (!config.auto) return false
     const context = input.request.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
+    const last = input.messages.findLast(
+      (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
+        message.type === "assistant" && message.tokens !== undefined,
+    )
+    if (!last) return false
     const output = input.request.generation?.maxTokens ?? input.request.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
-    )
-      return false
-    const selected = select(input.messages, config.tokens)
-    if (!selected) return false
-    const previousSummary = input.messages.find(
-      (message) => message.type === "compaction" && message.status === "completed",
-    )
-    if (!selected.head && previousSummary?.type !== "compaction") return false
-    const previousRecent = previousSummary?.type === "compaction" ? previousSummary.recent : ""
-    const summaryContext = [previousRecent, selected.head].filter(Boolean)
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
-    if (
-      Token.estimate(
-        buildPrompt({
-          previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
-          context: summaryContext,
-        }),
-      ) >
-      context - summaryOutput
-    )
-      return false
-    return yield* compact({
-      sessionID: input.sessionID,
-      model: input.request.model,
-      reason: "auto",
-      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
-      context: summaryContext,
-      recent: selected.recent,
-      output,
-    })
-  })
+    const used =
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    if (used <= 0) return false
+    return used >= context - (output || config.buffer)
+  }
   return {
-    compactIfNeeded,
-    compactAfterOverflow,
-    compactManual,
+    required,
+    compact,
+    execute,
   }
 }
 
@@ -372,36 +338,40 @@ export const layer = Layer.effect(
     const compaction = make({ events, llm, config: configured })
 
     return Service.of({
-      compactIfNeeded: compaction.compactIfNeeded,
-      compactAfterOverflow: compaction.compactAfterOverflow,
+      required: compaction.required,
+      compact: compaction.compact,
       compactManual: Effect.fn("SessionCompaction.compactManual")(function* (input) {
-        if (!select(input.messages, configured.tokens)) {
+        const content = planContent(input.messages, configured.tokens)
+        if (!content) {
+          const error = { type: "compaction.unavailable" as const, message: "Nothing to compact yet" }
           yield* events.publish(SessionEvent.Compaction.Failed, {
             sessionID: input.session.id,
             reason: "manual",
-            error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+            error,
             inputID: input.inputID,
           })
-          return false
+          return { status: "failed", error }
         }
         const resolved = yield* models.resolve(input.session).pipe(
-          Effect.catch((error) =>
-            events
+          Effect.catch((cause) => {
+            const error = toSessionError(cause)
+            return events
               .publish(SessionEvent.Compaction.Failed, {
                 sessionID: input.session.id,
                 reason: "manual",
-                error: toSessionError(error),
+                error,
                 inputID: input.inputID,
               })
-              .pipe(Effect.as(undefined)),
-          ),
+              .pipe(Effect.as({ status: "failed" as const, error }))
+          }),
         )
-        if (!resolved) return false
-        return yield* compaction.compactManual({
+        if ("status" in resolved) return resolved
+        return yield* compaction.execute({
           sessionID: input.session.id,
-          messages: input.messages,
           model: resolved.model,
+          reason: "manual",
           inputID: input.inputID,
+          ...content,
         })
       }),
     })
