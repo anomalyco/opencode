@@ -3,11 +3,9 @@ import { isBlockedMember } from "../tool-runtime.js"
 import { isSandboxValue, SandboxMap, SandboxPromise, SandboxSet, SandboxURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
-export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "assign", "fromEntries"])
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  if (!objectStatics.has(name)) throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
   const requireObject = (): Record<string, unknown> => {
     const input = args[0]
     if (Array.isArray(input)) return input as unknown as Record<string, unknown>
@@ -53,13 +51,11 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       }
       const out = target as Record<string, unknown>
       for (const source of args.slice(1)) {
-        if (source === null || source === undefined) continue
-        const value = source
-        if (isSandboxValue(value)) continue
-        if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        if (source === null || source === undefined || isSandboxValue(source)) continue
+        if (typeof source !== "object" || Array.isArray(source)) {
           throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         }
-        for (const [key, item] of Object.entries(value)) guardedSet(out, key, item)
+        for (const [key, item] of Object.entries(source)) guardedSet(out, key, item)
       }
       return out
     }

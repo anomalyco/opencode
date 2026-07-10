@@ -31,7 +31,6 @@ import {
   ErrorConstructorReference,
   GlobalMethodReference,
   GlobalNamespace,
-  type GlobalNamespaceName,
   formatLocation,
   getArray,
   getBoolean,
@@ -44,7 +43,6 @@ import {
   type MemberReference,
   OptionalShortCircuit,
   PromiseInstanceMethodReference,
-  type PromiseInstanceMethodName,
   PromiseMethodReference,
   type PromiseMethodName,
   PromiseNamespace,
@@ -58,7 +56,7 @@ import {
 } from "./model.js"
 import { arrayMethods, mapMethods, setMethods, spreadItems } from "../stdlib/collections.js"
 import { consoleMethods, MAX_CONSOLE_DEPTH } from "../stdlib/console.js"
-import { dateMethods, dateStatics, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
+import { dateMethods, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
 import { invokeJsonMethod } from "../stdlib/json.js"
 import { invokeMathMethod, mathConstants } from "../stdlib/math.js"
 import {
@@ -84,7 +82,6 @@ import {
   urlMethods,
   urlProperties,
   urlSearchParamsMethods,
-  urlStatics,
   urlWritableProperties,
   invokeUriFunction,
   invokeURLMethod,
@@ -419,7 +416,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
         break
       }
       if (args[0] instanceof SandboxRegExp) {
-        result = value.split((args[0] as SandboxRegExp).regex, optNum(1))
+        result = value.split(args[0].regex, optNum(1))
         break
       }
       const requestedLimit = optNum(1)
@@ -447,7 +444,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "replace":
     case "replaceAll": {
       if (args[0] instanceof SandboxRegExp) {
-        const pattern = (args[0] as SandboxRegExp).regex
+        const pattern = args[0].regex
         const replacement = str(1)
         if (name === "replaceAll" && !pattern.global) {
           throw new InterpreterRuntimeError(
@@ -552,9 +549,8 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
         )
       }
       // Map/Set materialize directly (the data checkpoint would serialize them to {}).
-      if (args[0] instanceof SandboxMap)
-        return Array.from((args[0] as SandboxMap).map.entries(), ([key, item]) => [key, item])
-      if (args[0] instanceof SandboxSet) return Array.from((args[0] as SandboxSet).set.values())
+      if (args[0] instanceof SandboxMap) return Array.from(args[0].map.entries(), ([key, item]) => [key, item])
+      if (args[0] instanceof SandboxSet) return Array.from(args[0].set.values())
       if (args[0] instanceof SandboxURLSearchParams) {
         return Array.from(args[0].params.entries(), ([key, value]) => [key, value])
       }
@@ -596,11 +592,7 @@ const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, no
   if (ref.namespace === "Number") return invokeNumberStatic(ref.name, args, node)
   if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
   if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
-  if (ref.namespace === "Date") {
-    if (!dateStatics.has(ref.name))
-      throw new InterpreterRuntimeError(`Date.${ref.name} is not available in CodeMode.`, node)
-    return invokeDateStatic(ref.name, args, node)
-  }
+  if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
   if (
     ref.namespace === "RegExp" ||
     ref.namespace === "Map" ||
@@ -1060,16 +1052,13 @@ class Interpreter<R> {
           : []
 
       while (testNode ? yield* self.evaluateExpression(testNode) : true) {
-        let iterationScope: Map<string, Binding> | undefined
-        if (perIterationBindings.length > 0) {
-          iterationScope = new Map(
-            perIterationBindings.map((name) => {
-              const binding = self.currentScope().get(name)!
-              return [name, { ...binding }]
-            }),
-          )
-          self.scopes.push(iterationScope)
-        }
+        const iterationScope =
+          perIterationBindings.length > 0
+            ? new Map(
+                perIterationBindings.map((name): [string, Binding] => [name, { ...self.currentScope().get(name)! }]),
+              )
+            : undefined
+        if (iterationScope) self.scopes.push(iterationScope)
         const result = yield* self.evaluateStatement(bodyNode).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -1119,7 +1108,7 @@ class Interpreter<R> {
 
       // Arrays iterate in place; strings iterate code points; Maps iterate [key, value]
       // pairs and Sets iterate values over a snapshot (mutation during iteration is safe).
-      const iterable = Array.isArray(right) ? right : spreadItems(right)
+      const iterable = spreadItems(right)
       if (iterable === undefined) {
         throw new InterpreterRuntimeError("for...of requires an array, string, Map, or Set value in CodeMode.", node)
       }
@@ -1945,7 +1934,7 @@ class Interpreter<R> {
           return self.setIdentifierValue(name, next, left)
         }
         const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
-        if (operator === "=") return self.setIdentifierValue(name, rightValue, left)
+        return self.setIdentifierValue(name, rightValue, left)
       }
       if (left.type === "MemberExpression") {
         return yield* self.modifyMember(left, (current) =>
@@ -2266,7 +2255,7 @@ class Interpreter<R> {
       return this.createPromise(Effect.fail(new ProgramThrow(args[0])))
     }
 
-    const items = Array.isArray(args[0]) ? args[0] : spreadItems(args[0])
+    const items = spreadItems(args[0])
     if (items === undefined) {
       return this.createPromise(
         Effect.fail(
@@ -2294,7 +2283,7 @@ class Interpreter<R> {
       }
       case "allSettled": {
         const observations = items.map((item) =>
-          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item as unknown)),
+          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item)),
         )
         return this.createPromise(
           settleAfterTurn(
@@ -2336,7 +2325,7 @@ class Interpreter<R> {
           )
         }
         const observations = items.map((item) =>
-          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item as unknown)),
+          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item)),
         )
         // First settlement (fulfilled OR rejected) wins; losing work stays execution-owned
         // and is interrupted at normal completion (already observed) or by teardown.
@@ -2569,8 +2558,8 @@ class Interpreter<R> {
     })
   }
 
-  // Runs a collection callback accepting a user function or supported builtin callable,
-  // mirroring the array-method callback contract.
+  // Accepts a user function or supported builtin callable, so idioms such as
+  // `filter(Boolean)`, `map(String)`, and `map(encodeURIComponent)` work as in JS.
   private applyCollectionCallback(
     callback: unknown,
     name: string,
@@ -2858,24 +2847,7 @@ class Interpreter<R> {
         return Effect.succeed(Array.from(target.entries(), ([index, item]): Array<unknown> => [index, item]))
     }
 
-    const callback = args[0]
-    if (
-      !(callback instanceof CodeModeFunction) &&
-      !(callback instanceof CoercionFunction) &&
-      !(callback instanceof UriFunction)
-    ) {
-      throw new InterpreterRuntimeError(`Array.${name} expects a function callback.`, node)
-    }
-    const self = this
-    // Accept a user function or supported builtin callable, so idioms such as
-    // `filter(Boolean)`, `map(String)`, and `map(encodeURIComponent)` work as in JS. Builtins
-    // are synchronous; only CodeModeFunctions can await tool calls.
-    const apply = (callbackArgs: Array<unknown>): Effect.Effect<unknown, unknown, R> =>
-      callback instanceof CoercionFunction
-        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
-        : callback instanceof UriFunction
-          ? Effect.succeed(invokeUriFunction(callback, callbackArgs, node))
-          : self.invokeFunction(callback, callbackArgs)
+    const apply = this.applyCollectionCallback(args[0], `Array.${name}`, node)
     return Effect.gen(function* () {
       // Capture the initial length, but read the receiver live so callbacks observe mutations
       // without visiting elements appended after iteration begins.
@@ -3300,7 +3272,7 @@ class Interpreter<R> {
       // Error instead of `undefined` so a missing await never hides.
       if (objectValue instanceof SandboxPromise) {
         if (key === "then" || key === "catch" || key === "finally") {
-          return new PromiseInstanceMethodReference(objectValue, key as PromiseInstanceMethodName)
+          return new PromiseInstanceMethodReference(objectValue, key)
         }
         throw new InterpreterRuntimeError(
           "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.",
@@ -3582,15 +3554,14 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
   // and the timeout path's completed value - binds at run time: a reused Effect must start
   // from a clean slate instead of observing a previous run's state.
   return Effect.suspend(() => {
-    const hooks = {
-      ...(options.onToolCallStart === undefined ? {} : { onToolCallStart: options.onToolCallStart }),
-      ...(options.onToolCallEnd === undefined ? {} : { onToolCallEnd: options.onToolCallEnd }),
-    }
     const tools = ToolRuntime.make(
       (options.tools ?? {}) as HostTools<Services<Tools>>,
       limits.maxToolCalls,
       searchIndex,
-      hooks,
+      {
+        onToolCallStart: options.onToolCallStart,
+        onToolCallEnd: options.onToolCallEnd,
+      },
     )
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})

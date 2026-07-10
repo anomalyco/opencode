@@ -1,11 +1,6 @@
 import { Effect, Schema } from "effect"
 import { executeWithLimits } from "./interpreter/runtime.js"
-import {
-  type HostTools,
-  type Services,
-  type ToolDescription,
-  ToolRuntime,
-} from "./tool-runtime.js"
+import { type HostTools, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Definition } from "./tool.js"
 
 /** A tool call admitted during an execution. */
@@ -130,11 +125,7 @@ export type Runtime<R = never> = {
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
-const validateLimit = <Value extends number | undefined>(
-  name: keyof ExecutionLimits,
-  value: Value,
-  minimum: number,
-): Value => {
+const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
   }

@@ -60,7 +60,7 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
     if (ref.name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = boundedData(args[0], `${ref.name} input`)
+  const value = boundedData(raw, `${ref.name} input`)
   if (ref.name === "Number") return coerceToNumber(value)
   if (ref.name === "Boolean") return Boolean(value)
   if (ref.name === "parseInt") {
@@ -73,11 +73,7 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
   if (ref.name === "parseFloat") return parseFloat(coerceToString(value))
   return coerceToString(value)
 }
-import {
-  type AstNode,
-  CoercionFunction,
-  InterpreterRuntimeError,
-} from "../interpreter/model.js"
+import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
 import { copyIn, type SafeObject } from "../tool-runtime.js"
 import {
   isSandboxValue,

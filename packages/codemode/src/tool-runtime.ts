@@ -326,15 +326,12 @@ export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
 const definitions = <R>(
   tools: HostTools<R>,
   path: ReadonlyArray<string> = [],
-): Array<{ path: string; definition: Definition<R> }> => {
-  const entries: Array<{ path: string; definition: Definition<R> }> = []
-  for (const [name, value] of Object.entries(tools)) {
+): Array<{ path: string; definition: Definition<R> }> =>
+  Object.entries(tools).flatMap(([name, value]) => {
     const next = [...path, name]
-    if (isDefinition(value)) entries.push({ path: next.join("."), definition: value })
-    else if (typeof value !== "function") entries.push(...definitions(value, next))
-  }
-  return entries
-}
+    if (isDefinition(value)) return [{ path: next.join("."), definition: value }]
+    return typeof value === "function" ? [] : definitions(value, next)
+  })
 
 const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDescription => ({
   path,
@@ -348,9 +345,6 @@ const visibleDefinitions = <R>(tools: HostTools<R>) =>
     definition,
     description: describeDefinition(path, definition),
   }))
-
-export const catalog = <R>(tools: HostTools<R>): ReadonlyArray<ToolDescription> =>
-  visibleDefinitions(tools).map(({ description }) => description)
 
 export type DiscoveryPlan = {
   readonly catalog: ReadonlyArray<ToolDescription>

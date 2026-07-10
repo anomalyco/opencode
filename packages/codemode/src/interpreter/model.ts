@@ -135,7 +135,7 @@ export const supportedSyntaxMessage =
 
 export class InterpreterRuntimeError extends Error {
   readonly node?: AstNode
-  errorName: string = "Error"
+  errorName = "Error"
 
   constructor(
     message: string,

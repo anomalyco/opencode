@@ -23,7 +23,7 @@ const effectNumberSentinel = (schema: JsonSchema) =>
 const intersection = (members: ReadonlyArray<string>): string => {
   const concrete = members.filter((member) => member !== "unknown")
   if (concrete.length === 0) return "unknown"
-  if (concrete.length === 1) return concrete[0] ?? "unknown"
+  if (concrete.length === 1) return concrete[0]
   return concrete.map((member) => (member.includes(" | ") ? `(${member})` : member)).join(" & ")
 }
 
