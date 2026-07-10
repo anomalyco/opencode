@@ -506,6 +506,26 @@ describe("CodeMode public contract", () => {
     expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(reusable)))).toStrictEqual(reusable)
   })
 
+  test("a reused execution Effect starts from a clean slate", async () => {
+    const echo = Tool.make({
+      description: "echo",
+      input: Schema.Struct({}),
+      output: Schema.Number,
+      run: () => Effect.succeed(1),
+    })
+    const effect = CodeMode.execute({
+      tools: { host: { echo } },
+      code: `console.log("hi"); return await tools.host.echo({})`,
+      limits: { maxToolCalls: 1 },
+    })
+    const first = await Effect.runPromise(effect)
+    const second = await Effect.runPromise(effect)
+    // Per-execution state (tool-call budget and audit list, logs, timeout bookkeeping) must
+    // bind at run time, so the second run neither exhausts the budget nor leaks run 1's logs.
+    expect(first).toStrictEqual(second)
+    expect(second).toStrictEqual({ ok: true, value: 1, logs: ["hi"], toolCalls: [{ name: "host.echo" }] })
+  })
+
   test("inlines a COMPLETE small catalog and keeps search registered but unadvertised", async () => {
     const runtime = CodeMode.make({ tools })
     expect(runtime.catalog()).toStrictEqual([

@@ -43,10 +43,8 @@ test("execute preserves successful results with visible unhandled rejections", a
       text: [
         "done",
         "",
-        "Unhandled promise rejections:",
-        "- [ToolFailure] Lookup refused",
-        "",
-        "Await or explicitly settle all started promises.",
+        "Warnings:",
+        "- [ToolFailure] Unhandled rejection from an un-awaited promise: Lookup refused",
       ].join("\n"),
     },
   ])

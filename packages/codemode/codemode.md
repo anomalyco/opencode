@@ -67,10 +67,13 @@ Every sandbox promise starts eagerly on a run-once fiber owned by the whole Code
 async functions, `Promise.all`, `Promise.allSettled`, `Promise.race`, `Promise.resolve`, and `Promise.reject`. Nested
 functions therefore cannot end the lifetime of work they started. Independent aggregate batches overlap, and rejection
 is observed at the eventual `await`. `Promise.race` uses native non-cancelling settlement semantics: its first result
-wins while losers continue. Before normal completion, CodeMode drains all active promises without marking them observed,
-then returns every unobserved ordinary rejection in `Success.unhandledRejections` while preserving the program value.
-A fatal program failure, timeout, or host interruption closes the execution promise scope and interrupts its active
-fibers instead. At most eight tool calls execute concurrently.
+wins while losers continue running. At normal completion CodeMode drains unobserved promises to empty (fire-and-forget
+work finishes, and its failures become `Success.warnings` diagnostics), then interrupts whatever remains active - all
+of it observed (race losers, fail-fast `Promise.all` stragglers), and since the program has returned, no future await
+can exist. An unobserved promise that itself awaits an observed loser transitively keeps that loser alive through the
+draining phase; interruption applies only to work nothing unobserved still depends on. A fatal program failure or host interruption closes the execution promise scope and interrupts its active
+fibers instead. A timeout does the same, except that a value the program already returned is preserved alongside a
+`TimeoutExceeded` warning rather than discarded. At most eight tool calls execute concurrently.
 
 The public execution-policy knobs are `timeoutMs`, `maxToolCalls`, and `maxOutputBytes`. The package supplies no
 defaults because budgets are host policy. The interpreter also enforces fixed internal boundaries for tool-call

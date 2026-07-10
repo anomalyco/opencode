@@ -176,15 +176,12 @@ function formatResult(result: CodeMode.Result) {
     : [result.error.message, ...(result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))]
         .join("\n")
         .trim()
-  const rejections =
-    result.ok && ((result.unhandledRejections?.length ?? 0) > 0 || result.unhandledRejectionsTruncated)
-      ? `Unhandled promise rejections:\n${[
-          ...(result.unhandledRejections ?? []).map((item) => `- [${item.kind}] ${item.message}`),
-          ...(result.unhandledRejectionsTruncated ? ["- Additional rejections omitted by the output limit."] : []),
-        ].join("\n")}\n\nAwait or explicitly settle all started promises.`
+  const warnings =
+    result.ok && result.warnings !== undefined && result.warnings.length > 0
+      ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
-  return [output, rejections, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
 function formatValue(value: CodeMode.DataValue) {

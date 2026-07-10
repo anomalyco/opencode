@@ -75,8 +75,9 @@ export const DiagnosticKind = Schema.Literals([
   "TimeoutExceeded",
   "ToolFailure",
   "ExecutionFailure",
+  "Truncated",
 ])
-/** Stable categories produced by program, schema, tool, and limit failures. */
+/** Stable categories produced by program, schema, tool, limit, and truncation diagnostics. */
 export type DiagnosticKind = typeof DiagnosticKind.Type
 
 export const Diagnostic = Schema.Struct({
@@ -92,8 +93,10 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
-  unhandledRejections: Schema.optionalKey(Schema.Array(Diagnostic)),
-  unhandledRejectionsTruncated: Schema.optionalKey(Schema.Boolean),
+  // Runtime-authored, non-fatal diagnostics alongside a valid value (stderr to `value`'s
+  // stdout): unhandled rejections, background work interrupted by the timeout. Program-
+  // authored console output stays in `logs`.
+  warnings: Schema.optionalKey(Schema.Array(Diagnostic)),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),
   toolCalls: Schema.Array(ToolCallSchema),
