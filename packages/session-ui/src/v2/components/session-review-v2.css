@@ -4,7 +4,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--background-stronger, var(--v2-background-bg-base));
+  background: var(--v2-background-bg-base);
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-body"] {
@@ -31,7 +31,7 @@
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
-  background: var(--background-stronger, var(--v2-background-bg-base));
+  background: var(--v2-background-bg-base);
 }
 
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar"][aria-hidden="true"] {
