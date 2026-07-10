@@ -6,6 +6,16 @@ import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "./fixture/tui-sdk"
 
+async function waitForFrame(setup: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
+  const start = Date.now()
+  while (Date.now() - start < 2000) {
+    await setup.renderOnce()
+    if (setup.captureCharFrame().includes(text)) return
+    await Bun.sleep(10)
+  }
+  throw new Error(`timed out waiting for ${text}`)
+}
+
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
@@ -121,6 +131,69 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     expect(stdout).toContain("mammouth -s dummy")
   } finally {
     process.stdout.write = originalWrite
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
+
+test("opens provider connection when only free OpenCode models are available", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/config/providers")
+      return json({
+        providers: [
+          {
+            id: "opencode",
+            name: "OpenCode",
+            source: "api",
+            env: [],
+            options: {},
+            models: {
+              free: {
+                cost: { input: 0 },
+              },
+            },
+          },
+        ],
+        default: {},
+      })
+    if (url.pathname === "/provider")
+      return json({ all: [{ id: "mammouth-ai", name: "Mammouth AI" }], default: {}, connected: [] })
+  })
+  let api: TuiPluginApi | undefined
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: {},
+        pluginHost: {
+          async start(input) {
+            api = input.api
+            started()
+          },
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(Global.defaultLayer)),
+    )
+
+    await ready
+    await waitForFrame(setup, "Connect a provider")
+    api?.keymap.dispatchCommand("app.exit")
+    await task
+  } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     mock.restore()
   }
