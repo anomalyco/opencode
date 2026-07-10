@@ -202,6 +202,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
   }
 
   return {
+    note,
     annotations,
     renderAnnotation,
     renderGutterUtility,

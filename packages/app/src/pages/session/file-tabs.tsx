@@ -5,10 +5,10 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode-ai/session-ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
-import { createLineCommentController } from "@opencode-ai/session-ui/line-comment-annotations"
+import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@/utils/toast"
@@ -29,26 +29,17 @@ function FileCommentMenu(props: {
 }) {
   return (
     <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <DropdownMenu gutter={4} placement="bottom-end">
-        <DropdownMenu.Trigger
-          as={IconButton}
-          icon="dot-grid"
-          variant="ghost"
-          size="small"
-          class="size-6 rounded-md"
-          aria-label={props.moreLabel}
-        />
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={props.onEdit}>
-              <DropdownMenu.ItemLabel>{props.editLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={props.onDelete}>
-              <DropdownMenu.ItemLabel>{props.deleteLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu>
+      <MenuV2 gutter={4}>
+        <MenuV2.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label={props.moreLabel}>
+          <LineCommentV2OverflowIcon />
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <MenuV2.Item onSelect={props.onEdit}>{props.editLabel}</MenuV2.Item>
+            <MenuV2.Item onSelect={props.onDelete}>{props.deleteLabel}</MenuV2.Item>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
     </div>
   )
 }
@@ -299,13 +290,11 @@ export function SessionFileView(props: { tab: string }) {
 
   const activeSelection = () => note.selected ?? selectedLines()
 
-  const commentsUi = createLineCommentController({
+  const commentsUi = createLineCommentControllerV2({
     comments: fileComments,
     label: language.t("ui.lineComment.submit"),
     draftKey: () => path() ?? props.tab,
-    mention: {
-      items: file.searchFilesAndDirectories,
-    },
+    getSide: (range) => range.endSide ?? range.side ?? "additions",
     state: {
       opened: () => note.openedComment,
       setOpened: (id) => setNote("openedComment", id),
@@ -316,9 +305,6 @@ export function SessionFileView(props: { tab: string }) {
       syncSelected,
       hoverSelected: syncSelected,
     },
-    getHoverSelectedRange: activeSelection,
-    cancelDraftOnCommentToggle: true,
-    clearSelectionOnSelectionEndNull: true,
     onSubmit: ({ comment, selection }) => {
       const p = path()
       if (!p) return
@@ -426,7 +412,15 @@ export function SessionFileView(props: { tab: string }) {
           commentsUi.onLineSelected(range)
         }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
+          if (!range) {
+            commentsUi.note.select(null)
+            commentsUi.note.cancelDraft()
+            return
+          }
           commentsUi.onLineSelectionEnd(range)
+        }}
+        onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
+          commentsUi.onLineNumberSelectionEnd(range)
         }}
         search={search}
         class="select-text"
