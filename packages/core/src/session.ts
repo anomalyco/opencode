@@ -194,7 +194,7 @@ export interface Interface {
    */
   readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<SessionPending.Info[], NotFoundError>
   /**
-   * Durable, ordered, gap-free session log read. Replays public durable
+   * Durable, ordered session log read. Replays public durable
    * session events after the exclusive `after` cursor, emits a `Synced`
    * marker at the captured replay watermark, then continues live when `follow`
    * is set.

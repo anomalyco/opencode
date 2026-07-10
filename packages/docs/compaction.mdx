@@ -114,22 +114,24 @@ and file or media attachments become textual descriptors rather than embedded
 data. On later compactions, V2 updates the previous summary and carries forward
 its retained recent context before selecting a new tail.
 
-The completed checkpoint is presented to the model as historical conversation
+The completed compaction is presented to the model as historical conversation
 context, explicitly not as new instructions. Running and failed compactions are
 not included in model context.
 
-## Instructions and checkpoints
+## Compaction advances the instruction epoch
 
-Conversation compaction and the durable instruction checkpoint are separate.
-Before each model step, V2 compares live instruction sources with what that
-session's model was last told. Ordinary changes are durable chronological
-system updates and do not rewrite the established instruction baseline.
+Conversation compaction and instruction synchronization are separate. Before
+promoting pending input, V2 compares live instruction sources with the latest
+admitted values. Ordinary changes become durable value deltas; their
+model-facing System messages are derived during request assembly rather than
+persisted.
 
-After a completed compaction, the next model step creates a fresh instruction
-baseline from current sources. If a source is temporarily unavailable, V2
-restates the last-applied value instead of treating it as removed. Session
-movement and a committed revert reset the instruction checkpoint as well. See
-[Instructions](/instructions) for source ordering and update behavior.
+Completed compaction advances the instruction epoch at the exact ended-event
+sequence and makes the currently admitted values initial. It does not reread
+sources or publish an instruction event. Session movement and committed revert
+clear the instruction fold so the next safe boundary requires one complete
+source read. See [Instructions](/instructions) for source ordering and update
+behavior.
 
 ## Current limitations
 

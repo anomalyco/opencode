@@ -151,3 +151,4 @@ Existing `session.forked.1` rows migrate to v2 with the event prefix reserved by
 - Source additions or software removals are silent unless a source explicitly reads `Removed`.
 - Clients display changed keys, not privileged prose.
 - Blob GC is deferred.
+- Pre-beta instruction events are deleted during migration; logs with resulting sequence gaps are not guaranteed to replay into a blank database.

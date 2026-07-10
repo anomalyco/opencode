@@ -5,8 +5,9 @@ description: ""
 
 Instructions are privileged context that guide an agent throughout a session.
 V2 combines built-in context, discovered `AGENTS.md` files, and dynamic sources
-such as skill, reference, MCP, and session context into a durable instruction
-baseline.
+such as skill, reference, MCP, and session context. It stores source values as
+durable deltas, then renders initial instructions and chronological updates when
+assembling each model request.
 
 ## AGENTS.md
 
@@ -92,7 +93,7 @@ See [Config](/config) for config locations and general precedence.
 ## Ordering
 
 The selected agent or provider system prompt is sent first. OpenCode then sends
-the session's instruction baseline, composed in this order:
+the session's initial instructions, composed in this order:
 
 1. Built-in environment and date context.
 2. Ambient `AGENTS.md` discovery.
@@ -101,24 +102,27 @@ the session's instruction baseline, composed in this order:
 
 These sources are combined; ordering is not an override mechanism. Nested
 `AGENTS.md` files discovered by reads are chronological session entries rather
-than part of the baseline.
+than part of the initial instructions.
 
 ## Changes
 
-Before each model step, V2 compares live instruction sources with what that
-session's model was last told:
+Before promoting pending input, V2 compares live instruction sources with the
+latest admitted source values:
 
 - A new or changed ambient `AGENTS.md` aggregate is announced as a system update
   that replaces the previous ambient aggregate.
 - Removing all ambient files announces that the previous ambient instructions
   no longer apply.
 - A temporary read or discovery failure preserves the session's last known
-  instructions instead of treating them as deleted. If no baseline exists yet,
-  the first model step waits until required sources are available.
-- Completed conversation compaction creates a fresh baseline from the current
-  sources. Moving a session or committing a revert also resets its instruction
-  checkpoint so the next step establishes a new baseline.
+  instructions instead of treating them as deleted. If no instruction epoch
+  exists yet, pending input waits until every source is available.
+- Completed conversation compaction advances the instruction epoch, making the
+  currently admitted values initial without rereading sources or authoring an
+  instruction event.
+- Moving a session or committing a revert clears the instruction fold. The next
+  safe boundary requires one complete source read before promoting input.
 
-Updates are durable session history. OpenCode does not rewrite the original
-baseline on every change; it records the change so subsequent model steps see
-both the established baseline and the chronological update.
+The durable event stores changed source keys and value hashes, not rendered
+prose. During request assembly, OpenCode renders the epoch's initial values and
+interleaves later changes as chronological System messages. Clients see changed
+keys but never the privileged value bodies.
