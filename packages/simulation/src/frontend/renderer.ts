@@ -11,21 +11,28 @@ const recordings = new WeakMap<CliRenderer, Timeline>()
  * module-side so the harness can use supported testing APIs without app
  * code carrying it around.
  */
-export async function create(options: CliRendererConfig, path?: string): Promise<CliRenderer> {
+export interface Viewport {
+  readonly cols: number
+  readonly rows: number
+}
+
+export async function create(options: CliRendererConfig, path?: string, viewport?: Viewport): Promise<CliRenderer> {
+  const cols = viewport?.cols ?? 100
+  const rows = viewport?.rows ?? 40
   if (!path) {
     const setup = await createTestRenderer({
       ...options,
-      width: 100,
-      height: 40,
+      width: cols,
+      height: rows,
     })
     setups.set(setup.renderer, setup)
     return setup.renderer
   }
-  const recording = await Timeline.create(path, 100, 40)
+  const recording = await Timeline.create(path, cols, rows)
   const setup = await createTestRenderer({
     ...options,
-    width: 100,
-    height: 40,
+    width: cols,
+    height: rows,
     stdout: recording as unknown as NodeJS.WriteStream,
     bufferedOutput: "stdout",
     onDestroy: () => {
@@ -39,6 +46,10 @@ export async function create(options: CliRendererConfig, path?: string): Promise
   setups.set(setup.renderer, setup)
   recordings.set(setup.renderer, recording)
   return setup.renderer
+}
+
+export function recordResize(renderer: CliRenderer, cols: number, rows: number) {
+  recordings.get(renderer)?.resize(cols, rows)
 }
 
 export function setupFor(renderer: CliRenderer): TestRendererSetup | undefined {

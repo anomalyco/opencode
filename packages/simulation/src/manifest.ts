@@ -7,6 +7,10 @@ export interface Manifest {
     readonly ui: string
     readonly backend: string
   }
+  readonly viewport?: {
+    readonly cols: number
+    readonly rows: number
+  }
   readonly recording?: {
     readonly timeline: string
   }
@@ -35,6 +39,7 @@ export function resolve() {
   if (!isManifest(manifest)) throw new Error(`Invalid drive manifest: ${file}`)
   validateEndpoint(manifest.endpoints.ui, "ui")
   validateEndpoint(manifest.endpoints.backend, "backend")
+  if (manifest.viewport) validateViewport(manifest.viewport)
   if (manifest.recording && !isAbsolute(manifest.recording.timeline)) {
     throw new Error(`Invalid drive recording timeline path: ${manifest.recording.timeline}`)
   }
@@ -52,6 +57,13 @@ function validateEndpoint(value: string, name: string) {
   const port = Number(endpoint.port)
   if (endpoint.protocol !== "ws:" || endpoint.hostname !== "127.0.0.1" || !Number.isInteger(port) || port < 1) {
     throw new Error(`Invalid drive ${name} endpoint: ${value}`)
+  }
+}
+
+function validateViewport(value: Manifest["viewport"]) {
+  if (!value) return
+  if (!Number.isSafeInteger(value.cols) || value.cols <= 0 || !Number.isSafeInteger(value.rows) || value.rows <= 0) {
+    throw new Error(`Invalid drive viewport: ${JSON.stringify(value)}`)
   }
 }
 

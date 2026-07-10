@@ -65,6 +65,7 @@ export namespace Frontend {
     Schema.Struct({ type: Schema.Literal("ui.arrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
     Schema.Struct({ type: Schema.Literal("ui.focus"), target: Schema.Number }),
     Schema.Struct({ type: Schema.Literal("ui.click"), target: Schema.Number, x: Schema.Number, y: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal("ui.resize"), cols: Schema.Number, rows: Schema.Number }),
   ])
   export type Action = Schema.Schema.Type<typeof Action>
 
@@ -121,12 +122,16 @@ export namespace Frontend {
   export const ClickParams = Schema.Struct({ target: Schema.Number, x: Schema.Number, y: Schema.Number })
   export interface ClickParams extends Schema.Schema.Type<typeof ClickParams> {}
 
+  export const ResizeParams = Schema.Struct({ cols: Schema.Number, rows: Schema.Number })
+  export interface ResizeParams extends Schema.Schema.Type<typeof ResizeParams> {}
+
   export const Request = Schema.Union([
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.type"), params: TypeParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.press"), params: PressParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.focus"), params: FocusParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.resize"), params: ResizeParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.matches"), params: MatchesParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,

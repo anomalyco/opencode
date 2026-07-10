@@ -16,8 +16,9 @@ export async function create(options: CliRendererConfig): Promise<CliRenderer> {
   const headless = process.env.OPENCODE_DRIVE_RENDERER === "headless"
   const manifest = DriveManifest.resolve()
   const renderer = headless
-    ? await SimulationRenderer.create(options, manifest.recording?.timeline)
+    ? await SimulationRenderer.create(options, manifest.recording?.timeline, manifest.viewport)
     : await createCliRenderer(options)
+  if (!headless && manifest.viewport) renderer.resize(manifest.viewport.cols, manifest.viewport.rows)
   const server = SimulationServer.start(
     SimulationActions.createHarness(renderer),
     manifest.endpoints.ui,

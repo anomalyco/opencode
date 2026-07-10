@@ -14,6 +14,7 @@ export interface Harness {
   readonly renderer: CliRenderer
   readonly mockInput: MockInput
   readonly mockMouse: MockMouse
+  readonly resize: (cols: number, rows: number) => void
   readonly renderOnce: () => Promise<void>
   readonly screen: () => string
 }
@@ -61,15 +62,20 @@ export function createHarness(renderer: CliRenderer): Harness {
     renderer,
     mockInput: setup?.mockInput ?? createMockKeys(renderer),
     mockMouse: setup?.mockMouse ?? createMockMouse(renderer),
+    resize: setup?.resize ?? ((cols, rows) => renderer.resize(cols, rows)),
     renderOnce:
       setup?.renderOnce ??
       (async () => {
         renderer.requestRender()
         await renderer.idle()
       }),
-    screen:
-      setup?.captureCharFrame ??
-      (() => decoder.decode((Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes(true))),
+    // captureCharFrame follows the test renderer's output sink. Recording
+    // redirects that sink to the timeline, so read the live render buffer
+    // instead; it is also the source used by screenshots.
+    screen: () =>
+      decoder.decode(
+        (Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes(),
+      ),
   }
 }
 
@@ -150,6 +156,13 @@ export async function execute(harness: Harness, action: Action) {
       break
     case "ui.click":
       await harness.mockMouse.click(action.x, action.y)
+      break
+    case "ui.resize":
+      if (!Number.isSafeInteger(action.cols) || action.cols <= 0 || !Number.isSafeInteger(action.rows) || action.rows <= 0) {
+        throw new Error("resize cols and rows must be positive integers")
+      }
+      harness.resize(action.cols, action.rows)
+      SimulationRenderer.recordResize(harness.renderer, action.cols, action.rows)
       break
   }
   await harness.renderOnce()

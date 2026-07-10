@@ -21,7 +21,15 @@ export const Output = Schema.Struct({
 })
 export interface Output extends Schema.Schema.Type<typeof Output> {}
 
-export const Event = Schema.Union([Header, Output])
+export const Resize = Schema.Struct({
+  type: Schema.Literal("resize"),
+  at_ms: Schema.Number,
+  cols: Schema.Number,
+  rows: Schema.Number,
+})
+export interface Resize extends Schema.Schema.Type<typeof Resize> {}
+
+export const Event = Schema.Union([Header, Output, Resize])
 export type Event = Schema.Schema.Type<typeof Event>
 
 export class Timeline extends Writable {
@@ -96,6 +104,12 @@ export class Timeline extends Writable {
     this.end()
     this.done = finished(this).then(() => this.path)
     return this.done
+  }
+
+  resize(cols: number, rows: number) {
+    if (this.writableEnded) return
+    const event = { type: "resize", at_ms: this.elapsed(), cols, rows } satisfies Resize
+    this.output.write(`${JSON.stringify(event)}\n`)
   }
 
   private elapsed() {
