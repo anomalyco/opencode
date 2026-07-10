@@ -15,6 +15,14 @@ import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 
 const NODE_VERSION = "26.4.0"
 const dir = path.resolve(import.meta.dirname, "..")
+const outdir = path.resolve(
+  dir,
+  process.argv.find((arg) => arg.startsWith("--outdir="))?.slice("--outdir=".length) ?? "dist",
+)
+if (outdir === dir) throw new Error("--outdir must not be the package directory")
+if (outdir === path.join(dir, "dist-node")) {
+  throw new Error("--outdir must not be dist-node because it contains temporary files")
+}
 const bundleOnly = process.argv.includes("--bundle-only")
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
@@ -42,7 +50,7 @@ if (!bundleOnly && targets.some((target) => target.platform === "darwin" && targ
 
 process.chdir(dir)
 if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
-if (!bundleOnly) await rm("dist", { recursive: true, force: true })
+if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
   !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
     ? await resolveHostNode()
@@ -67,7 +75,7 @@ for (const target of targets) {
 
   const name = `cli-${targetName(target)}`
   const binary = target.platform === "win32" ? "opencode2.exe" : "opencode2"
-  const output = path.join(dir, "dist", name, "bin", binary)
+  const output = path.join(outdir, name, "bin", binary)
   if (!builder) throw new Error("Node SEA builder is unavailable")
   await mkdir(path.dirname(output), { recursive: true })
   const config = {
@@ -90,7 +98,7 @@ for (const target of targets) {
     console.warn(`${output} must be signed on macOS before it can run`)
   }
   await writeFile(
-    path.join(dir, "dist", name, "package.json"),
+    path.join(outdir, name, "package.json"),
     `${JSON.stringify(
       {
         name: `@opencode-ai/${name}`,
