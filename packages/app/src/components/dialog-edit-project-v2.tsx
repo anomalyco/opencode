@@ -4,7 +4,7 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@op
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { Field } from "@opencode-ai/ui/v2/field-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -16,8 +16,6 @@ import { useLanguage } from "@/context/language"
 import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
 import { getProjectAvatarSource } from "@/pages/layout/helpers"
-
-const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
 export function DialogEditProjectV2(props: { project: LocalProject; server: ServerConnection.Any }) {
   const dialog = useDialog()
@@ -185,26 +183,26 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
                 {language.t("dialog.project.edit.color")}
               </div>
               <div class="-ml-1 flex gap-1.5">
-                <For each={AVATAR_COLOR_KEYS}>
+                <For each={PROJECT_AVATAR_VARIANTS}>
                   {(color) => (
                     <button
                       type="button"
                       aria-label={language.t("dialog.project.edit.color.select", { color })}
-                      aria-pressed={store.color === color}
-                      class="flex size-9 items-center justify-center rounded-[10px] p-1 outline outline-1 outline-transparent transition-[background-color,outline-color] hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-v2-border-border-focus"
+                      aria-pressed={getProjectAvatarVariant(store.color) === color}
+                      class="flex size-8 items-center justify-center rounded-[10px] p-1 outline outline-1 outline-transparent transition-[background-color,outline-color] hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-v2-border-border-focus"
                       classList={{
                         "bg-v2-overlay-simple-overlay-hover [box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]":
-                          store.color === color,
+                          getProjectAvatarVariant(store.color) === color,
                       }}
                       onClick={() => {
-                        if (store.color === color && !props.project.icon?.url) return
-                        setStore("color", store.color === color ? undefined : color)
+                        if (getProjectAvatarVariant(store.color) === color && !props.project.icon?.url) return
+                        setStore("color", getProjectAvatarVariant(store.color) === color ? undefined : color)
                       }}
                     >
                       <ProjectAvatar
                         fallback={store.name || defaultName()}
                         variant={getProjectAvatarVariant(color)}
-                        class="!size-7 [&_[data-slot=project-avatar-surface]]:!rounded-[6px]"
+                        class="!size-6 [&_[data-slot=project-avatar-surface]]:!rounded-[6px]"
                       />
                     </button>
                   )}
