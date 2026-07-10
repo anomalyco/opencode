@@ -465,8 +465,8 @@ export function NewHome() {
   }
 
   function editProject(conn: ServerConnection.Any, project: LocalProject) {
-    void import("@/components/dialog-edit-project").then((x) => {
-      dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
+    void import("@/components/dialog-edit-project-v2").then((x) => {
+      void dialog.show(() => <x.DialogEditProjectV2 server={conn} project={project} />)
     })
   }
 
