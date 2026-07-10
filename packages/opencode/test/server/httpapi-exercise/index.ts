@@ -838,13 +838,18 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/form", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
-      body: { mode: "url", url: "https://example.com/form" },
+      body: {
+        title: "External form",
+        fields: [{ key: "authorization", type: "external", url: "https://example.com/form" }],
+      },
     }))
     .json(200, (body) => {
       object(body)
       object(body.data)
       check(typeof body.data.id === "string", "form create should return an ID")
-      check(body.data.mode === "url", "form create should preserve URL mode")
+      array(body.data.fields)
+      object(body.data.fields[0])
+      check(body.data.fields[0].type === "external", "form create should preserve the external field")
     }),
   http.protected
     .get("/api/session/{sessionID}/form/{formID}", "v2.session.form.get")

@@ -1,17 +1,17 @@
-# RFC: Continue Sessions After Managed-Service Restart
+# Decision: Continue Sessions After Managed-Service Restart
 
 | Field          | Value                                                        |
 | -------------- | ------------------------------------------------------------ |
-| Status         | Proposed                                                     |
+| Status         | Accepted and implemented                                     |
 | Author         | Kit Langton                                                  |
 | Date           | 2026-07-08                                                   |
 | Tracking issue | [#35646](https://github.com/anomalyco/opencode/issues/35646) |
 
 ## Summary
 
-When the managed OpenCode server shuts down gracefully, active Sessions should continue automatically the next time the managed server starts.
+When the managed OpenCode server shuts down gracefully, active Sessions continue automatically the next time the managed server starts.
 
-This RFC proposes one private nullable timestamp on the existing Session row: `time_suspended`. The managed server suspends its active Sessions on graceful shutdown and resumes suspended Sessions on startup. Both are explicit actions the managed server invokes; no other server ever suspends or auto-resumes.
+The implementation uses one private nullable timestamp on the existing Session row: `time_suspended`. The managed server suspends its active Sessions on graceful shutdown and resumes suspended Sessions on startup. Both are explicit actions the managed server invokes.
 
 The field is not Session status. Live activity remains process-local. Hard-crash recovery and exactly-once provider or tool execution remain out of scope.
 
@@ -94,7 +94,7 @@ WHERE id = ? AND time_suspended IS NOT NULL
 RETURNING id;
 ```
 
-Only the process receiving the returned row resumes that Session. A second consumer receives no row. Each suspension is consumed right before its own drain starts, and at most a handful of resumed drains run at once.
+Only the process receiving the returned row resumes that Session. A second consumer receives no row. Each suspension is consumed right before its own drain starts, and at most four resumed drains run at once.
 
 The resume goes through the existing process-local coordinator, which joins duplicate same-process resumes and starts a forced drain while idle.
 
@@ -102,14 +102,14 @@ The resume goes through the existing process-local coordinator, which joins dupl
 
 The design provides at-most-once automatic scheduling, not guaranteed continuation.
 
-| Failure                                                | Result                                                                                |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| Old server is killed before graceful closeout          | Nothing is suspended; user resumes manually                                           |
-| Old server dies between suspension and teardown        | Session stays suspended; next server resumes it                                       |
-| New server crashes before conditional clear            | Session stays suspended                                                               |
-| New server crashes after clear but before drain starts | Automatic continuation is lost                                                        |
-| New server crashes after drain starts                  | No automatic hard-crash retry                                                         |
-| Interrupted tool has uncertain side effects            | Existing stale-tool reconciliation records failure rather than replaying the old call |
+| Failure                                                | Result                                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Old server is killed before graceful closeout          | Nothing is suspended; user resumes manually                                   |
+| Old server dies between suspension and teardown        | Session stays suspended; next server resumes it                               |
+| New server crashes before conditional clear            | Session stays suspended                                                       |
+| New server crashes after clear but before drain starts | Automatic continuation is lost                                                |
+| New server crashes after drain starts                  | No automatic hard-crash retry                                                 |
+| Interrupted tool has uncertain side effects            | Orphan reconciliation records interruption rather than replaying the old call |
 
 Losing one automatic continuation is safer than repeatedly restarting ambiguous provider or tool work.
 
@@ -130,16 +130,15 @@ An old shutdown event records what happened; it does not prove that a future pro
 |    5 | Persisted general Session status        | Reject    | Conflates activity, history, and pending work                                   |
 |    6 | Scan lifecycle history on every startup | Reject    | Repeats unbounded historical work and lacks direct atomic consumption           |
 
-## Verification
+## Coverage
 
-Required regression coverage:
+Regression coverage verifies:
 
 - A suspension can be consumed only once per Session.
 - Generic lifecycle publication and replay do not infer suspension.
 - Historical shutdown events remain unsuspended after migration.
 - Concurrent managed-service candidates elect one process and produce one continued execution.
 - Teardown interruption preserves suspension; a drain finishing on its own clears it.
-- Only the managed server suspends and resumes; default, embedded, and stdio servers never invoke the actions.
 
 ## Non-Goals
 

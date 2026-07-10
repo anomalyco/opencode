@@ -22,7 +22,7 @@ Usage notes:
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label`
 
 export const Input = Schema.Struct({
-  questions: Schema.Array(QuestionV2.Prompt).annotate({ description: "Questions to ask" }),
+  questions: Schema.NonEmptyArray(QuestionV2.Prompt).annotate({ description: "Questions to ask" }),
 })
 
 export const Output = Schema.Struct({
@@ -86,21 +86,10 @@ export const Plugin = {
                           kind: "question",
                           tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
                         },
-                        mode: "form",
-                        fields: input.questions.map(
-                          (question, index): Form.Field => ({
-                            key: `q${index}`,
-                            title: question.header,
-                            description: question.question,
-                            type: question.multiple === true ? "multiselect" : "string",
-                            options: question.options.map((option) => ({
-                              value: option.label,
-                              label: option.label,
-                              description: option.description,
-                            })),
-                            custom: true,
-                          }),
-                        ),
+                        fields: [
+                          toField(input.questions[0], 0),
+                          ...input.questions.slice(1).map((question, index) => toField(question, index + 1)),
+                        ],
                       })
                       .pipe(Effect.orDie),
                   ),
@@ -121,4 +110,19 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
   }),
+}
+
+function toField(question: QuestionV2.Prompt, index: number): Form.Field {
+  return {
+    key: `q${index}`,
+    title: question.header,
+    description: question.question,
+    type: question.multiple === true ? "multiselect" : "string",
+    options: question.options.map((option) => ({
+      value: option.label,
+      label: option.label,
+      description: option.description,
+    })),
+    custom: true,
+  }
 }

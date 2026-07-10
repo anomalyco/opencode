@@ -655,21 +655,12 @@ type Endpoint14_2Input = {
   readonly id?: Endpoint14_2Request["payload"]["id"]
   readonly title: Endpoint14_2Request["payload"]["title"]
   readonly metadata?: Endpoint14_2Request["payload"]["metadata"]
-  readonly mode: Endpoint14_2Request["payload"]["mode"]
-  readonly fields?: Endpoint14_2Request["payload"]["fields"]
-  readonly url?: Endpoint14_2Request["payload"]["url"]
+  readonly fields: Endpoint14_2Request["payload"]["fields"]
 }
 const Endpoint14_2 = (raw: RawClient["server.form"]) => (input: Endpoint14_2Input) =>
   raw["session.form.create"]({
     params: { sessionID: input["sessionID"] },
-    payload: {
-      id: input["id"],
-      title: input["title"],
-      metadata: input["metadata"],
-      mode: input["mode"],
-      fields: input["fields"],
-      url: input["url"],
-    },
+    payload: { id: input["id"], title: input["title"], metadata: input["metadata"], fields: input["fields"] },
   }).pipe(
     Effect.mapError(mapClientError),
     Effect.map((value) => value.data),

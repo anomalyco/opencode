@@ -550,9 +550,7 @@ export type Endpoint14_2Input = {
   readonly id?: Endpoint14_2Request["payload"]["id"]
   readonly title: Endpoint14_2Request["payload"]["title"]
   readonly metadata?: Endpoint14_2Request["payload"]["metadata"]
-  readonly mode: Endpoint14_2Request["payload"]["mode"]
-  readonly fields?: Endpoint14_2Request["payload"]["fields"]
-  readonly url?: Endpoint14_2Request["payload"]["url"]
+  readonly fields: Endpoint14_2Request["payload"]["fields"]
 }
 export type Endpoint14_2Output = EffectValue<ReturnType<RawClient["server.form"]["session.form.create"]>>["data"]
 export type FormCreateOperation<E = never> = (input: Endpoint14_2Input) => Effect.Effect<Endpoint14_2Output, E>

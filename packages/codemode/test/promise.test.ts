@@ -48,12 +48,38 @@ const failingTool = Tool.make({
   run: () => Effect.fail(toolError("Lookup refused")),
 })
 
+const interruptedTool = Tool.make({
+  description: "Interrupt this call",
+  input: Schema.Struct({}),
+  output: Schema.String,
+  run: () => Effect.interrupt,
+})
+
 const completedTool = (trace: Trace) =>
   Tool.make({
     description: "Return the number of completed sleepy calls",
     input: Schema.Struct({}),
     output: Schema.Number,
     run: () => Effect.succeed(trace.completed),
+  })
+
+/** Never settles, and holds interruption cleanup for `cleanupMs` so completion cleanup can outlast a timeout. */
+const stubbornTool = (trace: Trace) =>
+  Tool.make({
+    description: "Never settle; clean up slowly when interrupted",
+    input: Schema.Struct({ cleanupMs: Schema.Number }),
+    output: Schema.Number,
+    run: ({ cleanupMs }) =>
+      Effect.never.pipe(
+        Effect.onInterrupt(() =>
+          Effect.andThen(
+            Effect.sleep(cleanupMs),
+            Effect.sync(() => {
+              trace.interrupted += 1
+            }),
+          ),
+        ),
+      ),
   })
 
 const run = (
@@ -63,7 +89,15 @@ const run = (
   const trace = options.trace ?? makeTrace()
   return Effect.runPromise(
     CodeMode.execute({
-      tools: { host: { sleepy: sleepyTool(trace), fail: failingTool, completed: completedTool(trace) } },
+      tools: {
+        host: {
+          sleepy: sleepyTool(trace),
+          fail: failingTool,
+          interrupt: interruptedTool,
+          completed: completedTool(trace),
+          stubborn: stubbornTool(trace),
+        },
+      },
       code,
       ...(options.limits ? { limits: options.limits } : {}),
     }),
@@ -174,8 +208,7 @@ describe("first-class promise values", () => {
   })
 
   test("an awaited failure is catchable exactly like a synchronous throw", async () => {
-    expect(
-      await value(`
+    const result = await run(`
       const p = tools.host.fail({})
       try {
         await p
@@ -183,57 +216,195 @@ describe("first-class promise values", () => {
       } catch (e) {
         return e.message
       }
-    `),
-    ).toBe("Lookup refused")
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("Lookup refused")
+    expect(result.warnings).toBeUndefined()
   })
 
-  test("a fire-and-forget call completes before the execution ends", async () => {
+  test("a fire-and-forget call is interrupted when the program returns", async () => {
     const trace = makeTrace()
-    const result = await value(
+    const result = await run(
       `
         tools.host.sleepy({ id: 1, ms: 30 })
         return "done"
       `,
       { trace },
     )
-    expect(result).toBe("done")
-    expect(trace.completed).toBe(1)
-    expect(trace.interrupted).toBe(0)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toBeUndefined()
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
-  test("a never-awaited failing call surfaces as an unhandled-rejection diagnostic", async () => {
-    const diagnostic = await error(`
+  test("a never-awaited failing call preserves the result and reports the rejection", async () => {
+    const result = await run(`
       tools.host.fail({})
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ToolFailure")
-    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
-    expect(diagnostic.message).toContain("Lookup refused")
-    expect(diagnostic.suggestions?.join(" ")).toContain("Await promises")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toStrictEqual([
+      { kind: "ToolFailure", message: "Unhandled rejection from an un-awaited promise: Lookup refused" },
+    ])
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 
-  test("a never-awaited failing async function surfaces as an unhandled promise rejection", async () => {
-    const diagnostic = await error(`
+  test("a never-awaited failing async function is reported with a successful result", async () => {
+    const result = await run(`
       const fail = async () => { throw new Error("boom") }
       fail()
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ExecutionFailure")
-    expect(diagnostic.message).toContain("Unhandled rejection from an un-awaited promise")
-    expect(diagnostic.message).toContain("boom")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: boom" },
+    ])
   })
 
-  test("drains promises started by an async function after an await", async () => {
-    const diagnostic = await error(`
-      const run = async () => {
-        await tools.host.sleepy({ id: 1 })
-        tools.host.fail({})
-      }
-      run()
+  test("output truncation bounds warning diagnostics with an in-band marker", async () => {
+    const result = await run(
+      `
+        for (let i = 0; i < 100; i += 1) Promise.reject(new Error("x".repeat(1_000)))
+        return "done"
+      `,
+      { limits: { maxOutputBytes: 64 } },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.truncated).toBe(true)
+    expect(result.warnings).toStrictEqual([
+      { kind: "Truncated", message: "100 additional warnings omitted by the output limit." },
+    ])
+  })
+
+  test("a budget-consuming value does not starve warnings", async () => {
+    const result = await run(
+      `
+        Promise.reject(new Error("boom"))
+        return "x".repeat(500)
+      `,
+      { limits: { maxOutputBytes: 128 } },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.truncated).toBe(true)
+    expect(typeof result.value).toBe("string")
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: boom" },
+    ])
+  })
+
+  test("an un-awaited async function's pending chain is interrupted at the return", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        const run = async () => {
+          await tools.host.sleepy({ id: 1, ms: 60000 })
+          tools.host.fail({})
+        }
+        run()
+        return "done"
+      `,
+      { trace },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toBeUndefined()
+    expect(trace.starts).toEqual([1])
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
+  })
+
+  test("reports every unhandled rejection in promise creation order", async () => {
+    const result = await run(`
+      Promise.reject(new Error("first"))
+      tools.host.fail({})
+      Promise.reject(new Error("third"))
       return "done"
     `)
-    expect(diagnostic.kind).toBe("ToolFailure")
-    expect(diagnostic.message).toContain("Lookup refused")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: first" },
+      { kind: "ToolFailure", message: "Unhandled rejection from an un-awaited promise: Lookup refused" },
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: third" },
+    ])
+  })
+
+  test("orders an async function rejection before promises created inside its body", async () => {
+    const result = await run(`
+      const outer = async () => {
+        Promise.reject(new Error("inner"))
+        throw new Error("outer")
+      }
+      outer()
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: outer" },
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: inner" },
+    ])
+  })
+
+  test("un-awaited interruptions settle without becoming rejections", async () => {
+    const result = await run(`
+      tools.host.interrupt({})
+      Promise.all([tools.host.interrupt({})])
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toBeUndefined()
+  })
+
+  test("a fatal program error cancels outstanding work without reporting unhandled rejections", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        tools.host.sleepy({ id: 1, ms: 1_000 })
+        throw new Error("boom")
+      `,
+      { trace },
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.message).toBe("Uncaught: boom")
+    expect("warnings" in result).toBe(false)
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
+  })
+
+  test("async-function promises remain owned by the execution after the function returns", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const launch = async () => {
+            tools.host.sleepy({ id: 1, ms: 60000 })
+            Promise.all([tools.host.sleepy({ id: 2, ms: 60000 })])
+            return "returned"
+          }
+          return await launch()
+        `,
+        { trace },
+      ),
+    ).toBe("returned")
+    // Both calls outlive launch() itself - they belong to the execution, not the function -
+    // and are interrupted only when the whole program returns.
+    expect(trace.starts).toEqual([1, 2])
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(2)
   })
 })
 
@@ -249,6 +420,22 @@ describe("promises at data boundaries", () => {
     const diagnostic = await error(`return Array.from([Promise.resolve(1)])`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("un-awaited Promise")
+  })
+
+  test("invalid returned data cancels pending work", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        const pending = tools.host.sleepy({ id: 1, ms: 60_000 })
+        return { pending }
+      `,
+      { trace, limits: { timeoutMs: 100 } },
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.kind).toBe("InvalidDataValue")
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
   test("passing an un-awaited promise as a tool argument is a clear diagnostic", async () => {
@@ -270,6 +457,59 @@ describe("promises at data boundaries", () => {
 })
 
 describe("Promise.all over arbitrary arrays", () => {
+  test("combinators return promises that can be assigned and awaited later", async () => {
+    expect(
+      await value(`
+        const all = Promise.all([Promise.resolve(1)])
+        const settled = Promise.allSettled([Promise.reject("no")])
+        const race = Promise.race([Promise.resolve(2)])
+        const promises = [all instanceof Promise, settled instanceof Promise, race instanceof Promise]
+        return [promises, await all, await settled, await race]
+      `),
+    ).toEqual([[true, true, true], [1], [{ status: "rejected", reason: "no" }], 2])
+  })
+
+  test("separately-created aggregate batches overlap before either is awaited", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const first = Promise.all([tools.host.sleepy({ id: 1, ms: 40 })])
+          const second = Promise.all([tools.host.sleepy({ id: 2, ms: 40 })])
+          return [await first, await second]
+        `,
+        { trace },
+      ),
+    ).toEqual([[1], [2]])
+    expect(trace.starts).toEqual([1, 2])
+    expect(trace.maxActive).toBeGreaterThan(1)
+  })
+
+  test("an aggregate created before a try block rejects at its later await", async () => {
+    expect(
+      await value(`
+        const aggregate = Promise.all([tools.host.fail({})])
+        try {
+          await aggregate
+          return "no"
+        } catch (error) {
+          return error.message
+        }
+      `),
+    ).toBe("Lookup refused")
+  })
+
+  test("awaiting an aggregate repeatedly does not rerun its members", async () => {
+    const result = await run(`
+      const aggregate = Promise.all([tools.host.sleepy({ id: 7 })])
+      return [await aggregate, await aggregate]
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toEqual([[7], [7]])
+    expect(result.toolCalls).toStrictEqual([{ name: "host.sleepy" }])
+  })
+
   test("mixes promises and plain values, preserving order", async () => {
     expect(
       await value(`
@@ -340,16 +580,18 @@ describe("Promise.all over arbitrary arrays", () => {
   })
 
   test("rejects with the first failure, catchable in-program", async () => {
-    expect(
-      await value(`
+    const result = await run(`
       try {
         await Promise.all([tools.host.sleepy({ id: 1 }), tools.host.fail({})])
         return "no"
       } catch (e) {
         return e.message
       }
-    `),
-    ).toBe("Lookup refused")
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("Lookup refused")
+    expect(result.warnings).toBeUndefined()
   })
 
   test("rejects before an earlier slow promise fulfills", async () => {
@@ -370,8 +612,53 @@ describe("Promise.all over arbitrary arrays", () => {
         { trace },
       ),
     ).toBe(0)
+    // The surviving member is observed (Promise.all handled it), so completion interrupts
+    // it instead of waiting for it.
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
+  })
+
+  test("fail-fast does not cancel a sibling the program still holds and awaits", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const slow = tools.host.sleepy({ id: 1, ms: 40 })
+          try {
+            await Promise.all([slow, tools.host.fail({})])
+            return "no"
+          } catch {}
+          return await slow
+        `,
+        { trace },
+      ),
+    ).toBe(1)
     expect(trace.completed).toBe(1)
     expect(trace.interrupted).toBe(0)
+  })
+
+  test("a slower observed sibling is interrupted at completion after failing fast", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const failLater = async () => {
+            await tools.host.sleepy({ id: 1, ms: 40 })
+            throw new Error("later")
+          }
+          const aggregate = Promise.all([Promise.reject(new Error("first")), failLater()])
+          try {
+            await aggregate
+            return "no"
+          } catch (error) {
+            return error.message
+          }
+        `,
+        { trace },
+      ),
+    ).toBe("first")
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
   test("a non-collection argument is a clear error", async () => {
@@ -413,50 +700,64 @@ describe("Promise.allSettled", () => {
       return settled.filter((s) => s.status === "rejected").length
     `)
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toBe(2)
+    if (!result.ok) return
+    expect(result.value).toBe(2)
+    expect(result.warnings).toBeUndefined()
   })
 })
 
 describe("Promise.race", () => {
-  test("first settlement wins and losers are interrupted", async () => {
+  test("first settlement wins and a direct loser is interrupted at completion", async () => {
     const trace = makeTrace()
     const result = await value(
       `
         const fast = tools.host.sleepy({ id: 1, ms: 10 })
-        const slow = tools.host.sleepy({ id: 2, ms: 5000 })
+        const slow = tools.host.sleepy({ id: 2, ms: 40 })
         return await Promise.race([fast, slow])
       `,
       { trace },
     )
     expect(result).toBe(1)
-    expect(trace.interrupted).toBe(1)
+    // The loser is observed (the race handled it), so the execution does not wait for it.
     expect(trace.completed).toBe(1)
+    expect(trace.interrupted).toBe(1)
   })
 
-  test("awaiting an interrupted loser afterwards is a catchable program failure", async () => {
+  test("a direct loser remains awaitable after the race settles", async () => {
     expect(
       await value(`
       const fast = tools.host.sleepy({ id: 1, ms: 10 })
-      const slow = tools.host.sleepy({ id: 2, ms: 5000 })
+      const slow = tools.host.sleepy({ id: 2, ms: 40 })
       const winner = await Promise.race([fast, slow])
-      try {
-        await slow
-        return "no"
-      } catch (e) {
-        return { winner, caught: e.message }
-      }
+      return { winner, loser: await slow }
     `),
-    ).toEqual({
-      winner: 1,
-      caught: "This tool call was interrupted because another value settled a Promise.race first.",
-    })
+    ).toEqual({ winner: 1, loser: 2 })
+  })
+
+  test("a nested aggregate loser and its members are interrupted at completion", async () => {
+    const trace = makeTrace()
+    expect(
+      await value(
+        `
+          const nested = Promise.all([
+            tools.host.sleepy({ id: 1, ms: 40 }),
+            tools.host.sleepy({ id: 2, ms: 40 }),
+          ])
+          return await Promise.race(["immediate", nested])
+        `,
+        { trace },
+      ),
+    ).toBe("immediate")
+    // The nested aggregate and its members are all observed, so nothing waits for them.
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(2)
   })
 
   test("a rejection can win the race", async () => {
     expect(
       await value(`
       try {
-        await Promise.race([tools.host.fail({}), tools.host.sleepy({ id: 1, ms: 5000 })])
+        await Promise.race([tools.host.fail({}), tools.host.sleepy({ id: 1, ms: 40 })])
         return "no"
       } catch (e) {
         return e.message
@@ -468,9 +769,18 @@ describe("Promise.race", () => {
   test("a plain value wins over pending promises", async () => {
     const trace = makeTrace()
     expect(
-      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 5000 }), "immediate"])`, { trace }),
+      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 40 }), "immediate"])`, { trace }),
     ).toBe("immediate")
+    expect(trace.completed).toBe(0)
     expect(trace.interrupted).toBe(1)
+  })
+
+  test("a rejected race loser is observed by the aggregate", async () => {
+    const result = await run(`return await Promise.race(["winner", tools.host.fail({})])`)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("winner")
+    expect(result.warnings).toBeUndefined()
   })
 
   test("an empty race is a clear error instead of hanging", async () => {
@@ -484,6 +794,9 @@ describe("Promise.resolve / Promise.reject", () => {
     expect(await value(`return await Promise.resolve(42)`)).toBe(42)
     expect(await value(`return await Promise.resolve(Promise.resolve("nested"))`)).toBe("nested")
     expect(await value(`return await Promise.resolve(tools.host.sleepy({ id: 3 }))`)).toBe(3)
+    expect(await value(`const promise = Promise.resolve(1); return [promise].includes(Promise.resolve(promise))`)).toBe(
+      true,
+    )
   })
 
   test("reject produces a promise whose await throws the reason", async () => {
@@ -497,6 +810,34 @@ describe("Promise.resolve / Promise.reject", () => {
       }
     `),
     ).toBe("nope")
+  })
+
+  test("a rejection observed after settlement is handled", async () => {
+    expect(
+      await value(`
+        const rejected = Promise.reject(new Error("handled"))
+        await tools.host.sleepy({ id: 1 })
+        try {
+          await rejected
+          return "no"
+        } catch (error) {
+          return error.message
+        }
+      `),
+    ).toBe("handled")
+  })
+
+  test("an abandoned rejected promise is reported as unhandled", async () => {
+    const result = await run(`
+      Promise.reject(new Error("abandoned"))
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: abandoned" },
+    ])
   })
 })
 
@@ -530,6 +871,67 @@ describe("timeout interruption of forked calls", () => {
     if (result.ok) return
     expect(result.error.kind).toBe("TimeoutExceeded")
     expect(trace.interrupted).toBe(2)
+  })
+
+  test("a non-settling race loser cannot hold the execution to the timeout", async () => {
+    const trace = makeTrace()
+    const result = await run(`return await Promise.race(["winner", tools.host.sleepy({ id: 1, ms: 60000 })])`, {
+      trace,
+      limits: { timeoutMs: 100 },
+    })
+    // Completion interrupts the observed loser immediately; the race result survives.
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("winner")
+    expect(result.warnings).toBeUndefined()
+    expect(trace.starts).toEqual([1])
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
+  })
+
+  test("a timeout during completion cleanup keeps the computed value and warns", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        tools.host.stubborn({ cleanupMs: 400 })
+        return "done"
+      `,
+      { trace, limits: { timeoutMs: 100 } },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toStrictEqual([
+      {
+        kind: "TimeoutExceeded",
+        message:
+          "The program returned, but background work was still running at the 100ms timeout and was interrupted. Await all started promises.",
+      },
+    ])
+    expect(trace.interrupted).toBe(1)
+    expect(trace.completed).toBe(0)
+  })
+
+  test("a timeout during completion cleanup reports the timeout warning before settled rejections", async () => {
+    const result = await run(
+      `
+        tools.host.fail({})
+        tools.host.stubborn({ cleanupMs: 400 })
+        return "done"
+      `,
+      { limits: { timeoutMs: 100 } },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toStrictEqual([
+      {
+        kind: "TimeoutExceeded",
+        message:
+          "The program returned, but background work was still running at the 100ms timeout and was interrupted. Await all started promises.",
+      },
+      { kind: "ToolFailure", message: "Unhandled rejection from an un-awaited promise: Lookup refused" },
+    ])
   })
 })
 

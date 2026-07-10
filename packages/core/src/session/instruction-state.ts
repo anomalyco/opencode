@@ -1,6 +1,6 @@
 export * as InstructionState from "./instruction-state"
 
-import { and, asc, desc, eq, gt, inArray, lte } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -12,6 +12,8 @@ import { SessionSchema } from "./schema"
 import { InstructionBlobTable, InstructionStateTable, SessionTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
+
+const decodeInstructionsUpdated = Schema.decodeUnknownSync(SessionEvent.InstructionsUpdated.data)
 
 export const prepare = Effect.fn("InstructionState.prepare")(function* (
   db: DatabaseService,
@@ -69,11 +71,13 @@ export const advanceEpoch = Effect.fn("InstructionState.advanceEpoch")(function*
   sessionID: SessionSchema.ID,
   epochStart: number,
 ) {
-  const stored = yield* find(db, sessionID)
-  if (!stored) return
   yield* db
     .update(InstructionStateTable)
-    .set({ epoch_start: epochStart, through_seq: epochStart, initial_values: stored.current_values })
+    .set({
+      epoch_start: epochStart,
+      through_seq: epochStart,
+      initial_values: sql`${InstructionStateTable.current_values}`,
+    })
     .where(eq(InstructionStateTable.session_id, sessionID))
     .run()
     .pipe(Effect.orDie)
@@ -130,7 +134,7 @@ export const assemble = Effect.fn("InstructionState.assemble")(function* (
   const rows = yield* instructionUpdatesAfter(db, sessionID, state.epoch_start)
   const updates = rows.map((row) => ({
     row,
-    delta: Schema.decodeUnknownSync(SessionEvent.InstructionsUpdated.data)(row.data).delta,
+    delta: decodeInstructionsUpdated(row.data).delta,
   }))
   const blobs = yield* loadBlobs(db, [
     ...Object.values(state.initial_values),
@@ -194,8 +198,11 @@ const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, values: Read
   const batches = Array.from({ length: Math.ceil(hashes.length / 500) }, (_, index) =>
     hashes.slice(index * 500, (index + 1) * 500),
   )
-  const rows = (yield* Effect.forEach(batches, (batch) =>
-    db.select().from(InstructionBlobTable).where(inArray(InstructionBlobTable.hash, batch)).all().pipe(Effect.orDie),
+  const rows = (yield* Effect.forEach(
+    batches,
+    (batch) =>
+      db.select().from(InstructionBlobTable).where(inArray(InstructionBlobTable.hash, batch)).all().pipe(Effect.orDie),
+    { concurrency: 4 },
   )).flat()
   const blobs = new Map(rows.map((row) => [row.hash, row.value]))
   for (const hash of hashes) {
@@ -304,7 +311,7 @@ function fold(rows: ReadonlyArray<InstructionEventRow>) {
         ? { epochStart: row.seq, throughSeq: row.seq, initial: state.current, current: state.current }
         : undefined
     if (row.type !== instructionEventType) return state
-    const delta = Schema.decodeUnknownSync(SessionEvent.InstructionsUpdated.data)(row.data).delta
+    const delta = decodeInstructionsUpdated(row.data).delta
     const current = Instructions.applyHashDelta(state?.current ?? {}, delta)
     return state
       ? { ...state, throughSeq: row.seq, current }

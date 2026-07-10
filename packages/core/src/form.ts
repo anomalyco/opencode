@@ -16,6 +16,9 @@ export type Info = typeof Info.Type
 export const Field = Form.Field
 export type Field = Form.Field
 
+export const Fields = Form.Fields
+export type Fields = Form.Fields
+
 export const When = Form.When
 export type When = Form.When
 
@@ -64,9 +67,7 @@ export class InvalidFormError extends Schema.TaggedErrorClass<InvalidFormError>(
   message: Schema.String,
 }) {}
 
-export type CreateInput =
-  | (Omit<Form.FormInfo, "id"> & { readonly id?: ID })
-  | (Omit<Form.UrlInfo, "id"> & { readonly id?: ID })
+export type CreateInput = Omit<Form.Info, "id"> & { readonly id?: ID }
 
 export interface ReplyInput {
   readonly id: ID
@@ -74,7 +75,7 @@ export interface ReplyInput {
 }
 
 export interface ListInput {
-  readonly sessionID?: Form.FormInfo["sessionID"]
+  readonly sessionID?: Form.Info["sessionID"]
 }
 
 export interface Interface {
@@ -125,20 +126,15 @@ export const layer = Layer.effect(
           const id = input.id ?? ID.create()
           const existing = yield* Cache.getSuccess(forms, id)
           if (Option.isSome(existing)) return yield* new AlreadyExistsError({ id })
-          if (input.mode === "form") {
-            const invalid = validateFields(input.fields)
-            if (invalid) return yield* new InvalidFormError({ message: invalid })
-          }
-          const base = {
+          const invalid = validateFields(input.fields)
+          if (invalid) return yield* new InvalidFormError({ message: invalid })
+          const form: Info = {
             id,
             sessionID: input.sessionID,
             title: input.title,
             ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+            fields: input.fields,
           }
-          const form: Info =
-            input.mode === "form"
-              ? { ...base, mode: "form", fields: input.fields }
-              : { ...base, mode: "url", url: input.url }
           const entry: Entry = {
             form,
             state: { status: "pending" },
@@ -228,16 +224,16 @@ export const locationLayer = layer
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })
 
 function validateAnswer(form: Info, answer: Answer) {
-  if (form.mode === "url") {
-    if (Object.keys(answer).length === 0) return
-    return "URL forms must be answered with an empty answer"
-  }
-  const fields = new Map(form.fields.map((field) => [field.key, field]))
+  const fields = new Map(form.fields.map((field) => [field.key, field] as const))
   for (const key of Object.keys(answer)) {
     if (!fields.has(key)) return `Unknown form field: ${key}`
   }
   for (const field of form.fields) {
     const value = answer[field.key]
+    if (field.type === "external") {
+      if (value !== true) return `External form field must be acknowledged: ${field.key}`
+      continue
+    }
     const active = isActive(field, answer)
     if (value === undefined) {
       if (field.required && active) return `Missing required form field: ${field.key}`
@@ -249,7 +245,9 @@ function validateAnswer(form: Info, answer: Answer) {
   }
 }
 
-function isActive(field: Form.Field, answer: Answer) {
+type InputField = Exclude<Form.Field, Form.ExternalField>
+
+function isActive(field: InputField, answer: Answer) {
   if (!field.when) return true
   return field.when.every((when) => matches(when, answer[when.key]))
 }
@@ -267,9 +265,13 @@ function matches(when: Form.When, value: Form.Value | undefined) {
 // are closed. Rejecting these at creation surfaces authoring mistakes to the caller instead of
 // silently never matching.
 function validateFields(fields: ReadonlyArray<Form.Field>) {
-  const earlier = new Map<string, Form.Field>()
+  if (fields.length === 0) return "Form must have at least one field"
+  const earlier = new Map<string, InputField>()
+  const keys = new Set<string>()
   for (const field of fields) {
-    if (earlier.has(field.key)) return `Duplicate form field key: ${field.key}`
+    if (keys.has(field.key)) return `Duplicate form field key: ${field.key}`
+    keys.add(field.key)
+    if (field.type === "external") continue
     for (const when of field.when ?? []) {
       const target = earlier.get(when.key)
       if (!target) return `Form field condition must reference an earlier field: ${field.key} -> ${when.key}`
@@ -280,7 +282,7 @@ function validateFields(fields: ReadonlyArray<Form.Field>) {
   }
 }
 
-function validateWhen(when: Form.When, target: Form.Field) {
+function validateWhen(when: Form.When, target: InputField) {
   if (target.type === "boolean") {
     if (typeof when.value !== "boolean") return "Form field condition value must be a boolean"
     return
@@ -297,7 +299,7 @@ function validateWhen(when: Form.When, target: Form.Field) {
   }
 }
 
-function validateField(field: Form.Field, value: Form.Value): string | undefined {
+function validateField(field: InputField, value: Form.Value): string | undefined {
   if (field.type === "string") {
     if (typeof value !== "string") return `Expected string for form field: ${field.key}`
     if (field.required && value.length === 0) return `Missing required form field: ${field.key}`

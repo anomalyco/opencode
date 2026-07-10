@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
+import { Form } from "../src/form.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -47,6 +48,33 @@ describe("contract hygiene", () => {
     ).toEqual({ text: "completed" })
   })
 
+  test("forms require at least one field", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "Empty form",
+        fields: [],
+      }),
+    ).toThrow()
+    expect(
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
+      }).fields,
+    ).toHaveLength(1)
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ type: "external", url: "https://example.com" }],
+      }),
+    ).toThrow()
+  })
+
   test("model defaults and provider overlays preserve public invariants", () => {
     const id = Model.ID.make("model")
     expect(Model.Info.empty(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
@@ -69,6 +97,10 @@ describe("contract hygiene", () => {
     const identifiers = [
       Agent.Color,
       FileSystem.Submatch,
+      Form.Field,
+      Form.Fields,
+      Form.Info,
+      Form.ExternalField,
       Mcp.Resource,
       Mcp.ResourceTemplate,
       Mcp.ResourceCatalog,

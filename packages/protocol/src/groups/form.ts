@@ -14,11 +14,9 @@ import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const CreatePayload = Schema.Struct({
   id: Form.ID.pipe(Schema.optional),
-  title: Form.FormInfo.fields.title,
-  metadata: Form.FormInfo.fields.metadata,
-  mode: Schema.Literals(["form", "url"]),
-  fields: Form.FormInfo.fields.fields.pipe(Schema.optional),
-  url: Form.UrlInfo.fields.url.pipe(Schema.optional),
+  title: Form.Info.fields.title,
+  metadata: Form.Info.fields.metadata,
+  fields: Form.Info.fields.fields,
 }).annotate({ identifier: "Form.CreatePayload" })
 
 export type CreatePayload = typeof CreatePayload.Type

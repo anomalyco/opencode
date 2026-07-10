@@ -602,6 +602,7 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
         "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
+        "- Execution ends when the program returns; pending promises are interrupted, so await every call whose completion matters.",
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
         ...(complete
           ? []

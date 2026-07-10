@@ -15,7 +15,6 @@ const input = {
   id: formID,
   sessionID: SessionSchema.ID.make("ses_test"),
   title: "Test form",
-  mode: "form",
   fields: [{ key: "name", type: "string", required: true }],
 } satisfies Form.CreateInput
 
@@ -47,7 +46,6 @@ describe("Form", () => {
       const created = yield* service.create({
         sessionID: "global",
         title: "MCP input",
-        mode: "form",
         fields: [{ key: "name", type: "string", required: true }],
       })
       expect(created.sessionID).toBe("global")
@@ -59,6 +57,14 @@ describe("Form", () => {
 
       yield* service.reply({ id: created.id, answer: { name: "Ava" } })
       expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { name: "Ava" } })
+
+      const externalOnly = yield* service.create({
+        sessionID: "global",
+        title: "External setup",
+        fields: [{ key: "setup", type: "external", url: "https://example.com/setup" }],
+      })
+      yield* service.reply({ id: externalOnly.id, answer: { setup: true } })
+      expect(yield* service.state(externalOnly.id)).toEqual({ status: "answered", answer: { setup: true } })
     }),
   )
 
@@ -68,15 +74,18 @@ describe("Form", () => {
       const created = yield* service.create({
         sessionID: "global",
         title: "Conditional form",
-        mode: "form",
         fields: [
           { key: "confirm", type: "boolean", required: true },
           { key: "reason", type: "string", required: true, when: [{ key: "confirm", op: "eq", value: false }] },
         ],
       })
 
-      const inactive = yield* service.reply({ id: created.id, answer: { confirm: true, reason: "x" } }).pipe(Effect.flip)
-      expect(inactive).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: reason" }))
+      const inactive = yield* service
+        .reply({ id: created.id, answer: { confirm: true, reason: "x" } })
+        .pipe(Effect.flip)
+      expect(inactive).toEqual(
+        new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: reason" }),
+      )
 
       const missing = yield* service.reply({ id: created.id, answer: { confirm: false } }).pipe(Effect.flip)
       expect(missing).toEqual(
@@ -101,7 +110,6 @@ describe("Form", () => {
       const created = yield* service.create({
         sessionID: "global",
         title: "Multiselect form",
-        mode: "form",
         fields: [
           { key: "langs", type: "multiselect", options },
           { key: "goVersion", type: "string", required: true, when: [{ key: "langs", op: "eq", value: "go" }] },
@@ -124,7 +132,6 @@ describe("Form", () => {
       const created = yield* service.create({
         sessionID: "global",
         title: "Dependent form",
-        mode: "form",
         fields: [
           { key: "a", type: "boolean" },
           { key: "b", type: "boolean" },
@@ -142,7 +149,9 @@ describe("Form", () => {
       })
 
       const missingX = yield* service.reply({ id: created.id, answer: { a: true, b: true, z: "ok" } }).pipe(Effect.flip)
-      expect(missingX).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Missing required form field: x" }))
+      expect(missingX).toEqual(
+        new Form.InvalidAnswerError({ id: created.id, message: "Missing required form field: x" }),
+      )
 
       const inactiveX = yield* service
         .reply({ id: created.id, answer: { a: true, b: false, x: "nope", z: "ok" } })
@@ -150,7 +159,9 @@ describe("Form", () => {
       expect(inactiveX).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: x" }))
 
       const missingZ = yield* service.reply({ id: created.id, answer: { a: true, b: false } }).pipe(Effect.flip)
-      expect(missingZ).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Missing required form field: z" }))
+      expect(missingZ).toEqual(
+        new Form.InvalidAnswerError({ id: created.id, message: "Missing required form field: z" }),
+      )
 
       yield* service.reply({ id: created.id, answer: { a: true, b: false, z: "ok" } })
       expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { a: true, b: false, z: "ok" } })
@@ -167,7 +178,6 @@ describe("Form", () => {
       const created = yield* service.create({
         sessionID: "global",
         title: "Selection form",
-        mode: "form",
         fields: [
           { key: "langs", type: "multiselect", options },
           { key: "note", type: "string", required: true, when: [{ key: "langs", op: "neq", value: "go" }] },
@@ -186,7 +196,9 @@ describe("Form", () => {
       )
 
       const inactive = yield* service.reply({ id: created.id, answer: { langs: ["go"], note: "x" } }).pipe(Effect.flip)
-      expect(inactive).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: note" }))
+      expect(inactive).toEqual(
+        new Form.InvalidAnswerError({ id: created.id, message: "Form field is not active: note" }),
+      )
 
       yield* service.reply({ id: created.id, answer: { langs: ["go"] } })
       expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { langs: ["go"] } })
@@ -199,7 +211,6 @@ describe("Form", () => {
       const created = yield* service.create({
         sessionID: "global",
         title: "Cascading form",
-        mode: "form",
         fields: [
           { key: "a", type: "boolean" },
           { key: "b", type: "string", when: [{ key: "a", op: "eq", value: true }] },
@@ -220,14 +231,14 @@ describe("Form", () => {
   it.effect("rejects invalid when definitions at creation", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service
-      const flipCreate = (fields: ReadonlyArray<Form.Field>) =>
-        service.create({ sessionID: "global", title: "Invalid form", mode: "form", fields }).pipe(Effect.flip)
+      const flipCreate = (fields: Form.CreateInput["fields"]) =>
+        service.create({ sessionID: "global", title: "Invalid form", fields }).pipe(Effect.flip)
 
       expect(
-        yield* flipCreate([
-          { key: "b", type: "string", when: [{ key: "missing", op: "eq", value: "x" }] },
-        ]),
-      ).toEqual(new Form.InvalidFormError({ message: "Form field condition must reference an earlier field: b -> missing" }))
+        yield* flipCreate([{ key: "b", type: "string", when: [{ key: "missing", op: "eq", value: "x" }] }]),
+      ).toEqual(
+        new Form.InvalidFormError({ message: "Form field condition must reference an earlier field: b -> missing" }),
+      )
 
       expect(
         yield* flipCreate([
@@ -238,12 +249,17 @@ describe("Form", () => {
 
       expect(
         yield* flipCreate([
+          { key: "a", type: "external", url: "https://example.com" },
+          { key: "a", type: "string" },
+        ]),
+      ).toEqual(new Form.InvalidFormError({ message: "Duplicate form field key: a" }))
+
+      expect(
+        yield* flipCreate([
           { key: "a", type: "boolean" },
           { key: "b", type: "string", when: [{ key: "a", op: "eq", value: "yes" }] },
         ]),
-      ).toEqual(
-        new Form.InvalidFormError({ message: "Form field condition value must be a boolean: b -> a" }),
-      )
+      ).toEqual(new Form.InvalidFormError({ message: "Form field condition value must be a boolean: b -> a" }))
 
       expect(
         yield* flipCreate([
@@ -255,6 +271,40 @@ describe("Form", () => {
           message: "Form field condition value must be one of the field's options: b -> a",
         }),
       )
+    }),
+  )
+
+  it.effect("requires external field acknowledgements", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const created = yield* service.create({
+        sessionID: "global",
+        title: "External setup",
+        fields: [
+          { key: "authorization", type: "external", url: "https://example.com/setup", title: "Open setup" },
+          { key: "name", type: "string", required: true },
+        ],
+      })
+
+      const invalidAnswers: ReadonlyArray<Form.Answer> = [
+        { name: "Ava" },
+        { authorization: false, name: "Ava" },
+        { authorization: "yes", name: "Ava" },
+      ]
+      for (const answer of invalidAnswers) {
+        expect(yield* service.reply({ id: created.id, answer }).pipe(Effect.flip)).toEqual(
+          new Form.InvalidAnswerError({
+            id: created.id,
+            message: "External form field must be acknowledged: authorization",
+          }),
+        )
+      }
+
+      yield* service.reply({ id: created.id, answer: { authorization: true, name: "Ava" } })
+      expect(yield* service.state(created.id)).toEqual({
+        status: "answered",
+        answer: { authorization: true, name: "Ava" },
+      })
     }),
   )
 

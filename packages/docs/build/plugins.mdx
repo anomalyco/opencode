@@ -5,20 +5,19 @@ description: "Extend OpenCode with plugins."
 
 Plugins extend OpenCode in-process. They can transform agents, models, commands,
 integrations, references, skills, and tools; intercept model requests and tool
-execution; and call a location-scoped subset of the V2 client.
+execution; and call a subset of the V2 client.
 
 <Warning>
   The V2 plugin API is beta. Entrypoints, hooks, draft shapes, and configuration
-  may change before the stable release. Use only the `/v2` exports described on
-  this page; the root `@opencode-ai/plugin` API is the legacy API.
+  may change before the stable release. Use the `/v2` exports described on this
+  page.
 </Warning>
 
 ## Load plugins
 
 Plugins can be loaded from npm packages, explicit local paths, or config
 directories. Each module must have one default export containing a unique
-plugin `id` and either a Promise `setup` function or an Effect `effect`
-function.
+plugin `id` and a `setup` function.
 
 ### Configuration
 
@@ -75,26 +74,25 @@ relative config entry.
 
 ### Enable and disable
 
-A string beginning with `-` removes a previously selected target. `*` matches
-everything, and a suffix of `.*` matches an ID or target prefix. Directives are
+A string beginning with `-` disables plugins by their exported `id`. `*`
+matches every ID, and a suffix of `.*` matches an ID prefix. Directives are
 applied in order:
 
 ```jsonc title="opencode.jsonc"
 {
   "plugins": [
+    "./plugins/reviewer.ts",
+    "-acme.reviewer",
     "-opencode.provider.*",
-    "opencode.provider.openai",
-    "-./plugins/old.ts",
-    "-*",
-    "./plugins/only-this-one.ts"
+    "opencode.provider.openai"
   ]
 }
 ```
 
-Use the same package specifier or resolved local target to remove an external
-plugin. Built-in and embedded plugins can be selected by their plugin ID.
-Explicit config directives run after local auto-discovery, so they can disable
-discovered plugins.
+Package specifiers and local paths locate plugin modules; they are not disable
+selectors. Use the `id` from the plugin's default export to disable it. A later
+ID entry re-enables a loaded or built-in plugin. Explicit config directives run
+after local auto-discovery, so they can disable discovered plugins by ID.
 
 User plugins are activated in configured order between OpenCode's internal
 plugin phases. Hooks run sequentially in registration order, and later hooks
@@ -114,12 +112,10 @@ visible from the plugin file, for example:
 
 ```sh
 cd .opencode
-bun add @opencode-ai/plugin@1.17.15 effect@4.0.0-beta.83
+bun add @opencode-ai/plugin@next
 ```
 
-`effect` is required for Effect plugins and for the `Schema` values used by
-typed tools. A Promise plugin that does not define tools may only need
-`@opencode-ai/plugin`. Match these versions to the OpenCode release you target.
+Match the plugin package version to the OpenCode release you target.
 
 Configuration and discovered plugin files under watched config directories are
 reloaded when they change. Reloading replaces the active plugin generation and
@@ -128,8 +124,7 @@ package version or a local dependency when no watched file changed.
 
 ## Create a plugin
 
-The Promise API is the simplest option. Export the result of `Plugin.define`
-as the module default:
+Export the result of `Plugin.define` as the module default:
 
 ```ts title=".opencode/plugins/reviewer.ts"
 import { Plugin } from "@opencode-ai/plugin/v2"
@@ -152,42 +147,15 @@ export default Plugin.define({
 })
 ```
 
-`setup` runs each time the plugin is activated for a Location. Register
-long-lived behavior during setup; do not wait there on an infinite event
-stream.
+`setup` runs each time the plugin is activated. Register long-lived behavior
+during setup; do not wait there on an infinite event stream.
 
-### Effect plugins
+### Context
 
-Use the Effect entrypoint when the implementation benefits from Effect
-composition, fibers, or scoped resources:
-
-```ts title=".opencode/plugins/reviewer-effect.ts"
-import { Plugin } from "@opencode-ai/plugin/v2/effect"
-import { Effect } from "effect"
-
-export default Plugin.define({
-  id: "acme.reviewer-effect",
-  effect: (ctx) =>
-    Effect.gen(function* () {
-      yield* ctx.agent.transform((agents) => {
-        agents.update("reviewer", (agent) => {
-          agent.description = "Reviews code for regressions"
-          agent.mode = "subagent"
-        })
-      })
-    }),
-})
-```
-
-The plugin effect is scoped. Finalizers, scoped fibers, and registrations are
-released when the plugin reloads or unloads. OpenCode deliberately isolates the
-effect from its private Core services; use only the public `ctx` capabilities.
-
-## Context
-
-Promise methods return Promises; the equivalent Effect methods return
-`Effect`. Read and action methods use the same inputs and location-aware
-responses as the V2 client APIs.
+The plugin context is essentially an [OpenCode server client](/build/client).
+Its read and action methods use the same inputs and responses as the client. It
+adds plugin-only methods for transforms, runtime hooks, reloads, registrations,
+and plugin options.
 
 | Capability | Available operations |
 | --- | --- |
@@ -206,16 +174,11 @@ responses as the V2 client APIs.
 | `ctx.event` | `subscribe` to the current public server event stream |
 | `ctx.options` | Readonly options from the matching config object |
 
-Unlike the legacy API, V2 does not provide `$`, `directory`, `worktree`, or a
-general SDK client on the context. A plugin is Location-scoped, and the exposed
-domain clients apply that Location by default.
-
 ### Transform hooks
 
-Transforms synchronously edit a draft whenever a stateful domain is built.
-Registering or disposing a transform rebuilds the domain from fresh state and
-runs all active transforms in order. Call the domain's `reload()` method when
-external data captured by a transform changes.
+Transform hooks let a plugin modify how OpenCode is configured. Use them to add
+or remove definitions, override settings, choose defaults, and provide tools or
+other sources.
 
 | Transform | Draft operations |
 | --- | --- |
@@ -227,10 +190,41 @@ external data captured by a transform changes.
 | `skill.transform` | `source`, `list` |
 | `tool.transform` | `add` |
 
-Hook registrations are owned by the plugin scope. Transform and runtime hook
-calls also return a `Registration` with `dispose` for explicit cleanup. Tool
-contributions currently remain until the owning plugin scope closes, so prefer
-scope cleanup for plugin-wide teardown while this API is beta.
+Here's an example that keeps models synced from a remote source:
+
+```js title=".opencode/plugins/remote-models.js"
+import { Plugin } from "@opencode-ai/plugin/v2"
+
+export default Plugin.define({
+  id: "acme.remote-models",
+  setup: async (ctx) => {
+    let models = []
+
+    await ctx.catalog.transform((catalog) => {
+      for (const model of models) {
+        catalog.model.update(model.providerID, model.id, (draft) => Object.assign(draft, model))
+      }
+    })
+
+    const refresh = async () => {
+      const response = await fetch("https://example.com/opencode/models.json", {
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!response.ok) return
+      models = await response.json()
+      await ctx.catalog.reload()
+    }
+
+    await refresh()
+    setInterval(() => void refresh().catch(console.error), 60_000)
+  },
+})
+```
+
+`ctx.catalog.reload()` replays every catalog transform to derive the new
+catalog. Each plugin's logic remains composed with the others, so a later
+plugin can still modify models added by an earlier one. The catalog updates
+without restarting OpenCode.
 
 ### Runtime hooks
 
@@ -269,27 +263,39 @@ export default Plugin.define({
 A hook failure fails the operation it intercepts. Keep runtime hooks fast and
 handle expected errors inside the callback.
 
-## Add a tool
+## Examples
 
-Use `Tool.make` with Effect schemas. Promise tools use async executors:
+### Add a tool
 
-```ts title=".opencode/plugins/greeting.ts"
+Pass a tool declaration to `tools.add`. Define its input with JSON Schema and
+use an async executor:
+
+```js title=".opencode/plugins/greeting.js"
 import { Plugin } from "@opencode-ai/plugin/v2"
-import { Tool } from "@opencode-ai/plugin/v2/tool"
-import { Schema } from "effect"
-
-const greeting = Tool.make({
-  description: "Create a greeting",
-  input: Schema.Struct({ name: Schema.String }),
-  output: Schema.String,
-  execute: async ({ name }) => `Hello, ${name}!`,
-})
 
 export default Plugin.define({
   id: "acme.greeting",
   setup: async (ctx) => {
     await ctx.tool.transform((tools) => {
-      tools.add("greeting", greeting)
+      tools.add({
+        name: "greeting",
+        description: "Create a greeting",
+        jsonSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+          },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        execute: async ({ name }) => {
+          const text = `Hello, ${name}!`
+          return {
+            structured: { greeting: text },
+            content: [{ type: "text", text }],
+          }
+        },
+      })
     })
   },
 })
@@ -297,38 +303,48 @@ export default Plugin.define({
 
 Unsupported characters in tool and group names are normalized to underscores.
 The resulting exposed key must begin with a letter and contain at most 64
-letters, digits, underscores, or hyphens. `tools.add` also accepts
-`{ group, deferred }`:
+letters, digits, underscores, or hyphens. Set `options` on the declaration to
+configure registration with `{ group, deferred }`:
 
 - `group` prefixes and groups the exposed tool name.
 - `deferred: true` makes the tool available through the deferred `execute`
   tool instead of exposing it directly.
 
 The executor receives a second context argument containing `sessionID`,
-`agent`, `assistantMessageID`, and `toolCallID`. Use
-`Tool.withPermission(tool, "permission-name")` to assign a permission key.
-Effect plugins import the helper from `@opencode-ai/plugin/v2/effect/tool` and
-return an `Effect` from `execute`.
+`agent`, `assistantMessageID`, and `toolCallID`.
 
-## Types
+### Add a command
 
-`Plugin.define` infers the context and callbacks. The Promise root also
-re-exports the canonical `Agent`, `Command`, `Connection`, `Credential`,
-`Integration`, `Model`, `Provider`, `Reference`, and `Skill` schema namespaces.
-Import narrower API types from their public subpaths when needed:
+```js title=".opencode/plugins/review-command.js"
+import { Plugin } from "@opencode-ai/plugin/v2"
 
-```ts
-import { Plugin, Model } from "@opencode-ai/plugin/v2"
-import type { Context } from "@opencode-ai/plugin/v2/plugin"
-import type { AgentDraft } from "@opencode-ai/plugin/v2/agent"
-import type { ToolExecuteBeforeEvent } from "@opencode-ai/plugin/v2/tool"
+export default Plugin.define({
+  id: "acme.review-command",
+  setup: async (ctx) => {
+    await ctx.command.transform((commands) => {
+      commands.update("review", (command) => {
+        command.description = "Review the current changes"
+        command.template = "Review the current changes for correctness and missing tests."
+      })
+    })
+  },
+})
 ```
 
-Effect equivalents live below `@opencode-ai/plugin/v2/effect`, such as
-`@opencode-ai/plugin/v2/effect/plugin` and
-`@opencode-ai/plugin/v2/effect/tool`. Avoid importing types or runtime values
-from `@opencode-ai/core` or `@opencode-ai/server`; those are private host
-implementation details.
+### Set the default model
+
+```js title=".opencode/plugins/default-model.js"
+import { Plugin } from "@opencode-ai/plugin/v2"
+
+export default Plugin.define({
+  id: "acme.default-model",
+  setup: async (ctx) => {
+    await ctx.catalog.transform((catalog) => {
+      catalog.model.default.set("anthropic", "claude-sonnet-4-5")
+    })
+  },
+})
+```
 
 ## Publish a package
 
@@ -342,8 +358,7 @@ manifest is:
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.15",
-    "effect": "4.0.0-beta.83"
+    "@opencode-ai/plugin": "next"
   }
 }
 ```
@@ -355,7 +370,7 @@ change.
 
 ## Verify loading
 
-List active plugin IDs for the current Location through the V2 API:
+List active plugin IDs through the V2 API:
 
 ```sh
 opencode2 api get /api/plugin
@@ -365,3 +380,40 @@ If a plugin is absent, check the server log described in
 [Troubleshooting](/troubleshooting#read-logs). Invalid modules and setup failures are
 logged; one failing package does not prevent unrelated valid packages from
 being resolved.
+
+## Effect
+
+OpenCode provides a first-class Effect API for plugins through the
+`@opencode-ai/plugin/v2/effect` entrypoint. Install `effect` alongside the
+plugin package and export an `effect` function instead of `setup`:
+
+```sh
+bun add @opencode-ai/plugin@next effect
+```
+
+```ts title=".opencode/plugins/reviewer-effect.ts"
+import { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.reviewer-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* ctx.agent.transform((agents) => {
+        agents.update("reviewer", (agent) => {
+          agent.description = "Reviews code for regressions"
+          agent.mode = "subagent"
+        })
+      })
+    }),
+})
+```
+
+Context operations return Effects. The plugin effect is scoped, so finalizers,
+fibers, and registrations are released when the plugin reloads or unloads.
+OpenCode does not expose its private Core services to the plugin; use the
+capabilities on `ctx`.
+
+Typed tools can use `Schema` from `effect` and the contracts exported from
+`@opencode-ai/plugin/v2/effect/tool`. Their executors return an Effect and may
+fail with the typed tool failure channel.

@@ -2444,195 +2444,359 @@ export type FormRequestListInput = {
 
 export type FormRequestListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<
-    | {
-        id: string
-        sessionID: string
-        title: string
-        metadata?: { [x: string]: JsonValue }
-        mode: "form"
-        fields: Array<
-          | {
+  data: Array<{
+    id: string
+    sessionID: string
+    title: string
+    metadata?: { [x: string]: JsonValue }
+    fields: [
+      (
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "string"
-              format?: "email" | "uri" | "date" | "date-time"
-              minLength?: number
-              maxLength?: number
-              pattern?: string
-              placeholder?: string
-              default?: string
-              options?: Array<{ value: string; label: string; description?: string }>
-              custom?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "number"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "integer"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "boolean"
-              default?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "multiselect"
-              options: Array<{ value: string; label: string; description?: string }>
-              minItems?: number
-              maxItems?: number
-              custom?: boolean
-              default?: Array<string>
-            }
-        >
-      }
-    | { id: string; sessionID: string; title: string; metadata?: { [x: string]: JsonValue }; mode: "url"; url: string }
-  >
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      ),
+      ...Array<
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      >,
+    ]
+  }>
 }
 
 export type FormListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type FormListOutput = {
-  data: Array<
-    | {
-        id: string
-        sessionID: string
-        title: string
-        metadata?: { [x: string]: JsonValue }
-        mode: "form"
-        fields: Array<
-          | {
+  data: Array<{
+    id: string
+    sessionID: string
+    title: string
+    metadata?: { [x: string]: JsonValue }
+    fields: [
+      (
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "string"
-              format?: "email" | "uri" | "date" | "date-time"
-              minLength?: number
-              maxLength?: number
-              pattern?: string
-              placeholder?: string
-              default?: string
-              options?: Array<{ value: string; label: string; description?: string }>
-              custom?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "number"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "integer"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "boolean"
-              default?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "multiselect"
-              options: Array<{ value: string; label: string; description?: string }>
-              minItems?: number
-              maxItems?: number
-              custom?: boolean
-              default?: Array<string>
-            }
-        >
-      }
-    | { id: string; sessionID: string; title: string; metadata?: { [x: string]: JsonValue }; mode: "url"; url: string }
-  >
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      ),
+      ...Array<
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      >,
+    ]
+  }>
 }["data"]
 
 export type FormCreateInput = {
@@ -2641,678 +2805,983 @@ export type FormCreateInput = {
     readonly id?: string | null
     readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly mode: "form" | "url"
-    readonly fields?: ReadonlyArray<
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+    readonly fields: readonly [
+      (
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "string"
-          readonly format?: "email" | "uri" | "date" | "date-time"
-          readonly minLength?: number
-          readonly maxLength?: number
-          readonly pattern?: string
-          readonly placeholder?: string
-          readonly default?: string
-          readonly options?: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly custom?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "number"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "integer"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "boolean"
-          readonly default?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "multiselect"
-          readonly options: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly minItems?: number
-          readonly maxItems?: number
-          readonly custom?: boolean
-          readonly default?: ReadonlyArray<string>
-        }
-    > | null
-    readonly url?: string | null
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      ),
+      ...Array<
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      >,
+    ]
   }["id"]
   readonly title: {
     readonly id?: string | null
     readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly mode: "form" | "url"
-    readonly fields?: ReadonlyArray<
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+    readonly fields: readonly [
+      (
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "string"
-          readonly format?: "email" | "uri" | "date" | "date-time"
-          readonly minLength?: number
-          readonly maxLength?: number
-          readonly pattern?: string
-          readonly placeholder?: string
-          readonly default?: string
-          readonly options?: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly custom?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "number"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "integer"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "boolean"
-          readonly default?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "multiselect"
-          readonly options: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly minItems?: number
-          readonly maxItems?: number
-          readonly custom?: boolean
-          readonly default?: ReadonlyArray<string>
-        }
-    > | null
-    readonly url?: string | null
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      ),
+      ...Array<
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      >,
+    ]
   }["title"]
   readonly metadata?: {
     readonly id?: string | null
     readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly mode: "form" | "url"
-    readonly fields?: ReadonlyArray<
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+    readonly fields: readonly [
+      (
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "string"
-          readonly format?: "email" | "uri" | "date" | "date-time"
-          readonly minLength?: number
-          readonly maxLength?: number
-          readonly pattern?: string
-          readonly placeholder?: string
-          readonly default?: string
-          readonly options?: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly custom?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "number"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "integer"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "boolean"
-          readonly default?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "multiselect"
-          readonly options: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly minItems?: number
-          readonly maxItems?: number
-          readonly custom?: boolean
-          readonly default?: ReadonlyArray<string>
-        }
-    > | null
-    readonly url?: string | null
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      ),
+      ...Array<
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      >,
+    ]
   }["metadata"]
-  readonly mode: {
+  readonly fields: {
     readonly id?: string | null
     readonly title: string
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly mode: "form" | "url"
-    readonly fields?: ReadonlyArray<
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+    readonly fields: readonly [
+      (
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "string"
-          readonly format?: "email" | "uri" | "date" | "date-time"
-          readonly minLength?: number
-          readonly maxLength?: number
-          readonly pattern?: string
-          readonly placeholder?: string
-          readonly default?: string
-          readonly options?: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly custom?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "number"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "integer"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "boolean"
-          readonly default?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "multiselect"
-          readonly options: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly minItems?: number
-          readonly maxItems?: number
-          readonly custom?: boolean
-          readonly default?: ReadonlyArray<string>
-        }
-    > | null
-    readonly url?: string | null
-  }["mode"]
-  readonly fields?: {
-    readonly id?: string | null
-    readonly title: string
-    readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly mode: "form" | "url"
-    readonly fields?: ReadonlyArray<
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "string"
-          readonly format?: "email" | "uri" | "date" | "date-time"
-          readonly minLength?: number
-          readonly maxLength?: number
-          readonly pattern?: string
-          readonly placeholder?: string
-          readonly default?: string
-          readonly options?: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly custom?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
             readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "number"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "integer"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "boolean"
-          readonly default?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "multiselect"
-          readonly options: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
+            readonly title?: string
             readonly description?: string
-          }>
-          readonly minItems?: number
-          readonly maxItems?: number
-          readonly custom?: boolean
-          readonly default?: ReadonlyArray<string>
-        }
-    > | null
-    readonly url?: string | null
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      ),
+      ...Array<
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "string"
+            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly minLength?: number
+            readonly maxLength?: number
+            readonly pattern?: string
+            readonly placeholder?: string
+            readonly default?: string
+            readonly options?: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly custom?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "number"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "integer"
+            readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            readonly default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "boolean"
+            readonly default?: boolean
+          }
+        | {
+            readonly key: string
+            readonly title?: string
+            readonly description?: string
+            readonly required?: boolean
+            readonly when?: ReadonlyArray<{
+              readonly key: string
+              readonly op: "eq" | "neq"
+              readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            readonly type: "multiselect"
+            readonly options: ReadonlyArray<{
+              readonly value: string
+              readonly label: string
+              readonly description?: string
+            }>
+            readonly minItems?: number
+            readonly maxItems?: number
+            readonly custom?: boolean
+            readonly default?: ReadonlyArray<string>
+          }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
+      >,
+    ]
   }["fields"]
-  readonly url?: {
-    readonly id?: string | null
-    readonly title: string
-    readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly mode: "form" | "url"
-    readonly fields?: ReadonlyArray<
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "string"
-          readonly format?: "email" | "uri" | "date" | "date-time"
-          readonly minLength?: number
-          readonly maxLength?: number
-          readonly pattern?: string
-          readonly placeholder?: string
-          readonly default?: string
-          readonly options?: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
-            readonly description?: string
-          }>
-          readonly custom?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "number"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "integer"
-          readonly minimum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly maximum?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly default?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "boolean"
-          readonly default?: boolean
-        }
-      | {
-          readonly key: string
-          readonly title?: string
-          readonly description?: string
-          readonly required?: boolean
-          readonly when?: ReadonlyArray<{
-            readonly key: string
-            readonly op: "eq" | "neq"
-            readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-          }>
-          readonly type: "multiselect"
-          readonly options: ReadonlyArray<{
-            readonly value: string
-            readonly label: string
-            readonly description?: string
-          }>
-          readonly minItems?: number
-          readonly maxItems?: number
-          readonly custom?: boolean
-          readonly default?: ReadonlyArray<string>
-        }
-    > | null
-    readonly url?: string | null
-  }["url"]
 }
 
 export type FormCreateOutput = {
-  data:
-    | {
-        id: string
-        sessionID: string
-        title: string
-        metadata?: { [x: string]: JsonValue }
-        mode: "form"
-        fields: Array<
-          | {
+  data: {
+    id: string
+    sessionID: string
+    title: string
+    metadata?: { [x: string]: JsonValue }
+    fields: [
+      (
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "string"
-              format?: "email" | "uri" | "date" | "date-time"
-              minLength?: number
-              maxLength?: number
-              pattern?: string
-              placeholder?: string
-              default?: string
-              options?: Array<{ value: string; label: string; description?: string }>
-              custom?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "number"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "integer"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "boolean"
-              default?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "multiselect"
-              options: Array<{ value: string; label: string; description?: string }>
-              minItems?: number
-              maxItems?: number
-              custom?: boolean
-              default?: Array<string>
-            }
-        >
-      }
-    | { id: string; sessionID: string; title: string; metadata?: { [x: string]: JsonValue }; mode: "url"; url: string }
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      ),
+      ...Array<
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      >,
+    ]
+  }
 }["data"]
 
 export type FormGetInput = {
@@ -3321,97 +3790,180 @@ export type FormGetInput = {
 }
 
 export type FormGetOutput = {
-  data:
-    | {
-        id: string
-        sessionID: string
-        title: string
-        metadata?: { [x: string]: JsonValue }
-        mode: "form"
-        fields: Array<
-          | {
+  data: {
+    id: string
+    sessionID: string
+    title: string
+    metadata?: { [x: string]: JsonValue }
+    fields: [
+      (
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "string"
-              format?: "email" | "uri" | "date" | "date-time"
-              minLength?: number
-              maxLength?: number
-              pattern?: string
-              placeholder?: string
-              default?: string
-              options?: Array<{ value: string; label: string; description?: string }>
-              custom?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "number"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "integer"
-              minimum?: number | "Infinity" | "-Infinity" | "NaN"
-              maximum?: number | "Infinity" | "-Infinity" | "NaN"
-              default?: number | "Infinity" | "-Infinity" | "NaN"
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "boolean"
-              default?: boolean
-            }
-          | {
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
               key: string
-              title?: string
-              description?: string
-              required?: boolean
-              when?: Array<{
-                key: string
-                op: "eq" | "neq"
-                value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-              }>
-              type: "multiselect"
-              options: Array<{ value: string; label: string; description?: string }>
-              minItems?: number
-              maxItems?: number
-              custom?: boolean
-              default?: Array<string>
-            }
-        >
-      }
-    | { id: string; sessionID: string; title: string; metadata?: { [x: string]: JsonValue }; mode: "url"; url: string }
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      ),
+      ...Array<
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "string"
+            format?: "email" | "uri" | "date" | "date-time"
+            minLength?: number
+            maxLength?: number
+            pattern?: string
+            placeholder?: string
+            default?: string
+            options?: Array<{ value: string; label: string; description?: string }>
+            custom?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "number"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "integer"
+            minimum?: number | "Infinity" | "-Infinity" | "NaN"
+            maximum?: number | "Infinity" | "-Infinity" | "NaN"
+            default?: number | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "boolean"
+            default?: boolean
+          }
+        | {
+            key: string
+            title?: string
+            description?: string
+            required?: boolean
+            when?: Array<{
+              key: string
+              op: "eq" | "neq"
+              value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+            }>
+            type: "multiselect"
+            options: Array<{ value: string; label: string; description?: string }>
+            minItems?: number
+            maxItems?: number
+            custom?: boolean
+            default?: Array<string>
+          }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
+      >,
+    ]
+  }
 }["data"]
 
 export type FormStateInput = {
@@ -4879,84 +5431,140 @@ export type EventSubscribeOutput =
       type: "form.created"
       location?: { directory: string; workspaceID?: string }
       data: {
-        form:
-          | {
-              id: string
-              sessionID: string
-              title: string
-              metadata?: { [x: string]: unknown }
-              mode: "form"
-              fields: Array<
-                | {
-                    key: string
-                    title?: string
-                    description?: string
-                    required?: boolean
-                    when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
-                    type: "string"
-                    format?: "email" | "uri" | "date" | "date-time"
-                    minLength?: number
-                    maxLength?: number
-                    pattern?: string
-                    placeholder?: string
-                    default?: string
-                    options?: Array<{ value: string; label: string; description?: string }>
-                    custom?: boolean
-                  }
-                | {
-                    key: string
-                    title?: string
-                    description?: string
-                    required?: boolean
-                    when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
-                    type: "number"
-                    minimum?: number
-                    maximum?: number
-                    default?: number
-                  }
-                | {
-                    key: string
-                    title?: string
-                    description?: string
-                    required?: boolean
-                    when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
-                    type: "integer"
-                    minimum?: number
-                    maximum?: number
-                    default?: number
-                  }
-                | {
-                    key: string
-                    title?: string
-                    description?: string
-                    required?: boolean
-                    when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
-                    type: "boolean"
-                    default?: boolean
-                  }
-                | {
-                    key: string
-                    title?: string
-                    description?: string
-                    required?: boolean
-                    when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
-                    type: "multiselect"
-                    options: Array<{ value: string; label: string; description?: string }>
-                    minItems?: number
-                    maxItems?: number
-                    custom?: boolean
-                    default?: Array<string>
-                  }
-              >
-            }
-          | {
-              id: string
-              sessionID: string
-              title: string
-              metadata?: { [x: string]: unknown }
-              mode: "url"
-              url: string
-            }
+        form: {
+          id: string
+          sessionID: string
+          title: string
+          metadata?: { [x: string]: unknown }
+          fields: [
+            (
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "string"
+                  format?: "email" | "uri" | "date" | "date-time"
+                  minLength?: number
+                  maxLength?: number
+                  pattern?: string
+                  placeholder?: string
+                  default?: string
+                  options?: Array<{ value: string; label: string; description?: string }>
+                  custom?: boolean
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "number"
+                  minimum?: number
+                  maximum?: number
+                  default?: number
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "integer"
+                  minimum?: number
+                  maximum?: number
+                  default?: number
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "boolean"
+                  default?: boolean
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "multiselect"
+                  options: Array<{ value: string; label: string; description?: string }>
+                  minItems?: number
+                  maxItems?: number
+                  custom?: boolean
+                  default?: Array<string>
+                }
+              | { key: string; type: "external"; url: string; title?: string; description?: string }
+            ),
+            ...Array<
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "string"
+                  format?: "email" | "uri" | "date" | "date-time"
+                  minLength?: number
+                  maxLength?: number
+                  pattern?: string
+                  placeholder?: string
+                  default?: string
+                  options?: Array<{ value: string; label: string; description?: string }>
+                  custom?: boolean
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "number"
+                  minimum?: number
+                  maximum?: number
+                  default?: number
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "integer"
+                  minimum?: number
+                  maximum?: number
+                  default?: number
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "boolean"
+                  default?: boolean
+                }
+              | {
+                  key: string
+                  title?: string
+                  description?: string
+                  required?: boolean
+                  when?: Array<{ key: string; op: "eq" | "neq"; value: string | number | boolean }>
+                  type: "multiselect"
+                  options: Array<{ value: string; label: string; description?: string }>
+                  minItems?: number
+                  maxItems?: number
+                  custom?: boolean
+                  default?: Array<string>
+                }
+              | { key: string; type: "external"; url: string; title?: string; description?: string }
+            >,
+          ]
+        }
       }
     }
   | {

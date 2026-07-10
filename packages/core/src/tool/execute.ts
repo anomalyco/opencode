@@ -169,9 +169,12 @@ function formatResult(result: CodeMode.Result) {
     : [result.error.message, ...(result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))]
         .join("\n")
         .trim()
-  if (!result.logs || result.logs.length === 0) return output
-  const logs = `Logs:\n${result.logs.join("\n")}`
-  return output === "" ? logs : `${output}\n\n${logs}`
+  const warnings =
+    result.ok && result.warnings && result.warnings.length > 0
+      ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
+      : undefined
+  const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
+  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
 function formatValue(value: CodeMode.DataValue) {

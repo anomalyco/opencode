@@ -1,7 +1,9 @@
 export * as PluginPromise from "./promise"
 
 import { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { AnyTool } from "@opencode-ai/plugin/v2/tool"
 import { Effect, Scope, Stream } from "effect"
+import { Tool } from "../tool/tool"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
@@ -108,7 +110,14 @@ export function fromPromise(plugin: PromisePlugin) {
             reload: () => run(host.skill.reload()),
           },
           tool: {
-            transform: transform(host.tool),
+            transform: (callback) =>
+              register(
+                host.tool.transform((draft) =>
+                  callback({
+                    add: (tool: AnyTool) => draft.add(tool.name, fromPromiseTool(tool), tool.options),
+                  }),
+                ),
+              ),
             hook: (name, callback) =>
               register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
           },
@@ -123,5 +132,17 @@ export function fromPromise(plugin: PromisePlugin) {
 
         yield* Effect.promise(() => Promise.resolve(plugin.setup(context2)))
       }),
+  })
+}
+
+function fromPromiseTool(tool: AnyTool) {
+  if ("jsonSchema" in tool)
+    return Tool.make({
+      ...tool,
+      execute: (input, context) => Effect.promise(() => tool.execute(input, context)),
+    })
+  return Tool.make({
+    ...tool,
+    execute: (input, context) => Effect.promise(() => tool.execute(input, context)),
   })
 }

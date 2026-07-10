@@ -4,19 +4,25 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import open from "open"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { FormFormInfo, FormValue } from "@opencode-ai/sdk/v2"
-import type { FormInfo } from "../../context/data"
+import type { FormField, FormValue } from "@opencode-ai/sdk/v2"
+import type { FormWithLocation } from "../../context/data"
 import { useSDK } from "../../context/sdk"
+import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
+import { useToast } from "../../ui/toast"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const FORM_MODE = "form"
 
-type Field = FormFormInfo["fields"][number]
+type Field = Exclude<FormField, { type: "external" }>
 
-function fieldLabel(field: Field) {
-  return field.title ?? field.key
+function isField(field: FormField): field is Field {
+  return field.type !== "external"
+}
+
+function fieldLabel(field: FormField) {
+  return field.title ?? (field.type === "external" ? field.url : field.key)
 }
 
 function truncate(label: string, max: number) {
@@ -24,7 +30,7 @@ function truncate(label: string, max: number) {
 }
 
 function validateText(field: Field, text: string): string | undefined {
-  if (field.type !== "string") return
+  if (field.type !== "string") return undefined
   if (field.minLength !== undefined && text.length < field.minLength)
     return `Must be at least ${field.minLength} characters`
   if (field.maxLength !== undefined && text.length > field.maxLength)
@@ -50,17 +56,19 @@ function validateText(field: Field, text: string): string | undefined {
       return "Expected a date (YYYY-MM-DD)"
   }
   if (field.format === "date-time" && Number.isNaN(new Date(text).getTime())) return "Expected a date and time"
+  return undefined
 }
 
-function validateSelection(field: Field, value: FormValue | undefined) {
-  if (field.type !== "multiselect" || value === undefined) return
+function validateSelection(field: Field, value: FormValue | undefined): string | undefined {
+  if (field.type !== "multiselect" || value === undefined) return undefined
   if (!Array.isArray(value)) return "Expected selections"
   if (field.required && value.length === 0) return "Select at least one option"
   if (field.minItems !== undefined && value.length < field.minItems) return `Select at least ${field.minItems}`
   if (field.maxItems !== undefined && value.length > field.maxItems) return `Select at most ${field.maxItems}`
+  return undefined
 }
 
-function validateValue(field: Field, value: FormValue | undefined) {
+function validateValue(field: Field, value: FormValue | undefined): string | undefined {
   if (value === undefined) return field.required ? "Answer required" : undefined
   if (field.required && (value === "" || (Array.isArray(value) && value.length === 0))) {
     return field.type === "multiselect" ? "Select at least one option" : "Answer required"
@@ -72,14 +80,14 @@ function validateValue(field: Field, value: FormValue | undefined) {
     if (field.options && !field.custom && !field.options.some((option) => option.value === value)) {
       return "Select an available option"
     }
-    return
+    return undefined
   }
   if (field.type === "number" || field.type === "integer") {
     if (typeof value !== "number" || !Number.isFinite(value)) return "Expected a number"
     if (field.type === "integer" && !Number.isInteger(value)) return "Expected an integer"
     if (typeof field.minimum === "number" && value < field.minimum) return `Must be at least ${field.minimum}`
     if (typeof field.maximum === "number" && value > field.maximum) return `Must be at most ${field.maximum}`
-    return
+    return undefined
   }
   if (field.type === "boolean") return typeof value === "boolean" ? undefined : "Expected yes or no"
   const invalid = validateSelection(field, value)
@@ -91,6 +99,7 @@ function validateValue(field: Field, value: FormValue | undefined) {
   ) {
     return "Select only available options"
   }
+  return undefined
 }
 
 function fieldRows(field: Field): { value: FormValue; label: string; description?: string }[] {
@@ -117,11 +126,6 @@ function selectedRow(field: Field | undefined, value: FormValue | undefined) {
   return 0
 }
 
-function customDefault(field: Field) {
-  if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return
-  if (!field.options.some((option) => option.value === field.default)) return field.default
-}
-
 function display(field: Field, value: FormValue | undefined) {
   if (value === undefined) return ""
   const label = (item: string | number | boolean) =>
@@ -130,7 +134,7 @@ function display(field: Field, value: FormValue | undefined) {
   return label(value)
 }
 
-function requestOptions(form: FormInfo) {
+function requestOptions(form: FormWithLocation) {
   if (form.sessionID !== "global" || !form.location) return undefined
   return {
     headers: {
@@ -140,107 +144,32 @@ function requestOptions(form: FormInfo) {
   }
 }
 
-export function FormPrompt(props: { form: FormInfo }) {
-  return props.form.mode === "url" ? <UrlPrompt form={props.form} /> : <FieldsPrompt form={props.form} />
-}
-
-function UrlPrompt(props: { form: FormInfo & { mode: "url" } }) {
-  const sdk = useSDK()
-  const { theme } = useTheme()
-  const modeStack = useOpencodeModeStack()
-  const message = createMemo(() => {
-    const value = props.form.metadata?.["message"]
-    return typeof value === "string" ? value : undefined
-  })
-
-  onMount(() => onCleanup(modeStack.push(FORM_MODE)))
-
-  useBindings(() => ({
-    mode: FORM_MODE,
-    enabled: true,
-    commands: [
-      {
-        name: "app.exit",
-        title: "Dismiss form",
-        category: "Form",
-        run() {
-          void sdk.api.form.cancel(
-            { sessionID: props.form.sessionID, formID: props.form.id },
-            requestOptions(props.form),
-          )
-        },
-      },
-    ],
-    bindings: [
-      {
-        key: "return",
-        desc: "Open link",
-        group: "Form",
-        cmd: () => {
-          void open(props.form.url)
-        },
-      },
-      {
-        key: "escape",
-        desc: "Dismiss form",
-        group: "Form",
-        cmd: () => {
-          void sdk.api.form.cancel(
-            { sessionID: props.form.sessionID, formID: props.form.id },
-            requestOptions(props.form),
-          )
-        },
-      },
-    ],
-  }))
-
-  return (
-    <box
-      backgroundColor={theme.backgroundPanel}
-      border={["left"]}
-      borderColor={theme.accent}
-      customBorderChars={SplitBorder.customBorderChars}
-    >
-      <box gap={1} paddingLeft={2} paddingRight={3} paddingTop={1} paddingBottom={1}>
-        <text fg={theme.text}>{props.form.title}</text>
-        <Show when={message()}>
-          <text fg={theme.textMuted}>{message()}</text>
-        </Show>
-        <text fg={theme.secondary}>{props.form.url}</text>
-      </box>
-      <box flexDirection="row" flexShrink={0} gap={2} paddingLeft={2} paddingRight={3} paddingBottom={1}>
-        <text fg={theme.text}>
-          enter <span style={{ fg: theme.textMuted }}>open link</span>
-        </text>
-        <text fg={theme.text}>
-          esc <span style={{ fg: theme.textMuted }}>dismiss</span>
-        </text>
-      </box>
-    </box>
-  )
-}
-
-function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
+export function FormPrompt(props: { form: FormWithLocation }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const clipboard = useClipboard()
+  const toast = useToast()
+  const configuredFields = props.form.fields.filter(isField)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
     answers: Object.fromEntries(
-      props.form.fields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
+      configuredFields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
     ) as Record<string, FormValue | undefined>,
     custom: Object.fromEntries(
-      props.form.fields.flatMap((field) => {
-        const value = customDefault(field)
-        return value === undefined ? [] : [[field.key, value]]
+      configuredFields.flatMap((field) => {
+        if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return []
+        if (field.options.some((option) => option.value === field.default)) return []
+        return [[field.key, field.default]]
       }),
     ) as Record<string, string>,
-    selected: selectedRow(props.form.fields[0], props.form.fields[0]?.default),
+    externalReady: {} as Record<string, boolean>,
+    selected: selectedRow(configuredFields[0], configuredFields[0]?.default),
     editing: false,
     error: "",
   })
@@ -248,9 +177,14 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   let textarea: TextareaRenderable | undefined
   let review: ScrollBoxRenderable | undefined
 
+  const message = createMemo(() => {
+    const value = props.form.metadata?.["message"]
+    return typeof value === "string" ? value : undefined
+  })
   const fields = createMemo(() => {
     const answers: Record<string, FormValue | undefined> = {}
     return props.form.fields.filter((field) => {
+      if (field.type === "external") return true
       const active = (field.when ?? []).every((when) => {
         const value = answers[when.key]
         if (value === undefined) return false
@@ -263,9 +197,9 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   })
   const single = createMemo(() => {
     const list = fields()
-    if (props.form.fields.length !== 1) return false
     if (list.length !== 1) return false
-    const field = list[0]!
+    const field = list[0]
+    if (field.type === "external") return false
     return field.type === "boolean" || (field.type === "string" && field.options !== undefined)
   })
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
@@ -280,10 +214,18 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         return value !== undefined
       }).length,
   )
-  const field = createMemo(() => fields()[Math.min(store.tab, fields().length - 1)])
+  const field = createMemo(() => fields()[store.tab])
+  const answerField = createMemo(() => {
+    const current = field()
+    return current && isField(current) ? current : undefined
+  })
+  const externalField = createMemo(() => {
+    const current = field()
+    return current?.type === "external" ? current : undefined
+  })
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
   const rows = createMemo(() => {
-    const current = field()
+    const current = answerField()
     if (!current) return []
     const configured = fieldRows(current)
     const value = store.answers[current.key]
@@ -296,21 +238,32 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   })
   const textual = createMemo(() => {
     if (confirm()) return false
-    const current = field()
+    const current = answerField()
     if (!current) return false
     if (current.type === "number" || current.type === "integer") return true
     return current.type === "string" && current.options === undefined
   })
   const custom = createMemo(() => {
-    const current = field()
+    const current = answerField()
     if (!current) return false
     if (current.type === "string" && current.options !== undefined) return current.custom === true
     if (current.type === "multiselect") return current.custom === true
     return false
   })
-  const multi = createMemo(() => field()?.type === "multiselect")
+  const multi = createMemo(() => answerField()?.type === "multiselect")
+  const actionLabel = createMemo(() => {
+    if (confirm()) return "submit"
+    const external = externalField()
+    if (external) {
+      if (store.answers[external.key] === true) return "continue"
+      return store.externalReady[external.key] ? "I finished" : "open link"
+    }
+    if (multi()) return "toggle"
+    if (single()) return "submit"
+    return "confirm"
+  })
   const placeholder = createMemo(() => {
-    const current = field()
+    const current = answerField()
     if (current?.type === "string") {
       if (current.placeholder) return current.placeholder
       if (current.format === "email") return "name@example.com"
@@ -328,11 +281,11 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     return "Type your answer"
   })
   const other = createMemo(() => custom() && store.selected === rows().length)
-  const input = createMemo(() => store.custom[field()?.key ?? ""] ?? "")
+  const input = createMemo(() => store.custom[answerField()?.key ?? ""] ?? "")
   const customPicked = createMemo(() => {
     const value = input()
     if (!value) return false
-    const answer = store.answers[field()?.key ?? ""]
+    const answer = store.answers[answerField()?.key ?? ""]
     if (Array.isArray(answer)) return answer.includes(value)
     return answer === value
   })
@@ -363,7 +316,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function pick(value: FormValue, customValue?: string) {
-    const current = field()
+    const current = answerField()
     if (!current) return
     const invalid = validateValue(current, value)
     if (invalid) {
@@ -380,7 +333,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function toggle(value: string) {
-    const current = field()
+    const current = answerField()
     if (!current) return
     const existing = store.answers[current.key]
     const list = Array.isArray(existing) ? [...existing] : []
@@ -392,7 +345,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
 
   function validateCurrent() {
     if (confirm()) return true
-    const current = field()
+    const current = answerField()
     if (!current) return true
     const invalid = validateValue(current, store.answers[current.key])
     if (!invalid) return true
@@ -404,7 +357,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     if (!confirm() && index > store.tab && !validateCurrent()) return
     const next = fields()[index]
     setStore("tab", index)
-    setStore("selected", selectedRow(next, next ? store.answers[next.key] : undefined))
+    setStore("selected", next && isField(next) ? selectedRow(next, store.answers[next.key]) : 0)
     setStore("editing", false)
     setStore("error", "")
   }
@@ -433,7 +386,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   }
 
   function commitInput(text: string) {
-    const current = field()
+    const current = answerField()
     if (!current) return false
     const isTextual = textual()
     const isMulti = multi()
@@ -507,9 +460,9 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
     if (!single()) selectTab((store.tab + direction + tabs()) % tabs())
   }
 
-  function selectTabFromMouse(target?: Field) {
+  function selectTabFromMouse(target?: FormField) {
     const targetIndex = () => {
-      const index = target ? fields().findIndex((field) => field.key === target.key) : fields().length
+      const index = target ? fields().findIndex((field) => field === target) : fields().length
       return index === -1 ? fields().length : index
     }
     const move = () => selectTab(targetIndex())
@@ -522,6 +475,83 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
       return
     }
     move()
+  }
+
+  function cancel() {
+    void sdk.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
+  }
+
+  function openExternal() {
+    const current = externalField()
+    if (!current) return
+    setStore("error", "")
+    void open(current.url)
+      .then(() => setStore("externalReady", { ...store.externalReady, [current.key]: true }))
+      .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
+  }
+
+  function copyExternal() {
+    const current = externalField()
+    if (!current || !clipboard.write) return
+    void clipboard
+      .write(current.url)
+      .then(() => {
+        setStore("externalReady", { ...store.externalReady, [current.key]: true })
+        toast.show({ message: "Copied URL to clipboard", variant: "info" })
+      })
+      .catch(toast.error)
+  }
+
+  function acknowledgeExternal() {
+    const current = externalField()
+    if (!current) return
+    if (store.answers[current.key] === true) {
+      selectTab(store.tab + 1)
+      return
+    }
+    if (!store.externalReady[current.key]) {
+      openExternal()
+      return
+    }
+    answer(current.key, true)
+    selectTab(store.tab + 1)
+  }
+
+  function submit() {
+    const unacknowledged = fields().find((field) => field.type === "external" && store.answers[field.key] !== true)
+    if (unacknowledged) {
+      setStore("error", `External action must be acknowledged: ${fieldLabel(unacknowledged)}`)
+      return
+    }
+    const invalid = fields()
+      .filter(isField)
+      .find((field) => validateValue(field, store.answers[field.key]))
+    if (invalid) {
+      setStore("error", validateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
+      return
+    }
+    sdk.api.form
+      .reply(
+        {
+          sessionID: props.form.sessionID,
+          formID: props.form.id,
+          answer: Object.fromEntries(
+            fields().flatMap((field) => {
+              const value = store.answers[field.key]
+              return value === undefined ? [] : [[field.key, value] as const]
+            }),
+          ),
+        },
+        requestOptions(props.form),
+      )
+      .catch((error: unknown) => {
+        setStore(
+          "error",
+          typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+            ? error.message
+            : "Invalid answer",
+        )
+      })
   }
 
   onMount(() => onCleanup(modeStack.push(FORM_MODE)))
@@ -585,7 +615,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         group: "Form",
         cmd: () => {
           const text = textarea?.plainText?.trim() ?? ""
-          const current = field()
+          const current = answerField()
           if (!current) return
           if (textual()) {
             submitInput(text)
@@ -606,6 +636,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
   useBindings(() => {
     const total = rows().length + (custom() ? 1 : 0)
     const max = Math.min(total, 9)
+    const external = externalField()
 
     return {
       mode: FORM_MODE,
@@ -615,12 +646,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
           name: "app.exit",
           title: "Dismiss form",
           category: "Form",
-          run() {
-            void sdk.api.form.cancel(
-              { sessionID: props.form.sessionID, formID: props.form.id },
-              requestOptions(props.form),
-            )
-          },
+          run: cancel,
         },
       ],
       bindings: [
@@ -650,110 +676,86 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
           group: "Form",
           cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
-        ...(confirm()
+        ...(external
           ? [
               {
                 key: "return",
-                desc: "Submit form",
+                desc:
+                  store.answers[external.key] === true
+                    ? "Continue"
+                    : store.externalReady[external.key]
+                      ? "Confirm completion"
+                      : "Open link",
                 group: "Form",
-                cmd: () => {
-                  const invalid = fields().find((field) => validateValue(field, store.answers[field.key]))
-                  if (invalid) {
-                    setStore("error", validateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
-                    return
-                  }
-                  sdk.api.form
-                    .reply(
-                      {
-                        sessionID: props.form.sessionID,
-                        formID: props.form.id,
-                        answer: Object.fromEntries(
-                          fields().flatMap((field) => {
-                            const value = store.answers[field.key]
-                            return value === undefined ? [] : [[field.key, value] as const]
-                          }),
-                        ),
-                      },
-                      requestOptions(props.form),
-                    )
-                    .catch((error: unknown) => {
-                      setStore(
-                        "error",
-                        typeof error === "object" &&
-                          error !== null &&
-                          "message" in error &&
-                          typeof error.message === "string"
-                          ? error.message
-                          : "Invalid answer",
-                      )
-                    })
-                },
+                cmd: acknowledgeExternal,
               },
-              {
-                key: "escape",
-                desc: "Dismiss form",
-                group: "Form",
-                cmd: () => {
-                  void sdk.api.form.cancel(
-                    { sessionID: props.form.sessionID, formID: props.form.id },
-                    requestOptions(props.form),
-                  )
-                },
-              },
-              { key: "up", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(-1) },
-              { key: "k", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(-1) },
-              { key: "down", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(1) },
-              { key: "j", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(1) },
+              { key: "c", desc: "Copy link", group: "Form", cmd: copyExternal },
+              { key: "escape", desc: "Dismiss form", group: "Form", cmd: cancel },
               ...tuiConfig.keybinds.get("app.exit"),
             ]
-          : [
-              ...Array.from({ length: max }, (_, index) => ({
-                key: String(index + 1),
-                desc: `Select answer ${index + 1}`,
-                group: "Form",
-                cmd: () => {
-                  setStore("selected", index)
-                  selectOption()
+          : confirm()
+            ? [
+                {
+                  key: "return",
+                  desc: "Submit form",
+                  group: "Form",
+                  cmd: submit,
                 },
-              })),
-              {
-                key: "up",
-                desc: "Previous answer",
-                group: "Form",
-                cmd: () => setStore("selected", (store.selected - 1 + total) % total),
-              },
-              {
-                key: "k",
-                desc: "Previous answer",
-                group: "Form",
-                cmd: () => setStore("selected", (store.selected - 1 + total) % total),
-              },
-              {
-                key: "down",
-                desc: "Next answer",
-                group: "Form",
-                cmd: () => setStore("selected", (store.selected + 1) % total),
-              },
-              {
-                key: "j",
-                desc: "Next answer",
-                group: "Form",
-                cmd: () => setStore("selected", (store.selected + 1) % total),
-              },
-              { key: "return", desc: "Select answer", group: "Form", cmd: () => selectOption() },
-              {
-                key: "escape",
-                desc: "Dismiss form",
-                group: "Form",
-                cmd: () => {
-                  void sdk.api.form.cancel(
-                    { sessionID: props.form.sessionID, formID: props.form.id },
-                    requestOptions(props.form),
-                  )
+                {
+                  key: "escape",
+                  desc: "Dismiss form",
+                  group: "Form",
+                  cmd: cancel,
                 },
-              },
-              ...tuiConfig.keybinds.get("app.exit"),
-            ]),
+                { key: "up", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(-1) },
+                { key: "k", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(-1) },
+                { key: "down", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(1) },
+                { key: "j", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(1) },
+                ...tuiConfig.keybinds.get("app.exit"),
+              ]
+            : [
+                ...Array.from({ length: max }, (_, index) => ({
+                  key: String(index + 1),
+                  desc: `Select answer ${index + 1}`,
+                  group: "Form",
+                  cmd: () => {
+                    setStore("selected", index)
+                    selectOption()
+                  },
+                })),
+                {
+                  key: "up",
+                  desc: "Previous answer",
+                  group: "Form",
+                  cmd: () => setStore("selected", (store.selected - 1 + total) % total),
+                },
+                {
+                  key: "k",
+                  desc: "Previous answer",
+                  group: "Form",
+                  cmd: () => setStore("selected", (store.selected - 1 + total) % total),
+                },
+                {
+                  key: "down",
+                  desc: "Next answer",
+                  group: "Form",
+                  cmd: () => setStore("selected", (store.selected + 1) % total),
+                },
+                {
+                  key: "j",
+                  desc: "Next answer",
+                  group: "Form",
+                  cmd: () => setStore("selected", (store.selected + 1) % total),
+                },
+                { key: "return", desc: "Select answer", group: "Form", cmd: () => selectOption() },
+                {
+                  key: "escape",
+                  desc: "Dismiss form",
+                  group: "Form",
+                  cmd: cancel,
+                },
+                ...tuiConfig.keybinds.get("app.exit"),
+              ]),
       ],
     }
   })
@@ -769,14 +771,21 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
         <box paddingLeft={1}>
           <text fg={theme.textMuted}>{props.form.title}</text>
         </box>
+        <Show when={message()}>
+          <box paddingLeft={1}>
+            <text fg={theme.text}>{message()}</text>
+          </box>
+        </Show>
         <Show when={!single() && !tabbed()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
             <text fg={theme.textMuted}>
               {confirm() ? "Review" : `Field ${Math.min(store.tab, fields().length - 1) + 1} of ${fields().length}`}
             </text>
-            <text fg={theme.textMuted}>
-              · {answered()}/{fields().length} answered
-            </text>
+            <Show when={fields().length > 0}>
+              <text fg={theme.textMuted}>
+                · {answered()}/{fields().length} completed
+              </text>
+            </Show>
           </box>
         </Show>
         <Show when={!single() && tabbed()}>
@@ -828,16 +837,45 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
           </box>
         </Show>
 
-        <Show when={!confirm() && field()}>
+        <Show when={!confirm() && externalField()}>
+          {(external) => (
+            <box paddingLeft={1} gap={1}>
+              <Show when={external().title}>
+                <text fg={theme.text}>{external().title}</text>
+              </Show>
+              <Show when={external().description}>
+                <text fg={theme.textMuted}>{external().description}</text>
+              </Show>
+              <text
+                fg={theme.primary}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  openExternal()
+                }}
+              >
+                {external().url}
+              </text>
+              <text fg={store.answers[external().key] === true ? theme.success : theme.textMuted}>
+                {store.answers[external().key] === true
+                  ? "✓ Acknowledged"
+                  : store.externalReady[external().key]
+                    ? "Complete the external action, then press enter to confirm."
+                    : "Open or copy the URL, complete the external action, then confirm."}
+              </text>
+            </box>
+          )}
+        </Show>
+
+        <Show when={!confirm() && answerField()}>
           <box paddingLeft={1} gap={1}>
             <box>
               <text fg={theme.text}>
-                {field()!.description ?? fieldLabel(field()!)}
-                {field()!.required ? " (required)" : ""}
+                {answerField()!.description ?? fieldLabel(answerField()!)}
+                {answerField()!.required ? " (required)" : ""}
                 {multi() ? " (select all that apply)" : ""}
               </text>
             </box>
-            <Show when={textual() ? field()!.key : undefined} keyed>
+            <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
                 <textarea
                   ref={(val: TextareaRenderable) => {
@@ -848,7 +886,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                       val.gotoLineEnd()
                     })
                   }}
-                  initialValue={input() || display(field()!, store.answers[field()!.key])}
+                  initialValue={input() || display(answerField()!, store.answers[answerField()!.key])}
                   placeholder={placeholder()}
                   placeholderColor={theme.textMuted}
                   minHeight={1}
@@ -865,7 +903,7 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                   {(row, i) => {
                     const active = () => i() === store.selected
                     const picked = () => {
-                      const value = store.answers[field()?.key ?? ""]
+                      const value = store.answers[answerField()?.key ?? ""]
                       if (Array.isArray(value)) return value.includes(String(row.value))
                       return value === row.value
                     }
@@ -973,11 +1011,21 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
           >
             <For each={fields()}>
               {(item) => {
-                const value = () => display(item, store.answers[item.key])
-                const answered = () => {
-                  const value = store.answers[item.key]
-                  return value !== undefined
+                if (item.type === "external") {
+                  const acknowledged = () => store.answers[item.key] === true
+                  return (
+                    <box paddingLeft={1}>
+                      <text>
+                        <span style={{ fg: theme.textMuted }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
+                        <span style={{ fg: acknowledged() ? theme.success : theme.error }}>
+                          {acknowledged() ? "Acknowledged" : "(acknowledgement required)"}
+                        </span>
+                      </text>
+                    </box>
+                  )
                 }
+                const value = () => display(item, store.answers[item.key])
+                const answered = () => store.answers[item.key] !== undefined
                 const missing = () => !answered() && item.required === true
                 const invalid = () => validateValue(item, store.answers[item.key])
                 return (
@@ -985,7 +1033,9 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
                     <text>
                       <span style={{ fg: theme.textMuted }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
                       <span
-                        style={{ fg: invalid() || missing() ? theme.error : answered() ? theme.text : theme.textMuted }}
+                        style={{
+                          fg: invalid() || missing() ? theme.error : answered() ? theme.text : theme.textMuted,
+                        }}
                       >
                         {invalid() ?? (answered() ? value() : missing() ? "(required)" : "(not answered)")}
                       </span>
@@ -1012,23 +1062,32 @@ function FieldsPrompt(props: { form: FormInfo & { mode: "form" } }) {
               {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
             </text>
           </Show>
-          <Show when={!confirm() && !textual()}>
+          <Show when={!confirm() && !textual() && !externalField()}>
             <text fg={theme.text}>
               {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
             </text>
           </Show>
-          <Show when={confirm()}>
+          <Show when={confirm() && fields().length > 0}>
             <text fg={theme.text}>
               {"↑↓"} <span style={{ fg: theme.textMuted }}>scroll</span>
             </text>
           </Show>
-          <text fg={theme.text}>
-            enter{" "}
-            <span style={{ fg: theme.textMuted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
-            </span>
+          <text
+            fg={theme.text}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              if (confirm()) submit()
+              if (externalField()) acknowledgeExternal()
+            }}
+          >
+            enter <span style={{ fg: theme.textMuted }}>{actionLabel()}</span>
           </text>
-          <text fg={theme.text}>
+          <Show when={externalField() && clipboard.write}>
+            <text fg={theme.text} onMouseUp={copyExternal}>
+              c <span style={{ fg: theme.textMuted }}>copy</span>
+            </text>
+          </Show>
+          <text fg={theme.text} onMouseUp={cancel}>
             esc <span style={{ fg: theme.textMuted }}>dismiss</span>
           </text>
         </box>

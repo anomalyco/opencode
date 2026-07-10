@@ -1,8 +1,6 @@
 export type { PluginOptions } from "../options.js"
 export * as Plugin from "./plugin.js"
 
-export { Tool } from "./tool.js"
-
 export { Agent } from "@opencode-ai/schema/agent"
 export { Command } from "@opencode-ai/schema/command"
 export { Connection } from "@opencode-ai/schema/connection"

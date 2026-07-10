@@ -94,10 +94,27 @@ export const MultiselectField = Schema.Struct({
 }).annotate({ identifier: "Form.MultiselectField" })
 export interface MultiselectField extends Schema.Schema.Type<typeof MultiselectField> {}
 
-export const Field = Schema.Union([StringField, NumberField, IntegerField, BooleanField, MultiselectField]).pipe(
-  Schema.toTaggedUnion("type"),
-)
-export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField
+export const ExternalField = Schema.Struct({
+  key: Schema.String,
+  type: Schema.Literal("external"),
+  url: Schema.String,
+  title: Schema.String.pipe(optional),
+  description: Schema.String.pipe(optional),
+}).annotate({ identifier: "Form.ExternalField" })
+export interface ExternalField extends Schema.Schema.Type<typeof ExternalField> {}
+
+export const Field = Schema.Union([
+  StringField,
+  NumberField,
+  IntegerField,
+  BooleanField,
+  MultiselectField,
+  ExternalField,
+]).pipe(Schema.toTaggedUnion("type"), Schema.annotate({ identifier: "Form.Field" }))
+export type Field = StringField | NumberField | IntegerField | BooleanField | MultiselectField | ExternalField
+
+export const Fields = Schema.NonEmptyArray(Field).annotate({ identifier: "Form.Fields" })
+export type Fields = typeof Fields.Type
 
 const InfoBase = {
   id: ID,
@@ -110,22 +127,11 @@ const InfoBase = {
   metadata: Metadata.pipe(optional),
 }
 
-export const FormInfo = Schema.Struct({
+export const Info = Schema.Struct({
   ...InfoBase,
-  mode: Schema.Literal("form"),
-  fields: Schema.Array(Field),
-}).annotate({ identifier: "Form.FormInfo" })
-export interface FormInfo extends Schema.Schema.Type<typeof FormInfo> {}
-
-export const UrlInfo = Schema.Struct({
-  ...InfoBase,
-  mode: Schema.Literal("url"),
-  url: Schema.String,
-}).annotate({ identifier: "Form.UrlInfo" })
-export interface UrlInfo extends Schema.Schema.Type<typeof UrlInfo> {}
-
-export const Info = Schema.Union([FormInfo, UrlInfo]).pipe(Schema.toTaggedUnion("mode"))
-export type Info = FormInfo | UrlInfo
+  fields: Fields,
+}).annotate({ identifier: "Form.Info" })
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const Value = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Array(Schema.String)]).annotate(
   {

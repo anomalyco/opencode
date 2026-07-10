@@ -46,12 +46,7 @@
       },
       {
         "tab": "Build",
-        "groups": [
-          {
-            "group": "Build with OpenCode",
-            "pages": ["plugins", "client", "sdk/index"]
-          }
-        ]
+        "pages": ["build/index", "build/plugins", "build/client", "build/sdk"]
       },
       {
         "tab": "API",

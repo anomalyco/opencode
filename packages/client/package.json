@@ -16,6 +16,7 @@
     "dist"
   ],
   "exports": {
+    ".": "./src/promise/index.ts",
     "./promise": "./src/promise/index.ts",
     "./promise/api": "./src/promise/api.ts",
     "./effect": "./src/effect/index.ts",

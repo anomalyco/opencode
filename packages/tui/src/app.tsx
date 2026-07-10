@@ -196,9 +196,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const api = OpenCode.make(options)
   const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
     Effect.map((response) => response.location.directory),
-    Effect.catch(() =>
-      Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory)),
-    ),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
   )
   const reconnectEndpoint = input.server.reconnect
   const reconnect = reconnectEndpoint
@@ -411,11 +409,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: {
-  onSnapshot?: () => Promise<string[]>
-  pluginHost: TuiPluginHost
-  pair?: DialogPairCredentials
-}) {
+function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost; pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()

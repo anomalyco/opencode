@@ -36,6 +36,5 @@ test.each([
     "Provider",
     "Reference",
     "Skill",
-    ...(name === "promise" ? ["Tool"] : []),
   ])
 })

@@ -44,29 +44,21 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
         "session.form.create",
         Effect.fn(function* (ctx) {
           const form = yield* Form.Service
-          const common = {
-            id: ctx.payload.id,
-            sessionID: ctx.params.sessionID,
-            title: ctx.payload.title,
-            metadata: ctx.payload.metadata,
-          }
-          const input = yield* (() => {
-            if (ctx.payload.mode === "form") {
-              if (!ctx.payload.fields) {
-                return new InvalidRequestError({ message: "Form fields are required", field: "fields" })
-              }
-              return Effect.succeed({ ...common, mode: "form" as const, fields: ctx.payload.fields })
-            }
-            if (!ctx.payload.url) return new InvalidRequestError({ message: "Form URL is required", field: "url" })
-            return Effect.succeed({ ...common, mode: "url" as const, url: ctx.payload.url })
-          })()
-
-          const created = yield* form.create(input).pipe(
-            Effect.catchTags({
-              "Form.AlreadyExistsError": (error) => new ConflictError({ resource: error.id, message: error.message }),
-              "Form.InvalidFormError": (error) => new InvalidRequestError({ message: error.message, field: "fields" }),
-            }),
-          )
+          const created = yield* form
+            .create({
+              id: ctx.payload.id,
+              sessionID: ctx.params.sessionID,
+              title: ctx.payload.title,
+              metadata: ctx.payload.metadata,
+              fields: ctx.payload.fields,
+            })
+            .pipe(
+              Effect.catchTags({
+                "Form.AlreadyExistsError": (error) => new ConflictError({ resource: error.id, message: error.message }),
+                "Form.InvalidFormError": (error) =>
+                  new InvalidRequestError({ message: error.message, field: "fields" }),
+              }),
+            )
           return { data: created }
         }),
       )

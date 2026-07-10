@@ -1,5 +1,5 @@
 import { parse } from "acorn"
-import { Cause, Effect, Exit, Fiber, Semaphore } from "effect"
+import { Cause, Effect, Exit, Fiber, Scope, Semaphore } from "effect"
 import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageText, transpileModule } from "typescript"
 import {
   copyIn,
@@ -219,7 +219,7 @@ const normalizeError = (error: unknown): Diagnostic => {
   }
 }
 
-// Shared by catch bindings, Promise.allSettled rejection reasons, and Promise.race losers.
+// Shared by catch bindings and Promise.allSettled rejection reasons.
 const caughtErrorValue = (thrown: unknown): unknown => {
   if (thrown instanceof ProgramThrow) return thrown.value
   if (thrown instanceof InterpreterRuntimeError) return createErrorValue(thrown.errorName, thrown.message)
@@ -611,6 +611,80 @@ const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<s
   return out
 }
 
+// Promise work lives until the program returns, while observation only controls whether a
+// settled rejection is reported. Neither extends execution: completion interrupts all work.
+class PromiseRuntime<R> {
+  private readonly active = new Set<SandboxPromise>()
+  private readonly ids = new WeakMap<SandboxPromise, number>()
+  private readonly observed = new WeakSet<SandboxPromise>()
+  private readonly failures = new Map<number, Diagnostic>()
+  private nextID = 0
+
+  constructor(private readonly scope: Scope.Scope) {}
+
+  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
+    return Effect.suspend(() => {
+      // Allocated at execution time (not construction) so re-run effects cannot share an id,
+      // and before the fork so diagnostics order by creation: a forked body that immediately
+      // creates promises of its own must sequence after its creator.
+      const id = this.nextID++
+      return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
+        const promise = new SandboxPromise(fiber)
+        this.active.add(promise)
+        this.ids.set(promise, id)
+        fiber.addObserver((exit) => {
+          this.active.delete(promise)
+          if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause) || this.observed.has(promise)) {
+            this.ids.delete(promise)
+            return
+          }
+          const failure = normalizeError(Cause.squash(exit.cause))
+          this.failures.set(id, {
+            ...failure,
+            message: `Unhandled rejection from an un-awaited promise: ${failure.message}`,
+          })
+        })
+        return promise
+      })
+    })
+  }
+
+  // Synchronous on purpose: JS makes a promise "handled" the moment a construct takes
+  // responsibility for it (await, or membership in a combinator call), not when the
+  // consuming fiber later runs. Call sites must invoke this at that moment.
+  markObserved(promise: SandboxPromise): void {
+    this.observed.add(promise)
+    const id = this.ids.get(promise)
+    this.ids.delete(promise)
+    if (id !== undefined) this.failures.delete(id)
+  }
+
+  // Pure settlement subscription: never re-runs work and never affects rejection reporting.
+  await(promise: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
+    return Fiber.await(promise.fiber)
+  }
+
+  // Unobserved rejections that already settled, in creation order.
+  diagnostics(): Array<Diagnostic> {
+    return [...this.failures].sort(([left], [right]) => left - right).map(([, failure]) => failure)
+  }
+
+  // Normal-completion lifecycle: interrupts everything still running and reports the
+  // rejections that already settled un-awaited. interruptAll signals every fiber
+  // synchronously before awaiting termination, so no straggler can spawn new work between
+  // interrupts; the loop re-checks as a backstop because a straggler can create promises
+  // before its interrupt lands.
+  interrupt(): Effect.Effect<Array<Diagnostic>> {
+    const self = this
+    return Effect.gen(function* () {
+      while (self.active.size > 0) {
+        yield* Fiber.interruptAll([...self.active].map((promise) => promise.fiber))
+      }
+      return self.diagnostics()
+    })
+  }
+}
+
 class Interpreter<R> {
   private scopes: Array<Map<string, Binding>>
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -620,24 +694,22 @@ class Interpreter<R> {
   private readonly logs: Array<string>
   // Caps how many eagerly forked tool calls run at once (the parallel-call concurrency cap).
   private readonly callPermits: Semaphore.Semaphore
-  // Fiber-backed promises whose settlement no program construct has observed yet. Successful
-  // program completion drains these (like a runtime waiting on in-flight work at exit) and
-  // surfaces a never-awaited failure as an unhandled-rejection diagnostic.
-  private readonly pendingSettlements: Set<SandboxPromise>
+  private readonly promises: PromiseRuntime<R>
 
   constructor(
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
+    promises: PromiseRuntime<R>,
     logs: Array<string> = [],
-    shared?: { callPermits: Semaphore.Semaphore; pendingSettlements: Set<SandboxPromise> },
+    callPermits: Semaphore.Semaphore = Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY),
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = [globalScope]
     this.invokeTool = invokeTool
     this.toolKeys = toolKeys
     this.logs = logs
-    this.callPermits = shared?.callPermits ?? Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY)
-    this.pendingSettlements = shared?.pendingSettlements ?? new Set<SandboxPromise>()
+    this.callPermits = callPermits
+    this.promises = promises
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
     globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
     globalScope.set("undefined", { mutable: false, value: undefined })
@@ -703,36 +775,12 @@ class Interpreter<R> {
       // resolves before crossing the data boundary - `return tools.ns.tool(...)` works
       // without an explicit await, exactly as in JS.
       if (value instanceof SandboxPromise) value = yield* self.settlePromise(value)
-      yield* self.drainPendingSettlements()
       return value
     }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
   }
 
-  // Awaits every fiber-backed promise the program abandoned (fire-and-forget tool calls), so
-  // their work completes before the execution ends - mirroring a JS runtime waiting on
-  // in-flight I/O at exit. A failure nobody could have handled becomes an unhandled-rejection
-  // diagnostic (interrupted calls, e.g. Promise.race losers, are ignored).
-  private drainPendingSettlements(): Effect.Effect<void, unknown, never> {
-    const self = this
-    return Effect.gen(function* () {
-      while (self.pendingSettlements.size > 0) {
-        const promise = self.pendingSettlements.values().next().value
-        if (promise === undefined) break
-        const exit = yield* self.observePromise(promise)
-        if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) continue
-        const failure = normalizeError(Cause.squash(exit.cause))
-        throw new InterpreterRuntimeError(
-          `Unhandled rejection from an un-awaited promise: ${failure.message}`,
-          undefined,
-          failure.kind,
-          ["Await promises so failures can be caught and handled."],
-        )
-      }
-    })
-  }
-
-  // Eagerly starts a tool call on a supervised child fiber (so the execution timeout and
-  // scope teardown interrupt it) gated by the concurrency semaphore, and wraps the fiber in a
+  // Eagerly starts a tool call in the execution's promise scope (so timeout and teardown
+  // interrupt it) gated by the concurrency semaphore, and wraps the fiber in a
   // first-class promise value. `startImmediately` makes the runtime admit the call - charging
   // the tool-call budget and firing onToolCallStart - at the call site, before any await.
   private createToolCallPromise(
@@ -743,46 +791,20 @@ class Interpreter<R> {
   }
 
   private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
-    return Effect.map(Effect.forkChild(effect, { startImmediately: true }), (fiber) => {
-      const promise = new SandboxPromise(fiber)
-      this.pendingSettlements.add(promise)
-      return promise
-    })
-  }
-
-  // The promise's settlement as an Exit, marking it observed for unhandled-rejection tracking.
-  // Fiber settlement is idempotent, so observing the same promise repeatedly (await twice,
-  // Promise.all([p, p])) never re-runs the underlying call.
-  private observePromise(promise: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
-    this.pendingSettlements.delete(promise)
-    return promise.fiber !== undefined ? Fiber.await(promise.fiber) : Effect.exit(promise.immediate ?? Effect.void)
+    return this.promises.create(effect)
   }
 
   // `await promise`: succeed with the fulfilled value or re-raise the failure so try/catch
-  // observes it exactly like a synchronous throw at the await site.
-  private settlePromise(promise: SandboxPromise, node?: AstNode): Effect.Effect<unknown, unknown, never> {
-    const self = this
-    return Effect.flatMap(this.observePromise(promise), (exit) => self.unwrapPromiseExit(promise, exit, node))
-  }
-
-  private unwrapPromiseExit(
-    promise: SandboxPromise | undefined,
-    exit: Exit.Exit<unknown, unknown>,
-    node?: AstNode,
-  ): Effect.Effect<unknown, unknown> {
-    if (Exit.isSuccess(exit)) return Effect.succeed(exit.value)
-    // A call Promise.race interrupted after losing settles as a catchable program failure;
-    // any other interruption is execution teardown (timeout/host) and must keep propagating
-    // as interruption rather than becoming program-visible data.
-    if (promise?.interrupted === true && Cause.hasInterruptsOnly(exit.cause)) {
-      return Effect.fail(
-        new InterpreterRuntimeError(
-          "This tool call was interrupted because another value settled a Promise.race first.",
-          node,
-        ),
+  // observes it exactly like a synchronous throw at the await site. Settlement is idempotent
+  // (fiber exits replay), so awaiting the same promise repeatedly never re-runs the call.
+  private settlePromise(promise: SandboxPromise): Effect.Effect<unknown, unknown, never> {
+    const promises = this.promises
+    return Effect.suspend(() => {
+      promises.markObserved(promise)
+      return Effect.flatMap(promises.await(promise), (exit) =>
+        Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
       )
-    }
-    return Effect.failCause(exit.cause)
+    })
   }
 
   private evaluateStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
@@ -1532,7 +1554,7 @@ class Interpreter<R> {
         // matching real JS semantics for non-thenables.
         const self = this
         return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
-          value instanceof SandboxPromise ? self.settlePromise(value, node) : Effect.succeed(value),
+          value instanceof SandboxPromise ? self.settlePromise(value) : Effect.succeed(value),
         )
       }
       case "NewExpression":
@@ -2199,145 +2221,116 @@ class Interpreter<R> {
 
   // Promise.* over ordinary runtime values. Combinators accept ANY array (or spreadable
   // collection) mixing promise values and plain data - built inline, beforehand, via spread,
-  // whatever - because tool calls already run eagerly on their own fibers; the combinators
-  // only observe settlements. Joining is therefore sequential (no extra fibers) without
-  // costing parallelism, and the concurrency cap stays where the work is: the fork semaphore.
+  // whatever - because tool calls already run eagerly on their own fibers. Each combinator
+  // returns a real promise whose join runs on its own scope-owned fiber, observing member
+  // settlements; the concurrency cap stays where the work is: the fork semaphore.
   private invokePromiseMethod(
     ref: PromiseMethodReference,
     args: Array<unknown>,
     node: AstNode,
   ): Effect.Effect<unknown, unknown, R> {
-    const self = this
     if (ref.name === "resolve") {
       // Promise.resolve of a promise is that promise (JS flattens); anything else is a
-      // promise already fulfilled with the value.
+      // promise already fulfilled with the value. Pre-settled values still fork a scope-owned
+      // fiber so every promise shares one lifecycle (an abandoned reject is reported, teardown
+      // is uniform).
       const value = args[0]
-      return Effect.succeed(
-        value instanceof SandboxPromise ? value : new SandboxPromise(undefined, Effect.succeed(value)),
-      )
+      return value instanceof SandboxPromise ? Effect.succeed(value) : this.createPromise(Effect.succeed(value))
     }
     if (ref.name === "reject") {
-      return Effect.sync(() => new SandboxPromise(undefined, Effect.fail(new ProgramThrow(args[0]))))
+      return this.createPromise(Effect.fail(new ProgramThrow(args[0])))
     }
 
     const items = Array.isArray(args[0]) ? args[0] : spreadItems(args[0])
     if (items === undefined) {
-      throw new InterpreterRuntimeError(
-        `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
-        node,
+      return this.createPromise(
+        Effect.fail(
+          new InterpreterRuntimeError(
+            `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
+            node,
+          ),
+        ),
       )
+    }
+
+    // JS makes combinator members "handled" synchronously at the call - their rejections
+    // belong to the aggregate from this moment, even ones settling before it runs.
+    for (const item of items) {
+      if (item instanceof SandboxPromise) this.promises.markObserved(item)
     }
 
     switch (ref.name) {
       case "all": {
-        // Mark every promise element observed up-front (Promise.all handles all of its
-        // members' failures, as in JS), race their settlements for fail-fast rejection, and
-        // preserve input order when they all fulfill. Rejected calls keep draining siblings.
-        const observations = items.map((item, index) =>
+        // Each observation re-raises its member's failure, so Effect.all rejects on the first
+        // failure without waiting for the rest and preserves input order when all fulfill.
+        // Its failure-time interruption only unsubscribes the sibling waiters: the underlying
+        // fibers stay execution-owned and keep running, as in JS.
+        const observations = items.map((item) =>
           item instanceof SandboxPromise
-            ? Effect.map(this.observePromise(item), (exit) => ({ index, item, exit }))
-            : Effect.succeed({ index, item: undefined, exit: Exit.succeed(item) }),
+            ? Effect.flatMap(this.promises.await(item), (exit) =>
+                Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
+              )
+            : Effect.succeed(item),
         )
-        return Effect.gen(function* () {
-          const remaining = [...observations]
-          const values: Array<unknown> = []
-          values.length = items.length
-          while (remaining.length > 0) {
-            const winner = yield* Effect.raceAll(remaining)
-            const position = remaining.indexOf(observations[winner.index])
-            if (position >= 0) remaining.splice(position, 1)
-            if (Exit.isSuccess(winner.exit)) {
-              values[winner.index] = winner.exit.value
-              continue
-            }
-            yield* self.createPromise(
-              Effect.asVoid(
-                Effect.forEach(
-                  items,
-                  (item) => (item instanceof SandboxPromise ? self.observePromise(item) : Effect.void),
-                  { concurrency: "unbounded" },
-                ),
-              ),
-            )
-            return yield* self.unwrapPromiseExit(winner.item, winner.exit, node)
-          }
-          return values
-        })
+        return this.createPromise(Effect.all(observations, { concurrency: "unbounded" }))
       }
       case "allSettled": {
         const observations = items.map((item) =>
-          item instanceof SandboxPromise
-            ? Effect.map(this.observePromise(item), (exit) => ({ promise: item as SandboxPromise | undefined, exit }))
-            : Effect.succeed({ promise: undefined as SandboxPromise | undefined, exit: Exit.succeed(item as unknown) }),
+          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item as unknown)),
         )
-        return Effect.gen(function* () {
-          const outcomes: Array<unknown> = []
-          for (const observation of observations) {
-            const { exit, promise } = yield* observation
-            if (Exit.isSuccess(exit)) {
-              outcomes.push(
-                Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
-              )
-              continue
-            }
-            const raceInterrupted = promise?.interrupted === true && Cause.hasInterruptsOnly(exit.cause)
-            if (Cause.hasInterruptsOnly(exit.cause) && !raceInterrupted) {
-              // Execution teardown (timeout/host interruption), not a program-level rejection.
-              return yield* Effect.failCause(exit.cause)
-            }
-            const thrown = raceInterrupted
-              ? new InterpreterRuntimeError(
-                  "This tool call was interrupted because another value settled a Promise.race first.",
-                  node,
+        return this.createPromise(
+          Effect.gen(function* () {
+            const outcomes: Array<unknown> = []
+            for (const observation of observations) {
+              const exit = yield* observation
+              if (Exit.isSuccess(exit)) {
+                outcomes.push(
+                  Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
                 )
-              : Cause.squash(exit.cause)
-            outcomes.push(
-              Object.assign(Object.create(null) as SafeObject, {
-                status: "rejected",
-                reason: caughtErrorValue(thrown),
-              }),
-            )
-          }
-          return outcomes
-        })
+                continue
+              }
+              if (Cause.hasInterruptsOnly(exit.cause)) {
+                // Execution teardown (timeout/host interruption), not a program-level rejection.
+                return yield* Effect.failCause(exit.cause)
+              }
+              outcomes.push(
+                Object.assign(Object.create(null) as SafeObject, {
+                  status: "rejected",
+                  reason: caughtErrorValue(Cause.squash(exit.cause)),
+                }),
+              )
+            }
+            return outcomes
+          }),
+        )
       }
       case "race": {
         if (items.length === 0) {
-          throw new InterpreterRuntimeError(
-            "Promise.race([]) would never settle; provide at least one promise or value.",
-            node,
+          return this.createPromise(
+            Effect.fail(
+              new InterpreterRuntimeError(
+                "Promise.race([]) would never settle; provide at least one promise or value.",
+                node,
+              ),
+            ),
           )
         }
-        const observations = items.map((item, index) =>
-          item instanceof SandboxPromise
-            ? Effect.map(this.observePromise(item), (exit) => ({ index, exit }))
-            : Effect.succeed({ index, exit: Exit.succeed(item as unknown) }),
+        const observations = items.map((item) =>
+          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item as unknown)),
         )
-        return Effect.gen(function* () {
-          // First settlement (fulfilled OR rejected) wins; the observations never fail, so
-          // racing them yields exactly that. Losing in-flight calls are then interrupted.
-          const winner = yield* Effect.raceAll(observations)
-          for (const [index, item] of items.entries()) {
-            if (index === winner.index || !(item instanceof SandboxPromise) || item.fiber === undefined) continue
-            item.interrupted = true
-            yield* Fiber.interrupt(item.fiber)
-          }
-          const winningItem = items[winner.index]
-          return yield* self.unwrapPromiseExit(
-            winningItem instanceof SandboxPromise ? winningItem : undefined,
-            winner.exit,
-            node,
-          )
-        })
+        // First settlement (fulfilled OR rejected) wins; losing work stays execution-owned
+        // and is interrupted at normal completion (already observed) or by teardown.
+        return this.createPromise(
+          Effect.flatMap(Effect.raceAll(observations), (exit) =>
+            Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
+          ),
+        )
       }
     }
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
-    const invocation = new Interpreter(this.invokeTool, this.toolKeys, this.logs, {
-      callPermits: this.callPermits,
-      pendingSettlements: this.pendingSettlements,
-    })
+    const invocation = new Interpreter(this.invokeTool, this.toolKeys, this.promises, this.logs, this.callPermits)
     invocation.scopes = [...fn.capturedScopes, new Map<string, Binding>()]
     const run = Effect.gen(function* () {
       // Seed every parameter name into the scope as a TDZ slot first, so a default that
@@ -3484,68 +3477,109 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
   limits: ResolvedExecutionLimits,
   searchIndex: ToolRuntime.DiscoveryPlan["searchIndex"],
 ): Effect.Effect<Result, never, Services<Tools>> => {
-  const hooks = {
-    ...(options.onToolCallStart === undefined ? {} : { onToolCallStart: options.onToolCallStart }),
-    ...(options.onToolCallEnd === undefined ? {} : { onToolCallEnd: options.onToolCallEnd }),
-  }
-  const tools = ToolRuntime.make(
-    (options.tools ?? {}) as HostTools<Services<Tools>>,
-    limits.maxToolCalls,
-    searchIndex,
-    hooks,
-  )
-  const logs: Array<string> = []
-  const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
-
   if (options.code.trim().length === 0) {
     return Effect.succeed({
       ok: false,
       error: { kind: "ParseError", message: "Code cannot be empty." },
-      toolCalls: tools.calls,
+      toolCalls: [],
     })
   }
 
-  const operation = Effect.gen(function* () {
-    const program = parseProgram(options.code)
-    const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, logs)
-    const value = yield* interpreter.run(program)
-    const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
-    return {
-      ok: true,
-      value: result,
-      ...logged(),
-      toolCalls: tools.calls,
-    } satisfies Result
-  }).pipe((program) => {
-    const timeoutMs = limits.timeoutMs
-    if (timeoutMs === undefined) return program
-    return program.pipe(
-      Effect.timeoutOrElse({
-        duration: timeoutMs,
-        orElse: () =>
-          Effect.succeed({
-            ok: false,
-            error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
+  // Suspended so all per-execution state - tool-call admission budget and audit list, logs,
+  // and the timeout path's completed value - binds at run time: a reused Effect must start
+  // from a clean slate instead of observing a previous run's state.
+  return Effect.suspend(() => {
+    const hooks = {
+      ...(options.onToolCallStart === undefined ? {} : { onToolCallStart: options.onToolCallStart }),
+      ...(options.onToolCallEnd === undefined ? {} : { onToolCallEnd: options.onToolCallEnd }),
+    }
+    const tools = ToolRuntime.make(
+      (options.tools ?? {}) as HostTools<Services<Tools>>,
+      limits.maxToolCalls,
+      searchIndex,
+      hooks,
+    )
+    const logs: Array<string> = []
+    const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
+    // Set once the program body returned and its value crossed the data boundary, so a timeout
+    // firing during leftover interruption reports "completed with interrupted background work"
+    // instead of discarding the computed value as a plain timeout.
+    let returned: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
+
+    const base = Effect.acquireUseRelease(
+      Scope.make("parallel"),
+      (scope) =>
+        Effect.gen(function* () {
+          const program = parseProgram(options.code)
+          const promises = new PromiseRuntime<Services<Tools>>(scope)
+          const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, promises, logs)
+          const value = yield* interpreter.run(program)
+          // Validate the result first so an invalid value is a fatal completion that closes
+          // the promise scope directly instead of taking the normal-completion path.
+          const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
+          returned = { value: result, promises }
+          const warnings = yield* promises.interrupt()
+          return {
+            ok: true,
+            value: result,
+            ...(warnings.length > 0 ? { warnings } : {}),
             ...logged(),
             toolCalls: tools.calls,
-          } satisfies Result),
-      }),
+          } satisfies Result
+        }),
+      (scope, exit) => Scope.close(scope, exit),
+    )
+    const timeoutMs = limits.timeoutMs
+    const operation =
+      timeoutMs === undefined
+        ? base
+        : base.pipe(
+            Effect.timeoutOrElse({
+              duration: timeoutMs,
+              orElse: () =>
+                Effect.sync(() => {
+                  if (returned === undefined) {
+                    return {
+                      ok: false,
+                      error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
+                      ...logged(),
+                      toolCalls: tools.calls,
+                    } satisfies Result
+                  }
+                  // The timeout warning leads so byte-budget truncation cuts it last.
+                  return {
+                    ok: true,
+                    value: returned.value,
+                    warnings: [
+                      {
+                        kind: "TimeoutExceeded",
+                        message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await all started promises.`,
+                      },
+                      ...returned.promises.diagnostics(),
+                    ],
+                    ...logged(),
+                    toolCalls: tools.calls,
+                  } satisfies Result
+                }),
+            }),
+          )
+
+    return operation.pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.interrupt
+          : Effect.succeed({
+              ok: false,
+              error: normalizeError(Cause.squash(cause)),
+              ...logged(),
+              toolCalls: tools.calls,
+            } satisfies Result),
+      ),
+      Effect.map((result) =>
+        limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes),
+      ),
     )
   })
-
-  return operation.pipe(
-    Effect.catchCause((cause) =>
-      Cause.hasInterruptsOnly(cause)
-        ? Effect.interrupt
-        : Effect.succeed({
-            ok: false,
-            error: normalizeError(Cause.squash(cause)),
-            ...logged(),
-            toolCalls: tools.calls,
-          } satisfies Result),
-    ),
-    Effect.map((result) => (limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes))),
-  )
 }
 
 const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength
@@ -3560,9 +3594,10 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
 }
 
 /**
- * Bounds the model-facing output (serialized result value plus logs) to `maxOutputBytes`.
- * Oversized values are replaced by their truncated serialized text with an explanatory marker,
- * and logs are kept from the start until the remaining budget is exhausted. Truncation never
+ * Bounds retained program payload bytes (serialized result value and logs) to `maxOutputBytes`.
+ * Warning diagnostics are bounded by a separate budget of the same size so a large value can
+ * never starve runtime-authored diagnostics. Fixed truncation notices are added outside those
+ * budgets, as is any framing added when a host renders the structured result. Truncation never
  * fails the execution; `truncated: true` marks affected results. Only runs when the host set
  * `maxOutputBytes` - with the limit absent, output passes through unbounded.
  */
@@ -3584,6 +3619,23 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
     }
   }
 
+  const warnings = result.ok ? (result.warnings ?? []) : []
+  const keptWarnings: Array<Diagnostic> = []
+  let warningBytes = 0
+  for (const warning of warnings) {
+    const bytes = utf8ByteLength(JSON.stringify(warning)) + 1
+    if (warningBytes + bytes > maxOutputBytes) break
+    warningBytes += bytes
+    keptWarnings.push(warning)
+  }
+  if (keptWarnings.length < warnings.length) {
+    truncated = true
+    keptWarnings.push({
+      kind: "Truncated",
+      message: `${warnings.length - keptWarnings.length} additional warnings omitted by the output limit.`,
+    })
+  }
+
   const logs = result.logs ?? []
   const kept: Array<string> = []
   const logBudget = Math.max(0, maxOutputBytes - valueBytes)
@@ -3600,8 +3652,16 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   }
 
   if (!truncated) return result
+  const warningsPart = keptWarnings.length > 0 ? { warnings: keptWarnings } : {}
   const logsPart = kept.length > 0 ? { logs: kept } : {}
   return result.ok
-    ? { ok: true, value, ...logsPart, truncated: true, toolCalls: result.toolCalls }
+    ? {
+        ok: true,
+        value,
+        ...warningsPart,
+        ...logsPart,
+        truncated: true,
+        toolCalls: result.toolCalls,
+      }
     : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
 }

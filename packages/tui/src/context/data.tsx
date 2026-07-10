@@ -6,8 +6,7 @@
 import type {
   AgentInfo,
   CommandInfo,
-  FormFormInfo,
-  FormUrlInfo,
+  FormInfo,
   IntegrationInfo,
   LocationRef,
   McpServer,
@@ -38,7 +37,7 @@ const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
-export type FormInfo = (FormFormInfo | FormUrlInfo) & { readonly location?: LocationRef }
+export type FormWithLocation = FormInfo & { readonly location?: LocationRef }
 
 type LocationData = {
   agent?: AgentInfo[]
@@ -66,7 +65,7 @@ type Data = {
     input: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
-    form: Record<string, FormInfo[]>
+    form: Record<string, FormWithLocation[]>
   }
   project: {
     permission: Record<string, PermissionSavedInfo[]>
@@ -1031,7 +1030,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             directory: response.location.directory,
             workspaceID: response.location.workspaceID,
           }
-          const forms = response.data.reduce<Record<string, FormInfo[]>>(
+          const forms = response.data.reduce<Record<string, FormWithLocation[]>>(
             (result, form) => ({
               ...result,
               [form.sessionID]: [

@@ -111,13 +111,15 @@ ultimate source of truth.
 - [x] `Promise.resolve` and `Promise.reject`.
 - [x] `Promise.all`, `Promise.allSettled`, and `Promise.race` over supported collections containing promises and plain
       values.
-- [x] `Promise.all` preserves result order and rejects on the first observed failure.
+- [x] `Promise.all` preserves result order and rejects on the first observed failure without cancelling siblings.
 - [x] `Promise.allSettled` returns plain fulfilled/rejected outcome records.
-- [x] `Promise.race` interrupts losing in-flight tool calls.
-- [x] Un-awaited calls are drained before execution ends; unhandled failures become diagnostics.
+- [x] `Promise.race` settles from the first result without cancelling losers at settlement time.
+- [x] Real promise values from `Promise.all`, `Promise.allSettled`, and `Promise.race`; separately constructed
+      combinator batches overlap as in normal JavaScript.
+- [x] All still-pending work (race losers, fail-fast `Promise.all` stragglers, and un-awaited calls alike) is
+      interrupted when the program returns; rejections that settled un-awaited become `Success.warnings`
+      diagnostics.
 - [x] `try`/`catch` can handle awaited tool and promise failures.
-- [ ] Real promise values from `Promise.all`, `Promise.allSettled`, and `Promise.race`. These calls currently settle
-      before returning, so separately constructed combinator batches do not overlap as normal JavaScript promises do.
 - [ ] `Promise.any`.
 - [ ] Promise chaining with `.then`, `.catch`, and `.finally`.
 - [ ] Custom promise construction with `new Promise(...)`.
@@ -269,7 +271,7 @@ ultimate source of truth.
 
 These are actionable implementation items. Check them off only when behavior and direct tests land.
 
-- [ ] Return real promises from `Promise.all`, `Promise.allSettled`, and `Promise.race`.
+- [x] Return real promises from `Promise.all`, `Promise.allSettled`, and `Promise.race`.
 - [ ] Bound pending tool-call admission/allocation in addition to execution concurrency.
 - [ ] Guarantee every advertised tool path is executable, including dotted and blocked path segments.
 - [ ] Define safe outbound handling for non-finite numbers and `undefined` so invalid values cannot silently become
