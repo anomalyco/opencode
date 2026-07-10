@@ -12,8 +12,9 @@ import { createSessionRows, type SessionRow } from "../../../src/routes/session/
 import { createApi, createClient, createEventStream, createFetch, directory, json } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
-const formFields = [{ type: "external", url: "https://example.com" }] satisfies [
+const formFields = [{ key: "authorization", type: "external", url: "https://example.com" }] satisfies [
   {
+    key: string
     type: "external"
     url: string
   },
@@ -1813,7 +1814,7 @@ test("reconciles all pending form requests when the event stream reconnects", as
       id: "frm_keep",
       sessionID: "ses_keep",
       title: "Input requested",
-      fields: [{ type: "external" as const, url: "https://example.com" }],
+      fields: [{ key: "authorization", type: "external" as const, url: "https://example.com" }],
     },
   ]
   let calls = 0

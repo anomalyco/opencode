@@ -178,6 +178,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
         return value === undefined ? [] : [[field.key, value]]
       }),
     ) as Record<string, string>,
+    externalReady: {} as Record<string, boolean>,
     selected: selectedRow(configuredFields()[0], configuredFields()[0]?.default),
     editing: false,
     error: "",
@@ -219,7 +220,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
   })
   const answered = createMemo(
     () =>
-      answerable().filter((item) => {
+      fields().filter((item) => {
         const value = store.answers[item.key]
         return value !== undefined
       }).length,
@@ -262,8 +263,12 @@ function FieldsPrompt(props: { form: FormInfo }) {
   })
   const multi = createMemo(() => answerField()?.type === "multiselect")
   const actionLabel = createMemo(() => {
-    if (confirm()) return answerable().length === 0 ? "I finished" : "submit"
-    if (externalField()) return "open link"
+    if (confirm()) return "submit"
+    const external = externalField()
+    if (external) {
+      if (store.answers[external.key] === true) return "continue"
+      return store.externalReady[external.key] ? "I finished" : "open link"
+    }
     if (multi()) return "toggle"
     if (single()) return "submit"
     return "confirm"
@@ -490,10 +495,9 @@ function FieldsPrompt(props: { form: FormInfo }) {
   function openExternal() {
     const current = externalField()
     if (!current) return
-    const index = store.tab
     setStore("error", "")
     void open(current.url)
-      .then(() => selectTab(index + 1))
+      .then(() => setStore("externalReady", { ...store.externalReady, [current.key]: true }))
       .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
   }
 
@@ -502,11 +506,34 @@ function FieldsPrompt(props: { form: FormInfo }) {
     if (!current || !clipboard.write) return
     void clipboard
       .write(current.url)
-      .then(() => toast.show({ message: "Copied URL to clipboard", variant: "info" }))
+      .then(() => {
+        setStore("externalReady", { ...store.externalReady, [current.key]: true })
+        toast.show({ message: "Copied URL to clipboard", variant: "info" })
+      })
       .catch(toast.error)
   }
 
+  function acknowledgeExternal() {
+    const current = externalField()
+    if (!current) return
+    if (store.answers[current.key] === true) {
+      selectTab(store.tab + 1)
+      return
+    }
+    if (!store.externalReady[current.key]) {
+      openExternal()
+      return
+    }
+    answer(current.key, true)
+    selectTab(store.tab + 1)
+  }
+
   function submit() {
+    const unacknowledged = fields().find((field) => field.type === "external" && store.answers[field.key] !== true)
+    if (unacknowledged) {
+      setStore("error", `External action must be acknowledged: ${fieldLabel(unacknowledged)}`)
+      return
+    }
     const invalid = answerable().find((field) => validateValue(field, store.answers[field.key]))
     if (invalid) {
       setStore("error", validateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
@@ -518,7 +545,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
           sessionID: props.form.sessionID,
           formID: props.form.id,
           answer: Object.fromEntries(
-            answerable().flatMap((field) => {
+            fields().flatMap((field) => {
               const value = store.answers[field.key]
               return value === undefined ? [] : [[field.key, value] as const]
             }),
@@ -618,6 +645,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
   useBindings(() => {
     const total = rows().length + (custom() ? 1 : 0)
     const max = Math.min(total, 9)
+    const external = externalField()
 
     return {
       mode: FORM_MODE,
@@ -657,9 +685,19 @@ function FieldsPrompt(props: { form: FormInfo }) {
           group: "Form",
           cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
-        ...(externalField()
+        ...(external
           ? [
-              { key: "return", desc: "Open link", group: "Form", cmd: openExternal },
+              {
+                key: "return",
+                desc:
+                  store.answers[external.key] === true
+                    ? "Continue"
+                    : store.externalReady[external.key]
+                      ? "Confirm completion"
+                      : "Open link",
+                group: "Form",
+                cmd: acknowledgeExternal,
+              },
               { key: "c", desc: "Copy link", group: "Form", cmd: copyExternal },
               { key: "escape", desc: "Dismiss form", group: "Form", cmd: cancel },
               ...tuiConfig.keybinds.get("app.exit"),
@@ -668,7 +706,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
             ? [
                 {
                   key: "return",
-                  desc: answerable().length === 0 ? "Finish" : "Submit form",
+                  desc: "Submit form",
                   group: "Form",
                   cmd: submit,
                 },
@@ -752,9 +790,9 @@ function FieldsPrompt(props: { form: FormInfo }) {
             <text fg={theme.textMuted}>
               {confirm() ? "Review" : `Field ${Math.min(store.tab, fields().length - 1) + 1} of ${fields().length}`}
             </text>
-            <Show when={answerable().length > 0}>
+            <Show when={fields().length > 0}>
               <text fg={theme.textMuted}>
-                · {answered()}/{answerable().length} answered
+                · {answered()}/{fields().length} completed
               </text>
             </Show>
           </box>
@@ -764,7 +802,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
-                const isAnswered = () => item.type !== "external" && store.answers[item.key] !== undefined
+                const isAnswered = () => store.answers[item.key] !== undefined
                 return (
                   <box
                     paddingLeft={1}
@@ -825,6 +863,13 @@ function FieldsPrompt(props: { form: FormInfo }) {
                 }}
               >
                 {external().url}
+              </text>
+              <text fg={store.answers[external().key] === true ? theme.success : theme.textMuted}>
+                {store.answers[external().key] === true
+                  ? "✓ Acknowledged"
+                  : store.externalReady[external().key]
+                    ? "Complete the external action, then press enter to confirm."
+                    : "Open or copy the URL, complete the external action, then confirm."}
               </text>
             </box>
           )}
@@ -963,51 +1008,52 @@ function FieldsPrompt(props: { form: FormInfo }) {
         </Show>
 
         <Show when={confirm()}>
-          <Show when={tabbed() && answerable().length > 0}>
+          <Show when={tabbed()}>
             <box paddingLeft={1}>
               <text fg={theme.text}>Review</text>
             </box>
           </Show>
-          <Show
-            when={answerable().length > 0}
-            fallback={
-              <box paddingLeft={1}>
-                <text fg={theme.textMuted}>Complete the browser flow before continuing.</text>
-              </box>
-            }
+          <scrollbox
+            maxHeight={Math.min(fields().length, Math.max(3, dimensions().height - 14))}
+            scrollbarOptions={{ visible: false }}
+            ref={(r: ScrollBoxRenderable) => (review = r)}
           >
-            <scrollbox
-              maxHeight={Math.min(answerable().length, Math.max(3, dimensions().height - 14))}
-              scrollbarOptions={{ visible: false }}
-              ref={(r: ScrollBoxRenderable) => (review = r)}
-            >
-              <For each={answerable()}>
-                {(item) => {
-                  const value = () => display(item, store.answers[item.key])
-                  const answered = () => {
-                    const value = store.answers[item.key]
-                    return value !== undefined
-                  }
-                  const missing = () => !answered() && item.required === true
-                  const invalid = () => validateValue(item, store.answers[item.key])
+            <For each={fields()}>
+              {(item) => {
+                if (item.type === "external") {
+                  const acknowledged = () => store.answers[item.key] === true
                   return (
                     <box paddingLeft={1}>
                       <text>
                         <span style={{ fg: theme.textMuted }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
-                        <span
-                          style={{
-                            fg: invalid() || missing() ? theme.error : answered() ? theme.text : theme.textMuted,
-                          }}
-                        >
-                          {invalid() ?? (answered() ? value() : missing() ? "(required)" : "(not answered)")}
+                        <span style={{ fg: acknowledged() ? theme.success : theme.error }}>
+                          {acknowledged() ? "Acknowledged" : "(acknowledgement required)"}
                         </span>
                       </text>
                     </box>
                   )
-                }}
-              </For>
-            </scrollbox>
-          </Show>
+                }
+                const value = () => display(item, store.answers[item.key])
+                const answered = () => store.answers[item.key] !== undefined
+                const missing = () => !answered() && item.required === true
+                const invalid = () => validateValue(item, store.answers[item.key])
+                return (
+                  <box paddingLeft={1}>
+                    <text>
+                      <span style={{ fg: theme.textMuted }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
+                      <span
+                        style={{
+                          fg: invalid() || missing() ? theme.error : answered() ? theme.text : theme.textMuted,
+                        }}
+                      >
+                        {invalid() ?? (answered() ? value() : missing() ? "(required)" : "(not answered)")}
+                      </span>
+                    </text>
+                  </box>
+                )
+              }}
+            </For>
+          </scrollbox>
         </Show>
       </box>
       <box
@@ -1030,7 +1076,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
               {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
             </text>
           </Show>
-          <Show when={confirm() && answerable().length > 0}>
+          <Show when={confirm() && fields().length > 0}>
             <text fg={theme.text}>
               {"↑↓"} <span style={{ fg: theme.textMuted }}>scroll</span>
             </text>
@@ -1040,7 +1086,7 @@ function FieldsPrompt(props: { form: FormInfo }) {
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               if (confirm()) submit()
-              if (externalField()) openExternal()
+              if (externalField()) acknowledgeExternal()
             }}
           >
             enter <span style={{ fg: theme.textMuted }}>{actionLabel()}</span>

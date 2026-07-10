@@ -224,15 +224,16 @@ export const locationLayer = layer
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })
 
 function validateAnswer(form: Info, answer: Answer) {
-  const fields = new Map(
-    form.fields.flatMap((field) => (field.type === "external" ? [] : [[field.key, field] as const])),
-  )
+  const fields = new Map(form.fields.map((field) => [field.key, field] as const))
   for (const key of Object.keys(answer)) {
     if (!fields.has(key)) return `Unknown form field: ${key}`
   }
   for (const field of form.fields) {
-    if (field.type === "external") continue
     const value = answer[field.key]
+    if (field.type === "external") {
+      if (value !== true) return `External form field must be acknowledged: ${field.key}`
+      continue
+    }
     const active = isActive(field, answer)
     if (value === undefined) {
       if (field.required && active) return `Missing required form field: ${field.key}`
@@ -266,9 +267,11 @@ function matches(when: Form.When, value: Form.Value | undefined) {
 function validateFields(fields: ReadonlyArray<Form.Field>) {
   if (fields.length === 0) return "Form must have at least one field"
   const earlier = new Map<string, InputField>()
+  const keys = new Set<string>()
   for (const field of fields) {
+    if (keys.has(field.key)) return `Duplicate form field key: ${field.key}`
+    keys.add(field.key)
     if (field.type === "external") continue
-    if (earlier.has(field.key)) return `Duplicate form field key: ${field.key}`
     for (const when of field.when ?? []) {
       const target = earlier.get(when.key)
       if (!target) return `Form field condition must reference an earlier field: ${field.key} -> ${when.key}`

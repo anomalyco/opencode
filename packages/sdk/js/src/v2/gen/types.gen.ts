@@ -3546,6 +3546,7 @@ export type FormMultiselectField = {
 }
 
 export type FormExternalField = {
+  key: string
   type: "external"
   url: string
   title?: string

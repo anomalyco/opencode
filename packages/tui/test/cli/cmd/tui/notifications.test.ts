@@ -82,7 +82,7 @@ function form(id: string, sessionID = "session"): Extract<OpenCodeEvent, { type:
     id,
     sessionID,
     title: "Input requested",
-    fields: [{ type: "external", url: "https://example.com" }],
+    fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
   }
 }
 

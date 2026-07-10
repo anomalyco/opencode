@@ -47,7 +47,9 @@ type ResourceTemplatePage = {
   nextCursor?: string
 }
 
-function resourceServer(input: { resources?: boolean; listChanged?: boolean; emptyElicitation?: boolean } = {}) {
+function resourceServer(
+  input: { resources?: boolean; listChanged?: boolean; emptyElicitation?: boolean; urlElicitation?: boolean } = {},
+) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const state = {
@@ -75,7 +77,9 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean; emp
         Promise.resolve({
           tools: input.emptyElicitation
             ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-            : [],
+            : input.urlElicitation
+              ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+              : [],
         }),
       )
       if (input.emptyElicitation) {
@@ -84,6 +88,20 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean; emp
             mode: "form",
             message: "Confirm",
             requestedSchema: { type: "object", properties: {} },
+          })
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+          }
+        })
+      }
+      if (input.urlElicitation) {
+        protocol.setRequestHandler(CallToolRequestSchema, async () => {
+          const result = await protocol.elicitInput({
+            mode: "url",
+            message: "Authorize access",
+            url: "https://example.com/authorize",
+            elicitationId: "elicitation-test",
           })
           return {
             content: [{ type: "text", text: JSON.stringify(result) }],
@@ -117,6 +135,7 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean; emp
         state,
         url: http.url.toString(),
         sendResourceListChanged: () => protocol.sendResourceListChanged(),
+        completeElicitation: () => protocol.createElicitationCompletionNotifier("elicitation-test")(),
         close: async () => {
           await protocol.close().catch(() => {})
           await http.stop(true)
@@ -127,7 +146,10 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean; emp
   )
 }
 
-function resourceMcpLayer(url: string) {
+function resourceMcpLayer(
+  url: string,
+  form: Partial<Form.Interface> = { ask: () => Effect.die("Empty MCP elicitation must not create a form") },
+) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
   return MCP.layer.pipe(
@@ -159,9 +181,7 @@ function resourceMcpLayer(url: string) {
               data,
             } as EventV2.Payload<typeof definition>),
         }),
-        Layer.mock(Form.Service, {
-          ask: () => Effect.die("Empty MCP elicitation must not create a form"),
-        }),
+        Layer.mock(Form.Service, form),
         Layer.mock(Integration.Service, {
           connection: {
             active: unusedIntegration,
@@ -522,6 +542,42 @@ test("accepts empty MCP elicitations without creating forms", async () => {
         }).pipe(Effect.provide(resourceMcpLayer(server.url)))
 
         expect(result.structured).toEqual({ action: "accept", content: {} })
+      }),
+    ),
+  )
+})
+
+test("acknowledges completed MCP URL elicitations without returning internal content", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ resources: false, urlElicitation: true })
+        const asked = yield* Deferred.make<Form.CreateInput>()
+        const terminal = yield* Deferred.make<Form.TerminalState>()
+        const replied = yield* Deferred.make<Form.ReplyInput>()
+        const call = yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          return yield* service.callTool({ server: "resources", name: "url-elicitation" })
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(server.url, {
+              ask: (input) => Deferred.succeed(asked, input).pipe(Effect.andThen(Deferred.await(terminal))),
+              reply: (input) =>
+                Effect.gen(function* () {
+                  yield* Deferred.succeed(replied, input)
+                  yield* Deferred.succeed(terminal, { status: "answered", answer: input.answer })
+                }),
+            }),
+          ),
+          Effect.forkScoped,
+        )
+
+        const form = yield* Deferred.await(asked)
+        expect(form.fields).toEqual([{ key: "elicitation", type: "external", url: "https://example.com/authorize" }])
+
+        yield* Effect.promise(server.completeElicitation)
+        expect((yield* Deferred.await(replied)).answer).toEqual({ elicitation: true })
+        expect((yield* Fiber.join(call)).structured).toEqual({ action: "accept" })
       }),
     ),
   )

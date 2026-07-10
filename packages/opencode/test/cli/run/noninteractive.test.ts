@@ -14,7 +14,7 @@ function form(id: string, sessionID: string): FormInfo {
     id,
     sessionID,
     title: "Input requested",
-    fields: [{ type: "external", url: "https://example.com/form" }],
+    fields: [{ key: "authorization", type: "external", url: "https://example.com/form" }],
   }
 }
 

@@ -62,9 +62,17 @@ describe("contract hygiene", () => {
         id: Form.ID.create(),
         sessionID: "global",
         title: "External form",
-        fields: [{ type: "external", url: "https://example.com" }],
+        fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
       }).fields,
     ).toHaveLength(1)
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ type: "external", url: "https://example.com" }],
+      }),
+    ).toThrow()
   })
 
   test("model defaults and provider overlays preserve public invariants", () => {

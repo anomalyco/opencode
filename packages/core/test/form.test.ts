@@ -61,10 +61,10 @@ describe("Form", () => {
       const externalOnly = yield* service.create({
         sessionID: "global",
         title: "External setup",
-        fields: [{ type: "external", url: "https://example.com/setup" }],
+        fields: [{ key: "setup", type: "external", url: "https://example.com/setup" }],
       })
-      yield* service.reply({ id: externalOnly.id, answer: {} })
-      expect(yield* service.state(externalOnly.id)).toEqual({ status: "answered", answer: {} })
+      yield* service.reply({ id: externalOnly.id, answer: { setup: true } })
+      expect(yield* service.state(externalOnly.id)).toEqual({ status: "answered", answer: { setup: true } })
     }),
   )
 
@@ -249,6 +249,13 @@ describe("Form", () => {
 
       expect(
         yield* flipCreate([
+          { key: "a", type: "external", url: "https://example.com" },
+          { key: "a", type: "string" },
+        ]),
+      ).toEqual(new Form.InvalidFormError({ message: "Duplicate form field key: a" }))
+
+      expect(
+        yield* flipCreate([
           { key: "a", type: "boolean" },
           { key: "b", type: "string", when: [{ key: "a", op: "eq", value: "yes" }] },
         ]),
@@ -267,25 +274,37 @@ describe("Form", () => {
     }),
   )
 
-  it.effect("treats external fields as non-answerable", () =>
+  it.effect("requires external field acknowledgements", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service
       const created = yield* service.create({
         sessionID: "global",
         title: "External setup",
         fields: [
-          { type: "external", url: "https://example.com/setup", title: "Open setup" },
+          { key: "authorization", type: "external", url: "https://example.com/setup", title: "Open setup" },
           { key: "name", type: "string", required: true },
         ],
       })
 
-      const invalid = yield* service
-        .reply({ id: created.id, answer: { link: "opened", name: "Ava" } })
-        .pipe(Effect.flip)
-      expect(invalid).toEqual(new Form.InvalidAnswerError({ id: created.id, message: "Unknown form field: link" }))
+      const invalidAnswers: ReadonlyArray<Form.Answer> = [
+        { name: "Ava" },
+        { authorization: false, name: "Ava" },
+        { authorization: "yes", name: "Ava" },
+      ]
+      for (const answer of invalidAnswers) {
+        expect(yield* service.reply({ id: created.id, answer }).pipe(Effect.flip)).toEqual(
+          new Form.InvalidAnswerError({
+            id: created.id,
+            message: "External form field must be acknowledged: authorization",
+          }),
+        )
+      }
 
-      yield* service.reply({ id: created.id, answer: { name: "Ava" } })
-      expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { name: "Ava" } })
+      yield* service.reply({ id: created.id, answer: { authorization: true, name: "Ava" } })
+      expect(yield* service.state(created.id)).toEqual({
+        status: "answered",
+        answer: { authorization: true, name: "Ava" },
+      })
     }),
   )
 

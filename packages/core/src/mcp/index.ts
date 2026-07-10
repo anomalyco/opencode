@@ -311,7 +311,7 @@ export const layer = Layer.effect(
                   elicitationID: input.params.elicitationId,
                   message: input.params.message,
                 },
-                fields: [{ type: "external", url: input.params.url }],
+                fields: [{ key: "elicitation", type: "external", url: input.params.url }],
               })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
@@ -355,7 +355,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
           if (!formID) return
-          yield* forms.reply({ id: formID, answer: {} }).pipe(Effect.ignore)
+          yield* forms.reply({ id: formID, answer: { elicitation: true } }).pipe(Effect.ignore)
         }),
     } satisfies MCPClient.ElicitationHandler
 

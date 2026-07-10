@@ -2510,7 +2510,7 @@ export type FormRequestListOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       ),
       ...Array<
         | {
@@ -2593,7 +2593,7 @@ export type FormRequestListOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       >,
     ]
   }>
@@ -2689,7 +2689,7 @@ export type FormListOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       ),
       ...Array<
         | {
@@ -2772,7 +2772,7 @@ export type FormListOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       >,
     ]
   }>
@@ -2874,7 +2874,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       ),
       ...Array<
         | {
@@ -2965,7 +2971,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       >,
     ]
   }["id"]
@@ -3063,7 +3075,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       ),
       ...Array<
         | {
@@ -3154,7 +3172,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       >,
     ]
   }["title"]
@@ -3252,7 +3276,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       ),
       ...Array<
         | {
@@ -3343,7 +3373,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       >,
     ]
   }["metadata"]
@@ -3441,7 +3477,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       ),
       ...Array<
         | {
@@ -3532,7 +3574,13 @@ export type FormCreateInput = {
             readonly custom?: boolean
             readonly default?: ReadonlyArray<string>
           }
-        | { readonly type: "external"; readonly url: string; readonly title?: string; readonly description?: string }
+        | {
+            readonly key: string
+            readonly type: "external"
+            readonly url: string
+            readonly title?: string
+            readonly description?: string
+          }
       >,
     ]
   }["fields"]
@@ -3626,7 +3674,7 @@ export type FormCreateOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       ),
       ...Array<
         | {
@@ -3709,7 +3757,7 @@ export type FormCreateOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       >,
     ]
   }
@@ -3808,7 +3856,7 @@ export type FormGetOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       ),
       ...Array<
         | {
@@ -3891,7 +3939,7 @@ export type FormGetOutput = {
             custom?: boolean
             default?: Array<string>
           }
-        | { type: "external"; url: string; title?: string; description?: string }
+        | { key: string; type: "external"; url: string; title?: string; description?: string }
       >,
     ]
   }
@@ -5429,7 +5477,7 @@ export type EventSubscribeOutput =
                   custom?: boolean
                   default?: Array<string>
                 }
-              | { type: "external"; url: string; title?: string; description?: string }
+              | { key: string; type: "external"; url: string; title?: string; description?: string }
             ),
             ...Array<
               | {
@@ -5492,7 +5540,7 @@ export type EventSubscribeOutput =
                   custom?: boolean
                   default?: Array<string>
                 }
-              | { type: "external"; url: string; title?: string; description?: string }
+              | { key: string; type: "external"; url: string; title?: string; description?: string }
             >,
           ]
         }

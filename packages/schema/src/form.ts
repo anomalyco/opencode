@@ -95,6 +95,7 @@ export const MultiselectField = Schema.Struct({
 export interface MultiselectField extends Schema.Schema.Type<typeof MultiselectField> {}
 
 export const ExternalField = Schema.Struct({
+  key: Schema.String,
   type: Schema.Literal("external"),
   url: Schema.String,
   title: Schema.String.pipe(optional),
