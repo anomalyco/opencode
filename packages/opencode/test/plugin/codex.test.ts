@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import os from "os"
 import {
   CodexAuthPlugin,
   parseJwtClaims,
@@ -147,6 +149,18 @@ describe("plugin.codex", () => {
     expect(disabledOptions.fetch).toBeUndefined()
     expect(enabledOptions.fetch).toBeFunction()
     await enabled.dispose?.()
+  })
+
+  test("sends Codex-compatible request identity headers", async () => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const output = { headers: {} as Record<string, string> }
+
+    await hooks["chat.headers"]?.({ model: { providerID: "openai" } } as never, output)
+
+    expect(output.headers.originator).toBe("codex_cli_rs")
+    expect(output.headers["User-Agent"]).toBe(
+      `codex_cli_rs/0.0.0 (OpenCode/${InstallationVersion}) (${os.platform()} ${os.release()})`,
+    )
   })
 
   test("deduplicates concurrent Codex token refreshes", async () => {
