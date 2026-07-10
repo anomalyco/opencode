@@ -37,6 +37,16 @@
       "bun": "./src/filesystem/fff.bun.ts",
       "node": "./src/filesystem/fff.node.ts",
       "default": "./src/filesystem/fff.bun.ts"
+    },
+    "#photon-wasm": {
+      "bun": "./src/image/photon-wasm.bun.ts",
+      "node": "./src/image/photon-wasm.node.ts",
+      "default": "./src/image/photon-wasm.bun.ts"
+    },
+    "#runtime-import": {
+      "bun": "./src/runtime/import.bun.ts",
+      "node": "./src/runtime/import.node.ts",
+      "default": "./src/runtime/import.bun.ts"
     }
   },
   "devDependencies": {
@@ -121,6 +131,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
+    "resolve.exports": "catalog:",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
     "venice-ai-sdk-provider": "2.1.1",

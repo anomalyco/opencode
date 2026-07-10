@@ -3,6 +3,7 @@ import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Npm } from "../../npm"
 import { ProviderV2 } from "../../provider"
+import { importModule } from "#runtime-import"
 
 export const SapAICorePlugin = define({
   id: "opencode.provider.sap-ai-core",
@@ -22,9 +23,9 @@ export const SapAICorePlugin = define({
           : (yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint
         if (!installedPath) return yield* Effect.die(new Error(`Package ${evt.package} has no import entrypoint`))
 
-        const mod: Record<string, unknown> = yield* Effect.promise(
-          () => import(installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href),
-        )
+        const mod = (yield* Effect.promise(() =>
+          importModule(installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href),
+        )) as Record<string, unknown>
         const match = Object.keys(mod).find((name) => name.startsWith("create"))
         if (!match) return yield* Effect.die(new Error(`Package ${evt.package} has no provider factory export`))
         const factory = mod[match]

@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Npm } from "../../npm"
+import { importModule } from "#runtime-import"
 
 export const DynamicProviderPlugin = define({
   id: "opencode.provider.dynamic",
@@ -17,11 +18,9 @@ export const DynamicProviderPlugin = define({
           : (yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint
         if (!installedPath) throw new Error(`Package ${evt.package} has no import entrypoint`)
 
-        const mod = yield* Effect.promise(async () => {
-          return (await import(
-            installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
-          )) as Record<string, (options: any) => any>
-        }).pipe(Effect.orDie)
+        const mod = (yield* Effect.promise(() =>
+          importModule(installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href),
+        ).pipe(Effect.orDie)) as Record<string, (options: any) => any>
         const match = Object.keys(mod).find((name) => name.startsWith("create"))
         if (!match) throw new Error(`Package ${evt.package} has no provider factory export`)
 
