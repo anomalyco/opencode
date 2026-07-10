@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
-import { WebFetchTool } from "../../src/tool/webfetch"
+import { AllowPrivateFetch, WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
@@ -31,10 +31,15 @@ const withFetch = <A, E, R>(
     (server) => Effect.sync(() => server.stop(true)),
   )
 
-const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParameters<typeof WebFetchTool>) {
+const exec = Effect.fn("WebFetchToolTest.exec")(function* (
+  args: Tool.InferParameters<typeof WebFetchTool>,
+  options?: { allowPrivate?: boolean },
+) {
   const info = yield* WebFetchTool
   const tool = yield* info.init()
-  return yield* tool.execute(args, ctx)
+  // These tests fetch from a local Bun.serve instance, which the SSRF guard
+  // would otherwise reject, so they opt in to private fetches by default.
+  return yield* tool.execute(args, ctx).pipe(Effect.provideService(AllowPrivateFetch, options?.allowPrivate ?? true))
 })
 
 describe("tool.webfetch", () => {
@@ -107,6 +112,45 @@ describe("tool.webfetch", () => {
           const result = yield* exec({ url: new URL("/page.html", url).toString(), format: "text" })
           expect(result.output).toBe("Hello world")
           expect(result.attachments).toBeUndefined()
+        }),
+    ),
+  )
+
+  it.instance("follows redirects to the final response", () =>
+    withFetch(
+      (req) => {
+        const path = new URL(req.url).pathname
+        if (path === "/start") return new Response(null, { status: 302, headers: { location: "/end" } })
+        return new Response("landed", { status: 200, headers: { "content-type": "text/plain" } })
+      },
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/start", url).toString(), format: "text" })
+          expect(result.output).toBe("landed")
+        }),
+    ),
+  )
+
+  it.instance("fails after too many redirects", () =>
+    withFetch(
+      () => new Response(null, { status: 302, headers: { location: "/loop" } }),
+      (url) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(exec({ url: new URL("/loop", url).toString(), format: "text" }))
+          expect(exit._tag).toBe("Failure")
+        }),
+    ),
+  )
+
+  it.instance("rejects loopback targets when the SSRF guard is enabled", () =>
+    withFetch(
+      () => new Response("secret", { status: 200 }),
+      (url) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(
+            exec({ url: new URL("/", url).toString(), format: "text" }, { allowPrivate: false }),
+          )
+          expect(exit._tag).toBe("Failure")
         }),
     ),
   )
