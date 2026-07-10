@@ -254,6 +254,43 @@ describe("Config", () => {
     ),
   )
 
+  it.live("does not watch ecosystem config roots", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.mkdir(path.join(tmp.path, ".claude", "skills"), { recursive: true }),
+              fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
+            ]),
+          )
+          const targets: Watcher.WatchInput[] = []
+          const watcher = Layer.succeed(
+            Watcher.Service,
+            Watcher.Service.of({
+              subscribe: (input) => {
+                targets.push(input)
+                return Stream.never
+              },
+            }),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            yield* config.entries()
+
+            expect(targets).toEqual([
+              { type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) },
+            ])
+          }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, watcher)))
+        }),
+      ),
+    ),
+  )
+
   it.live("loads opencode JSON and JSONC files from lowest to highest priority", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -915,8 +952,11 @@ describe("Config", () => {
               "global",
               AbsolutePath.make(global),
               "root",
+              AbsolutePath.make(path.join(root, "opencode.json")),
               "parent",
+              AbsolutePath.make(path.join(parent, "opencode.jsonc")),
               "directory",
+              AbsolutePath.make(path.join(directory, "opencode.json")),
               "root-dot",
               AbsolutePath.make(path.join(root, ".opencode")),
               "directory-dot",

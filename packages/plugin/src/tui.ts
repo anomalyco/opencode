@@ -1,6 +1,5 @@
 import type {
   OpencodeClient,
-  V2Event,
   LspStatus,
   McpStatus,
   Message,
@@ -12,6 +11,7 @@ import type {
   SessionStatus,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { PromptInput } from "@opencode-ai/schema"
 import type { Types } from "effect"
 import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
@@ -507,9 +507,9 @@ export type TuiSlots = {
 }
 
 export type TuiEventBus = {
-  on: <Type extends V2Event["type"]>(
+  on: <Type extends OpenCodeEvent["type"]>(
     type: Type,
-    handler: (event: Extract<V2Event, { type: Type }>) => void,
+    handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
   ) => () => void
 }
 

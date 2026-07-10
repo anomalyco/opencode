@@ -47,7 +47,7 @@ import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogDebug } from "./component/dialog-debug"
-import { DialogLink, type DialogLinkCredentials } from "./component/dialog-link"
+import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -123,7 +123,7 @@ const appBindingCommands = [
   "provider.connect",
   "console.org.switch",
   "opencode.status",
-  "server.link",
+  "server.pair",
   "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
@@ -147,7 +147,7 @@ const appBindingCommands = [
 export type TuiInput = {
   server: {
     endpoint: Service.Endpoint
-    discover?: () => Promise<Service.Endpoint>
+    reconnect?: (attempt: number) => Promise<Service.Endpoint>
     reload?: () => Promise<void>
   }
   args: Args
@@ -200,10 +200,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory)),
     ),
   )
-  const discover = input.server.discover
-  const reconnect = discover
-    ? async () => {
-        const endpoint = await discover()
+  const reconnectEndpoint = input.server.reconnect
+  const reconnect = reconnectEndpoint
+    ? async (attempt: number) => {
+        const endpoint = await reconnectEndpoint(attempt)
         const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
         return {
           client: createOpencodeClient({ ...next, directory }),
@@ -339,7 +339,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           <SDKProvider
                                             client={createOpencodeClient({ ...options, directory })}
                                             api={api}
-                                            discover={reconnect}
+                                            reconnect={reconnect}
                                             reload={input.server.reload}
                                           >
                                             <PermissionProvider>
@@ -358,7 +358,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                       <App
                                                                         onSnapshot={input.onSnapshot}
                                                                         pluginHost={input.pluginHost}
-                                                                        link={
+                                                                        pair={
                                                                           input.server.endpoint.auth
                                                                             ? input.server.endpoint.auth
                                                                             : {
@@ -414,7 +414,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 function App(props: {
   onSnapshot?: () => Promise<string[]>
   pluginHost: TuiPluginHost
-  link?: DialogLinkCredentials
+  pair?: DialogPairCredentials
 }) {
   const log = useLog({ component: "app" })
   const startup = useTuiStartup()
@@ -849,11 +849,11 @@ function App(props: {
         category: "System",
       },
       {
-        name: "server.link",
-        title: "Show server info",
-        slashName: "link",
+        name: "server.pair",
+        title: "Pair device",
+        slashName: "pair",
         run: () => {
-          dialog.replace(() => <DialogLink credentials={props.link} />)
+          dialog.replace(() => <DialogPair credentials={props.pair} />)
         },
         category: "System",
       },

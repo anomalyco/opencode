@@ -13,11 +13,7 @@ test("execute preserves successful results with visible unhandled rejections", a
     output: Schema.String,
     execute: () => Effect.fail(new Tool.Failure({ message: "Lookup refused" })),
   })
-  const registration: ExecuteTool.Registration = { identity: {}, tool: child, name: "fail" }
-  const execute = ExecuteTool.create({
-    registrations: new Map([["fail", registration]]),
-    current: () => registration,
-  })
+  const execute = ExecuteTool.create(new Map([["fail", { tool: child, name: "fail" }]]))
   const result = await Effect.runPromise(
     Tool.settle(
       execute,

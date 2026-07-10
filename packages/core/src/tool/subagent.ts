@@ -192,32 +192,5 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
-
-    yield* ctx.session.hook("request", (event) =>
-      Effect.gen(function* () {
-        const tool = event.tools[name]
-        if (!tool) return
-        const selected = yield* agents.resolve(event.agent)
-        if (!selected) return
-        const available = (yield* agents.list())
-          .filter(
-            (agent) =>
-              agent.mode !== "primary" &&
-              !agent.hidden &&
-              PermissionV2.evaluate(name, agent.id, selected.permissions).effect !== "deny",
-          )
-          .toSorted((a, b) => a.id.localeCompare(b.id))
-        if (available.length === 0) return
-        tool.description = [
-          tool.description,
-          "",
-          "Available subagents:",
-          ...available.map(
-            (agent) =>
-              `- ${agent.id}: ${agent.description ?? "This subagent should only be called when explicitly requested."}`,
-          ),
-        ].join("\n")
-      }),
-    )
   }),
 }

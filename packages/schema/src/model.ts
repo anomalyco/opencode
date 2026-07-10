@@ -93,9 +93,9 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "Model.Info" })
   .pipe(
-    statics((schema) => ({
+    statics(() => ({
       empty: (providerID: Provider.ID, id: ID) =>
-        schema.make({
+        ({
           id,
           modelID: id,
           providerID,
@@ -107,6 +107,6 @@ export const Info = Schema.Struct({
           status: "active",
           enabled: true,
           limit: { context: 0, output: 0 },
-        }),
+        }) satisfies Info,
     })),
   )

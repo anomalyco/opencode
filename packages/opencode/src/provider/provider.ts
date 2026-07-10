@@ -207,6 +207,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
+    meta: () =>
+      Effect.succeed({
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+      }),
     xai: () =>
       Effect.succeed({
         autoload: false,
@@ -1064,11 +1071,17 @@ export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof 
 
 export function toPublicInfo(provider: Info): Info {
   return JSON.parse(
-    JSON.stringify(provider, (_, value) => {
-      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
-      if (typeof value === "bigint") return value.toString()
-      return value
-    }),
+    JSON.stringify(
+      {
+        ...provider,
+        models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
+      },
+      (_, value) => {
+        if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+        if (typeof value === "bigint") return value.toString()
+        return value
+      },
+    ),
   )
 }
 
@@ -1156,6 +1169,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 
 export const use = serviceUse(Service)
 
+// @ts-expect-error dead V1 consumes the removed pre-normalized ModelsDev model type.
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
     input: c?.input ?? 0,
@@ -1166,6 +1180,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
     },
   }
   if (c?.tiers) {
+    // @ts-expect-error dead V1 relies on the removed ModelsDev cost tier context.
     result.tiers = c.tiers.map((item) => ({
       input: item.input,
       output: item.output,
@@ -1189,6 +1204,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   return result
 }
 
+// @ts-expect-error dead V1 consumes removed provider and model types instead of snapshots.
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1240,26 +1256,34 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
   }
 }
 
+// @ts-expect-error dead V1 consumes the removed pre-normalized ModelsDev provider type.
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   const models: Record<string, Model> = {}
   for (const [key, model] of Object.entries(provider.models)) {
     models[key] = fromModelsDevModel(provider, model)
+    // @ts-expect-error dead V1 expects raw model metadata inside a provider instead of normalized snapshots.
     for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
+      // @ts-expect-error dead V1 expects raw model IDs inside normalized ModelsDev data.
       const id = `${model.id}-${mode}`
       const base = fromModelsDevModel(provider, model)
       models[id] = {
         ...base,
         id: ModelV2.ID.make(id),
+        // @ts-expect-error dead V1 expects raw model names and mode options.
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
+        // @ts-expect-error dead V1 expects raw mode costs inside normalized ModelsDev data.
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
+        // @ts-expect-error dead V1 expects raw mode provider bodies inside normalized ModelsDev data.
         options: opts.provider?.body
           ? Object.fromEntries(
+              // @ts-expect-error dead V1 expects raw mode provider bodies inside normalized ModelsDev data.
               Object.entries(opts.provider.body).map(([k, v]) => [
                 k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
                 v,
               ]),
             )
           : base.options,
+        // @ts-expect-error dead V1 expects raw mode headers inside normalized ModelsDev data.
         headers: opts.provider?.headers ?? base.headers,
       }
     }
@@ -1344,13 +1368,13 @@ const layer = Layer.effect(
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
           const existing = providers[providerID]
           if (existing) {
-            // @ts-expect-error
+            // @ts-expect-error dead V1 merges partial provider records with legacy semantics.
             providers[providerID] = mergeDeep(existing, provider)
             return
           }
+          // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
           const match = database[providerID]
           if (!match) return
-          // @ts-expect-error
           providers[providerID] = mergeDeep(match, provider)
         }
 
@@ -1376,6 +1400,7 @@ const layer = Layer.effect(
           const providerID = ProviderV2.ID.make(p.id)
           if (disabled.has(providerID)) continue
 
+          // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
           const provider = database[providerID]
           if (!provider) continue
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
@@ -1397,6 +1422,7 @@ const layer = Layer.effect(
 
         // extend database from config
         for (const [providerID, provider] of configProviders) {
+          // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
           const existing = database[providerID]
           const parsed: Info = {
             id: ProviderV2.ID.make(providerID),
@@ -1414,6 +1440,7 @@ const layer = Layer.effect(
               model.provider?.npm ??
               provider.npm ??
               existingModel?.api.npm ??
+              // @ts-expect-error dead V1 indexes normalized ModelsDev snapshots for raw provider fields.
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible"
             const name = iife(() => {
@@ -1426,6 +1453,7 @@ const layer = Layer.effect(
               api: {
                 id: apiID,
                 npm: apiNpm,
+                // @ts-expect-error dead V1 indexes normalized ModelsDev snapshots for raw provider fields.
                 url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
               },
               status: model.status ?? existingModel?.status ?? "active",
@@ -1486,6 +1514,7 @@ const layer = Layer.effect(
             )
             parsed.models[modelID] = parsedModel
           }
+          // @ts-expect-error dead V1 mutates a provider-keyed record, not normalized snapshots.
           database[providerID] = parsed
         }
 
@@ -1528,6 +1557,7 @@ const layer = Layer.effect(
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
+              // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
               toPublicInfo(database[plugin.auth!.provider]),
             ),
           )
@@ -1539,6 +1569,7 @@ const layer = Layer.effect(
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
+          // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
           const data = database[providerID]
           if (!data) {
             continue

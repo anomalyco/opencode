@@ -17,12 +17,7 @@ await Effect.runPromise(
     [
       write(
         emitPromise(promiseContract, {
-          outputTypes: {
-            "events.subscribe": {
-              name: "OpenCodeEventEncoded",
-              import: 'import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"',
-            },
-          },
+          mutableOutputs: true,
         }),
         fileURLToPath(new URL("../src/promise/generated", import.meta.url)),
       ),

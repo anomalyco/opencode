@@ -49,6 +49,7 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
     const state = State.create<Data, Draft>({
+      name: "reference",
       initial: () => ({ sources: new Map() }),
       draft: (draft) => ({
         add: (name, source) => draft.sources.set(name, source as Types.DeepMutable<Source>),

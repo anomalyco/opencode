@@ -20,6 +20,8 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@opencode-ai/httpapi-codegen": "workspace:*",
+    "@opencode-ai/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

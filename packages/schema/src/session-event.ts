@@ -19,7 +19,7 @@ import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
 import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
-import { SessionInput } from "./session-input.js"
+import { SessionPending } from "./session-pending.js"
 
 export { FileAttachment }
 
@@ -130,7 +130,7 @@ export const InputAdmitted = Event.durable({
   schema: {
     ...Base,
     inputID: SessionMessage.ID,
-    input: SessionInput.Message,
+    input: SessionPending.Message,
   },
 })
 export type InputAdmitted = typeof InputAdmitted.Type

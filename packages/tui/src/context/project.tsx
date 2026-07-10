@@ -1,4 +1,4 @@
-import { batch, onCleanup } from "solid-js"
+import { batch } from "solid-js"
 import type { Path, Workspace } from "@opencode-ai/sdk/v2"
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -65,12 +65,6 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         }
       })
     }
-
-    onCleanup(
-      sdk.event.on("workspace.status", (event) => {
-        setStore("workspace", "status", event.data.workspaceID, event.data.status)
-      }),
-    )
 
     return {
       data: store,

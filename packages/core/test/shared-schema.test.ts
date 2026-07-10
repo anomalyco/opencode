@@ -12,7 +12,7 @@ import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
 import { Prompt } from "@opencode-ai/schema/prompt"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionInput } from "@opencode-ai/schema/session-input"
+import { SessionPending } from "@opencode-ai/schema/session-pending"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Command } from "@opencode-ai/schema/command"
@@ -43,7 +43,7 @@ test("Core reuses the canonical shared schemas", async () => {
     corePty,
     coreProject,
     coreReference,
-    coreSessionInput,
+    coreSessionPending,
     coreSessionMessage,
     coreSkill,
     coreV2Schema,
@@ -63,7 +63,7 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/pty"),
     import("@opencode-ai/core/project/schema"),
     import("@opencode-ai/core/reference"),
-    import("@opencode-ai/core/session/input"),
+    import("@opencode-ai/core/session/pending"),
     import("@opencode-ai/core/session/message"),
     import("@opencode-ai/core/skill"),
     import("@opencode-ai/core/v2-schema"),
@@ -133,10 +133,10 @@ test("Core reuses the canonical shared schemas", async () => {
     [SessionV2.ID, Session.ID],
     [SessionV2.Info, Session.Info],
     [SessionV2.ListAnchor, Session.ListAnchor],
-    [coreSessionInput.Delivery, SessionInput.Delivery],
-    [coreSessionInput.Message, SessionInput.Message],
-    [coreSessionInput.User, SessionInput.User],
-    [coreSessionInput.Synthetic, SessionInput.Synthetic],
+    [coreSessionPending.Delivery, SessionPending.Delivery],
+    [coreSessionPending.Message, SessionPending.Message],
+    [coreSessionPending.User, SessionPending.User],
+    [coreSessionPending.Synthetic, SessionPending.Synthetic],
     [coreSessionMessage.ID, SessionMessage.ID],
     [coreSessionMessage.AssistantRetry, SessionMessage.AssistantRetry],
     [coreSessionMessage.AgentSelected, SessionMessage.AgentSelected],

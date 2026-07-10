@@ -1,7 +1,7 @@
 export * as Tool from "./tool.js"
 
-import { ToolDefinition, ToolFailure, ToolOutput, type ToolCall, type ToolResultValue } from "@opencode-ai/llm"
 import { Agent } from "@opencode-ai/schema/agent"
+import type { LLM } from "@opencode-ai/schema/llm"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, JsonSchema, Schema, type Scope } from "effect"
@@ -16,6 +16,29 @@ export interface Context {
 
 export type SchemaType<A> = Schema.Codec<A, any>
 
+type ToolDefinition = {
+  readonly name: string
+  readonly description: string
+  readonly inputSchema: JsonSchema.JsonSchema
+  readonly outputSchema?: JsonSchema.JsonSchema
+}
+
+type ToolCall = {
+  readonly input: unknown
+  readonly [key: string]: unknown
+}
+
+type ToolResultValue =
+  | { readonly type: "json"; readonly value: unknown }
+  | { readonly type: "text"; readonly value: unknown }
+  | { readonly type: "error"; readonly value: unknown }
+  | { readonly type: "content"; readonly value: ReadonlyArray<LLM.ToolContent> }
+
+type ToolOutput = {
+  readonly structured: unknown
+  readonly content: ReadonlyArray<LLM.ToolContent>
+}
+
 declare const TypeId: unique symbol
 
 export interface Definition<Input extends SchemaType<any>, Output extends SchemaType<any>> {
@@ -26,8 +49,11 @@ export interface Definition<Input extends SchemaType<any>, Output extends Schema
 }
 
 export type AnyTool = Definition<any, any>
-export const Failure = ToolFailure
-export type Failure = ToolFailure
+export class Failure extends Schema.TaggedErrorClass<Failure>()("LLM.ToolFailure", {
+  message: Schema.String,
+  error: Schema.optional(Schema.Defect()),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
 
 export class RegistrationError extends Schema.TaggedErrorClass<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -54,7 +80,7 @@ type Config<
   readonly execute: (
     input: Schema.Schema.Type<Input>,
     context: Context,
-  ) => Effect.Effect<Schema.Schema.Type<Output>, ToolFailure>
+  ) => Effect.Effect<Schema.Schema.Type<Output>, Failure>
   readonly toModelOutput?: (input: {
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
@@ -75,13 +101,13 @@ type DynamicConfig = {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
-  readonly execute: (input: unknown, context: Context) => Effect.Effect<DynamicOutput, ToolFailure>
+  readonly execute: (input: unknown, context: Context) => Effect.Effect<DynamicOutput, Failure>
 }
 
 type Runtime = {
   readonly permission?: string
   readonly definition: (name: string) => ToolDefinition
-  readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, ToolFailure>
+  readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, Failure>
 }
 
 const runtimes = new WeakMap<AnyTool, Runtime>()
@@ -108,18 +134,18 @@ function makeTyped<
     definition: (name) => {
       const cached = definitions.get(name)
       if (cached) return cached
-      const definition = new ToolDefinition({
+      const definition: ToolDefinition = {
         name,
         description: config.description,
         inputSchema: toJsonSchema(config.input),
         outputSchema: toJsonSchema(config.structured ?? config.output),
-      })
+      }
       definitions.set(name, definition)
       return definition
     },
     settle: (call, context) =>
       Schema.decodeUnknownEffect(config.input)(call.input).pipe(
-        Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
+        Effect.mapError((error) => new Failure({ message: `Invalid tool input: ${error.message}` })),
         Effect.flatMap((input) =>
           config.execute(input, context).pipe(
             Effect.flatMap((output) =>
@@ -133,7 +159,7 @@ function makeTyped<
                 }),
                 Effect.mapError(
                   (error) =>
-                    new ToolFailure({
+                    new Failure({
                       message: `Tool returned an invalid value for its output schema: ${error.message}`,
                     }),
                 ),
@@ -159,12 +185,12 @@ function makeDynamic(config: DynamicConfig): AnyTool {
     definition: (name) => {
       const cached = definitions.get(name)
       if (cached) return cached
-      const definition = new ToolDefinition({
+      const definition: ToolDefinition = {
         name,
         description: config.description,
         inputSchema: config.jsonSchema,
         outputSchema: config.outputSchema,
-      })
+      }
       definitions.set(name, definition)
       return definition
     },

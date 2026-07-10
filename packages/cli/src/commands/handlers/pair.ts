@@ -8,8 +8,8 @@ import { Runtime } from "../../framework/runtime"
 import { ServiceConfig } from "../../services/service-config"
 
 export default Runtime.handler(
-  Commands.commands.link,
-  Effect.fn("cli.link")(function* () {
+  Commands.commands.pair,
+  Effect.fn("cli.pair")(function* () {
     const endpoint = yield* Service.start(yield* ServiceConfig.options())
     const password = yield* ServiceConfig.password()
     const server = yield* Effect.tryPromise(() =>
@@ -24,7 +24,7 @@ export default Runtime.handler(
         `  Username  ${info.username}`,
         `  Password  ${info.password}`,
         "",
-        "  Scan to connect",
+        "  Scan to pair",
         "",
         renderUnicodeCompact(JSON.stringify(info), { border: 2 })
           .split(EOL)

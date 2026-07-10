@@ -1,8 +1,10 @@
-# Policy
+# Provider Policy Proposal
+
+Status: **Proposed and unimplemented.** This document is design input, not current configuration or runtime behavior.
 
 ## Purpose
 
-Policies control whether an operation on a named resource is allowed. They may be authored in configuration files, but policy evaluation is its own runtime concern.
+This proposal would let policies control whether an operation on a named resource is allowed. Statements could be authored in configuration files while policy evaluation remained its own runtime concern.
 
 The first policy consumer is provider availability:
 
@@ -58,7 +60,7 @@ interface PolicyInfo {
 }
 ```
 
-The `Policy` module owns the shared `Policy.Info` interface, `Policy.Effect` type, and evaluator. Domains define their supported typed statement schemas; for example, `Catalog.ProviderPolicy` fixes `action` to `"provider.use"`. The config schema gathers those domain-defined statement schemas into the accepted `experimental.policies` union because config files are one place statements can be authored while the capability is experimental.
+The proposed `Policy` module would own the shared `Policy.Info` interface, `Policy.Effect` type, and evaluator. Domains would define their supported typed statement schemas; for example, `Catalog.ProviderPolicy` would fix `action` to `"provider.use"`. The config schema could gather those domain-defined statement schemas into an `experimental.policies` union.
 
 ## Matching
 

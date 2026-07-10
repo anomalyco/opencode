@@ -296,6 +296,7 @@ export function emitPromise(
   contract: Contract,
   options?: {
     readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
+    readonly mutableOutputs?: boolean
   },
 ): Output {
   const groups = contract.groups
@@ -305,7 +306,7 @@ export function emitPromise(
   return {
     operations: promiseOperations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes) },
+      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes, options?.mutableOutputs ?? false) },
       {
         path: "client-error.ts",
         content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions) {\n    super(reason, options)\n  }\n}\n`,
@@ -568,6 +569,7 @@ function renderImportedProjection(groups: ReadonlyArray<Group>, endpoints: Reado
 function renderPromiseTypes(
   groups: ReadonlyArray<Group>,
   outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
+  mutableOutputs = false,
 ) {
   const types = new Map<SchemaAST.AST, string>()
   const typeOf = (schema: Schema.Top, decoded = false) => {
@@ -623,18 +625,23 @@ function renderPromiseTypes(
                 : successSchema.events
               : successSchema,
           )
+        const output = mutableOutputs ? mutableType(success) : success
         return [
           ...(promiseInputMode(endpoint) === "none" ? [] : [`export type ${prefix}Input = { ${input} }`]),
-          `export type ${prefix}Output = ${endpoint.unwrapData ? `(${success})["data"]` : success}`,
+          `export type ${prefix}Output = ${endpoint.unwrapData ? `(${output})["data"]` : output}`,
         ]
       }),
     )
     .join("\n\n")
   const json = operations.includes("JsonValue")
-    ? "export type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"
+    ? `export type JsonValue = null | boolean | number | string | ${mutableOutputs ? "Array<JsonValue> | { [key: string]: JsonValue }" : "ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"}`
     : ""
   const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
   return [...imports, json, ...errorTypes, operations].filter(Boolean).join("\n\n")
+}
+
+function mutableType(type: string) {
+  return type.replaceAll("ReadonlyArray<", "Array<").replaceAll(/\breadonly\s+/g, "")
 }
 
 function renderPromiseClient(groups: ReadonlyArray<Group>) {

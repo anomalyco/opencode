@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { V2Event } from "@opencode-ai/sdk/v2"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { EventV2 } from "@opencode-ai/core/event"
 import { onMount } from "solid-js"
@@ -20,7 +20,7 @@ async function wait(fn: () => boolean, timeout = 2000) {
   }
 }
 
-function emitEvent(events: ReturnType<typeof createEventStream>, event: V2Event) {
+function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCodeEvent) {
   events.emit({ ...event, location: { directory } })
 }
 
@@ -458,8 +458,9 @@ test("restores running manual compaction before applying live deltas", async () 
 
 test("reconnects the event stream and bootstraps fresh data", async () => {
   const events = createEventStream()
-  const requests = { active: 0, event: 0, model: 0 }
+  const requests = { active: 0, event: 0, message: 0, model: 0 }
   let resolveActive!: (response: Response) => void
+  let resolveMessages!: (response: Response) => void
   const calls = createFetch((url) => {
     if (url.pathname === "/api/event") {
       requests.event++
@@ -470,6 +471,17 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
       if (requests.active === 1) return json({ data: { "session-stale": { type: "running" } } })
       return new Promise<Response>((resolve) => {
         resolveActive = resolve
+      })
+    }
+    if (url.pathname === "/api/session/session-stale/message") {
+      requests.message++
+      if (requests.message === 1)
+        return json({
+          data: [{ id: "message-stale", type: "user", text: "Stale", time: { created: 1 } }],
+          cursor: {},
+        })
+      return new Promise<Response>((resolve) => {
+        resolveMessages = resolve
       })
     }
     if (url.pathname !== "/api/model") return
@@ -517,6 +529,8 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
   try {
     await wait(() => data.location.model.list()?.[0]?.id === "model-1")
     await wait(() => data.session.status("session-stale") === "running")
+    await data.session.message.refresh("session-stale")
+    expect(data.session.message.get("session-stale", "message-stale")?.id).toBe("message-stale")
     expect(sdk.connection.status()).toBe("connected")
     expect(sdk.connection.attempt()).toBe(0)
 
@@ -530,8 +544,19 @@ test("reconnects the event stream and bootstraps fresh data", async () => {
 
     await wait(() => data.location.model.list()?.[0]?.id === "model-2", 4000)
     await wait(() => data.session.status("session-stale") === "idle")
-    expect(data.session.status("session-new")).toBe("running")
+    await wait(() => requests.message === 2)
+    expect(data.session.message.get("session-stale", "message-stale")?.id).toBe("message-stale")
+    resolveMessages(
+      json({
+        data: [{ id: "message-fresh", type: "user", text: "Fresh", time: { created: 2 } }],
+        cursor: {},
+      }),
+    )
+    await wait(() => data.session.message.get("session-stale", "message-fresh") !== undefined)
+    expect(data.session.message.get("session-stale", "message-stale")).toBeUndefined()
+    await wait(() => data.session.status("session-new") === "running")
     expect(requests.event).toBe(2)
+    expect(requests.message).toBe(2)
     expect(sdk.connection.status()).toBe("connected")
     expect(sdk.connection.attempt()).toBe(0)
     expect(sdk.connection.error()).toBeUndefined()

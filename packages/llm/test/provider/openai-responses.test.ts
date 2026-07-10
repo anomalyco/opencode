@@ -1443,7 +1443,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("surfaces error event details even when they arrive nested under response.error", () =>
+  it.effect("surfaces error event details nested under response.error", () =>
     Effect.gen(function* () {
       // Some OpenAI-compatible proxies and older SDK versions wrap the
       // top-level error fields into a nested `response.error` payload
@@ -1468,6 +1468,65 @@ describe("OpenAI Responses route", () => {
           classification: "context-overflow",
         },
       ])
+    }),
+  )
+
+  it.effect("surfaces error event details nested under error", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              sequence_number: 2,
+              error: {
+                type: "invalid_request_error",
+                code: "context_length_exceeded",
+                message: "prompt too long",
+                param: "input",
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "context_length_exceeded: prompt too long",
+          classification: "context-overflow",
+        },
+      ])
+    }),
+  )
+
+  it.effect("accepts nullable fields in spec-compliant error events", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              code: null,
+              message: "Something went wrong",
+              param: null,
+              sequence_number: 1,
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "Something went wrong" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when error is null", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", error: null }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses stream error" }])
     }),
   )
 

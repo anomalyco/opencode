@@ -10,11 +10,12 @@ import { Standalone } from "./standalone"
 export type Args = {
   readonly server?: string
   readonly standalone?: boolean
+  readonly mismatch?: "replace" | "ignore" | "error"
 }
 
 export type Resolved = {
   readonly endpoint: Service.Endpoint
-  readonly discover?: () => Promise<Service.Endpoint>
+  readonly reconnect?: (attempt: number) => Promise<Service.Endpoint>
   readonly reload?: () => Promise<void>
 }
 
@@ -45,11 +46,19 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
   }
 
   const options = yield* ServiceConfig.options()
-  const endpoint = yield* Service.start(options)
+  const endpoint = yield* resolveManaged(options, args.mismatch ?? "replace")
   const reconnectOptions = { ...options, version: undefined }
   return {
     endpoint,
-    discover: () => Effect.runPromise(Service.start(reconnectOptions).pipe(Effect.provide(NodeFileSystem.layer))),
+    reconnect: (attempt) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          if (attempt > 3) return yield* Service.start(reconnectOptions)
+          const endpoint = yield* Service.discover(reconnectOptions)
+          if (endpoint !== undefined) return endpoint
+          return yield* Effect.fail(new Error("Background server is unavailable"))
+        }).pipe(Effect.provide(NodeFileSystem.layer)),
+      ),
     reload: () =>
       Effect.runPromise(
         Effect.gen(function* () {
@@ -58,6 +67,20 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
         }).pipe(Effect.provide(NodeFileSystem.layer)),
       ),
   } satisfies Resolved
+})
+
+const resolveManaged = Effect.fnUntraced(function* (
+  options: Service.Options,
+  mismatch: NonNullable<Args["mismatch"]>,
+) {
+  if (mismatch === "replace") return yield* Service.start(options)
+  if (mismatch === "ignore") return yield* Service.start({ ...options, version: undefined })
+
+  const compatible = yield* Service.discover(options)
+  if (compatible !== undefined) return compatible
+  const existing = yield* Service.discover({ ...options, version: undefined })
+  if (existing !== undefined) return yield* Effect.fail(new Error("Background server version does not match this client"))
+  return yield* Service.start(options)
 })
 
 function connectError(endpoint: Service.Endpoint, cause: unknown) {

@@ -1,4 +1,5 @@
 import { LLMError, ToolFailure } from "@opencode-ai/llm"
+import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
@@ -38,7 +39,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   }
   if (cause instanceof PermissionV2.BlockedError) return { type: "permission.rejected", message: cause.message }
   if (cause instanceof QuestionV2.RejectedError) return { type: "aborted", message: cause.message }
-  if (cause instanceof ToolFailure)
+  if (cause instanceof ToolFailure || cause instanceof Tool.Failure)
     return cause.error === undefined ? { type: "tool.execution", message: cause.message } : toSessionError(cause.error)
   if (cause instanceof StepFailedError) return cause.error
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }

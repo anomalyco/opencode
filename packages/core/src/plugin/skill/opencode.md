@@ -37,6 +37,23 @@ settings when editing an existing file.
 See the [full configuration guide](https://opencode.mintlify.site/config) for
 every field, examples, config locations, and links to dedicated feature guides.
 
+## V1 to V2 migration
+
+For any request to migrate OpenCode configuration, agents, commands, skills,
+plugins, integrations, or other behavior from V1 to V2, read the full
+[migration guide](https://opencode.mintlify.site/migrate-v1) before acting. In
+the repository, its source is `packages/docs/migrate-v1.mdx`.
+
+V1 config files and `.opencode/` definitions are intended to remain compatible.
+The only intentional breaking changes are the server API and plugin API. Native
+V2 config uses more ergonomic shapes, but conversion is optional. When the user
+requests conversion, inspect the complete configuration, preserve behavior and
+unrelated settings, and apply only the relevant migrations from the guide. If
+the request includes a V1 plugin, explain that its API is not finalized and do
+not attempt migration yet. Once the V2 plugin API is finalized, OpenCode should
+be able to migrate most plugins. If non-API V1 functionality fails in V2, use
+the `report` skill to file it as a compatibility bug.
+
 ## Service
 
 OpenCode uses a client-server architecture. Interfaces such as the TUI connect

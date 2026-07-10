@@ -167,6 +167,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
 
       const providers = await Effect.runPromise(modelsDev.get()).then((p) => {
         // TODO: add guide for copilot, for now just hide it
+        // @ts-expect-error dead V1 expects the pre-normalized ModelsDev provider record.
         delete p["github-copilot"]
         return p
       })
@@ -187,6 +188,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           step2 = [
             `    2. Add the following secrets in org or repo (${app.owner}/${app.repo}) settings`,
             "",
+            // @ts-expect-error dead V1 expects provider env fields instead of normalized snapshots.
             ...providers[provider].env.map((e) => `       - ${e}`),
           ].join("\n")
         }
@@ -238,12 +240,17 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
             providers,
             values(),
             sortBy(
+              // @ts-expect-error dead V1 expects provider IDs on the ModelsDev record values.
               (x) => priority[x.id] ?? 99,
+              // @ts-expect-error dead V1 expects provider names on the ModelsDev record values.
               (x) => x.name ?? x.id,
             ),
             map((x) => ({
+              // @ts-expect-error dead V1 expects provider names on the ModelsDev record values.
               label: x.name,
+              // @ts-expect-error dead V1 expects provider IDs on the ModelsDev record values.
               value: x.id,
+              // @ts-expect-error dead V1 expects provider IDs on the ModelsDev record values.
               hint: priority[x.id] === 0 ? "recommended" : undefined,
             })),
           ),
@@ -330,6 +337,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         const envStr =
           provider === "amazon-bedrock"
             ? ""
+            // @ts-expect-error dead V1 expects provider env fields instead of normalized snapshots.
             : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
 
         await Filesystem.write(

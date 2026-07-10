@@ -49,9 +49,11 @@ type RecordedScenario = {
   readonly recordAuth?: () => Auth.Info | undefined
   readonly replayAuth?: Auth.Info
   readonly stableID?: string
+  // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
   readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<ConfigV1.Info>
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const cloned = structuredClone(model)
   const { experimental, ...rest } = cloned
@@ -94,6 +96,7 @@ const providerConfig = (input: {
   readonly env: string[]
   readonly npm: string
   readonly api: string
+  // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
   readonly model: ModelsDev.Provider["models"][string]
   readonly options: Record<string, unknown>
 }): Partial<ConfigV1.Info> => ({
@@ -254,6 +257,7 @@ async function loadFixture(providerID: string, modelID: string) {
   return model
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const modelsFixture = Filesystem.readJson<Record<string, ModelsDev.Provider>>(
   path.join(import.meta.dir, "../tool/fixtures/models-api.json"),
 )
@@ -283,6 +287,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
   ])
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const writeConfig = (directory: string, scenario: RecordedScenario, model: ModelsDev.Provider["models"][string]) =>
   Effect.promise(() =>
     Bun.write(

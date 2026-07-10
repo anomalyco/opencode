@@ -83,6 +83,7 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
 
     const state = State.create<Data, Draft>({
+      name: "skill",
       initial: () => ({ sources: [] }),
       draft: (draft) => ({
         source: (source) => {

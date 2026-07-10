@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show, type JSX } from "solid-js"
+import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
 import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -21,7 +21,12 @@ import type {
 import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
-import { filterReviewFiles, reviewDiffKinds, type RenderDiff } from "@/pages/session/v2/review-diff-kinds"
+import {
+  filterReviewFiles,
+  reviewDiffKinds,
+  reviewDiffNeedsLoad,
+  type RenderDiff,
+} from "@/pages/session/v2/review-diff-kinds"
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 
@@ -32,6 +37,8 @@ export type ReviewPanelV2Props = {
   empty?: JSX.Element
   diffs: () => ReviewDiff[]
   diffsReady: () => boolean
+  diffVersion?: number
+  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
   activeFile?: string
   onSelectFile: (path: string) => void
   diffStyle: SessionReviewDiffStyle
@@ -69,7 +76,26 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
     if (active && files.includes(active)) return active
     return files[0]
   })
-  const activeItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+  const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+  const detailSource = createMemo(() => {
+    const diff = sourceActiveItem()
+    const load = props.loadDiff
+    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return
+    return { diff, load, version: props.diffVersion }
+  })
+  const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
+    const value = await load(diff.file, version)
+    if (value?.file !== diff.file) return
+    return { source: diff, version, value }
+  })
+
+  const activeItem = createMemo(() => {
+    const source = sourceActiveItem()
+    if (loadedDiff.state !== "ready") return source
+    const loaded = loadedDiff()
+    if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
+    return source
+  })
 
   const readFile = async (path: string) =>
     sdk()

@@ -28,7 +28,6 @@ type Execution<E, Reason> = {
   owner?: Fiber.Fiber<void>
   pendingWake: boolean
   stopping: boolean
-  settling: boolean
   interruptionReason?: Reason
 }
 
@@ -74,7 +73,6 @@ export const make = <Key, E, Reason = never>(options: {
         done: Deferred.makeUnsafe<void, E>(),
         pendingWake: false,
         stopping: false,
-        settling: false,
       }
       executions.set(key, execution)
       // The leading yield lets `owner` be assigned before the drain can settle, and keeps
@@ -86,7 +84,7 @@ export const make = <Key, E, Reason = never>(options: {
           Effect.andThen(loop(key, execution, force)),
           Effect.onExit((exit) =>
             Effect.sync(() => {
-              execution.settling = true
+              execution.owner = undefined
             }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
           ),
           Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
@@ -106,14 +104,14 @@ export const make = <Key, E, Reason = never>(options: {
     }
 
     const run = (key: Key): Effect.Effect<void, E> =>
-      Effect.uninterruptibleMask((restore) => {
+      Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution !== undefined) {
           // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
-          if (execution.stopping) return restore(Deferred.await(execution.done).pipe(Effect.andThen(run(key))))
-          return restore(Deferred.await(execution.done))
+          if (execution.stopping) return Deferred.await(execution.done).pipe(Effect.andThen(run(key)))
+          return Deferred.await(execution.done)
         }
-        return restore(Deferred.await(start(key, true).done))
+        return Deferred.await(start(key, true).done)
       })
 
     const wake = (key: Key) =>
@@ -129,7 +127,7 @@ export const make = <Key, E, Reason = never>(options: {
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<void> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
-        if (execution?.owner === undefined || execution.stopping || execution.settling) return Effect.void
+        if (execution?.owner === undefined || execution.stopping) return Effect.void
         execution.stopping = true
         execution.pendingWake = false
         execution.interruptionReason = reason

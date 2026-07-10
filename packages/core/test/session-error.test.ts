@@ -16,6 +16,7 @@ import {
   ToolFailure,
 } from "@opencode-ai/llm"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 
@@ -63,6 +64,10 @@ describe("toSessionError", () => {
     expect(toSessionError(new ToolFailure({ message: blocked.message, error: blocked }))).toEqual({
       type: "permission.rejected",
       message: "Permission denied: external_directory",
+    })
+    expect(toSessionError(new Tool.Failure({ message: "failed" }))).toEqual({
+      type: "tool.execution",
+      message: "failed",
     })
   })
 

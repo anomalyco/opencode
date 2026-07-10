@@ -15,6 +15,7 @@ describe("provider model status schemas", () => {
   test("accepts active status across public provider schemas", () => {
     expect(Schema.decodeUnknownSync(ConfigProviderV1.Model)({ status: "active" }).status).toBe("active")
     expect(
+      // @ts-expect-error dead V1 test consumes the removed ModelsDev model schema value.
       Schema.decodeUnknownSync(ModelsDev.Model)({
         id: "test-model",
         name: "Test Model",

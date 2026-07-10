@@ -1,38 +1,30 @@
 # V2 Tools
 
-## Design
+Status: **Current semantic overview.** The Plugin package owns the public tool type; Core owns registration, settlement, and generic output bounding.
 
-V2 has one opaque type for locally executable tools:
+## Tool Definitions Are Opaque
+
+V2 has one opaque type for locally executable tools. Typed tools declare codecs, execution, and optional model-facing projection together:
 
 ```ts
-type Definition<Input, Output>
-type AnyTool = Definition<any, any>
-
-const make: <
-  Input extends Schema.Codec<any, any, never, never>,
-  Output extends Schema.Codec<any, any, never, never>,
->(config: {
-  readonly description: string
-  readonly input: Input
-  readonly output: Output
-  readonly execute: (
-    input: Schema.Type<Input>,
-    context: Tool.Context,
-  ) => Effect.Effect<Schema.Type<Output>, ToolFailure>
-  readonly toModelOutput?: (input: {
-    readonly input: Schema.Type<Input>
-    readonly output: Output["Encoded"]
-  }) => ReadonlyArray<Tool.Content>
-}) => Definition<Input, Output>
+const read = Tool.make({
+  description: "Read a file",
+  input: Schema.Struct({ path: Schema.String }),
+  output: Schema.Struct({ content: Schema.String }),
+  execute: ({ path }, context) => readFile(path, context),
+  toModelOutput: ({ output }) => [{ type: "text", text: output.content }],
+})
 ```
 
-Application tools, built-ins, and statically authored plugin tools use this same constructor and execution contract.
+`structured` and `toStructuredOutput` may expose a smaller validated result than the complete execution output. Dynamic MCP and manifest tools use the same opaque representation with runtime JSON Schema.
+
+Built-ins and statically authored plugin tools use this same constructor and execution contract.
 
 `Tool.Definition` is opaque and has exactly one executor. Its schemas and executor are not public fields. The Tool module privately derives model definitions and interprets invocations for the registry; callers normally rely on `Tool.make` inference rather than naming the carrier type.
 
 Input and output codecs are self-contained. Schema conversion cannot require services. Tool dependencies are acquired during construction and captured by `execute`.
 
-## Invocation Context
+## Every Call Has Durable Identity
 
 Every local tool receives the same concrete invocation context:
 
@@ -40,18 +32,20 @@ Every local tool receives the same concrete invocation context:
 interface Tool.Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: Session.MessageID
-  readonly toolCallID: ToolCall.ID
+  readonly assistantMessageID: SessionMessage.ID
+  readonly toolCallID: string
 }
 ```
 
 `assistantMessageID` is the durable ID of the assistant message containing the call. The Session runner owns this association and supplies the complete context to the registry; the registry does not infer it.
 
+Durable events call the invocation identifier `callID`; `Tool.Context.toolCallID` is the same value at the executor boundary.
+
 Decoded tool input is passed separately to `execute`. Raw provider input and domain services do not belong in the invocation context.
 
 Effect interruption is the cancellation mechanism. Tools may translate expected typed failures into `ToolFailure`, but must not translate interruption or defects into model-visible failures.
 
-## Registration
+## Registrations Are Scoped
 
 Tools are named when registered:
 
@@ -64,7 +58,7 @@ yield *
   })
 ```
 
-The record key is the effective model-facing name. A reusable tool value has no intrinsic name.
+The record key is the authored name. Registration normalizes it before deriving the effective model-facing name. A reusable tool value has no intrinsic name.
 
 ```ts
 interface Tools {
@@ -74,11 +68,9 @@ interface Tools {
 }
 ```
 
-Tool names use a conservative provider-neutral grammar and are validated at registration. Provider-specific restrictions that cannot be validated generically fail during request preparation with an explicit model-compatibility error.
+Registration replaces unsupported name characters with `_` and reserves `execute` for Code Mode.
 
-Process application tools and Location tools expose the same `register` operation but retain separate services and stores. Registration placement determines scope, precedence, and authority; it does not change the tool type.
-
-A Location plugin receives only the narrow `Tools` registration capability, not the internal registry. Its installation effect runs once per applicable Location, acquires that Location's services, constructs its tools, and registers them in the plugin-owned Scope.
+A Location plugin receives only the narrow `Tools` registration capability, not the internal registry. Each activation acquires the Location's services, constructs its tools, and registers them in a fresh plugin-owned Scope.
 
 Within one placement:
 
@@ -87,9 +79,7 @@ Within one placement:
 - Closing the winner reveals the next-latest active registration.
 - Mutating the caller's registration record later does not change the captured registration.
 
-Location registrations take precedence over process application registrations.
-
-## Built-In Tools
+## Built-Ins Use The Same Contract
 
 Built-ins use the same tool API while capturing trusted Location services:
 
@@ -132,7 +122,7 @@ Trusted tools formulate and sequence permission requests. `PermissionV2` evaluat
 
 Sharing a tool type does not imply equal authority. Built-ins and trusted Location plugins may capture services that are not available to application tools.
 
-## Execution
+## Requests Capture Tool Values
 
 The Location-scoped registry owns effective lookup and settlement. For each local call it:
 
@@ -142,30 +132,31 @@ The Location-scoped registry owns effective lookup and settlement. For each loca
 4. Encodes the returned output with the output codec.
 5. Projects encoded output into model-facing content.
 6. Bounds the complete model-facing output.
-7. Returns the settlement and managed-output references to the runner, which persists them durably.
+7. Runs `execute.after` hooks with the bounded settlement.
+8. Returns the settlement to the runner for durable publication.
 
 Invalid input never invokes the tool. Invalid output never produces a successful settlement.
 
 `toModelOutput` is pure and total. When omitted, the encoded output remains structured output; an encoded string is also projected as text. Projection does not receive invocation identity because presentation depends only on validated input and output.
 
-Step materialization captures the effective registration identity for each advertised name without retaining its handler. Settlement rejects the call as stale if that registration was removed or replaced, including when closing an overlay reveals the previously effective registration. The current handler is captured only after this check; removing or replacing its registration afterward does not affect the running invocation.
+Each model request captures the effective registered `Tool` value for every advertised name. Settlement executes those captured values; later registration changes affect later requests.
 
-## Output Bounding
+## Producers And The Registry Own Different Limits
 
-Tools return complete validated domain output. They do not truncate model-facing output or manage retention files.
+Producers may cap capture or spool data before a complete tool result exists. For example, a process tool may retain output it cannot keep in memory. Producer limits must report their own loss accurately; they are separate from registry bounding and cannot claim to reconstruct bytes already discarded.
 
-After projection, one generic settlement boundary bounds the channel actually sent to the provider. When content exists, only its textual parts are measured; structured metadata is retained unchanged without being double-counted, and native media remains unchanged under producer-owned limits. When content is empty, the structured output is measured. Oversized provider-facing text or structured output is retained in managed storage and replaced with a bounded text preview while structured metadata and media are preserved; if complete retention fails, settlement fails operationally rather than publishing lossy success. Managed paths never appear in `Tool.make`, tool output schemas, or projection callbacks solely for retention bookkeeping.
+After projection, the registry bounds the channel sent to the provider. When content exists, only its textual parts are measured; structured metadata is retained unchanged without being double-counted, and native media remains unchanged under producer-owned limits. When content is empty, the structured output is measured. Oversized provider-facing text or structured output is retained in managed storage and replaced with a bounded text preview while structured metadata and media are preserved; if complete retention fails, settlement fails operationally rather than publishing lossy success. Managed paths never appear in `Tool.make`, tool output schemas, or projection callbacks solely for retention bookkeeping.
 
-Model-output bounding is not producer memory management. Processes and streaming sources may need separate capture or spooling limits before a tool result exists. Those limits must be modeled at the producer boundary and must not masquerade as model-output truncation. A producer cannot claim a complete retained output after it has already discarded bytes.
+`execute.after` hooks receive the bounded settlement and its internal managed paths. Hooks may deliberately transform that settlement; the registry does not apply a second bounding pass afterward.
 
-## Failure Semantics
+## Failures Preserve Interruptions
 
 Outcomes remain distinct:
 
 - `ToolFailure` is an expected model-visible failure.
 - Interruption cancels the invocation and is not a tool result.
 - Unexpected typed errors and defects follow the runner's operational failure policy.
-- Unknown, invalid, and stale calls become explicit model-visible settlement errors without invoking a handler.
+- Unknown and invalid calls become explicit model-visible settlement errors without invoking a handler.
 
 Leaf tools translate only errors they deliberately classify as recoverable. Broad cause-catching around an executor is invalid because it consumes interruption and defects.
 
@@ -175,12 +166,5 @@ Leaf tools translate only errors they deliberately classify as recoverable. Broa
 - **Codec boundary:** execution observes decoded input; projection observes encoded output.
 - **Durable identity:** invocation-owned records use the exact Session, agent, assistant message, and call IDs supplied by the runner.
 - **Scoped registration:** closing a Scope removes exactly its registration and reveals any prior active overlay.
-- **Captured execution:** registration changes cannot alter an invocation after effective lookup.
-- **Stale rejection:** a call never executes a registration other than the one advertised for its step.
+- **Captured execution:** a call executes the registered `Tool` value advertised in its model request.
 - **Storage encapsulation:** domain output does not change according to model-output bounding or retention policy.
-
-## Follow-Up
-
-Location plugin installation should receive the same narrow `Tools` capability. That requires a separate Location-layer ordering change so built-ins register before plugins without introducing a `PluginBoot -> Tools -> PluginBoot` dependency cycle. The carrier, registrar, and plugin-owned Scope semantics are already suitable; no tool-specific plugin hook is needed.
-
-Session's current public result shape still exposes managed `outputPaths`. Extending storage encapsulation across the public Session API requires a separate opaque managed-output reference design; paths are not entirely internal today.

@@ -32,7 +32,7 @@ import { makeGlobalNode } from "./effect/app-node"
 import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
-import { SessionInput } from "./session/input"
+import { SessionPending } from "./session/pending"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Session } from "@opencode-ai/schema/session"
@@ -188,6 +188,12 @@ export interface Interface {
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   /**
+   * Durable admitted session work not yet visible in projected history,
+   * ordered by admission. Includes unpromoted user and synthetic inputs and
+   * unhandled compaction barriers.
+   */
+  readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<SessionPending.Info[], NotFoundError>
+  /**
    * Durable, ordered, gap-free session log read. Replays public durable
    * session events after the exclusive `after` cursor, emits a `Synced`
    * marker at the captured replay watermark, then continues live when `follow`
@@ -216,9 +222,9 @@ export interface Interface {
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     metadata?: Record<string, unknown>
-    delivery?: SessionInput.Delivery
+    delivery?: SessionPending.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.User, NotFoundError | PromptConflictError | AttachmentError>
+  }) => Effect.Effect<SessionPending.User, NotFoundError | PromptConflictError | AttachmentError>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -228,10 +234,10 @@ export interface Interface {
     model?: ModelV2.Ref
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
-    delivery?: SessionInput.Delivery
+    delivery?: SessionPending.Delivery
     resume?: boolean
   }) => Effect.Effect<
-    SessionInput.User,
+    SessionPending.User,
     NotFoundError | PromptConflictError | AttachmentError | CommandV2.NotFoundError | CommandV2.EvaluationError
   >
   readonly shell: (input: {
@@ -247,7 +253,7 @@ export interface Interface {
   }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (
     input: CompactInput,
-  ) => Effect.Effect<SessionInput.Compaction, NotFoundError | CompactionConflictError>
+  ) => Effect.Effect<SessionPending.Compaction, NotFoundError | CompactionConflictError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
@@ -259,9 +265,9 @@ export interface Interface {
     text: string
     description?: string
     metadata?: Record<string, unknown>
-    delivery?: SessionInput.Delivery
+    delivery?: SessionPending.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Synthetic, NotFoundError | SyntheticConflictError>
+  }) => Effect.Effect<SessionPending.Synthetic, NotFoundError | SyntheticConflictError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -481,6 +487,10 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
+      pending: Effect.fn("V2Session.pending")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionPending.list(db, sessionID)
+      }),
       log: (input) =>
         Stream.unwrap(
           result
@@ -504,25 +514,25 @@ const layer = Layer.effect(
               Effect.provideService(FSUtil.Service, fs),
             )
             const messageID = input.id ?? SessionMessage.ID.create()
-            const admittedInput = SessionInput.Message.make({
+            const admittedInput = SessionPending.Message.make({
               type: "user",
               data: { ...prompt, metadata: input.metadata },
               delivery: input.delivery ?? "steer",
             })
-            const admitted = yield* SessionInput.admit(db, events, {
+            const admitted = yield* SessionPending.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
               input: admittedInput,
             }).pipe(
               Effect.catchDefect((defect) =>
-                defect instanceof SessionInput.LifecycleConflict
+                defect instanceof SessionPending.LifecycleConflict
                   ? new PromptConflictError({ sessionID: input.sessionID, messageID })
                   : Effect.die(defect),
               ),
             )
             if (
               admitted.type !== "user" ||
-              !SessionInput.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
+              !SessionPending.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
             )
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) {
@@ -664,12 +674,12 @@ const layer = Layer.effect(
       compact: Effect.fn("V2Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
         const inputID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* SessionInput.admitCompaction(db, events, {
+        const admitted = yield* SessionPending.admitCompaction(db, events, {
           id: inputID,
           sessionID: input.sessionID,
         }).pipe(
           Effect.catchDefect((defect) =>
-            defect instanceof SessionInput.LifecycleConflict
+            defect instanceof SessionPending.LifecycleConflict
               ? new CompactionConflictError({ sessionID: input.sessionID, inputID })
               : Effect.die(defect),
           ),
@@ -709,7 +719,7 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
             const inputID = input.id ?? SessionMessage.ID.create()
-            const admittedInput = SessionInput.Message.make({
+            const admittedInput = SessionPending.Message.make({
               type: "synthetic",
               data: {
                 text: input.text,
@@ -718,20 +728,20 @@ const layer = Layer.effect(
               },
               delivery: input.delivery ?? "steer",
             })
-            const admitted = yield* SessionInput.admit(db, events, {
+            const admitted = yield* SessionPending.admit(db, events, {
               id: inputID,
               sessionID: input.sessionID,
               input: admittedInput,
             }).pipe(
               Effect.catchDefect((defect) =>
-                defect instanceof SessionInput.LifecycleConflict
+                defect instanceof SessionPending.LifecycleConflict
                   ? new SyntheticConflictError({ sessionID: input.sessionID, inputID })
                   : Effect.die(defect),
               ),
             )
             if (
               admitted.type !== "synthetic" ||
-              !SessionInput.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
+              !SessionPending.equivalent(admitted, { sessionID: input.sessionID, input: admittedInput })
             )
               return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
             if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)

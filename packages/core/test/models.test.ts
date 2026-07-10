@@ -1,12 +1,15 @@
 import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
-import { Effect, Layer, Ref, Schema } from "effect"
+import { Money } from "@opencode-ai/schema/money"
+import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { it } from "./lib/effect"
 import { readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
@@ -29,7 +32,7 @@ afterAll(() => {
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
 
-const fixture: Record<string, ModelsDev.Provider> = {
+const fixture = {
   acme: {
     id: "acme",
     name: "Acme",
@@ -49,7 +52,47 @@ const fixture: Record<string, ModelsDev.Provider> = {
   },
 }
 
-const fixture2: Record<string, ModelsDev.Provider> = {
+const fixtureSnapshot = [
+  {
+    info: {
+      id: ProviderV2.ID.make("acme"),
+      name: "Acme",
+      package: "",
+    },
+    models: [
+      {
+        id: ModelV2.ID.make("acme-1"),
+        modelID: ModelV2.ID.make("acme-1"),
+        providerID: ProviderV2.ID.make("acme"),
+        name: "Acme One",
+        family: undefined,
+        package: undefined,
+        settings: undefined,
+        capabilities: { tools: true, input: [], output: [] },
+        variants: [],
+        time: { released: Date.parse("2026-01-01") },
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.zero,
+            output: Money.USDPerMillionTokens.zero,
+            cache: {
+              read: Money.USDPerMillionTokens.zero,
+              write: Money.USDPerMillionTokens.zero,
+            },
+          },
+        ],
+        status: "active",
+        enabled: true,
+        limit: { context: 128000, input: undefined, output: 8192 },
+        headers: undefined,
+        body: undefined,
+      },
+    ],
+    environment: ["ACME_API_KEY"],
+  },
+] satisfies readonly ModelsDev.Snapshot[]
+
+const fixture2 = {
   beta: {
     id: "beta",
     name: "Beta",
@@ -68,6 +111,46 @@ const fixture2: Record<string, ModelsDev.Provider> = {
     },
   },
 }
+
+const fixture2Snapshot = [
+  {
+    info: {
+      id: ProviderV2.ID.make("beta"),
+      name: "Beta",
+      package: "",
+    },
+    models: [
+      {
+        id: ModelV2.ID.make("beta-1"),
+        modelID: ModelV2.ID.make("beta-1"),
+        providerID: ProviderV2.ID.make("beta"),
+        name: "Beta One",
+        family: undefined,
+        package: undefined,
+        settings: undefined,
+        capabilities: { tools: false, input: [], output: [] },
+        variants: [],
+        time: { released: Date.parse("2026-02-01") },
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.zero,
+            output: Money.USDPerMillionTokens.zero,
+            cache: {
+              read: Money.USDPerMillionTokens.zero,
+              write: Money.USDPerMillionTokens.zero,
+            },
+          },
+        ],
+        status: "active",
+        enabled: true,
+        limit: { context: 64000, input: undefined, output: 4096 },
+        headers: undefined,
+        body: undefined,
+      },
+    ],
+    environment: ["BETA_API_KEY"],
+  },
+] satisfies readonly ModelsDev.Snapshot[]
 
 interface MockState {
   body: string
@@ -127,45 +210,7 @@ const initialState: MockState = {
 }
 
 describe("ModelsDev Service", () => {
-  it.effect("decodes known reasoning options", () =>
-    Effect.sync(() => {
-      const result = Schema.decodeUnknownSync(ModelsDev.Model)({
-        id: "reasoning-model",
-        name: "Reasoning Model",
-        release_date: "2026-01-01",
-        attachment: false,
-        reasoning: true,
-        reasoning_options: [
-          { type: "effort", values: ["low", "high"] },
-          { type: "budget_tokens", min: 1024, max: 8192 },
-          { type: "toggle" },
-        ],
-        temperature: true,
-        tool_call: true,
-        limit: { context: 128000, output: 8192 },
-      })
-
-      expect(result.reasoning_options?.map((item) => item.type)).toEqual(["effort", "budget_tokens", "toggle"])
-    }),
-  )
-
-  it.effect("allows models.dev entries without temperature metadata", () =>
-    Effect.sync(() => {
-      const result = Schema.decodeUnknownSync(ModelsDev.Model)({
-        id: "no-temperature-model",
-        name: "No Temperature Model",
-        release_date: "2026-01-01",
-        attachment: false,
-        reasoning: false,
-        tool_call: true,
-        limit: { context: 128000, output: 8192 },
-      })
-
-      expect(result.temperature).toBeUndefined()
-    }),
-  )
-
-  it.live("get() returns providers from disk when cache file exists", () =>
+  it.live("get() returns normalized snapshots from disk when cache file exists", () =>
     Effect.gen(function* () {
       yield* writeCache(fixture)
       const state = yield* Ref.make(initialState)
@@ -173,7 +218,7 @@ describe("ModelsDev Service", () => {
         state,
         ModelsDev.Service.use((s) => s.get()),
       )
-      expect(result).toEqual(fixture)
+      expect(result).toEqual(fixtureSnapshot)
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
@@ -186,7 +231,7 @@ describe("ModelsDev Service", () => {
         state,
         ModelsDev.Service.use((s) => s.get()),
       )
-      expect(result).toEqual({})
+      expect(result).toEqual([])
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
@@ -207,7 +252,7 @@ describe("ModelsDev Service", () => {
             Flag.OPENCODE_DISABLE_MODELS_FETCH = true
           }),
       )
-      expect(result).toEqual(fixture2)
+      expect(result).toEqual(fixture2Snapshot)
       expect(yield* Effect.promise(() => readFile(cacheFile, "utf8"))).toBe(JSON.stringify(fixture2))
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
@@ -227,7 +272,7 @@ describe("ModelsDev Service", () => {
           })
         }),
       )
-      for (const result of results) expect(result).toEqual(fixture)
+      for (const result of results) expect(result).toEqual(fixtureSnapshot)
     }),
   )
 
@@ -246,8 +291,8 @@ describe("ModelsDev Service", () => {
           return { a, b }
         }),
       )
-      expect(first.a).toEqual(fixture)
-      expect(first.b).toEqual(fixture)
+      expect(first.a).toEqual(fixtureSnapshot)
+      expect(first.b).toEqual(fixtureSnapshot)
     }),
   )
 
@@ -265,8 +310,8 @@ describe("ModelsDev Service", () => {
           return { before, after }
         }),
       )
-      expect(result.before).toEqual(fixture)
-      expect(result.after).toEqual(fixture2)
+      expect(result.before).toEqual(fixtureSnapshot)
+      expect(result.after).toEqual(fixture2Snapshot)
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain("/api.json")
@@ -303,7 +348,7 @@ describe("ModelsDev Service", () => {
       )
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
-      expect(after).toEqual(fixture2)
+      expect(after).toEqual(fixture2Snapshot)
     }),
   )
 
@@ -319,7 +364,7 @@ describe("ModelsDev Service", () => {
           return yield* svc.get()
         }),
       )
-      expect(result).toEqual(fixture)
+      expect(result).toEqual(fixtureSnapshot)
       // retryTransient retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)

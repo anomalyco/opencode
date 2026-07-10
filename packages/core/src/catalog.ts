@@ -72,16 +72,17 @@ const layer = Layer.effect(
     }
 
     const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
-      return ModelV2.Info.make({
+      return {
         ...model,
         package: model.package ?? provider.package,
         settings: ProviderV2.mergeOverlay(provider.settings, model.settings),
         headers: ProviderV2.mergeHeaders(provider.headers, model.headers),
         body: ProviderV2.mergeOverlay(provider.body, model.body),
-      })
+      } satisfies ModelV2.Info
     }
 
     const state = State.create<Data, Draft>({
+      name: "catalog",
       initial: () => ({ providers: new Map() }),
       draft: (draft) => {
         const result: Draft = {
@@ -179,7 +180,18 @@ const layer = Layer.effect(
 
         available: Effect.fn("CatalogV2.model.available")(function* () {
           const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
-          return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
+          const models: ModelV2.Info[] = []
+          for (const record of state.get().providers.values()) {
+            if (!providers.has(record.provider.id)) continue
+            for (const model of record.models.values()) {
+              if (!model.enabled) continue
+              models.push(projectModel(model, record.provider))
+            }
+          }
+          return pipe(
+            models,
+            Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
+          )
         }),
 
         default: Effect.fn("CatalogV2.model.default")(function* () {
@@ -192,13 +204,7 @@ const layer = Layer.effect(
             }
           }
 
-          return Option.getOrUndefined(
-            pipe(
-              yield* result.model.available(),
-              Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
-              Array.head,
-            ),
-          )
+          return (yield* result.model.available())[0]
         }),
 
         small: Effect.fn("CatalogV2.model.small")(function* (providerID) {

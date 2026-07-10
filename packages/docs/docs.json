@@ -20,13 +20,38 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": ["index", "config", "plugins", "troubleshooting"]
+            "pages": ["index", "migrate-v1", "config", "troubleshooting"]
+          },
+          {
+            "group": "Configure",
+            "pages": [
+              "providers",
+              "models",
+              "agents",
+              "permissions",
+              "sharing",
+              "snapshots",
+              "commands",
+              "skills",
+              "instructions",
+              "mcp",
+              "attachments",
+              "compaction",
+              "formatters",
+              "lsp",
+              "references"
+            ]
           }
         ]
       },
       {
-        "tab": "SDK",
-        "pages": ["sdk/index"]
+        "tab": "Build",
+        "groups": [
+          {
+            "group": "Build with OpenCode",
+            "pages": ["build/plugins", "build/client", "build/sdk"]
+          }
+        ]
       },
       {
         "tab": "API",

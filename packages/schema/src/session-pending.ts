@@ -1,4 +1,4 @@
-export * as SessionInput from "./session-input.js"
+export * as SessionPending from "./session-pending.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
@@ -15,32 +15,32 @@ export interface UserData extends Schema.Schema.Type<typeof UserData> {}
 export const UserData = Schema.Struct({
   ...Prompt.fields,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
-}).annotate({ identifier: "SessionInput.UserData" })
+}).annotate({ identifier: "SessionPending.UserData" })
 
 export interface SyntheticData extends Schema.Schema.Type<typeof SyntheticData> {}
 export const SyntheticData = Schema.Struct({
   text: Schema.String,
   description: Schema.String.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
-}).annotate({ identifier: "SessionInput.SyntheticData" })
+}).annotate({ identifier: "SessionPending.SyntheticData" })
 
 export interface UserMessage extends Schema.Schema.Type<typeof UserMessage> {}
 export const UserMessage = Schema.Struct({
   type: Schema.tag("user"),
   data: UserData,
   delivery: Delivery,
-}).annotate({ identifier: "SessionInput.UserMessage" })
+}).annotate({ identifier: "SessionPending.UserMessage" })
 
 export interface SyntheticMessage extends Schema.Schema.Type<typeof SyntheticMessage> {}
 export const SyntheticMessage = Schema.Struct({
   type: Schema.tag("synthetic"),
   data: SyntheticData,
   delivery: Delivery,
-}).annotate({ identifier: "SessionInput.SyntheticMessage" })
+}).annotate({ identifier: "SessionPending.SyntheticMessage" })
 
 export const Message = Schema.Union([UserMessage, SyntheticMessage]).pipe(
   Schema.toTaggedUnion("type"),
-  Schema.annotate({ identifier: "SessionInput.Message" }),
+  Schema.annotate({ identifier: "SessionPending.Message" }),
 )
 export type Message = typeof Message.Type
 
@@ -50,32 +50,27 @@ const Admitted = {
   sessionID: SessionID,
   timeCreated: DateTimeUtcFromMillis,
 }
-const MessageLifecycle = {
-  ...Admitted,
-  promotedSeq: NonNegativeInt.pipe(optional),
-}
 
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
-  ...MessageLifecycle,
+  ...Admitted,
   ...UserMessage.fields,
-}).annotate({ identifier: "SessionInput.User" })
+}).annotate({ identifier: "SessionPending.User" })
 
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
-  ...MessageLifecycle,
+  ...Admitted,
   ...SyntheticMessage.fields,
-}).annotate({ identifier: "SessionInput.Synthetic" })
+}).annotate({ identifier: "SessionPending.Synthetic" })
 
 export interface Compaction extends Schema.Schema.Type<typeof Compaction> {}
 export const Compaction = Schema.Struct({
   ...Admitted,
   type: Schema.tag("compaction"),
-  handledSeq: NonNegativeInt.pipe(optional),
-}).annotate({ identifier: "SessionInput.Compaction" })
+}).annotate({ identifier: "SessionPending.Compaction" })
 
 export const Info = Schema.Union([User, Synthetic, Compaction]).pipe(
   Schema.toTaggedUnion("type"),
-  Schema.annotate({ identifier: "SessionInput.Info" }),
+  Schema.annotate({ identifier: "SessionPending.Info" }),
 )
 export type Info = typeof Info.Type

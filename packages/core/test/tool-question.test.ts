@@ -79,7 +79,7 @@ const it = testEffect(
 )
 
 describe("QuestionTool", () => {
-  it.effect("omits a denied built-in question and terminally settles a stale call", () =>
+  it.effect("omits a catalog-denied question and enforces its leaf permission", () =>
     Effect.gen(function* () {
       captured = undefined
       deny = true

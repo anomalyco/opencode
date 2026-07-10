@@ -63,6 +63,32 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
+  it.live("disables configured plugins by exported ID", () => {
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    return withLocation(
+      { plugins: [plugin, "-config-promise-plugin"] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* PluginV2.Service
+        const agents = yield* AgentV2.Service
+        expect((yield* plugins.list()).map((item) => String(item.id))).not.toContain("config-promise-plugin")
+        expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+      }),
+    )
+  })
+
+  it.live("does not disable configured plugins by package target", () => {
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    return withLocation(
+      { plugins: [plugin, `-${plugin}`] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* PluginV2.Service
+        expect((yield* plugins.list()).map((item) => String(item.id))).toContain("config-promise-plugin")
+      }),
+    )
+  })
+
   it.live("loads configured Effect plugins with options", () =>
     withLocation(
       {

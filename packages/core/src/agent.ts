@@ -52,6 +52,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const state = State.create<Data, Draft>({
+      name: "agent",
       initial: () => ({ agents: new Map() }),
       draft: (draft) => ({
         list: () => Array.fromIterable(draft.agents.values()) as Info[],

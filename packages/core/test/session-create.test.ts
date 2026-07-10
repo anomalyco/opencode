@@ -20,7 +20,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -195,9 +195,9 @@ describe("SessionV2.create", () => {
         text: "First",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       yield* session.synthetic({ sessionID: parent.id, text: "parent note", resume: false })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
 
       const forked = yield* session.fork({ sessionID: parent.id })
       const parentContext = yield* session.context(parent.id)
@@ -217,30 +217,28 @@ describe("SessionV2.create", () => {
         durable: { seq: 0 },
         data: { sessionID: forked.id, parentID: parent.id },
       })
-      expect(yield* SessionInput.find(db, forkContext[0].id)).toMatchObject({
-        sessionID: forked.id,
-        type: "user",
-        data: { text: "First" },
-        promotedSeq: 2,
-      })
-      expect(yield* SessionInput.find(db, forkContext[1].id)).toMatchObject({
-        sessionID: forked.id,
-        type: "synthetic",
-        data: { text: "parent note" },
-      })
+      expect(yield* SessionPending.find(db, forkContext[0].id)).toBeUndefined()
+      expect(yield* SessionPending.find(db, forkContext[1].id)).toBeUndefined()
+      // Fork-copied messages have no admitted event in the fork aggregate, so
+      // reusing their IDs as prompt IDs is conflicting reuse, not a retry.
+      expect(
+        yield* session
+          .prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false })
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.PromptConflictError", messageID: forkContext[0].id })
 
       yield* session.prompt({
         sessionID: parent.id,
         text: "Parent changed",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       yield* session.prompt({
         sessionID: forked.id,
         text: "Child continues",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, forked.id)
+      yield* SessionPending.promoteSteers(db, events, forked.id)
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -250,7 +248,7 @@ describe("SessionV2.create", () => {
           (event): number | undefined => event.durable?.seq,
         ),
       ).toEqual([0, 5, 6])
-      expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({ sessionID: parent.id })
+      expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
     }),
   )
 
@@ -265,13 +263,13 @@ describe("SessionV2.create", () => {
         text: "First",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       const second = yield* session.prompt({
         sessionID: parent.id,
         text: "Second",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       const assistantMessageID = SessionMessage.ID.create()
       const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
       yield* events.publish(SessionEvent.Step.Started, {
@@ -416,7 +414,7 @@ describe("SessionV2.create", () => {
         text: "Hello",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, created.id)
+      yield* SessionPending.promoteSteers(db, events, created.id)
 
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
@@ -442,7 +440,7 @@ describe("SessionV2.create", () => {
         text: "Replay lifecycle",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id)
+      yield* SessionPending.promoteSteers(sourceDb, sourceEvents, created.id)
       const serialized = (yield* sourceDb
         .select()
         .from(EventTable)
@@ -480,7 +478,7 @@ describe("SessionV2.create", () => {
 
         expect(yield* store.get(created.id)).toBeUndefined()
         expect(yield* events.replayAll(serialized.slice(0, 2))).toBe(created.id)
-        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
+        expect(yield* SessionPending.find(db, admitted.id)).toMatchObject({
           id: admitted.id,
           sessionID: created.id,
           type: "user",
@@ -491,15 +489,7 @@ describe("SessionV2.create", () => {
         expect(yield* store.context(created.id)).toEqual([])
 
         expect(yield* events.replayAll(serialized.slice(2))).toBe(created.id)
-        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
-          id: admitted.id,
-          sessionID: created.id,
-          type: "user",
-          data: { text: "Replay lifecycle" },
-          delivery: "steer",
-          admittedSeq: 1,
-          promotedSeq: 2,
-        })
+        expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
         expect(yield* store.context(created.id)).toMatchObject([
           { id: admitted.id, type: "user", text: "Replay lifecycle" },
         ])

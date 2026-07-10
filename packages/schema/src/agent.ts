@@ -38,9 +38,9 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "Agent.Info" })
   .pipe(
-    statics((schema) => ({
+    statics(() => ({
       empty: (id: ID) =>
-        schema.make({
+        ({
           id,
           name: Name.make(id),
           request: { settings: {}, headers: {}, body: {} },
@@ -50,7 +50,7 @@ export const Info = Schema.Struct({
             { action: "*", resource: "*", effect: "allow" },
             { action: "external_directory", resource: "*", effect: "ask" },
           ],
-        }),
+        }) satisfies Info,
     })),
   )
 

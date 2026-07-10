@@ -35,7 +35,7 @@ Registrations are scoped:
 
 - The latest active same-placement registration wins.
 - Closing any registration removes only that registration and reveals the next active one.
-- An invocation captures the effective tool once settlement starts.
+- Each model request captures the effective tools it advertises; later registration changes affect later requests.
 
 `ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
 

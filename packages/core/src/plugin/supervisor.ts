@@ -72,23 +72,6 @@ type Operation =
       readonly target: string
     }
 
-type Candidate =
-  | {
-      readonly type: "definition"
-      readonly definition: Plugin
-    }
-  | {
-      readonly type: "package"
-      readonly specifier: string
-      readonly options: Record<string, unknown>
-      readonly mtime?: number
-    }
-
-type ConfiguredPackage = {
-  readonly operation: Extract<Operation, { type: "add" }>
-  enabled: boolean
-}
-
 function parse(input: ConfigPlugin.Plugin): Operation {
   if (typeof input !== "string") {
     return { type: "add", target: input.package, options: input.options ?? {} }
@@ -109,13 +92,14 @@ const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Con
     .filter((entry): entry is Config.Document => entry.type === "document")
     .flatMap((entry) =>
       (entry.info.plugins ?? []).map(parse).map((operation) => {
+        if (operation.type === "remove") return operation
         const directory = entry.path ? path.dirname(entry.path) : location.directory
         const target = operation.target.startsWith("file://")
           ? fileURLToPath(operation.target)
           : operation.target.startsWith("./") || operation.target.startsWith("../")
             ? path.resolve(directory, operation.target)
             : operation.target
-        return operation.type === "add" ? { ...operation, target } : { type: "remove" as const, target }
+        return { ...operation, target }
       }),
     )
   // Explicit config is applied last so it can remove auto-discovered packages.
@@ -136,91 +120,66 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   post: readonly Plugin[],
   operations: readonly Operation[],
 ) {
-  const plan = apply(pre, post, operations)
-  return yield* load(plan)
-})
-
-function apply(pre: readonly Plugin[], post: readonly Plugin[], operations: readonly Operation[]) {
   const matches = (selector: string, target: string) =>
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
-  const plugins = [...pre, ...post]
-  const enabled = new Set(plugins.map((plugin) => plugin.id))
-  const packages = new Map<string, ConfiguredPackage>()
+  const definitions = [...pre, ...post]
+  const enabled = new Set(definitions.map((plugin) => plugin.id))
+  const packages = new Map<string, Plugin>()
+  const plugins = () => [...definitions, ...packages.values()]
 
   for (const operation of operations) {
     if (operation.type === "remove") {
-      plugins.filter((plugin) => matches(operation.target, plugin.id)).forEach((plugin) => enabled.delete(plugin.id))
-      packages.forEach((item, target) => {
-        if (matches(operation.target, target)) item.enabled = false
-      })
+      plugins()
+        .filter((plugin) => matches(operation.target, plugin.id))
+        .forEach((plugin) => enabled.delete(plugin.id))
       continue
     }
 
-    const matched = plugins.filter((plugin) => matches(operation.target, plugin.id))
-    const selectsDefinitions =
+    const matched = plugins().filter((plugin) => matches(operation.target, plugin.id))
+    const selectsPlugins =
       matched.length > 0 ||
       operation.target === "*" ||
       operation.target.endsWith(".*") ||
       operation.target.startsWith("opencode.")
-    if (selectsDefinitions) {
+    if (selectsPlugins) {
       matched.forEach((plugin) => enabled.add(plugin.id))
-      packages.forEach((item, target) => {
-        if (matches(operation.target, target)) item.enabled = true
-      })
       continue
     }
 
-    packages.set(operation.target, { operation, enabled: true })
+    const plugin = yield* load(operation).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+    if (!plugin) continue
+    const previous = packages.get(operation.target)
+    if (previous) enabled.delete(previous.id)
+    packages.set(operation.target, plugin)
+    enabled.add(plugin.id)
   }
 
-  const definitions: Candidate[] = pre.flatMap((definition) =>
-    enabled.has(definition.id) ? [{ type: "definition", definition }] : [],
-  )
-  const configured: Candidate[] = Array.from(packages.values()).flatMap((item) =>
-    item.enabled
-      ? [
-          {
-            type: "package",
-            specifier: item.operation.target,
-            options: item.operation.options,
-            ...(item.operation.mtime === undefined ? {} : { mtime: item.operation.mtime }),
-          },
-        ]
-      : [],
-  )
-  const posts: Candidate[] = post.flatMap((definition) =>
-    enabled.has(definition.id) ? [{ type: "definition", definition }] : [],
-  )
-  return [...definitions, ...configured, ...posts]
-}
+  return [
+    ...pre.filter((plugin) => enabled.has(plugin.id)),
+    ...Array.from(packages.values()).filter((plugin) => enabled.has(plugin.id)),
+    ...post.filter((plugin) => enabled.has(plugin.id)),
+  ]
+})
 
-const load = Effect.fn("PluginSupervisor.load")(function* (plan: readonly Candidate[]) {
-  return yield* Effect.forEach(plan, (candidate) => {
-    if (candidate.type === "definition") return Effect.succeed({ plugin: candidate.definition })
-    return Effect.gen(function* () {
-      const npm = yield* Npm.Service
-      const entrypoint = path.isAbsolute(candidate.specifier)
-        ? pathToFileURL(candidate.specifier).href
-        : (yield* npm.add(candidate.specifier)).entrypoint
-      if (!entrypoint) return
-      // Bun currently ignores query parameters when caching file:// imports.
-      const source =
-        candidate.mtime === undefined
-          ? entrypoint
-          : `${candidate.specifier.replaceAll("\\", "/")}?mtime=${candidate.mtime}`
-      yield* Effect.log({ msg: "loading plugin", id: candidate.specifier, entrypoint: source })
-      const mod = yield* Effect.promise(() => import(source))
-      const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
-      const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
-      return {
-        plugin: {
-          id: plugin.id,
-          effect: (host) => plugin.effect({ ...host, options: candidate.options }),
-        } satisfies Plugin,
-        ...(candidate.mtime === undefined ? {} : { version: String(candidate.mtime) }),
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
-  }).pipe(Effect.map((plugins) => plugins.filter((plugin) => plugin !== undefined)))
+const load = Effect.fn("PluginSupervisor.load")(function* (operation: Extract<Operation, { type: "add" }>) {
+  const npm = yield* Npm.Service
+  const entrypoint = path.isAbsolute(operation.target)
+    ? pathToFileURL(operation.target).href
+    : (yield* npm.add(operation.target)).entrypoint
+  if (!entrypoint) return
+  // Bun currently ignores query parameters when caching file:// imports.
+  const source =
+    operation.mtime === undefined
+      ? entrypoint
+      : `${operation.target.replaceAll("\\", "/")}?mtime=${operation.mtime}`
+  yield* Effect.log({ msg: "loading plugin", id: operation.target, entrypoint: source })
+  const mod = yield* Effect.promise(() => import(source))
+  const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
+  const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
+  return {
+    id: plugin.id,
+    effect: (host) => plugin.effect({ ...host, options: operation.options }),
+  } satisfies Plugin
 })
 
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {

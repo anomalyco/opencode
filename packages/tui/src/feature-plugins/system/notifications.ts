@@ -1,10 +1,10 @@
-import type { V2Event } from "@opencode-ai/sdk/v2"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { TuiAttentionSoundName, TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 
 const id = "internal:notifications"
 
-type SessionError = Extract<V2Event, { type: "session.error" }>["data"]["error"]
+type SessionError = Extract<OpenCodeEvent, { type: "session.error" }>["data"]["error"]
 
 function notify(
   api: TuiPluginApi,

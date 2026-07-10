@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
-import type { PermissionRequest, QuestionRequest, Session, V2Event } from "@opencode-ai/sdk/v2"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2"
 import type { TuiAttentionNotifyInput } from "@opencode-ai/plugin/tui"
 import { createTuiPluginApi } from "../../../fixture/tui-plugin"
 
 async function setup() {
   const notifications: TuiAttentionNotifyInput[] = []
-  const handlers = new Map<V2Event["type"], ((event: V2Event) => void)[]>()
+  const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
   const session = (id: string, title: string, parentID?: string): Session => ({
     id,
     title,
@@ -33,9 +34,12 @@ async function setup() {
         },
       },
       event: {
-        on: <Type extends V2Event["type"]>(type: Type, handler: (event: Extract<V2Event, { type: Type }>) => void) => {
+        on: <Type extends OpenCodeEvent["type"]>(
+          type: Type,
+          handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+        ) => {
           const list = handlers.get(type) ?? []
-          const wrapped = handler as (event: V2Event) => void
+          const wrapped = handler as (event: OpenCodeEvent) => void
           list.push(wrapped)
           handlers.set(type, list)
           return () => {
@@ -59,7 +63,7 @@ async function setup() {
 
   return {
     notifications,
-    emit(event: V2Event) {
+    emit(event: OpenCodeEvent) {
       for (const handler of handlers.get(event.type) ?? []) handler(event)
     },
   }
@@ -73,7 +77,10 @@ function question(id: string, sessionID = "session"): QuestionRequest {
   }
 }
 
-function form(id: string, sessionID = "session"): Extract<V2Event, { type: "form.created" }>["data"]["form"] {
+function form(
+  id: string,
+  sessionID = "session",
+): Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"] {
   return {
     id,
     sessionID,
@@ -98,7 +105,7 @@ function durable(sessionID: string): { aggregateID: string; seq: number; version
   return { aggregateID: sessionID, seq: 0, version: 1 }
 }
 
-function executionStarted(id: string, sessionID = "session"): V2Event {
+function executionStarted(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
     created: 0,
@@ -108,7 +115,7 @@ function executionStarted(id: string, sessionID = "session"): V2Event {
   }
 }
 
-function executionSucceeded(id: string, sessionID = "session"): V2Event {
+function executionSucceeded(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
     created: 0,
@@ -118,7 +125,7 @@ function executionSucceeded(id: string, sessionID = "session"): V2Event {
   }
 }
 
-function executionFailed(id: string, sessionID = "session"): V2Event {
+function executionFailed(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
     created: 0,

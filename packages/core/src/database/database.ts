@@ -54,4 +54,10 @@ export function path() {
   return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
 }
 
-export const node = makeGlobalNode({ service: Service, layer: layerFromPath(path()), deps: [] })
+// Resolve the database path lazily so tests and embedders that set
+// Flag.OPENCODE_DB after module evaluation still control the storage target.
+export const node = makeGlobalNode({
+  service: Service,
+  layer: Layer.suspend(() => layerFromPath(path())),
+  deps: [],
+})

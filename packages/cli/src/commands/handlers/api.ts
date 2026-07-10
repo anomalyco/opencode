@@ -3,7 +3,7 @@ import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Service } from "@opencode-ai/client/effect"
-import { ServiceConfig } from "../../services/service-config"
+import { Server } from "../../services/server"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
 
@@ -18,9 +18,12 @@ type OpenApi = {
 export default Runtime.handler(
   Commands.commands.api,
   Effect.fn("cli.api")(function* (input) {
-    const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover(options)
-    const endpoint = found ?? (yield* Service.start(options))
+    const server = yield* Server.resolve({
+      server: Option.getOrUndefined(input.server),
+      standalone: input.standalone,
+      mismatch: "ignore",
+    })
+    const endpoint = server.endpoint
     const params = Option.getOrElse(input.param, () => ({}))
     const request = yield* resolveRequest(endpoint, input.request, params)
     const headers = new Headers(Service.headers(endpoint))

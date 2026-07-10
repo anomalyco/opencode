@@ -1,4 +1,9 @@
 const dict: Record<string, string> = {
+  "session.revertDock.summary.one": "{{count}} rolled back message",
+  "session.revertDock.summary.other": "{{count}} rolled back messages",
+  "session.revertDock.collapse": "Collapse rolled back messages",
+  "session.revertDock.expand": "Expand rolled back messages",
+  "session.revertDock.restore": "Restore message",
   "prompt.loading": "Loading prompt...",
   "prompt.placeholder.normal": "Ask anything...",
   "prompt.placeholder.simple": "Ask anything...",

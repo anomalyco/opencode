@@ -35,16 +35,22 @@ export function DialogSessionList() {
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return
     const location = data.location.default()
-    const response = await sdk.api.session.list({
-      search: query,
-      limit: 50,
-      order: "desc",
-      parentID: null,
-      directory: location.directory,
-      workspace: location.workspaceID,
-    })
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; session list UI reuses legacy mutable session types.
-    return { query, sessions: structuredClone(response.data) as SessionInfo[] }
+    try {
+      const response = await sdk.api.session.list({
+        search: query,
+        limit: 50,
+        order: "desc",
+        parentID: null,
+        directory: location.directory,
+        workspace: location.workspaceID,
+      })
+      return { query, sessions: response.data }
+    } catch (error) {
+      // A transient transport failure must degrade search, not crash the TUI
+      // through the root ErrorBoundary when the errored resource is read.
+      toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+      return { query, sessions: [] as SessionInfo[] }
+    }
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
@@ -134,7 +140,7 @@ export function DialogSessionList() {
               setToDelete(option.value)
               return
             }
-            void sdk.client.v2.session.remove({ sessionID: option.value }, { throwOnError: true }).catch((error) => {
+            void sdk.api.session.remove({ sessionID: option.value }).catch((error) => {
               setToDelete(undefined)
               toast.show({
                 message: `Failed to delete session: ${errorMessage(error)}`,

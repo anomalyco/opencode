@@ -119,6 +119,11 @@ export class Directory extends Schema.Class<Directory>("Config.Directory")({
   path: AbsolutePath,
 }) {}
 
+export class File extends Schema.Class<File>("Config.File")({
+  type: Schema.Literal("file"),
+  path: AbsolutePath,
+}) {}
+
 export class AgentsDirectory extends Schema.Class<AgentsDirectory>("Config.AgentsDirectory")({
   type: Schema.Literal("agents"),
   path: AbsolutePath,
@@ -129,7 +134,7 @@ export class ClaudeDirectory extends Schema.Class<ClaudeDirectory>("Config.Claud
   path: AbsolutePath,
 }) {}
 
-export type Entry = Document | Directory | AgentsDirectory | ClaudeDirectory
+export type Entry = Document | Directory | File | AgentsDirectory | ClaudeDirectory
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries
@@ -138,7 +143,7 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 }
 
 export interface Interface {
-  /** Returns location config documents and supplemental directories from lowest to highest priority. */
+  /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
 }
 
@@ -227,31 +232,36 @@ const layer = Layer.effect(
       const directPaths = discovered
         .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
         .toReversed()
-      const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
+      const direct = yield* Effect.forEach(directPaths, (filepath) =>
+        loadFile(filepath).pipe(
+          Effect.map((config) => [
+            ...(config ? [config] : []),
+            new File({ type: "file", path: AbsolutePath.make(filepath) }),
+          ]),
+        ),
+      ).pipe(
         Effect.orDie,
-        Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
+        Effect.map((entries) => entries.flat()),
       )
 
       const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
-      return {
-        entries: [...claude, ...agents, ...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()],
-        directories: [...directories, ...claude.map((entry) => entry.path), ...agents.map((entry) => entry.path)],
-        files: directPaths,
-      }
+      return [...claude, ...agents, ...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
     })
 
     const initial = yield* discover()
-    let configs = initial.entries
+    let configs = initial
     const updates = yield* PubSub.unbounded<Watcher.Update>()
     const subscriptions = new Map<string, Effect.Effect<unknown>>()
-    const targets = (snapshot: typeof initial) => [
-      ...snapshot.directories.map((path) => ({ path, type: "directory" as const })),
-      ...snapshot.files
-        .filter((file) => !snapshot.directories.some((directory) => FSUtil.contains(directory, file)))
-        .map((path) => ({ path, type: "file" as const })),
-    ]
-    const reconcile = Effect.fn("Config.reconcileWatches")(function* (snapshot: typeof initial) {
-      const next = new Map(targets(snapshot).map((target) => [JSON.stringify(target), target]))
+    const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
+      const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
+      const files = entries.flatMap((entry) => (entry.type === "file" ? [entry.path] : []))
+      const targets = [
+        ...directories.map((path) => ({ path, type: "directory" as const })),
+        ...files
+          .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
+          .map((path) => ({ path, type: "file" as const })),
+      ]
+      const next = new Map(targets.map((target) => [JSON.stringify(target), target]))
       for (const [key, stop] of subscriptions) {
         if (next.has(key)) continue
         yield* stop
@@ -272,7 +282,7 @@ const layer = Layer.effect(
       Stream.runForEach((update) =>
         Effect.gen(function* () {
           const next = yield* discover()
-          configs = next.entries
+          configs = next
           yield* reconcile(next)
           yield* events.publish(ConfigSchema.Event.Updated, {})
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload config", { path: update.path, cause }))),

@@ -264,6 +264,7 @@ export const ProvidersListCommand = effectCmd({
     const database = yield* modelsDev.get()
 
     for (const [providerID, result] of results) {
+      // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
       const name = database[providerID]?.name || providerID
       yield* Prompt.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
     }
@@ -273,9 +274,11 @@ export const ProvidersListCommand = effectCmd({
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
     for (const [providerID, provider] of Object.entries(database)) {
+      // @ts-expect-error dead V1 expects provider env fields instead of normalized snapshots.
       for (const envVar of provider.env) {
         if (process.env[envVar]) {
           activeEnvVars.push({
+            // @ts-expect-error dead V1 expects provider names instead of normalized snapshot info.
             provider: provider.name || providerID,
             envVar,
           })
@@ -362,6 +365,7 @@ export const ProvidersLoginCommand = effectCmd({
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
 
     const allProviders = yield* modelsDev.get()
+    // @ts-expect-error dead V1 expects a provider-keyed record, not normalized ModelsDev snapshots.
     const providers: Record<string, (typeof allProviders)[string]> = {}
     for (const [key, value] of Object.entries(allProviders)) {
       if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) providers[key] = value
@@ -395,6 +399,7 @@ export const ProvidersLoginCommand = effectCmd({
         map((x) => ({
           label: x.name,
           value: x.id,
+          // @ts-expect-error dead V1 provider IDs come from pre-normalized ModelsDev records.
           hint: {
             opencode: "recommended",
             openai: "ChatGPT Plus/Pro or API key",
@@ -419,6 +424,7 @@ export const ProvidersLoginCommand = effectCmd({
       }
       provider = match.value
     } else {
+      // @ts-expect-error dead V1 selection values come from pre-normalized ModelsDev records.
       provider = yield* promptValue(
         yield* Prompt.autocomplete({
           message: "Select provider",
@@ -511,6 +517,7 @@ export const ProvidersLogoutCommand = effectCmd({
     }
     const database = yield* modelsDev.get()
     const options = credentials.map(([key, value]) => ({
+      // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
       label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
       value: key,
     }))
@@ -518,6 +525,7 @@ export const ProvidersLogoutCommand = effectCmd({
       ? options.find(
           (option) =>
             option.value === args.provider ||
+            // @ts-expect-error dead V1 indexes the normalized ModelsDev snapshot array by provider ID.
             database[option.value]?.name?.toLowerCase() === args.provider?.toLowerCase(),
         )?.value
       : yield* promptValue(

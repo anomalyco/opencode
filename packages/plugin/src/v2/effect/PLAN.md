@@ -290,7 +290,7 @@ begin batch
 → end batch
 ```
 
-Registration itself is not staged per plugin. If setup fails, closing the plugin's child scope removes every registration made before the failure.
+Registration itself is not staged per plugin. If setup fails, closing the plugin's child scope removes every registration made before the failure. A replacement then retries the previous definition; if that setup also fails, the plugin remains inactive.
 
 Outside a batch, transform registration and disposal rebuild immediately.
 

@@ -163,14 +163,11 @@ describe("OpencodePlugin", () => {
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const authorization: Array<string | null> = []
-        const gate = Promise.withResolvers<void>()
         return {
           authorization,
-          release: gate.resolve,
           server: Bun.serve({
             port: 0,
-            fetch: async (request) => {
-              await gate.promise
+            fetch: (request) => {
               authorization.push(request.headers.get("authorization"))
               const origin = new URL(request.url).origin
               return Response.json({
@@ -209,7 +206,7 @@ describe("OpencodePlugin", () => {
           }),
         }
       }),
-      ({ authorization, release, server }) =>
+      ({ authorization, server }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
@@ -237,15 +234,9 @@ describe("OpencodePlugin", () => {
           })
 
           yield* addPlugin()
-          expect(authorization).toEqual([])
-          release()
+          expect(authorization).toEqual(["Bearer secret"])
 
-          const provider = required(
-            yield* eventually(
-              catalog.provider.get(ProviderV2.ID.make("remote")),
-              (item) => item?.integrationID === Integration.ID.make("opencode"),
-            ),
-          )
+          const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("remote")))
           expect(provider).toMatchObject({
             name: "Remote",
             integrationID: "opencode",
@@ -283,7 +274,6 @@ describe("OpencodePlugin", () => {
             required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("disabled"))).enabled,
           ).toBe(false)
           expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"))).toBeDefined()
-          expect(authorization).toContain("Bearer secret")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
