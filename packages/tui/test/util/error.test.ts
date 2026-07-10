@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { errorData, errorFormat, errorMessage } from "../../src/util/error"
+import { cliErrorMessage, errorData, errorFormat, errorMessage } from "../../src/util/error"
 
 describe("util.error", () => {
   test("formats native Error instances", () => {
@@ -45,5 +45,11 @@ describe("util.error", () => {
     const data = errorData(err)
     expect(data.message).toBe("ResolveMessage: Cannot resolve module")
     expect(String(data.formatted)).toContain("ResolveMessage")
+  })
+
+  test("brands MCP failure guidance as Mammouth Code", () => {
+    expect(cliErrorMessage({ name: "MCPFailed", data: { name: "docs" } })).toBe(
+      'MCP server "docs" failed. Note, Mammouth Code does not support MCP authentication yet.',
+    )
   })
 })

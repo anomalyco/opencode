@@ -161,7 +161,7 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: false,
     })
-    expect(renderer.notifications).toEqual([{ title: "opencode", message: "focused" }])
+    expect(renderer.notifications).toEqual([{ title: "Mammouth Code", message: "focused" }])
   })
 
   test("notification can deliver while focused when requested", async () => {
@@ -176,7 +176,7 @@ describe("createTuiAttention", () => {
       sound: true,
     })
     expect(audio.playCalls).toBe(1)
-    expect(renderer.notifications).toEqual([{ title: "opencode", message: "hello" }])
+    expect(renderer.notifications).toEqual([{ title: "Mammouth Code", message: "hello" }])
   })
 
   test("notifies while blurred", async () => {
@@ -238,7 +238,7 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: true,
     })
-    expect(renderer.notifications).toEqual([{ title: "opencode", message: "hello again" }])
+    expect(renderer.notifications).toEqual([{ title: "Mammouth Code", message: "hello again" }])
   })
 
   test("can disable notification per call while still playing sound", async () => {
@@ -357,6 +357,14 @@ describe("createTuiAttention", () => {
     const audio = new FakeAudioEngine()
     const attention = createTuiAttention({ renderer, config: config(), audio })
     renderer.emit("blur")
+
+    expect(attention.soundboard.current()).toBe("opencode.default")
+    expect(attention.soundboard.list()).toContainEqual({
+      id: "opencode.default",
+      name: "Mammouth Code Default",
+      active: true,
+      builtin: true,
+    })
 
     const dispose = attention.soundboard.registerPack({
       id: "acme.soft",
