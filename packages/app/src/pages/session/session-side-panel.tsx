@@ -23,10 +23,12 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
 import { SessionContextTab, SortableTab } from "@/components/session"
+import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -70,7 +72,9 @@ export function SessionSidePanel(props: {
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
+  const sdk = useSDK()
   const { sessionKey, tabs, view, params } = useSessionLayout()
+  const projectDirectory = createMemo(() => sdk().directory)
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const shown = settings.visibility.fileTree
@@ -280,7 +284,8 @@ export function SessionSidePanel(props: {
                         activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
                         preventActivation: (event) =>
                           event.target instanceof Element &&
-                          !!event.target.closest('[data-slot="tabs-trigger-close-button"]'),
+                          (!!event.target.closest('[data-slot="tabs-trigger-close-button"]') ||
+                            !!event.target.closest(".session-review-v2-open-in-app-slot")),
                       }),
                     ]}
                     modifiers={[
@@ -299,7 +304,7 @@ export function SessionSidePanel(props: {
                     }}
                   >
                     <Tabs value={activeTab()} onChange={activateTab}>
-                      <div class="sticky top-0 shrink-0 flex">
+                      <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
                         <Tabs.List
                           ref={(el: HTMLDivElement) => {
                             tabList = el
@@ -395,7 +400,7 @@ export function SessionSidePanel(props: {
                             )}
                           </For>
                           <div
-                            class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3"
+                            class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center"
                             classList={{
                               "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
                               "bg-background-stronger": !settings.general.newLayoutDesigns(),
@@ -431,6 +436,13 @@ export function SessionSidePanel(props: {
                             </TooltipV2>
                           </div>
                         </Tabs.List>
+                        <div
+                          class="session-review-v2-open-in-app-slot shrink-0 flex items-center pr-3"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <OpenInAppV2 directory={projectDirectory} />
+                        </div>
                       </div>
 
                       <Show when={reviewTab() && props.canReview() && activeTab() === "review"}>

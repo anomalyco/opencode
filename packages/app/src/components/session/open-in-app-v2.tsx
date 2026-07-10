@@ -15,14 +15,21 @@ export function OpenInAppV2(props: { directory: () => string }) {
 
   return (
     <Show when={props.directory() && state.canOpen()}>
-      <SplitButtonV2 class="session-review-v2-open-in-app">
+      <SplitButtonV2
+        class="session-review-v2-open-in-app"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
         <TooltipV2
           placement="bottom"
           value={language.t("session.header.open.ariaLabel", { app: state.current().label })}
           class="flex items-center"
         >
           <SplitButtonV2Action
-            onClick={() => state.openDir(state.current().id)}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+              if (event.button !== 0 || state.opening()) return
+              state.openDir(state.current().id)
+            }}
             disabled={state.opening()}
             aria-label={language.t("session.header.open.ariaLabel", { app: state.current().label })}
           >
@@ -42,6 +49,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
             as={SplitButtonV2MenuTrigger}
             disabled={state.opening()}
             aria-label={language.t("session.header.open.menu")}
+            onPointerDown={(event) => event.stopPropagation()}
           >
             <IconV2 name="chevron-down" size="small" />
           </MenuV2.Trigger>

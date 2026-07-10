@@ -1,7 +1,7 @@
 import { splitProps, type ComponentProps, type ParentProps } from "solid-js"
 import "./split-button-v2.css"
 
-export function SplitButtonV2(props: ParentProps<{ class?: string; classList?: ComponentProps<"div">["classList"] }>) {
+export function SplitButtonV2(props: ParentProps<ComponentProps<"div">>) {
   const [split, rest] = splitProps(props, ["class", "classList", "children"])
   return (
     <div

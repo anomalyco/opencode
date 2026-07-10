@@ -733,3 +733,36 @@ body[data-new-layout] #terminal-panel [data-component="tabs"][data-variant="norm
     }
   }
 }
+
+#review-panel [data-component="tabs"] .session-review-v2-tabs-bar {
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
+  background-color: var(--background-stronger, var(--v2-background-bg-base));
+}
+
+#review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"] {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  border-bottom: none;
+}
+
+#review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"] > .sticky {
+  padding-right: 0;
+}
+
+#review-panel [data-component="tabs"] .session-review-v2-open-in-app-slot {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+#review-panel [data-component="tabs"] .session-review-v2-open-in-app {
+  flex-shrink: 0;
+}
+
+body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-tabs-bar {
+  background-color: var(--v2-background-bg-base);
+}
