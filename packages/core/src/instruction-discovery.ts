@@ -31,15 +31,17 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
 
-    const source = (value: ReadonlyArray<File> | Instructions.Unavailable) =>
-      Instructions.make({
+    const source = (value: ReadonlyArray<File> | Instructions.Unavailable | Instructions.Removed) =>
+      Instructions.make<ReadonlyArray<File>>({
         key,
         codec: Schema.toCodecJson(Files),
-        load: Effect.succeed(value),
-        baseline: render,
-        update: (_previous, current) =>
-          `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
-        removed: () => "Previously loaded instructions no longer apply.",
+        read: Effect.succeed(value),
+        render: {
+          first: render,
+          changed: (_previous, current) =>
+            `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
+          removed: () => "Previously loaded instructions no longer apply.",
+        },
       })
 
     const observe = Effect.fn("InstructionDiscovery.observe")(function* () {
@@ -85,7 +87,7 @@ const layer = Layer.effect(
             files === Instructions.unavailable
               ? source(files)
               : files.length === 0
-                ? Instructions.empty
+                ? source(Instructions.removed)
                 : source(files),
           ),
           Effect.catch(() => Effect.succeed(source(Instructions.unavailable))),

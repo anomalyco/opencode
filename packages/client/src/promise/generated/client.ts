@@ -701,7 +701,7 @@ export function make(options: ClientOptions) {
                 path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
                 body: { value: input["value"] },
                 successStatus: 204,
-                declaredStatuses: [404, 400, 401],
+                declaredStatuses: [404, 413, 400, 401],
                 empty: true,
               },
               requestOptions,

@@ -55,6 +55,17 @@ const SyncSent = EventV2.durable({
   },
 })
 
+const VersionedMessageV1 = EventV2.durable({
+  type: "test.versioned",
+  durable: { version: 1, aggregate: "id" },
+  schema: { id: Schema.String },
+})
+const VersionedMessageV2 = EventV2.durable({
+  type: "test.versioned",
+  durable: { version: 2, aggregate: "id" },
+  schema: { id: Schema.String },
+})
+
 const GlobalMessage = EventV2.ephemeral({
   type: "test.global",
   schema: {
@@ -722,13 +733,32 @@ describe("EventV2", () => {
       yield* events.replay({
         id: EventV2.ID.create(),
         created: DateTime.makeUnsafe(0),
-        type: EventV2.versionedType(SessionEvent.InstructionsUpdated.type, 1),
+        type: EventV2.versionedType(SessionEvent.InstructionsUpdated.type, 2),
         seq: 0,
         aggregateID,
-        data: { sessionID: aggregateID, text: "context" },
+        data: { sessionID: aggregateID, delta: { "core/context": "0".repeat(64) } },
       })
 
       expect(received[0]?.created).toEqual(DateTime.makeUnsafe(0))
+    }),
+  )
+
+  it.effect("dispatches durable projectors by exact event version", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      const received = new Array<typeof VersionedMessageV2.Type>()
+      yield* events.project(VersionedMessageV2, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      yield* events.publish(VersionedMessageV1, { id: aggregateID })
+      yield* events.publish(VersionedMessageV2, { id: aggregateID })
+
+      expect(received).toHaveLength(1)
+      expect(received[0]?.durable.version).toBe(EventV2.Version.make(2))
     }),
   )
 

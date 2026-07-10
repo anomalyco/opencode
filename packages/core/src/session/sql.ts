@@ -11,7 +11,7 @@ import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
-import type { Instructions } from "../instructions/index"
+import type { InstructionSync } from "@opencode-ai/schema/instruction-sync"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SyntheticData, UserData } from "@opencode-ai/schema/session-pending"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
@@ -33,6 +33,7 @@ export const SessionTable = sqliteTable(
     parent_id: text().$type<SessionSchema.ID>(),
     fork_session_id: text().$type<SessionSchema.ID>(),
     fork_message_id: text().$type<SessionMessage.ID>(),
+    fork_seq: integer(),
     slug: text().notNull(),
     directory: directoryColumn().notNull(),
     path: pathColumn(),
@@ -160,17 +161,24 @@ export const InstructionEntryTable = sqliteTable(
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     key: text().notNull(),
     value: text({ mode: "json" }).notNull().$type<Schema.Json>(),
+    removed: integer({ mode: "boolean" }).notNull().default(false),
     ...Timestamps,
   },
   (table) => [primaryKey({ columns: [table.session_id, table.key] })],
 )
 
-export const InstructionCheckpointTable = sqliteTable("instruction_checkpoint", {
+export const InstructionBlobTable = sqliteTable("instruction_blob", {
+  hash: text().$type<InstructionSync.Hash>().primaryKey(),
+  value: text({ mode: "json" }).notNull().$type<Schema.Json>(),
+})
+
+export const InstructionStateTable = sqliteTable("instruction_state", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),
-  baseline: text().notNull(),
-  snapshot: text({ mode: "json" }).notNull().$type<Instructions.Applied>(),
-  baseline_seq: integer().notNull(),
+  epoch_start: integer().notNull(),
+  through_seq: integer().notNull(),
+  initial_values: text({ mode: "json" }).notNull().$type<InstructionSync.Values>(),
+  current_values: text({ mode: "json" }).notNull().$type<InstructionSync.Values>(),
 })

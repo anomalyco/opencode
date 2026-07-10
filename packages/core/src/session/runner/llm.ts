@@ -30,7 +30,7 @@ import { InstructionEntry } from "../instruction-entry"
 import { QuestionTool } from "../../tool/question"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
-import { InstructionCheckpoint } from "../instruction-checkpoint"
+import { InstructionState } from "../instruction-state"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
@@ -113,6 +113,8 @@ const layer = Layer.effect(
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       return session
     })
+    const isCurrentLocation = (session: SessionSchema.Info) =>
+      session.location.directory === location.directory && session.location.workspaceID === location.workspaceID
 
     const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
       sessionID: SessionSchema.ID,
@@ -161,20 +163,15 @@ const layer = Layer.effect(
       assistantMessageID?: SessionMessage.ID,
     ) {
       const session = yield* getSession(sessionID)
-      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
-        return yield* Effect.interrupt
+      if (!isCurrentLocation(session)) return yield* Effect.interrupt
       yield* plugins.flush
       const agent = yield* agents.select(session.agent)
       const agentInfo = agent.info
       if (!agentInfo) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Establish what the model knows before admitting what the user said, so
       // a blocked first step leaves pending inputs untouched.
-      const checkpoint = yield* InstructionCheckpoint.prepare(
-        db,
-        events,
-        loadInstructions(agent, session.id),
-        session.id,
-      )
+      const instructions = yield* loadInstructions(agent, session.id)
+      yield* InstructionState.prepare(db, events, instructions, session.id)
       let currentStep = step
       if (promotion) {
         let promoted = 0
@@ -188,15 +185,15 @@ const layer = Layer.effect(
       const resolved = yield* models.resolve(session)
       const model = resolved.model
       const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
-      const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
-      const context = entries.map((entry) => entry.message)
+      const history = yield* SessionHistory.entriesForRunner(db, session.id, instructions)
+      const context = history.entries.map((entry) => entry.message)
       const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agentInfo.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), checkpoint.baseline]
+        system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), history.initial]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [
@@ -233,6 +230,8 @@ const layer = Layer.effect(
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
       const publish = (event: LLMEvent, error?: SessionError.Error) => serialized(publisher.publish(event, error))
       let overflowFailure: ProviderErrorEvent | undefined
+      const dispatchSession = yield* getSession(session.id)
+      if (!isCurrentLocation(dispatchSession)) return yield* Effect.interrupt
       const providerStream = llm.stream(hookedRequest).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {

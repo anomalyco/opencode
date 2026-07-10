@@ -155,7 +155,7 @@ const select = (
   tokens: number,
 ): { readonly head: string; readonly recent: string } | undefined => {
   const conversation = messages
-    .filter((message) => message.type !== "compaction")
+    .filter((message) => message.type !== "compaction" && message.type !== "system")
     .map(serialize)
     .filter(Boolean)
   if (conversation.length === 0) return undefined
@@ -295,9 +295,7 @@ const make = (dependencies: Dependencies) => {
       model: input.model,
       reason: input.reason,
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
-      context: (summarizeRecent ? [previousRecent, selected.recent] : [previousRecent, selected.head]).filter(
-        Boolean,
-      ),
+      context: (summarizeRecent ? [previousRecent, selected.recent] : [previousRecent, selected.head]).filter(Boolean),
       recent: summarizeRecent ? "" : selected.recent,
       output: input.output,
       inputID: input.inputID,

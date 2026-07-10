@@ -53,5 +53,6 @@ export const migrations = (
     import("./migration/20260709025533_drop-todo"),
     import("./migration/20260709163752_time_suspended"),
     import("./migration/20260709190621_session_pending_table"),
+    import("./migration/20260710025429_instruction_sync"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

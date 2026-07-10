@@ -126,12 +126,9 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`instruction_checkpoint\` (
-          \`session_id\` text PRIMARY KEY,
-          \`baseline\` text NOT NULL,
-          \`snapshot\` text NOT NULL,
-          \`baseline_seq\` integer NOT NULL,
-          CONSTRAINT \`fk_instruction_checkpoint_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        CREATE TABLE \`instruction_blob\` (
+          \`hash\` text PRIMARY KEY,
+          \`value\` text NOT NULL
         );
       `)
       yield* tx.run(`
@@ -139,10 +136,21 @@ export default {
           \`session_id\` text NOT NULL,
           \`key\` text NOT NULL,
           \`value\` text NOT NULL,
+          \`removed\` integer DEFAULT false NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           CONSTRAINT \`instruction_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
           CONSTRAINT \`fk_instruction_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`instruction_state\` (
+          \`session_id\` text PRIMARY KEY,
+          \`epoch_start\` integer NOT NULL,
+          \`through_seq\` integer NOT NULL,
+          \`initial_values\` text NOT NULL,
+          \`current_values\` text NOT NULL,
+          CONSTRAINT \`fk_instruction_state_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -198,6 +206,7 @@ export default {
           \`parent_id\` text,
           \`fork_session_id\` text,
           \`fork_message_id\` text,
+          \`fork_seq\` integer,
           \`slug\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`path\` text,

@@ -23,7 +23,7 @@ import { fromRow } from "@opencode-ai/core/session/info"
 import { SessionPending } from "@opencode-ai/core/session/pending"
 import { Shell } from "@opencode-ai/schema/shell"
 import {
-  InstructionCheckpointTable,
+  InstructionStateTable,
   SessionPendingTable,
   SessionMessageTable,
   SessionTable,
@@ -204,8 +204,14 @@ describe("SessionProjector", () => {
         ])
         .run()
       yield* db
-        .insert(InstructionCheckpointTable)
-        .values({ session_id: sessionID, baseline: "baseline", snapshot: {}, baseline_seq: 0 })
+        .insert(InstructionStateTable)
+        .values({
+          session_id: sessionID,
+          epoch_start: 0,
+          through_seq: 0,
+          initial_values: {},
+          current_values: {},
+        })
         .run()
       const events = yield* EventV2.Service
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
@@ -238,8 +244,8 @@ describe("SessionProjector", () => {
         tokens_cache_read: 3,
         tokens_cache_write: 1,
       })
-      // A committed revert resets the context checkpoint so the next turn re-initializes.
-      expect(yield* db.select().from(InstructionCheckpointTable).get().pipe(Effect.orDie)).toBeUndefined()
+      // A committed revert resets the fold cache so the next boundary establishes a new epoch.
+      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toBeUndefined()
     }),
   )
 

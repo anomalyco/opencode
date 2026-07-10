@@ -104,14 +104,15 @@ describe("public event manifest", () => {
         "session.model.selected.1",
         "session.moved.1",
         "session.renamed.1",
-        "session.forked.1",
+        "session.forked.2",
         "session.input.promoted.1",
         "session.input.admitted.1",
         "session.execution.started.1",
         "session.execution.succeeded.1",
         "session.execution.failed.1",
         "session.execution.interrupted.1",
-        "session.instructions.updated.1",
+        "session.instructions.legacy.1",
+        "session.instructions.updated.2",
         "session.synthetic.1",
         "session.skill.activated.1",
         "session.shell.started.1",
@@ -139,9 +140,10 @@ describe("public event manifest", () => {
         "session.revert.committed.1",
       ].toSorted(),
     )
-    expect(SessionEvent.DurableDefinitions).toEqual(
-      SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
-    )
+    expect(SessionEvent.DurableDefinitions).toEqual([
+      SessionEvent.InstructionsUpdatedV1,
+      ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
+    ])
     expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
     expect(SessionEvent.Compaction.Delta.durability).toBe("ephemeral")
     expect(EventManifest.Durable.has("session.compaction.delta.1")).toBe(false)

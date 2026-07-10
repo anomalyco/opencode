@@ -59,9 +59,9 @@ A normalized `step-finish` with `content-filter` publishes `session.step.failed.
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 
-## Instruction Checkpoints
+## Instruction Sync
 
-V2 Sessions persist the exact privileged instructions shown to the model. `InstructionCheckpoint` stores one immutable instruction baseline, its baseline event sequence, and a model-hidden `Instructions.Applied` record used to compare independently observed instruction sources. Instructions are only one part of Model Context: the runner separately assembles agent or provider system text, Session History, tool definitions, and step-local additions for each request.
+V2 Sessions persist instruction values, never rendered privileged prose. The only new durable fact is `session.instructions.updated.2 { delta }`, where each changed source key maps to a SHA-256 content hash and explicit removal maps to the literal `"removed"` (unambiguous against 64-hex hashes and generator-safe where nullable record values are not). `instruction_blob` stores each canonical JSON value once. Instructions are only one part of Model Context: the runner separately assembles agent or provider system text, Session History, tool definitions, and step-local additions for each request.
 
 The runner has no instruction registry. `loadInstructions` explicitly loads these producers concurrently and combines them in this fixed order:
 
@@ -72,55 +72,41 @@ The runner has no instruction registry. `loadInstructions` explicitly loads thes
 5. Selected-agent MCP guidance.
 6. API-managed `InstructionEntry` values for the Session.
 
-`Instructions.combine(...)` preserves that caller order and rejects duplicate namespaced source keys. Each source owns its typed observation, JSON codec, and pure baseline, update, and optional removal renderers.
+`Instructions.combine(...)` preserves that caller order and rejects duplicate namespaced source keys. Each source owns its typed boundary read, canonical JSON codec, and pure first, changed, and optional removal renderers.
 
-The first complete observation initializes `InstructionCheckpoint` before any pending prompt becomes model-visible. If an initial source is temporarily unavailable, execution stops while the prompt remains pending and retryable. Every later step attempt also prepares instructions before input promotion. Changed instructions publish one durable chronological System message through `session.instructions.updated`, and that event commit advances `Instructions.Applied` atomically.
+At every safe boundary the runner reads each source concurrently and exactly once, hashes encoded values, and compares them with current values. The first complete read admits one full delta before any pending prompt becomes model-visible; temporary unavailability blocks that first delta while leaving the prompt retryable. Later unavailability retains the stored value silently. Changed values insert new blobs and admit one delta atomically before input promotion.
 
-```text
-Client            Runner                 Explicit producers       InstructionCheckpoint      Inbox / History       LLM
-   │                 │                            │                          │                       │               │
-   ├─ Admit prompt ────────────────────────────────────────────────────────────────────────────────▶               │
-   │                 │                            │                          │                       │               │
-   │                 ├─ Load instructions ───────▶                          │                       │               │
-   │                 │                            │                          │                       │               │
-   │                 ◀─ Combined sources ─────────┤                          │                       │               │
-   │                 │                            │                          │                       │               │
-   │                 ├─ Initialize or reconcile ────────────────────────────▶                       │               │
-   │                 │                            │                          │                       │               │
-   │                 ├─ Publish update + advance Applied atomically ───────────────────────────────▶               │
-   │                 │                            │                          │                       │               │
-   │                 ├─ Promote eligible input ────────────────────────────────────────────────────▶               │
-   │                 │                            │                          │                       │               │
-   │                 ├─ System text + instruction baseline + history + tools ──────────────────────────────────────▶
-```
-
-Agent and model selection are step-scoped. The runner selects the agent before loading agent-specific guidance; a switch admitted after the current boundary applies to the next step without restarting the current one. Changed guidance is admitted through `session.instructions.updated` while preserving the baseline. Model selection affects Model Context assembly but is not an instruction source and does not itself replace the instruction baseline.
-
-A completed compaction causes the next physical attempt to rebaseline from current instructions. Temporarily unavailable sources are restated from the model's last applied belief where possible. A Session move resets `InstructionCheckpoint` so the destination Location initializes a complete baseline on its next run. Committed revert also resets the checkpoint.
+An instruction epoch starts at the last completed compaction sequence, or at the first complete delta when no epoch exists. The runner derives initial instructions by folding through the epoch start, then renders every later delta as a chronological System message during request assembly. Neither initial nor update text is stored. The `instruction_state` row caches `epoch_start`, `through_seq`, `initial_values`, and `current_values`; a sequence mismatch or missing row rebuilds from the durable log without publishing another event.
 
 ```text
-Session                      InstructionCheckpoint
-   │                                   │
-   ├─ initialize complete baseline ────▶
-   │                                   │
-   │                                   ├──────────────────────────────╮
-   │                                   │ reconcile instruction update │
-   │                                   ◀──────────────────────────────╯
-   │                                   │
-   ├─ completed compaction ────────────▶ rebaseline
-   │                                   │
-   ├─ move or committed revert ────────▶ reset
+Client            Runner                 Explicit producers       Values / blobs       Inbox / History       LLM
+   │                 │                            │                       │                    │               │
+   ├─ Admit prompt ────────────────────────────────────────────────────────────────────────────▶               │
+   │                 │                            │                       │                    │               │
+   │                 ├─ Read each source once ───▶                       │                    │               │
+   │                 │                            │                       │                    │               │
+   │                 ◀─ Encoded values ───────────┤                       │                    │               │
+   │                 │                            │                       │                    │               │
+   │                 ├─ Insert blobs + admit one delta atomically ──────▶                    │               │
+   │                 │                            │                       │                    │               │
+   │                 ├─ Promote eligible input ─────────────────────────────────────────────▶               │
+   │                 │                            │                       │                    │               │
+   │                 ├─ Render initial values + historical deltas + history + tools ─────────────────────────▶
 ```
+
+Agent and model selection are step-scoped. The runner selects the agent before loading agent-specific guidance; a switch admitted after the current boundary applies to the next step without restarting the current one. Changed guidance is admitted through `session.instructions.updated` while preserving the epoch's initial values. Model selection affects Model Context assembly but is not an instruction source.
+
+Completed compaction moves the epoch to the exact `session.compaction.ended` sequence and makes current values initial; this transition does not read sources or author an instruction event. Session movement and committed revert clear the fold so the next destination boundary must admit one complete delta. Forks carry an authoritative parent sequence and fold parent ancestry only through that cutoff, preventing later parent values from leaking into the child.
 
 `InstructionDiscovery` observes ambient instructions as one ordered aggregate source. Ambient discovery canonicalizes traversal within the project root, reads global and upward-project `AGENTS.md` files, and honors `OPENCODE_DISABLE_PROJECT_CONFIG` for project files.
 
-An unavailable observation preserves the previously applied value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation message.
+An unavailable read preserves the folded current value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation delta and message.
 
 Current instruction follow-ups:
 
 - Add configured and remote instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash continuation recovery for promoted or provider-dispatched work.
-- Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
+- Add operational metrics for read latency, unavailable sources, contention, initial-instruction size, and delta frequency.
 - Consider watcher-backed per-file caching only if measurements show direct step-boundary observation is too expensive.
 - Design any plugin-defined instruction contribution as an explicit runner composition boundary; do not reintroduce a registry implicitly.
 - Add clustered Session execution ownership and stale-runtime fencing.
@@ -133,7 +119,7 @@ Compaction keeps the full transcript durable while replacing its active model re
 
 The rolling summary is a continuation checkpoint with this complete heading order: `Objective`, `Important Details`, `Work State`, and `Next Move`. `Work State` records completed, active, and blocked work, while `Next Move` records the immediate and following actions. Every heading remains present even when its value is `(none)`.
 
-`session.compaction.admitted.1` durably records a manual request and projects its queued transcript row. `session.compaction.started.1` identifies the attempt and transforms that row into a running divider. Compaction deltas are live-only progress rendered beneath it. `session.compaction.ended.1` durably stores the final summary and serialized recent context, completes the same row, and settles the manual barrier. `session.compaction.failed.1` settles an unsuccessful manual barrier without changing the previous history boundary. On the next physical attempt, the runner observes a completed compaction and directly renders a fresh instruction baseline through `InstructionCheckpoint`.
+`session.compaction.admitted.1` durably records a manual request and projects its queued transcript row. `session.compaction.started.1` identifies the attempt and transforms that row into a running divider. Compaction deltas are live-only progress rendered beneath it. `session.compaction.ended.1` durably stores the final summary and serialized recent context, completes the same row, settles the manual barrier, and moves the instruction epoch to that event sequence. `session.compaction.failed.1` settles an unsuccessful manual barrier without changing either history boundary. Derived instruction-update prose is excluded from compaction summaries; the next physical attempt renders initial instructions from the epoch's stored values.
 
 Assistant text and reasoning follow a strict `started` / live-only `delta` / durable full-value `ended` lifecycle. A publisher permits at most one open fragment of each kind in a step and fails on a second start before the matching end. Provider block IDs remain internal to LLM adapters; each fragment event carries a Session-assigned kind-specific ordinal, matching the ordinal derived from projected content. UI identity is therefore the assistant message ID plus content kind and ordinal. Tool calls retain step-scoped `callID` because settlements and provider replay correlate through it.
 
@@ -165,7 +151,7 @@ Status: `complete` is usable in the native V2 path, `partial` covers only part o
 | Step request assembly      | Plugin message, system, parameter, and header transforms                 | missing  | Design V2 plugin hooks and lifecycle semantics.                                                                                        |
 | Step request assembly      | Model variants and request settings                                      | partial  | Apply effective agent options and future plugin-mutated request settings.                                                              |
 | Step request assembly      | Structured-output policy                                                 | missing  | Add prompt format, generated tool, tool choice, and model-visible policy together.                                                     |
-| Step request assembly      | Automatic/context-pressure compaction                                    | complete | V2 initiates automatic and overflow-triggered compaction, then rebuilds the baseline from the completed checkpoint.                    |
+| Step request assembly      | Automatic/context-pressure compaction                                    | complete | V2 initiates automatic and overflow-triggered compaction, then renders initial instructions from values at the completed epoch.        |
 | Prompt/reference expansion | Durable typed prompt attachments                                         | complete | None.                                                                                                                                  |
 | Prompt/reference expansion | Native template and `@` mention expansion                                | missing  | Parse and resolve native V2 prompt input before durable admission.                                                                     |
 | Prompt/reference expansion | File, directory, media, and MCP-resource materialization                 | partial  | Materialize and normalize sources instead of lowering unresolved attachment metadata.                                                  |

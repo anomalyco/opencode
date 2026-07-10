@@ -2124,10 +2124,10 @@ test("projects live instruction updates with their message ID", async () => {
       id: "evt_instructions_1",
       created: 0,
       type: "session.instructions.updated",
-      durable: durable("session-1"),
+      durable: durable("session-1", 0, 2),
       data: {
         sessionID: "session-1",
-        text: "Updated instructions",
+        delta: { "core/date": "0".repeat(64) },
       },
     })
 
@@ -2135,7 +2135,7 @@ test("projects live instruction updates with their message ID", async () => {
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
       id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_instructions_1")),
       type: "system",
-      text: "Updated instructions",
+      text: "Instructions updated: core/date",
       time: { created: 0 },
     })
   } finally {

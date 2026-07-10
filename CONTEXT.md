@@ -13,11 +13,11 @@ The opaque algebra of independently refreshable typed instruction sources that r
 _Avoid_: Model Context, System Context
 
 **Session History**:
-The projected chronological conversation selected for a **Step** after applying the active compaction and **InstructionCheckpoint** baseline cutoffs.
+The projected chronological conversation selected for a **Step** after applying the active compaction boundary and interleaving derived **Instruction Updates** from the current **Instruction Epoch**.
 _Avoid_: Session Context
 
 **Instruction Source**:
-One independently observed typed value within **Instructions**, represented by a stable namespaced key, JSON codec, loader, pure baseline/update renderers, and an optional removal renderer.
+One independently read typed value within **Instructions**, represented by a stable namespaced key, canonical JSON codec, pure first/changed renderers, and an optional removal renderer.
 _Avoid_: Prompt fragment
 
 **InstructionEntry**:
@@ -26,22 +26,25 @@ One API-managed, durable, per-Session instruction value. Its slash-free client k
 **InstructionDiscovery**:
 The Location-scoped service that observes ambient global and upward-project `AGENTS.md` files as one ordered aggregate **Instruction Source**.
 
-**InstructionCheckpoint**:
-The Session-owned durable instruction baseline, baseline sequence, and `Instructions.Applied` record used to prepare later Steps.
+**Instruction State**:
+The Session-owned projection cache of one instruction log fold: epoch start, values at that start, current values, and the last folded sequence. It is rebuilt from durable events and never authors model-visible facts.
 
 **Instruction Update**:
-A durable chronological System message published as `session.instructions.updated` that tells the model the newly effective state of one or more changed **Instruction Sources**.
-_Avoid_: System notification, raw text diff
+A durable `session.instructions.updated` value delta admitted at a **Safe Step Boundary**. Its model-visible System text is rendered from stored values at request assembly and is never persisted verbatim.
+_Avoid_: Correction, stored prose, raw text diff
 
-**Instruction Baseline**:
-The exact joined instruction text stored by **InstructionCheckpoint** and sent as immutable provider-cache prefix state until completed compaction rebaselines it or Session movement or committed revert resets it.
+**Initial Instructions**:
+The deterministic instruction text rendered from values at the current **Instruction Epoch** start and sent as provider-cache prefix state until completed compaction moves the epoch or Session movement or committed revert resets it.
 _Avoid_: Live system prompt
 
-**Applied Instructions**:
-The overwriteable model-hidden `Instructions.Applied` record in **InstructionCheckpoint**, containing what the model was last told per **Instruction Source**.
+**Instruction Epoch**:
+The span between completed compactions. Its start is the last `session.compaction.ended` sequence, or the first complete instruction delta when no prior epoch exists.
+
+**Instruction Values**:
+The key-to-hash map produced by folding instruction deltas in durable sequence order. Hash bodies live once in the content-addressed instruction blob store.
 
 **Unavailable Instruction Source**:
-An expected temporary inability to observe an **Instruction Source** value; the runtime retains its prior effective state and emits no update, while an unavailable source blocks creation of the first complete **Instruction Baseline**.
+An expected temporary inability to read an **Instruction Source** value; the runtime retains its prior effective value and emits no update, while an unavailable source blocks the first complete delta.
 
 **Safe Step Boundary**:
 The point during Step preparation, after prior tool settlement and before durable input promotion, where instruction changes may be admitted chronologically.
@@ -53,7 +56,7 @@ A durable user input accepted into the Session inbox but not yet included in **S
 The durable transition that removes an **Admitted Prompt** from pending input and appends its user message to **Session History**.
 
 **Step**:
-One logical LLM call spanning pre-flight instruction checkpoint preparation, input promotion, request build, and compaction check; the provider stream; and tool settlement.
+One logical LLM call spanning pre-flight instruction synchronization, input promotion, request build, and compaction check; the provider stream; and tool settlement.
 _Avoid_: provider turn, turn (unqualified)
 
 **Physical Attempt**:
@@ -108,18 +111,16 @@ _Avoid_: Response envelope
 ## Relationships
 
 - **Instructions** is an opaque carrier composed from zero or more **Instruction Sources**.
-- **Model Context** is broader than **Instructions**. For each **Step**, the runner assembles the selected agent or provider system text, the **Instruction Baseline**, **Session History**, available tools, and step-local additions into one model request.
-- **Session History** contains projected conversational messages and admitted **Instruction Updates**; the active **Instruction Baseline** remains separate provider-request state.
+- **Model Context** is broader than **Instructions**. For each **Step**, the runner assembles the selected agent or provider system text, **Initial Instructions**, **Session History**, available tools, and step-local additions into one model request.
+- **Session History** persists conversational messages. The runner derives model-facing **Instruction Update** messages from value deltas and interleaves them by durable sequence; **Initial Instructions** remain separate provider-request state.
 - The runner explicitly loads and combines instruction built-ins, **InstructionDiscovery**, selected-agent skill guidance, reference guidance, MCP guidance, and **InstructionEntry** values. There is no instruction registry.
 - `Instructions.combine(...)` preserves caller order and rejects duplicate stable namespaced source keys. The runner loads its producers concurrently, then combines them in its fixed declared order.
-- Each **Instruction Source** loader returns one coherent typed value or explicitly reports unavailability. `Instructions.make(...)` hides the value type so differently typed sources compose uniformly; its codec compares and stores the value, while pure renderers produce baseline, update, and optional removal text.
-- `Instructions.initialize(...)` observes composed **Instructions** once and produces a complete **Instruction Baseline** with **Applied Instructions**.
-- `Instructions.reconcile(...)` observes composed **Instructions** once and returns either unchanged or one combined chronological update. It never rewrites the baseline.
-- `Instructions.rebaseline(...)` renders a fresh baseline after completed compaction, recalling previously applied values for sources that are temporarily unavailable.
-- A changed **Instruction Source** may contribute text to one **Instruction Update** containing the newly effective state.
-- An **Instruction Update** persists the exact combined rendered text sent to the model through `session.instructions.updated`.
-- **Applied Instructions** advances atomically with the corresponding durable **Instruction Update**.
-- **Applied Instructions** stores one codec-encoded JSON value and, for removable sources, a pre-rendered removal message per stable **Instruction Source** key.
+- Each **Instruction Source** read returns one coherent typed value, explicit removal, or temporary unavailability. `Instructions.make(...)` hides the value type so differently typed sources compose uniformly; its canonical codec defines storage and hash equivalence, while pure renderers produce first, changed, and optional removal text.
+- `Instructions.read(...)` reads every composed source concurrently and exactly once at the boundary. `Instructions.diff(...)` compares encoded-value hashes with current **Instruction Values** and returns one delta plus new blob bodies.
+- `Instructions.renderInitial(...)` renders values at the **Instruction Epoch** start. `Instructions.renderUpdate(...)` renders one hydrated delta against the values immediately before it.
+- A changed **Instruction Source** contributes its hash to one **Instruction Update**; explicit removal contributes the `"removed"` sentinel.
+- An **Instruction Update** persists only its value delta. Rendered text is derived during request assembly and excluded from compaction summaries.
+- The instruction blob insert, durable delta, and **Instruction State** advance commit atomically.
 - Changes from multiple **Instruction Sources** admitted at one safe boundary combine into one **Instruction Update**.
 - Instruction changes are sampled and admitted lazily at a **Safe Step Boundary**, never pushed asynchronously when their source changes.
 - At a **Safe Step Boundary**, prior tool results are already settled; instruction preparation completes before newly admitted user input promotes.
@@ -130,28 +131,27 @@ _Avoid_: Response envelope
 - A **Session Drain** is process-local coordination rather than a durable domain entity. Durable recovery must reason from prompts, projected history, physical attempts, and tool state rather than inventing an enclosing execution identity.
 - An **Execution** contains one or more **Session Drains**; a **Session Drain** contains one reserved assistant-turn span at a time; that span contains **Steps**; and each **Step** contains one or more **Physical Attempts** plus any tool calls it requires.
 - A **Step** record covers only the model-visible span from first assistant output through tool settlement; pre-flight leaves no record, and one Step settles at most one record.
-- The first **Step** renders the latest complete **Instruction Baseline** and creates its **InstructionCheckpoint** without emitting a redundant **Instruction Update**; an unavailable initial source blocks the Step instead of persisting an incomplete baseline.
+- The first **Step** admits one complete delta and renders **Initial Instructions** without narrating that delta in history; an unavailable initial source blocks the Step instead of persisting incomplete values.
 - Instruction preparation precedes durable input promotion on every Step so an unavailable first baseline leaves pending input untouched and later updates enter history before newly promoted input.
-- Completed compaction rebaselines the **InstructionCheckpoint** from current **Instructions** and removes earlier **Instruction Updates** from active projected model history while preserving durable audit history.
-- A newly composed **Instruction Source** absent from **Applied Instructions** emits its baseline rendering once at the next **Safe Step Boundary**.
+- Completed compaction moves the **Instruction Epoch** to the exact `session.compaction.ended` sequence and copies current hashes to the epoch's initial values. Earlier updates leave active model history while durable deltas remain.
+- A newly composed **Instruction Source** absent from current **Instruction Values** emits its first rendering once at the next **Safe Step Boundary**.
 - **Unavailable Instruction Source** uses stale-while-revalidate semantics and is distinct from a successfully loaded absence, which may emit removal text.
 - **InstructionDiscovery** observes ambient instructions as one ordered aggregate **Instruction Source**.
 - Ambient discovery reads global and upward-project `AGENTS.md` files and honors `OPENCODE_DISABLE_PROJECT_CONFIG` for project files.
 - After a successful internal file or directory read, nearby `AGENTS.md` files toward the Location root are injected once per Session as durable synthetic instruction messages.
 - **InstructionEntry** stores API-managed per-Session JSON values. Each entry contributes one `api/<key>` **Instruction Source**, so adding, replacing, or removing an entry is reconciled at the next **Safe Step Boundary**.
 - Location-scoped instruction producers naturally re-resolve when a moved Session next runs in its destination Location.
-- Moving a Session resets its **InstructionCheckpoint**, so the destination must initialize a complete baseline before another prompt can promote. Committed revert also resets the checkpoint.
+- Moving a Session clears its **Instruction State**, so the destination must admit a complete delta before another prompt can promote. Committed revert does the same; replay derives both resets from their durable events.
 - Selected-agent available-skill guidance is an **Instruction Source** composed explicitly by the runner. It lists only names and descriptions permitted for that agent; skill bodies and locations are exposed only through the permission-checked `skill` tool.
 - The selected agent and model are sampled when a **Step** starts. Changes admitted after that boundary apply to the next Step and do not restart the current Step.
 - An agent switch that changes selected-agent guidance produces an **Instruction Update** while preserving the current baseline.
 - Local tool authorization and pending permission requests retain the effective agent of the **Step** that issued the call; a later agent switch cannot change that call's policy.
 - Instruction source changes never wake idle Sessions; the next naturally scheduled **Safe Step Boundary** loads and compares current values lazily.
 - Once admitted, an **Instruction Update** remains durable even if the following **Physical Attempt** fails and is replayed unchanged on retry.
-- **Instruction Updates** remain durable Session-message history; normal user-facing transcript surfaces may hide them.
+- **Instruction Updates** remain durable value history but are not `session_message` rows. Clients display changed keys rather than model-facing prose.
 - The date **Instruction Source** initially preserves host-local calendar-date behavior; a configured user timezone may replace that default later.
-- An **Instruction Baseline** is stored durably and reused verbatim across process restarts until rebaseline or reset.
-- An **Instruction Baseline** durably preserves the exact joined text used for its part of the active provider-cache prefix.
-- A model/provider switch preserves the current **InstructionCheckpoint** and chronological conversation history; the new selection applies to the next **Step**.
+- **Initial Instructions** are recomputed deterministically from durable values for every request; rendered bytes are not stored.
+- A model/provider switch preserves current **Instruction Values**, the **Instruction Epoch**, and chronological conversation history; the new selection applies to the next **Step**.
 - **Native Continuation Metadata** remains in durable history. Step projection includes it only for a successful exact originating provider/model match; failed Steps and incompatible models omit opaque metadata, while non-empty visible reasoning lowers to ordinary assistant text after a model switch. This conservative relation may widen only when recorded provider tests establish compatibility.
 - **Model Request Options** remain provider-semantic through Catalog resolution. The Session runner maps them into the LLM package's provider-option namespace; the selected protocol adapter alone owns provider wire encoding.
 - **Generation Controls**, protocol-semantic **Model Request Options**, and compatibility request body fields are separate Catalog domains. A shared ingestion adapter partitions legacy and models.dev AI-SDK-shaped options before routing.
@@ -195,7 +195,7 @@ _Avoid_: Response envelope
 - `sessions.message({ sessionID, messageID })` is a required resource lookup. An unknown Session fails with `SessionNotFoundError`; a known Session with an absent or differently owned message fails with `MessageNotFoundError` without disclosing cross-Session ownership. Absence is not represented as `undefined` across the public HTTP boundary.
 - `sessions.interrupt({ sessionID })` first verifies that the durable Session exists, failing with `SessionNotFoundError` otherwise. For a known Session, interruption is idempotent: idle, already-settled, or locally unowned execution is a no-op.
 - `sessions.active()` snapshots the current process's foreground Session drain registry as a record of Session IDs to `{ type: "running" }`. Missing IDs are inactive; background subagents and tasks do not make their parent Session active, and process restart clears the registry.
-- `sessions.context({ sessionID })` preserves the existing message-only operation. It returns projected **Session History**; it does not include or represent the complete **Model Context**, whose system text, **Instruction Baseline**, tools, and step-local additions remain separate.
+- `sessions.context({ sessionID })` preserves the existing message-only operation. It returns projected **Session History**; it does not include or represent the complete **Model Context**, whose agent system text, **Initial Instructions**, tools, and step-local additions remain separate.
 - **Open question**: Should a future, separately named operation expose complete **Model Context**, including the instruction baseline, applied instruction metadata, tools, and step-local additions?
 - `sessions.prompt(...)` exposes `resume?: boolean`. Omitting it preserves durable admission followed by an advisory execution wake; `resume: false` requests durable admit-only behavior.
 - The public operation remains `sessions.prompt(...)`; `SessionPending.admit` is the internal primitive, while the public `Admission` result and `resume` option express its durable admission semantics.

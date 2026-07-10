@@ -178,16 +178,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.execution.succeeded": () => clearCurrentRetry,
       "session.execution.failed": () => clearCurrentRetry,
       "session.execution.interrupted": () => clearCurrentRetry,
-      "session.instructions.updated": (event) =>
-        adapter.appendMessage(
-          SessionMessage.System.make({
-            id: SessionMessage.ID.fromEvent(event.id),
-            type: "system",
-            text: event.data.text,
-            metadata: event.metadata,
-            time: { created: event.created },
-          }),
-        ),
+      "session.instructions.updated": () => Effect.void,
       "session.synthetic": (event) => {
         return adapter.appendMessage(
           SessionMessage.Synthetic.make({

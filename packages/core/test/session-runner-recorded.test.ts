@@ -200,6 +200,7 @@ describe("SessionRunnerLLM recorded", () => {
           .all()).map((event) => event.type),
       ).toEqual([
         "session.input.admitted.1",
+        "session.instructions.updated.2",
         "session.input.promoted.1",
         "session.step.started.1",
         "session.text.started.1",

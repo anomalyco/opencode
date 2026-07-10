@@ -9,10 +9,10 @@ import { Global } from "@opencode-ai/core/global"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Instructions } from "@opencode-ai/core/instructions"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { readInitial, readUpdate, state } from "./lib/instructions"
 
 const it = testEffect(Layer.empty)
 
@@ -69,7 +69,7 @@ describe("InstructionDiscovery", () => {
             ),
           )
 
-          const initialized = yield* Instructions.initialize(yield* load)
+          const initialized = yield* readInitial(yield* load)
           expect(initialized.text).toBe(
             [
               `Instructions from: ${globalFile}\nglobal`,
@@ -80,29 +80,24 @@ describe("InstructionDiscovery", () => {
           expect(initialized.text).not.toContain("outside")
 
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
-          expect(yield* Instructions.reconcile(yield* load, initialized.applied)).toMatchObject({
-            _tag: "Updated",
-            text: expect.stringContaining(`Instructions from: ${packageFile}\nchanged`),
-          })
+          expect((yield* readUpdate(yield* load, initialized)).text).toContain(
+            `Instructions from: ${packageFile}\nchanged`,
+          )
 
           yield* Effect.promise(() => fs.rm(packageFile))
-          const partial = yield* Instructions.reconcile(yield* load, initialized.applied)
-          expect(partial).toEqual({
-            _tag: "Updated",
-            text: [
+          const partial = yield* readUpdate(yield* load, initialized)
+          expect(partial.text).toBe(
+            [
               "These instructions replace all previously loaded ambient instructions.",
               `Instructions from: ${globalFile}\nglobal`,
               `Instructions from: ${projectFile}\nproject`,
             ].join("\n\n"),
-            applied: expect.any(Object),
-          })
+          )
 
           yield* Effect.promise(() => Promise.all([fs.rm(globalFile), fs.rm(projectFile)]))
-          expect(yield* Instructions.reconcile(yield* load, initialized.applied)).toEqual({
-            _tag: "Updated",
-            text: "Previously loaded instructions no longer apply.",
-            applied: {},
-          })
+          expect((yield* readUpdate(yield* load, initialized)).text).toBe(
+            "Previously loaded instructions no longer apply.",
+          )
         }),
       ),
     ),
@@ -130,7 +125,7 @@ describe("InstructionDiscovery", () => {
             ),
           )
 
-          expect((yield* Instructions.initialize(context)).text).toBe(`Instructions from: ${file}\n`)
+          expect((yield* readInitial(context)).text).toBe(`Instructions from: ${file}\n`)
         }),
       ),
     ),
@@ -161,13 +156,9 @@ describe("InstructionDiscovery", () => {
       )
 
       expect(
-        yield* Instructions.reconcile(context, {
-          "core/instructions": {
-            value: [{ path: "/repo/AGENTS.md", content: "old" }],
-            removed: "Previously loaded instructions no longer apply.",
-          },
-        }),
-      ).toEqual({ _tag: "Unchanged" })
+        (yield* readUpdate(context, state({ "core/instructions": [{ path: "/repo/AGENTS.md", content: "old" }] })))
+          .changed,
+      ).toBe(false)
     }),
   )
 
@@ -201,13 +192,8 @@ describe("InstructionDiscovery", () => {
       )
 
       expect(
-        yield* Instructions.reconcile(context, {
-          "core/instructions": {
-            value: [{ path: file, content: "old" }],
-            removed: "Previously loaded instructions no longer apply.",
-          },
-        }),
-      ).toEqual({ _tag: "Unchanged" })
+        (yield* readUpdate(context, state({ "core/instructions": [{ path: file, content: "old" }] }))).changed,
+      ).toBe(false)
     }),
   )
 

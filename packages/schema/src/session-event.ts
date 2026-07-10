@@ -14,6 +14,7 @@ import { SessionMessage } from "./session-message.js"
 import { Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
+import { InstructionSync } from "./instruction-sync.js"
 import { Agent } from "./agent.js"
 import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
@@ -105,10 +106,14 @@ export type Deleted = typeof Deleted.Type
 
 export const Forked = Event.durable({
   type: "session.forked",
-  ...options,
+  durable: {
+    aggregate: "sessionID",
+    version: 2,
+  },
   schema: {
     ...Base,
     parentID: SessionID,
+    parentSeq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)),
     from: SessionMessage.ID.pipe(optional),
   },
 })
@@ -157,12 +162,25 @@ export namespace Execution {
   export type Interrupted = typeof Interrupted.Type
 }
 
-export const InstructionsUpdated = Event.durable({
-  type: "session.instructions.updated",
+/** Historical rendered-prose event retained only so persisted logs remain decodable. */
+export const InstructionsUpdatedV1 = Event.durable({
+  type: "session.instructions.legacy",
   ...options,
   schema: {
     ...Base,
     text: Schema.String,
+  },
+})
+
+export const InstructionsUpdated = Event.durable({
+  type: "session.instructions.updated",
+  durable: {
+    aggregate: "sessionID",
+    version: 2,
+  },
+  schema: {
+    ...Base,
+    delta: InstructionSync.Delta,
   },
 })
 export type InstructionsUpdated = typeof InstructionsUpdated.Type
@@ -560,6 +578,7 @@ export const Definitions = Event.inventory(
 )
 
 export const DurableDefinitions = Event.inventory(
+  InstructionsUpdatedV1,
   ...Definitions.filter((definition) => definition.durability === "durable"),
 )
 

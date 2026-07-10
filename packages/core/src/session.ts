@@ -384,9 +384,11 @@ const layer = Layer.effect(
         if (input.messageID && !boundary)
           return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
         const sessionID = SessionSchema.ID.create()
+        const parentSeq = boundary ? boundary.seq - 1 : yield* EventV2.latestSequence(db, parent.id)
         yield* events.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
+          parentSeq,
           from: input.messageID,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)

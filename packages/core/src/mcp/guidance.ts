@@ -70,8 +70,19 @@ export const layer = Layer.effect(
       load: Effect.fn("McpGuidance.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
+        const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
+          Instructions.make<ReadonlyArray<Summary>>({
+            key: Instructions.Key.make("core/mcp-guidance"),
+            codec: Schema.toCodecJson(Schema.Array(Summary)),
+            read: Effect.succeed(value),
+            render: {
+              first: render,
+              changed: update,
+              removed: () => "MCP server instructions are no longer available.",
+            },
+          })
         if (Flag.CODEMODE_ENABLED && PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny")
-          return Instructions.empty
+          return source(Instructions.removed)
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
@@ -88,15 +99,8 @@ export const layer = Layer.effect(
             )
           })
           .map((item) => ({ server: item.server, instructions: item.instructions }))
-        if (visible.length === 0) return Instructions.empty
-        return Instructions.make({
-          key: Instructions.Key.make("core/mcp-guidance"),
-          codec: Schema.toCodecJson(Schema.Array(Summary)),
-          load: Effect.succeed(visible),
-          baseline: render,
-          update,
-          removed: () => "MCP server instructions are no longer available.",
-        })
+          .toSorted((a, b) => a.server.localeCompare(b.server))
+        return source(visible.length === 0 ? Instructions.removed : visible)
       }),
     })
   }),

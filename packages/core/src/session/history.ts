@@ -1,10 +1,12 @@
-import { and, asc, desc, eq, gt, gte, ne, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
-import { InstructionCheckpointTable, SessionMessageTable } from "./sql"
+import { Instructions } from "../instructions/index"
+import { InstructionState } from "./instruction-state"
+import { SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -31,7 +33,6 @@ const messageRows = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   compaction: { readonly seq: number } | undefined,
-  baselineSeq?: number,
 ) {
   const rows = yield* db
     .select()
@@ -39,20 +40,7 @@ const messageRows = Effect.fnUntraced(function* (
     .where(
       and(
         eq(SessionMessageTable.session_id, sessionID),
-        // Keep system updates visible in the gap between a completed compaction
-        // and the next prepared step's rebaseline, when their content is not yet
-        // folded into a new baseline.
-        compaction
-          ? or(
-              gte(SessionMessageTable.seq, compaction.seq),
-              baselineSeq === undefined
-                ? undefined
-                : and(eq(SessionMessageTable.type, "system"), gt(SessionMessageTable.seq, baselineSeq)),
-            )
-          : undefined,
-        baselineSeq === undefined
-          ? undefined
-          : or(ne(SessionMessageTable.type, "system"), gt(SessionMessageTable.seq, baselineSeq)),
+        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
       ),
     )
     .orderBy(asc(SessionMessageTable.seq))
@@ -73,30 +61,32 @@ const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   )
 
 export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const [epoch, compaction] = yield* Effect.all(
-    [
-      db
-        .select({ baselineSeq: InstructionCheckpointTable.baseline_seq })
-        .from(InstructionCheckpointTable)
-        .where(eq(InstructionCheckpointTable.session_id, sessionID))
-        .get()
-        .pipe(Effect.orDie),
-      latestCompaction(db, sessionID),
-    ],
-    { concurrency: "unbounded" },
+  return yield* Effect.forEach(
+    yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID)),
+    decodeMessageRow,
   )
-  return yield* Effect.forEach(yield* messageRows(db, sessionID, compaction, epoch?.baselineSeq), decodeMessageRow)
 })
 
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  baselineSeq: number,
+  instructions: Instructions.Instructions,
 ) {
-  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID), baselineSeq)
-  return yield* Effect.forEach(rows, (row) =>
-    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
-  )
+  return yield* db
+    .transaction(() =>
+      Effect.gen(function* () {
+        const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
+        const messages = yield* Effect.forEach(rows, (row) =>
+          decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+        )
+        const assembled = yield* InstructionState.assemble(db, sessionID, instructions)
+        return {
+          initial: assembled.initial,
+          entries: [...messages, ...assembled.updates].toSorted((a, b) => a.seq - b.seq),
+        }
+      }),
+    )
+    .pipe(Effect.orDie)
 })
 
 /** Returns the session's sole user message, or `undefined` once a second one exists. */

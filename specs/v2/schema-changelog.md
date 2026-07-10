@@ -1,5 +1,19 @@
 # V2 Schema Changelog
 
+## 2026-07-10: Replace Instruction Checkpoints With Value Deltas
+
+- Replace rendered `session.instructions.updated.1` prose with `session.instructions.updated.2 { delta }`, where values are SHA-256 hashes and the literal `"removed"` means removal.
+- Add the global `instruction_blob` content-addressed value store and rebuildable per-Session `instruction_state` fold cache. Drop `instruction_checkpoint` and its stored baseline, snapshot, and baseline sequence.
+- Add an authoritative parent event sequence to `session.forked.2` so forks derive instruction values from the selected parent prefix rather than copying the parent's latest state.
+- Keep removed API entries as hidden source tombstones so the next safe boundary can admit and render a revocation. Reject API entry JSON larger than 8KB with a typed HTTP 413 error.
+- Render initial instructions and chronological updates from stored values during request assembly. Instruction update prose is no longer a `session_message` row or compaction input; clients display changed keys from the durable delta.
+
+Compatibility:
+
+- `session.instructions.updated.1` migrates to read-only `session.instructions.legacy.1`; no projector runs and migration deletes its projected System rows. The next safe boundary establishes one complete v2 delta.
+- Existing forks are assigned the sequence reserved by their original projection and their durable event is rewritten to v2 with that cutoff.
+- Blob GC is intentionally deferred. A future sync/export boundary must hydrate referenced blobs on the wire and re-hash them on ingestion.
+
 ## 2026-07-09: Make Session Input Storage Pending-Only And Rename It To Session Pending
 
 - Rename the `SessionInput` schema namespace to `SessionPending` and the `session_input` table to `session_pending`.

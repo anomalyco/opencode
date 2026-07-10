@@ -13,22 +13,18 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionPending } from "./pending"
 import { WorkspaceV2 } from "../workspace"
-import { InstructionCheckpoint } from "./instruction-checkpoint"
-import {
-  MessageTable,
-  PartTable,
-  InstructionCheckpointTable,
-  SessionPendingTable,
-  SessionMessageTable,
-  SessionTable,
-} from "./sql"
+import { InstructionState } from "./instruction-state"
+import { MessageTable, PartTable, SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
 import { Money } from "@opencode-ai/schema/money"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
-type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
+type MessageEvent = Exclude<
+  CurrentDurableEvent,
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | typeof SessionEvent.InstructionsUpdated.Type
+>
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -212,6 +208,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       parent_id: null,
       fork_session_id: event.data.parentID,
       fork_message_id: event.data.from,
+      fork_seq: event.data.parentSeq,
       project_id: parent.project_id,
       workspace_id: parent.workspace_id,
       slug: Slug.create(),
@@ -235,23 +232,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
-
-  // The fork inherits the parent's transcript, so it inherits the context
-  // checkpoint that transcript was built against: copied message seqs keep
-  // folding at the same baseline horizon.
-  const checkpoint = yield* db
-    .select()
-    .from(InstructionCheckpointTable)
-    .where(eq(InstructionCheckpointTable.session_id, event.data.parentID))
-    .get()
-    .pipe(Effect.orDie)
-  if (checkpoint) {
-    yield* db
-      .insert(InstructionCheckpointTable)
-      .values({ ...checkpoint, session_id: event.data.sessionID })
-      .run()
-      .pipe(Effect.orDie)
-  }
 
   let cursor = -1
   while (copiedSeq !== undefined) {
@@ -334,7 +314,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
     cursor = rows.at(-1)!.seq
   }
-  if (copiedSeq !== undefined) yield* EventV2.reserveSequence(db, event.data.sessionID, copiedSeq)
+  yield* EventV2.reserveSequence(db, event.data.sessionID, event.data.parentSeq)
+  yield* InstructionState.rebuild(db, event.data.sessionID)
 })
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -522,7 +503,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* InstructionCheckpoint.reset(db, event.data.sessionID)
+        yield* InstructionState.reset(db, event.data.sessionID)
       }),
     )
     yield* events.project(SessionV1.Event.Deleted, (event) =>
@@ -688,7 +669,9 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
     yield* events.project(SessionEvent.Execution.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
-    yield* events.project(SessionEvent.InstructionsUpdated, (event) => run(db, event))
+    yield* events.project(SessionEvent.InstructionsUpdated, (event) =>
+      InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta),
+    )
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
@@ -722,6 +705,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
+        yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         if (event.data.reason === "manual")
@@ -793,7 +777,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* InstructionCheckpoint.reset(db, event.data.sessionID)
+        yield* InstructionState.reset(db, event.data.sessionID)
       }),
     )
     yield* events.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed]).pipe(

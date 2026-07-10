@@ -359,7 +359,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
               type: "system",
-              text: event.data.text,
+              text: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
               metadata: event.metadata,
               time: { created: event.created },
             })
@@ -737,9 +737,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
           setStore("session", "form", event.data.form.sessionID, [
             ...(store.session.form[event.data.form.sessionID] ?? []),
-            event.data.form.sessionID === "global"
-              ? { ...event.data.form, location: event.location }
-              : event.data.form,
+            event.data.form.sessionID === "global" ? { ...event.data.form, location: event.location } : event.data.form,
           ])
           break
         case "form.replied":
