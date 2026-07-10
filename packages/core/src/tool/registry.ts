@@ -167,22 +167,19 @@ const registryLayer = Layer.effect(
         )
       }),
       materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions) {
-        const registrations = new Map<string, Registration>()
+        const direct = new Map<string, Registration>()
+        const deferred = new Map<string, Registration>()
+        const rules = permissions ?? []
         for (const [name, entries] of local) {
           const registration = entries.at(-1)?.registration
-          if (registration) registrations.set(name, registration)
+          if (!registration) continue
+          if (registration.deferred && !Flag.CODEMODE_ENABLED) continue
+          if (whollyDisabled(permission(registration.tool, name), rules)) continue
+          if (registration.deferred) deferred.set(name, registration)
+          else direct.set(name, registration)
         }
-        for (const [name, registration] of registrations) {
-          if (
-            (registration.deferred && !Flag.CODEMODE_ENABLED) ||
-            whollyDisabled(permission(registration.tool, name), permissions ?? [])
-          )
-            registrations.delete(name)
-        }
-        const direct = new Map(Array.from(registrations).filter(([, registration]) => !registration.deferred))
-        const deferred = new Map(Array.from(registrations).filter(([, registration]) => registration.deferred))
         const execute =
-          deferred.size > 0 && !whollyDisabled("execute", permissions ?? []) ? ExecuteTool.create(deferred) : undefined
+          deferred.size > 0 && !whollyDisabled("execute", rules) ? ExecuteTool.create(deferred) : undefined
         return {
           definitions: [
             ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),

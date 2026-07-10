@@ -13,7 +13,6 @@ export const toolIdentity = {
   assistantMessageID: SessionMessage.ID.make("msg_tool_test"),
 }
 
-// Default fixture model: a non-OpenAI provider, so edit and write are the materialized edit tools.
 export const toolDefinitions = (registry: ToolRegistry.Interface, permissions?: PermissionV2.Ruleset) =>
   registry.materialize(permissions).pipe(Effect.map((materialized) => materialized.definitions))
 
