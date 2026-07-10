@@ -308,6 +308,12 @@
       font-variation-settings: "slnt" 0;
       font-variant-numeric: tabular-nums;
     }
+
+    /* Preview/temporary tabs: beat trigger + .text-14-medium upright defaults */
+    [data-slot="tabs-trigger"] .italic {
+      font-style: italic !important;
+      font-variation-settings: "slnt" -10 !important;
+    }
   }
 
   #review-panel &[data-variant="normal"][data-orientation="horizontal"] {
