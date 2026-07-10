@@ -375,6 +375,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         seed(sessionDirectory, created)
         session = created
         await startTransition(() => {
+          if (!session) return
           if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
           local.session.promote(sessionDirectory, session.id)
           layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
