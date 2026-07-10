@@ -1,0 +1,99 @@
+---
+title: "External Supervisor Pattern"
+description: "Run a local coding agent under an external security supervisor that confines work to a workspace and enforces command and file policies"
+---
+
+## Overview
+
+The **external supervisor pattern** separates task orchestration and policy enforcement from agent execution. A supervisor process runs outside the agent's own trust boundary: it accepts task descriptions, enforces security policies, and hands scoped work to a local coding agent. The agent operates only inside a confined workspace and cannot escalate beyond the policies the supervisor defines.
+
+This pattern is useful when an autonomous agent must perform file and shell operations on a developer machine, but you want an independent layer — not the agent itself — to decide what is in scope.
+
+```
+┌──────────────────────────────────────────────┐
+│  External Supervisor (out-of-process)        │
+│  - accepts task input                        │
+│  - enforces workspace, command, file policy  │
+│  - records auditable task artifacts          │
+└───────────────┬──────────────────────────────┘
+                │ scoped task
+                ▼
+┌──────────────────────────────────────────────┐
+│  Local Agent (in-workspace)                  │
+│  - reads / edits files under workspaceRoot   │
+│  - runs only allow-listed commands           │
+│  - cannot reach secrets or out-of-scope paths│
+└──────────────────────────────────────────────┘
+```
+
+## Motivation
+
+A coding agent that can run shell commands and edit files is powerful, but an agent's own permission prompts are not a security boundary: the same model that proposes an action also decides whether to allow it. Moving policy to an external, non-agent process gives you:
+
+- **Independent enforcement.** The supervisor denies actions the agent would otherwise permit, without relying on the agent to self-regulate.
+- **Reproducible scope.** Each task starts from a declared workspace and allow-list, so the same task produces the same boundaries every run.
+- **Auditable evidence.** Task artifacts (commands run, files changed, before/after snapshots) are recorded by the supervisor, not by the agent that performed the work.
+
+## Architecture
+
+Two cooperating layers, each in its own process:
+
+### Supervisor layer
+
+The supervisor is a long-running process that the operator trusts. It owns the policy and the workspace root. Its responsibilities:
+
+1. Accept a task description and bind it to a `workspaceRoot`.
+2. Enforce that every file path the agent touches resolves under `workspaceRoot`.
+3. Match every shell command against an allow-list before execution.
+4. Block reads and writes to sensitive file names regardless of location.
+5. Persist structured artifacts for the task: command log, changed-file record, before/after git snapshot.
+
+### Agent layer
+
+The agent runs inside the workspace and performs the actual work. It may use any model and any tool the supervisor permits. The agent never receives credentials, environment secrets, or paths outside the workspace. If the agent requests an action the supervisor rejects, the rejection is returned to the agent as an ordinary tool error so it can recover.
+
+## Security boundaries
+
+### Workspace confinement
+
+All file operations are resolved to absolute paths and checked against `workspaceRoot`. A path is allowed only if its canonical form stays under the root. This blocks:
+
+- Absolute paths outside the workspace (`/etc/passwd`, `C:\Windows\System32\...`).
+- Traversal escapes (`../../.ssh/id_rsa`).
+- Symlinks that resolve outside the root.
+
+### Command allow-lists
+
+Shell commands are matched exactly, not by parsing intent. The supervisor compares the resolved command and its arguments against an allow-list of permitted entries. This means:
+
+- The full command string (including arguments) must match an allowed entry.
+- Wildcards or prefix matching weaken the boundary and should be avoided for sensitive scopes.
+- A general-purpose remote shell is never exposed; the supervisor only runs commands an operator explicitly registered.
+
+### Scope-violation detection
+
+When the agent attempts a disallowed action, the supervisor records the attempt and returns a structured error. Repeated violations can surface as task-level signals so the operator can decide whether to abort, or whether the allow-list is too narrow.
+
+### Sensitive-file blocking
+
+A deny-list of file names is enforced independently of path checks, so a sensitive file is blocked even if it lives under the workspace root (for example `.env`, SSH keys, credential stores, browser state). This protects secrets that might be checked in accidentally.
+
+## Example implementation
+
+[PatchWarden](https://github.com/patchwarden/patchwarden) is one implementation of this pattern: a local MCP bridge that confines an agent to a configured `workspaceRoot`, enforces an exact-match command allow-list, blocks sensitive file names, and persists task artifacts with redaction. The pattern does not depend on any specific supervisor — any process that enforces the boundaries above qualifies.
+
+## When to use this pattern
+
+Consider an external supervisor when:
+
+- The agent runs autonomously with limited human supervision.
+- Tasks touch a real working tree with secrets or cross-project files nearby.
+- You need auditable records of what an agent did on disk and in the shell.
+
+This pattern adds little value when a human reviews and approves every action interactively, since the human already acts as the supervisor.
+
+## Considerations
+
+- **The supervisor is the trust root.** If the supervisor process is compromised, the boundary collapses. Run it under the same account that owns the workspace and keep its configuration under version control.
+- **Allow-lists are maintained by the operator.** A narrow allow-list is safer but may block legitimate work; widening it is a deliberate decision the operator owns.
+- **Keep supervision separate from verification.** Verifying that a change is correct (tests, type checks) is a different concern than confining the agent. Run verification after the supervisor hands back the changed workspace, not inside the supervision loop.
