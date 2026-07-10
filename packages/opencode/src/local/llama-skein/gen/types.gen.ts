@@ -32,6 +32,25 @@ export type ResourceSnapshot = {
     gpus?: Array<GpuSnapshot>;
     vram?: VramInfo;
     loaded_model?: LoadedModelInfo;
+    inference?: InferenceInfo;
+};
+
+/**
+ * Live inference load: in-flight model-dispatched requests vs. serving slots. The exact busy signal for schedulers — GPU utilization is sampled over a window and reads low between tokens; this does not.
+ */
+export type InferenceInfo = {
+    /**
+     * Model-dispatched HTTP requests currently being served, including any queued behind a model load or a busy slot.
+     */
+    in_flight?: number;
+    /**
+     * Total serving slots across running models (--parallel/-np per model command, default 1 each). 0 when no model is running.
+     */
+    slots_total?: number;
+    /**
+     * True when every slot of every running model is occupied (in_flight >= slots_total > 0) — a new request would queue. False when no model is running: the host is idle, it just needs a swap-in.
+     */
+    busy?: boolean;
 };
 
 export type LoadedModelInfo = {
@@ -141,6 +160,10 @@ export type Model = {
         mtp?: MtpMetadata;
         [key: string]: unknown | MtpMetadata | undefined;
     };
+    /**
+     * True if the model emits reasoning/thinking output (reasoning_content) before its answer. Resolved from the model config; omitted when not declared. Clients use it to enable reasoning-stream rendering.
+     */
+    reasoning?: boolean;
 };
 
 export type ConfigInfoResponse = {
@@ -560,6 +583,12 @@ export type TuningStatus = {
      * User-supplied flags appended at launch.
      */
     extra_args?: Array<string>;
+    /**
+     * Effective glibc allocator env vars injected into each llama.cpp backend process on this host (e.g. MALLOC_MMAP_THRESHOLD_). Empty/absent on non-Linux hosts or when disabled. Recommended defaults, overridable per-model or via backend_env=false.
+     */
+    backend_env?: {
+        [key: string]: string;
+    };
 };
 
 export type TuningProfilesResponse = {
@@ -594,6 +623,10 @@ export type TuningPatchRequest = {
      * Override GPU detection.
      */
     gfx_target?: string | null;
+    /**
+     * Toggle glibc allocator-env injection (MALLOC_* caps) on Linux llama.cpp backends. false disables it while leaving GPU flag tuning active; true or null defers to the built-in default (enabled on Linux).
+     */
+    backend_env?: boolean | null;
 };
 
 export type GetSystemVersionData = {
