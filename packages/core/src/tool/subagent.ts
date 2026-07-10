@@ -69,8 +69,18 @@ export const Plugin = {
       state: "completed" | "error" | "cancelled",
       text: string,
     ) {
+      // TUI synthetic rows require a non-empty description to render in the parent transcript.
+      // Keep the structured XML body in text for model consumption; surface a short human label
+      // so background completions and failures remain visible without a follow-up model turn.
+      const label =
+        state === "error"
+          ? `Background subagent failed: ${description}`
+          : state === "cancelled"
+            ? `Background subagent cancelled: ${description}`
+            : `Background subagent completed: ${description}`
       yield* runtime.session.synthetic({
         sessionID: parentID,
+        description: label,
         text: `<subagent id="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
       })
     })
