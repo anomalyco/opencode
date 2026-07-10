@@ -22,6 +22,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 
 const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
+const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab, SortableTab } from "@/components/session"
 import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
 import { useCommand } from "@/context/command"
@@ -167,6 +168,7 @@ export function SessionSidePanel(props: {
     fileBrowser: () => !!props.fileBrowserState,
   })
   const contextOpen = tabState.contextOpen
+  const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
@@ -208,8 +210,21 @@ export function SessionSidePanel(props: {
   }
   const browserTab = createMemo(() => {
     if (!props.fileBrowserState) return undefined
-    if (activeTab() === SESSION_OPEN_FILE_TAB) return SESSION_OPEN_FILE_TAB
+    const active = activeTab()
+    if (active === SESSION_OPEN_FILE_TAB) return SESSION_OPEN_FILE_TAB
+    if (active && file.pathFromTab(active)) return active
     return activeFileTab()
+  })
+  // Keep the file-browser shell mounted while any file tab exists. Kobalte briefly
+  // selects Review while the tab For replaces a preview trigger, which would
+  // otherwise dispose the sidebar and reset scroll.
+  const fileBrowserMounted = createMemo(() => {
+    if (!props.fileBrowserState) return false
+    return openedTabs().length > 0 || openFileOpen() || !!browserTab()
+  })
+  const fileBrowserVisible = createMemo(() => {
+    const active = activeTab()
+    return active !== "review" && active !== "context" && active !== "empty"
   })
   const browserKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
@@ -479,17 +494,28 @@ export function SessionSidePanel(props: {
                         </Tabs.Content>
                       </Show>
 
-                      <Show when={browserTab()}>
-                        <SessionFileBrowserTab
-                          tab={browserTab()!}
-                          placeholder={browserTab() === SESSION_OPEN_FILE_TAB}
-                          active={file.pathFromTab(browserTab()!)}
-                          kinds={browserKinds()}
-                          state={props.fileBrowserState!}
-                          onSelect={(path) => previewTab(file.tab(path))}
-                          onSelectPermanent={(path) => openTab(file.tab(path))}
-                          filterRef={(element) => (fileFilter = element)}
-                        />
+                      <Show when={fileBrowserMounted()}>
+                        <div
+                          id={fileBrowserTabPanelID}
+                          role="tabpanel"
+                          data-slot="tabs-content"
+                          class="h-full min-h-0 overflow-hidden"
+                          classList={{ hidden: !fileBrowserVisible() }}
+                          inert={!fileBrowserVisible() || undefined}
+                        >
+                          <SessionFileBrowserTab
+                            tab={browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB}
+                            placeholder={
+                              (browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB) === SESSION_OPEN_FILE_TAB
+                            }
+                            active={file.pathFromTab(browserTab() ?? activeFileTab() ?? "")}
+                            kinds={browserKinds()}
+                            state={props.fileBrowserState!}
+                            onSelect={(path) => previewTab(file.tab(path))}
+                            onSelectPermanent={(path) => openTab(file.tab(path))}
+                            filterRef={(element) => (fileFilter = element)}
+                          />
+                        </div>
                       </Show>
 
                       <Show when={!props.fileBrowserState && activeFileTab()} keyed>

@@ -99,7 +99,7 @@ test("opens and searches project files inline", async ({ page }) => {
   await expect(sidebar).toBeVisible()
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context" })).toHaveAttribute("data-selected", "")
-  await expect(sidebar).toHaveCount(0)
+  await expect(sidebar).toBeHidden()
   await panel.getByRole("button", { name: "Open file" }).click()
   const filter = panel.getByRole("combobox", { name: "Filter files" })
   await expect(filter).toBeFocused()

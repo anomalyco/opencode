@@ -7,7 +7,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { SplitButtonV2, SplitButtonV2Action, SplitButtonV2MenuTrigger } from "@opencode-ai/ui/v2/split-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
-import { OPEN_APPS, type OpenApp, useOpenInApp } from "@/components/session/open-in-app"
+import { type OpenApp, useOpenInApp } from "@/components/session/open-in-app"
 
 export function OpenInAppV2(props: { directory: () => string }) {
   const language = useLanguage()
@@ -25,9 +25,10 @@ export function OpenInAppV2(props: { directory: () => string }) {
           class="flex items-center"
         >
           <SplitButtonV2Action
-            onPointerDown={(event) => {
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
               event.stopPropagation()
-              if (event.button !== 0 || state.opening()) return
+              if (state.opening()) return
               state.openDir(state.current().id)
             }}
             disabled={state.opening()}
@@ -60,7 +61,6 @@ export function OpenInAppV2(props: { directory: () => string }) {
                 <MenuV2.RadioGroup
                   value={state.current().id}
                   onChange={(value) => {
-                    if (!OPEN_APPS.includes(value as OpenApp)) return
                     state.selectApp(value as OpenApp)
                   }}
                 >
@@ -70,6 +70,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
                         value={option.id}
                         disabled={state.opening()}
                         onSelect={() => {
+                          state.selectApp(option.id)
                           state.setMenu("open", false)
                           state.openDir(option.id)
                         }}

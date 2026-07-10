@@ -294,6 +294,9 @@ export function SessionFileView(props: { tab: string }) {
     comments: fileComments,
     label: language.t("ui.lineComment.submit"),
     draftKey: () => path() ?? props.tab,
+    mention: {
+      items: file.searchFilesAndDirectories,
+    },
     getSide: (range) => range.endSide ?? range.side ?? "additions",
     state: {
       opened: () => note.openedComment,
