@@ -149,13 +149,13 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
                   class="!size-16 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[32px]"
                 />
                 <span
-                  class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[6px] bg-v2-background-bg-contrast/80 text-v2-icon-icon-contrast transition-opacity"
+                  class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[6px] bg-v2-background-bg-contrast/80 text-v2-icon-icon-contrast backdrop-blur-[2px] transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover,
                     "opacity-0": !store.iconHover,
                   }}
                 >
-                  <Icon name={store.iconOverride ? "close" : "edit"} size="large" />
+                  <Icon name={store.iconOverride ? "close" : "outline-share"} />
                 </span>
               </button>
               <input
