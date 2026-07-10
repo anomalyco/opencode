@@ -5857,7 +5857,6 @@
 }
 
 [data-page="stats"] [data-slot="compare-home-card-head"] b {
-  position: relative;
   display: grid;
   place-items: center;
   width: 32px;
@@ -5868,32 +5867,10 @@
   box-shadow: 0 1px 1.5px #0000000f;
 }
 
-[data-page="stats"] [data-slot="compare-home-card-head"] b::before {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 3px;
-  height: 3px;
-  content: "";
-  background: currentColor;
-  box-shadow:
-    7px 0 currentColor,
-    0 7px currentColor;
-  color: var(--stats-muted);
-}
-
-[data-page="stats"] [data-slot="compare-home-card-head"] b::after {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 12px;
-  height: 12px;
-  box-sizing: border-box;
-  content: "";
-  background:
-    radial-gradient(circle at 4px 4px, transparent 2.5px, var(--stats-muted) 2.75px 4px, transparent 4.25px),
-    linear-gradient(var(--stats-muted) 0 0) 7px 8px / 5px 1.5px no-repeat;
-  transform: rotate(45deg);
+[data-page="stats"] [data-slot="compare-home-card-head"] b svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 [data-page="stats"] [data-slot="compare-home-card-divider"] {
@@ -6081,6 +6058,211 @@
   height: 16px;
   font-size: 16px;
   line-height: 16px;
+}
+
+[data-page="stats"] [data-section="compare-radar"] {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 800px minmax(0, 1fr);
+  width: 100%;
+  height: 800px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  color: var(--stats-text);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 40px;
+  list-style: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li > i {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] strong,
+[data-page="stats"] [data-slot="compare-radar-legend"] small {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] small {
+  color: var(--stats-muted);
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="compare-radar-chart"] {
+  position: relative;
+  width: 800px;
+  height: 800px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-plot"] {
+  position: absolute;
+  inset: 17.5%;
+}
+
+[data-page="stats"] [data-slot="compare-radar-plot"] svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+[data-page="stats"] [data-slot="compare-radar-grid"] polygon,
+[data-page="stats"] [data-slot="compare-radar-grid"] line {
+  fill: none;
+  stroke: var(--stats-line);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-area"],
+[data-page="stats"] [data-slot="compare-radar-line"] {
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-area"] {
+  fill: currentColor;
+  fill-opacity: 0.09;
+}
+
+[data-page="stats"] [data-slot="compare-radar-line"] {
+  fill: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point"] {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point-hit"] {
+  fill: transparent;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"] {
+  position: absolute;
+  top: var(--compare-radar-axis-y);
+  left: var(--compare-radar-axis-x);
+  max-width: 160px;
+  color: var(--stats-text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  transform: translate(var(--compare-radar-axis-translate-x), -50%);
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"]:focus-visible {
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis-label"] {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  margin: 0 -8px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"][data-active="true"] [data-slot="compare-radar-axis-label"] {
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"]:focus-visible [data-slot="compare-radar-axis-label"] {
+  outline: 1px solid var(--stats-text);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] {
+  position: absolute;
+  z-index: 5;
+  top: var(--compare-radar-tooltip-y);
+  left: clamp(104px, var(--compare-radar-tooltip-x), calc(100% - 104px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 192px;
+  box-sizing: border-box;
+  padding: 8px;
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--stats-text) 12%, transparent),
+    0 4px 8px color-mix(in srgb, #000000 8%, transparent),
+    0 8px 16px color-mix(in srgb, #000000 4%, transparent);
+  pointer-events: none;
+  transform: translate(-50%, var(--compare-radar-tooltip-translate-y));
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] strong,
+[data-page="stats"] [data-slot="compare-radar-tooltip"] p {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+  line-height: 12px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] p {
+  color: var(--stats-muted);
+  font-weight: 400;
+  line-height: 16px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-data"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 [data-page="stats"] [data-component="compare-detail-table"] {
@@ -6455,6 +6637,22 @@
     justify-content: flex-start;
   }
 
+  [data-page="stats"] [data-section="compare-radar"] {
+    grid-template-columns: minmax(180px, 208px) minmax(0, 1fr);
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    padding-right: 24px;
+    padding-left: 32px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-chart"] {
+    align-self: center;
+    width: min(100%, 800px);
+    height: auto;
+    aspect-ratio: 1;
+  }
+
   [data-page="stats"] [data-component="compare-detail-table"] {
     --compare-detail-label-column: 220px;
     --compare-detail-model-column-min: 320px;
@@ -6484,6 +6682,28 @@
   [data-page="stats"] [data-slot="compare-detail-actions"] {
     flex-wrap: wrap;
   }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    padding: 32px 24px 24px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    padding: 0 0 16px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] li {
+    flex: 1 1 180px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-chart"] {
+    justify-self: center;
+    width: min(100%, 720px);
+  }
 }
 
 @media (max-width: 40rem) {
@@ -6494,6 +6714,34 @@
 
   [data-page="stats"] [data-slot="compare-detail-action"] {
     width: 100%;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] li {
+    flex-basis: 140px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-axis"] {
+    left: var(--compare-radar-axis-mobile-x);
+    max-width: 104px;
+    font-size: 13px;
+    line-height: 16px;
+    white-space: normal;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-axis-label"] {
+    padding-right: 6px;
+    padding-left: 6px;
+    margin-right: -6px;
+    margin-left: -6px;
   }
 
   [data-page="stats"] [data-component="compare-detail-table"] {
