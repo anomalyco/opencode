@@ -743,7 +743,11 @@ body[data-new-layout] #terminal-panel [data-component="tabs"][data-variant="norm
   background-color: var(--background-stronger, var(--v2-background-bg-base));
 }
 
-#review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"] {
+#review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"],
+#review-panel
+  [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-list"] {
   flex: 1 1 0;
   min-width: 0;
   width: auto;
