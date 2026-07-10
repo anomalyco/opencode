@@ -21,13 +21,13 @@ import type { FileNode } from "@opencode-ai/sdk/v2"
 
 const MAX_DEPTH = 128
 
-function pathToFileUrl(filepath: string): string {
+export function pathToFileUrl(filepath: string): string {
   return `file://${encodeFilePath(filepath)}`
 }
 
-type Kind = "add" | "del" | "mix"
+export type Kind = "add" | "del" | "mix"
 
-type Filter = {
+export type Filter = {
   files: Set<string>
   dirs: Set<string>
 }
@@ -78,7 +78,7 @@ const kindDotColor = (kind: Kind) => {
   return "background-color: var(--icon-diff-modified-base)"
 }
 
-const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
+export const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
   const kind = kinds?.get(node.path)
   if (!kind) return
   if (!marks?.has(node.path)) return
@@ -99,7 +99,7 @@ const buildDragImage = (target: HTMLElement) => {
   return image
 }
 
-const withFileDragImage = (event: DragEvent) => {
+export const withFileDragImage = (event: DragEvent) => {
   const image = buildDragImage(event.currentTarget as HTMLElement)
   if (!image) return
   document.body.appendChild(image)
@@ -201,6 +201,7 @@ export default function FileTree(props: {
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
+  onFileDoubleClick?: (file: FileNode) => void
 
   _filter?: Filter
   _marks?: Set<string>
@@ -440,6 +441,7 @@ export default function FileTree(props: {
                         active={props.active}
                         draggable={props.draggable}
                         onFileClick={props.onFileClick}
+                        onFileDoubleClick={props.onFileDoubleClick}
                         _filter={filter()}
                         _marks={marks()}
                         _deeps={deeps()}
@@ -462,6 +464,7 @@ export default function FileTree(props: {
                   as="button"
                   type="button"
                   onClick={() => props.onFileClick?.(node)}
+                  onDblClick={() => props.onFileDoubleClick?.(node)}
                 >
                   <div class="w-4 shrink-0" />
                   <Switch>

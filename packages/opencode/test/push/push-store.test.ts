@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { Push } from "../../src/push"
 import { PushDeliveryTable, PushSubscriptionTable } from "../../src/push/push.sql"
 
-const runtime = makeRuntime(Database.Service, Database.defaultLayer)
+const runtime = makeRuntime(Database.Service, Database.layerFromPath(Database.path()))
 
 describe("push subscription store", () => {
   beforeEach(async () => {

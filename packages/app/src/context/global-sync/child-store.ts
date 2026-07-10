@@ -17,7 +17,7 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { ServerScope } from "@/utils/server-scope"
 
 export function createChildStoreManager(input: {
@@ -185,8 +185,10 @@ export function createChildStoreManager(input: {
 
           const pathQuery = useQuery(() => input.queryOptions.path(key))
           const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
+          const mcpResourceQuery = useQuery(() => ({ ...input.queryOptions.mcpResources(key), enabled: mcpEnabled() }))
           const lspQuery = useQuery(() => input.queryOptions.lsp(key))
           const providerQuery = useQuery(() => input.queryOptions.providers(key))
+          const referenceQuery = useQuery(() => input.queryOptions.references(key))
 
           const child = createStore<State>({
             project: "",
@@ -210,6 +212,9 @@ export function createChildStoreManager(input: {
             status: "loading" as const,
             agent: [],
             command: [],
+            get reference() {
+              return referenceQuery.isLoading ? [] : (referenceQuery.data ?? [])
+            },
             session: [],
             sessionTotal: 0,
             session_status: {},
@@ -226,6 +231,9 @@ export function createChildStoreManager(input: {
             },
             get mcp() {
               return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
+            },
+            get mcp_resource() {
+              return mcpResourceQuery.isLoading ? {} : (mcpResourceQuery.data ?? {})
             },
             get lsp_ready() {
               return !lspQuery.isLoading

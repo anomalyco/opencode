@@ -1,8 +1,9 @@
 import { useServerSync } from "@/context/server-sync"
 import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
-import { Iterable, pipe } from "effect"
-import { createMemo } from "solid-js"
+import type { Provider } from "@opencode-ai/sdk/v2"
+import type { Accessor } from "solid-js"
+import { selectProviderCatalog } from "./provider-catalog"
 
 export const popularProviders = [
   "opencode",
@@ -16,46 +17,52 @@ export const popularProviders = [
 ]
 const popularProviderSet = new Set(popularProviders)
 
-export function useProviders() {
+type ProviderEntry = [string, Provider]
+
+type ProviderHelpers = {
+  all: () => Map<string, Provider>
+  default: () => Record<string, string>
+  popular: () => Provider[]
+  connected: () => Provider[]
+  paid: () => ProviderEntry[]
+}
+
+export function useProviders(directory?: Accessor<string | undefined>): ProviderHelpers {
   const serverSync = useServerSync()
   const params = useParams()
-  const dir = createMemo(() => decode64(params.dir) ?? "")
+  const dir = () => (directory ? directory() : decode64(params.dir))
   const providers = () => {
-    if (dir()) {
-      const [projectStore] = serverSync().child(dir())
-      if (projectStore.provider_ready) return projectStore.provider
-    }
-    return serverSync().data.provider
+    const value = dir()
+    const projectStore = value ? serverSync().child(value)[0] : undefined
+    if (directory)
+      return selectProviderCatalog({
+        explicit: true,
+        directory: value,
+        catalog: projectStore && { ready: projectStore.provider_ready, providers: projectStore.provider },
+      })
+    return selectProviderCatalog({
+      explicit: false,
+      directory: value,
+      catalog: projectStore && { ready: projectStore.provider_ready, providers: projectStore.provider },
+      global: serverSync().data.provider,
+    })
   }
   return {
     all: () => providers().all,
     default: () => providers().default,
     popular: () =>
-      pipe(
-        providers().all,
-        Iterable.map(([, p]) => p),
-        Iterable.filter((p) => popularProviderSet.has(p.id)),
-        (v) => Array.from(v),
-      ),
+      Array.from(providers().all.values()).filter((provider) => popularProviderSet.has(provider.id)),
     connected: () => {
       const connected = new Set(providers().connected)
-      return pipe(
-        providers().all,
-        Iterable.map(([, p]) => p),
-        Iterable.filter((p) => connected.has(p.id)),
-        (v) => Array.from(v),
-      )
+      return Array.from(providers().all.values()).filter((provider) => connected.has(provider.id))
     },
     paid: () => {
       const connected = new Set(providers().connected)
-      return [
-        ...Iterable.filter(
-          providers().all,
-          ([id]) =>
-            connected.has(id) &&
-            (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
-        ),
-      ]
+      return Array.from(providers().all).filter(
+        ([id]) =>
+          connected.has(id) &&
+          (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((model) => model.cost?.input)),
+      )
     },
   }
 }

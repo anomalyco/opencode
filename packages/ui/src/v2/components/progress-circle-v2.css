@@ -1,0 +1,13 @@
+[data-component="progress-circle-v2"] {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+[data-component="progress-circle-v2"] [data-slot="progress-circle-v2-background"] {
+  stroke: var(--v2-background-bg-layer-04);
+}
+
+[data-component="progress-circle-v2"] [data-slot="progress-circle-v2-progress"] {
+  stroke: var(--v2-icon-icon-muted);
+  transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+}

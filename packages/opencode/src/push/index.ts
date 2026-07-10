@@ -115,7 +115,7 @@ let drainScheduledAt: number | undefined
 let drainTimer: ReturnType<typeof setTimeout> | undefined
 let draining: Promise<void> | undefined
 
-const runtime = makeRuntime(Database.Service, Database.defaultLayer)
+const runtime = makeRuntime(Database.Service, Database.layerFromPath(Database.path()))
 const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000] as const
 const MAX_DELIVERY_ATTEMPTS = RETRY_DELAYS_MS.length + 1
 
