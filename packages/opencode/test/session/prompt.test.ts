@@ -1543,7 +1543,17 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     expect(inputs).toHaveLength(2)
     const messages = inputs.at(-1)?.messages
     if (!Array.isArray(messages)) throw new Error("expected LLM messages")
-    expect(messages.at(-1)).toEqual({ role: "user", content: "second" })
+    expect(messages.at(-1)).toEqual({
+      role: "user",
+      content: [
+        "<system-reminder>",
+        "The user sent the following message:",
+        "second",
+        "",
+        "Please address this message and continue with your tasks.",
+        "</system-reminder>",
+      ].join("\n"),
+    })
   }),
 )
 
