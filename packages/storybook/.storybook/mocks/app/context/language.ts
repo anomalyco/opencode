@@ -2,13 +2,18 @@ const dict: Record<string, string> = {
   "session.todo.title": "Todos",
   "session.todo.collapse": "Collapse todos",
   "session.todo.expand": "Expand todos",
+  "session.revertDock.summary.one": "{{count}} rolled back message",
+  "session.revertDock.summary.other": "{{count}} rolled back messages",
+  "session.revertDock.collapse": "Collapse rolled back messages",
+  "session.revertDock.expand": "Expand rolled back messages",
+  "session.revertDock.restore": "Restore message",
   "prompt.loading": "Loading prompt...",
   "prompt.placeholder.normal": "Ask anything...",
   "prompt.placeholder.simple": "Ask anything...",
-  "prompt.placeholder.shell": "Run a shell command...",
+  "prompt.placeholder.shell": "Run a shell command... {{example}}",
   "prompt.placeholder.summarizeComment": "Summarize this comment",
   "prompt.placeholder.summarizeComments": "Summarize these comments",
-  "prompt.action.attachFile": "Attach file",
+  "prompt.action.attachFile": "Attach files",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
   "prompt.attachment.remove": "Remove attachment",
@@ -60,6 +65,7 @@ function render(template: string, params?: Record<string, unknown>) {
   return template.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
     const value = params[key.trim()]
     if (value === undefined || value === null) return ""
+    // oxlint-disable-next-line no-base-to-string -- value is Record<string, unknown>, always coerced intentionally
     return String(value)
   })
 }

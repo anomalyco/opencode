@@ -2,12 +2,21 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  SESSION_OPEN_FILE_TAB,
   createOpenReviewFile,
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  shouldShowFileTree,
 } from "./helpers"
+
+describe("shouldShowFileTree", () => {
+  test("does not reserve space for a disabled file tree", () => {
+    expect(shouldShowFileTree({ visible: false, opened: true })).toBe(false)
+    expect(shouldShowFileTree({ visible: true, opened: true })).toBe(true)
+  })
+})
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -154,6 +163,51 @@ describe("createSessionTabs", () => {
       expect(result.activeTab()).toBe("review")
       expect(result.activeFileTab()).toBeUndefined()
       expect(result.closableTab()).toBeUndefined()
+      dispose()
+    })
+  })
+
+  test("exposes the Open File tab without treating it as a file tab", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: SESSION_OPEN_FILE_TAB as string | undefined,
+        all: ["file://src/a.ts", SESSION_OPEN_FILE_TAB],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+        normalizeTab: (tab) => tab,
+        fileBrowser: () => true,
+      })
+
+      expect(result.openFileOpen()).toBe(true)
+      expect(result.panelTabs()).toEqual(["file://src/a.ts", SESSION_OPEN_FILE_TAB])
+      expect(result.openedTabs()).toEqual(["file://src/a.ts"])
+      expect(result.activeTab()).toBe(SESSION_OPEN_FILE_TAB)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe(SESSION_OPEN_FILE_TAB)
+      dispose()
+    })
+  })
+
+  test("hides the Open File placeholder when the file browser is unavailable", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: SESSION_OPEN_FILE_TAB as string | undefined,
+        all: ["file://src/a.ts", SESSION_OPEN_FILE_TAB],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+        normalizeTab: (tab) => tab,
+        fileBrowser: () => false,
+      })
+
+      expect(result.openFileOpen()).toBe(false)
+      expect(result.panelTabs()).toEqual(["file://src/a.ts"])
+      expect(result.activeTab()).toBe("file://src/a.ts")
       dispose()
     })
   })

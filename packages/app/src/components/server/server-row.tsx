@@ -1,11 +1,11 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   children,
   createEffect,
   createMemo,
   createSignal,
   type JSXElement,
-  onCleanup,
   onMount,
   type ParentProps,
   Show,
@@ -46,12 +46,9 @@ export function ServerRow(props: ServerRowProps) {
   })
 
   onMount(() => {
-    check()
     if (typeof ResizeObserver !== "function") return
-    const observer = new ResizeObserver(check)
-    if (nameRef) observer.observe(nameRef)
-    if (versionRef) observer.observe(versionRef)
-    onCleanup(() => observer.disconnect())
+    createResizeObserver([nameRef, versionRef], check)
+    check()
   })
 
   const tooltipValue = () => (
@@ -120,7 +117,7 @@ export function ServerHealthIndicator(props: { health?: ServerHealth }) {
   return (
     <div
       classList={{
-        "size-1.5 rounded-full shrink-0": true,
+        "size-1.5 rounded-full shrink-0 my-[3.5px]": true,
         "bg-icon-success-base": props.health?.healthy === true,
         "bg-icon-critical-base": props.health?.healthy === false,
         "bg-border-weak-base": props.health === undefined,

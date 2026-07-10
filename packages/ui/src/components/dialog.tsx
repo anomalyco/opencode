@@ -28,7 +28,7 @@ export function Dialog(props: DialogProps) {
           data-slot="dialog-content"
           data-no-header={!props.title && !props.action ? "" : undefined}
           classList={{
-            ...(props.classList ?? {}),
+            ...props.classList,
             [props.class ?? ""]: !!props.class,
           }}
           onOpenAutoFocus={(e) => {

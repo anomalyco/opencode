@@ -1,249 +1,225 @@
-import { test, expect, mock, beforeEach } from "bun:test"
-import { EventEmitter } from "events"
+import { expect } from "bun:test"
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Deferred, Effect, Layer, Option } from "effect"
+import { Config } from "../../src/config/config"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { McpAuth } from "../../src/mcp/auth"
+import { McpBrowser } from "../../src/mcp/browser"
+import { MCP } from "../../src/mcp/index"
+import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
-// Track open() calls and control failure behavior
-let openShouldFail = false
-let openCalledWith: string | undefined
+const browsers = new Map<string, { opened: Deferred.Deferred<string>; fail: boolean }>()
 
-mock.module("open", () => ({
-  default: async (url: string) => {
-    openCalledWith = url
+const browserLayer = Layer.succeed(
+  McpBrowser.Service,
+  McpBrowser.Service.of({
+    open: (url) =>
+      Effect.gen(function* () {
+        const browser = browsers.get(new URL(url).origin)
+        if (!browser) return yield* Effect.fail(new Error(`Unexpected browser URL: ${url}`))
+        Deferred.doneUnsafe(browser.opened, Effect.succeed(url))
+        if (browser.fail) return yield* Effect.fail(new Error("spawn xdg-open ENOENT"))
+        yield* Effect.tryPromise({
+          try: () => fetch(url).then((response) => response.body?.cancel()),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+      }),
+  }),
+)
 
-    // Return a mock subprocess that emits an error if openShouldFail is true
-    const subprocess = new EventEmitter()
-    if (openShouldFail) {
-      // Emit error asynchronously like a real subprocess would
-      setTimeout(() => {
-        subprocess.emit("error", new Error("spawn xdg-open ENOENT"))
-      }, 10)
-    }
-    return subprocess
-  },
-}))
+const mcpTest = testEffect(
+  LayerNode.compile(LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node]), [
+    [McpBrowser.node, browserLayer],
+  ]),
+)
 
-// Mock UnauthorizedError
-class MockUnauthorizedError extends Error {
-  constructor() {
-    super("Unauthorized")
-    this.name = "UnauthorizedError"
-  }
-}
+const serveOAuthMcp = Effect.acquireRelease(
+  Effect.promise(async () => {
+    const requests: Array<{ pathname: string; headers: Headers }> = []
+    const protocol = new Server({ name: "oauth-browser", version: "1.0.0" }, { capabilities: { tools: {} } })
+    protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      enableJsonResponse: true,
+    })
+    await protocol.connect(transport)
 
-// Track what options were passed to each transport constructor
-const transportCalls: Array<{
-  type: "streamable" | "sse"
-  url: string
-  options: { authProvider?: unknown }
-}> = []
+    const http = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        requests.push({ pathname: url.pathname, headers: new Headers(request.headers) })
 
-// Mock the transport constructors
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
-  StreamableHTTPClientTransport: class MockStreamableHTTP {
-    url: string
-    authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
-    constructor(url: URL, options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> } }) {
-      this.url = url.toString()
-      this.authProvider = options?.authProvider
-      transportCalls.push({
-        type: "streamable",
-        url: url.toString(),
-        options: options ?? {},
-      })
-    }
-    async start() {
-      // Simulate OAuth redirect by calling the authProvider's redirectToAuthorization
-      if (this.authProvider?.redirectToAuthorization) {
-        await this.authProvider.redirectToAuthorization(new URL("https://auth.example.com/authorize?client_id=test"))
-      }
-      throw new MockUnauthorizedError()
-    }
-    async finishAuth(_code: string) {
-      // Mock successful auth completion
-    }
-  },
-}))
-
-mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
-  SSEClientTransport: class MockSSE {
-    constructor(url: URL) {
-      transportCalls.push({
-        type: "sse",
-        url: url.toString(),
-        options: {},
-      })
-    }
-    async start() {
-      throw new Error("Mock SSE transport cannot connect")
-    }
-  },
-}))
-
-// Mock the MCP SDK Client to trigger OAuth flow
-mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
-  Client: class MockClient {
-    async connect(transport: { start: () => Promise<void> }) {
-      await transport.start()
-    }
-  },
-}))
-
-// Mock UnauthorizedError in the auth module
-mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
-  UnauthorizedError: MockUnauthorizedError,
-}))
-
-beforeEach(() => {
-  openShouldFail = false
-  openCalledWith = undefined
-  transportCalls.length = 0
-})
-
-// Import modules after mocking
-const { MCP } = await import("../../src/mcp/index")
-const { Bus } = await import("../../src/bus")
-const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
-const { Instance } = await import("../../src/project/instance")
-const { tmpdir } = await import("../fixture/fixture")
-
-test("BrowserOpenFailed event is published when open() throws", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        `${dir}/opencode.json`,
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            "test-oauth-server": {
-              type: "remote",
-              url: "https://example.com/mcp",
+        if (url.pathname === "/mcp") {
+          if (request.headers.get("authorization") === "Bearer test-access-token") {
+            return transport.handleRequest(request)
+          }
+          return new Response("Unauthorized", {
+            status: 401,
+            headers: {
+              "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp", scope="mcp"`,
             },
-          },
-        }),
-      )
-    },
+          })
+        }
+
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp") {
+          return Response.json({
+            resource: `${url.origin}/mcp`,
+            authorization_servers: [url.origin],
+            scopes_supported: ["mcp"],
+          })
+        }
+
+        if (url.pathname === "/.well-known/oauth-authorization-server") {
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            registration_endpoint: `${url.origin}/register`,
+            scopes_supported: ["mcp"],
+            response_types_supported: ["code"],
+            grant_types_supported: ["authorization_code"],
+            token_endpoint_auth_methods_supported: ["none"],
+            code_challenge_methods_supported: ["S256"],
+          })
+        }
+
+        if (url.pathname === "/register") {
+          const metadata = await request.json()
+          if (!metadata || typeof metadata !== "object") return new Response("Invalid metadata", { status: 400 })
+          return Response.json({ ...metadata, client_id: "test-client" }, { status: 201 })
+        }
+
+        if (url.pathname === "/authorize") {
+          const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "test-code")
+          const state = url.searchParams.get("state")
+          if (state) redirect.searchParams.set("state", state)
+          return Response.redirect(redirect, 302)
+        }
+
+        if (url.pathname === "/token") {
+          return Response.json({ access_token: "test-access-token", token_type: "Bearer", scope: "mcp" })
+        }
+
+        return new Response("Not found", { status: 404 })
+      },
+    })
+
+    return {
+      requests,
+      url: new URL("/mcp", http.url).toString(),
+      close: async () => {
+        await http.stop(true)
+        await protocol.close()
+      },
+    }
+  }),
+  (server) => Effect.promise(server.close),
+)
+
+const withCallbackStop = Effect.addFinalizer(() => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore))
+
+const trackBrowserOpen = (url: string, fail = false) =>
+  Effect.gen(function* () {
+    const origin = new URL(url).origin
+    const opened = yield* Deferred.make<string>()
+    browsers.set(origin, { opened, fail })
+    yield* Effect.addFinalizer(() => Effect.sync(() => browsers.delete(origin)))
+    return opened
   })
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      openShouldFail = true
-
-      const events: Array<{ mcpName: string; url: string }> = []
-      const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
-        events.push(evt.properties)
-      })
-
-      // Run authenticate with a timeout to avoid waiting forever for the callback
-      // Attach a handler immediately so callback shutdown rejections
-      // don't show up as unhandled between tests.
-      const authPromise = MCP.authenticate("test-oauth-server").catch(() => undefined)
-
-      // Config.get() can be slow in tests, so give it plenty of time.
-      await new Promise((resolve) => setTimeout(resolve, 2_000))
-
-      // Stop the callback server and cancel any pending auth
-      await McpOAuthCallback.stop()
-
-      await authPromise
-
-      unsubscribe()
-
-      // Verify the BrowserOpenFailed event was published
-      expect(events.length).toBe(1)
-      expect(events[0].mcpName).toBe("test-oauth-server")
-      expect(events[0].url).toContain("https://")
-    },
+const trackBrowserOpenFailed = Effect.gen(function* () {
+  const events = yield* EventV2Bridge.Service
+  const event = yield* Deferred.make<{ mcpName: string; url: string }>()
+  const unsubscribe = yield* events.listen((evt) => {
+    if (evt.type === MCP.BrowserOpenFailed.type)
+      Deferred.doneUnsafe(event, Effect.succeed(evt.data as { mcpName: string; url: string }))
+    return Effect.void
   })
+  yield* Effect.addFinalizer(() => unsubscribe)
+  return event
 })
 
-test("BrowserOpenFailed event is NOT published when open() succeeds", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        `${dir}/opencode.json`,
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            "test-oauth-server-2": {
-              type: "remote",
-              url: "https://example.com/mcp",
-            },
-          },
-        }),
-      )
-    },
-  })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      openShouldFail = false
-
-      const events: Array<{ mcpName: string; url: string }> = []
-      const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
-        events.push(evt.properties)
-      })
-
-      // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
-
-      // Config.get() can be slow in tests; also covers the ~500ms open() error-detection window.
-      await new Promise((resolve) => setTimeout(resolve, 2_000))
-
-      // Stop the callback server and cancel any pending auth
-      await McpOAuthCallback.stop()
-
-      await authPromise
-
-      unsubscribe()
-
-      // Verify NO BrowserOpenFailed event was published
-      expect(events.length).toBe(0)
-      // Verify open() was still called
-      expect(openCalledWith).toBeDefined()
-    },
-  })
+const addServer = Effect.fnUntraced(function* (name: string, url: string, headers?: Record<string, string>) {
+  const mcp = yield* MCP.Service
+  const result = yield* mcp.add(name, { type: "remote", url, headers })
+  expect(result.status).toMatchObject({ [name]: { status: "needs_auth" } })
+  return mcp
 })
 
-test("open() is called with the authorization URL", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        `${dir}/opencode.json`,
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            "test-oauth-server-3": {
-              type: "remote",
-              url: "https://example.com/mcp",
-            },
-          },
-        }),
-      )
-    },
-  })
+mcpTest.instance("BrowserOpenFailed event is published when browser launch fails", () =>
+  Effect.gen(function* () {
+    yield* withCallbackStop
+    const server = yield* serveOAuthMcp
+    yield* trackBrowserOpen(server.url, true)
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      openShouldFail = false
-      openCalledWith = undefined
+    const event = yield* trackBrowserOpenFailed
+    const mcp = yield* addServer("test-oauth-server", server.url)
+    yield* mcp.authenticate("test-oauth-server").pipe(Effect.ignore, Effect.forkScoped)
 
-      // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-3").catch(() => undefined)
+    const failure = yield* awaitWithTimeout(
+      Deferred.await(event),
+      "Timed out waiting for BrowserOpenFailed event",
+      "5 seconds",
+    )
 
-      // Config.get() can be slow in tests; also covers the ~500ms open() error-detection window.
-      await new Promise((resolve) => setTimeout(resolve, 2_000))
+    expect(failure.mcpName).toBe("test-oauth-server")
+    expect(failure.url).toStartWith(new URL("/authorize", server.url).toString())
+  }),
+)
 
-      // Stop the callback server and cancel any pending auth
-      await McpOAuthCallback.stop()
+mcpTest.instance("BrowserOpenFailed event is not published when browser launch succeeds", () =>
+  Effect.gen(function* () {
+    yield* withCallbackStop
+    const server = yield* serveOAuthMcp
 
-      await authPromise
+    const opened = yield* trackBrowserOpen(server.url)
+    const event = yield* trackBrowserOpenFailed
+    const mcp = yield* addServer("test-oauth-server-2", server.url)
+    const status = yield* awaitWithTimeout(
+      mcp.authenticate("test-oauth-server-2"),
+      "Timed out completing OAuth authentication",
+      "5 seconds",
+    )
+    const url = yield* Deferred.await(opened)
+    const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
 
-      // Verify open was called with a URL
-      expect(openCalledWith).toBeDefined()
-      expect(typeof openCalledWith).toBe("string")
-      expect(openCalledWith!).toContain("https://")
-    },
-  })
-})
+    expect(status).toEqual({ status: "connected" })
+    expect(failure).toEqual(Option.none())
+    expect(new URL(url).origin).toBe(new URL(server.url).origin)
+  }),
+)
+
+mcpTest.instance("browser launch receives the discovered authorization URL", () =>
+  Effect.gen(function* () {
+    yield* withCallbackStop
+    const server = yield* serveOAuthMcp
+
+    const opened = yield* trackBrowserOpen(server.url)
+    const authorization = yield* Deferred.make<string>()
+    const mcp = yield* addServer("test-oauth-server-3", server.url, { "X-Custom-Header": "custom-value" })
+    const status = yield* awaitWithTimeout(
+      mcp.authenticate("test-oauth-server-3", (url) => Deferred.doneUnsafe(authorization, Effect.succeed(url))),
+      "Timed out completing OAuth authentication",
+      "5 seconds",
+    )
+    const url = yield* Deferred.await(opened)
+    const authorizationUrl = yield* Deferred.await(authorization)
+
+    expect(status).toEqual({ status: "connected" })
+    expect(authorizationUrl).toBe(url)
+    expect(new URL(url).pathname).toBe("/authorize")
+    expect(new URL(url).searchParams.get("client_id")).toBe("test-client")
+    expect(
+      server.requests.some(
+        (request) => request.pathname === "/mcp" && request.headers.get("x-custom-header") === "custom-value",
+      ),
+    ).toBe(true)
+  }),
+)

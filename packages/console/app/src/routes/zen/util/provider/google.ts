@@ -30,14 +30,13 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
   format: "google",
   modifyUrl: (providerApi: string, isStream?: boolean) =>
     `${providerApi}/models/${providerModel}:${isStream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+  modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
     headers.set("x-goog-api-key", apiKey)
   },
   modifyBody: (body: Record<string, any>) => {
     return body
   },
   createBinaryStreamDecoder: () => undefined,
-  streamSeparator: "\r\n\r\n",
   createUsageParser: () => {
     let usage: Usage
 
@@ -48,7 +47,7 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
         let json
         try {
           json = JSON.parse(chunk.slice(6)) as { usageMetadata?: Usage }
-        } catch (e) {
+        } catch {
           return
         }
 
@@ -56,9 +55,9 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
         usage = json.usageMetadata
       },
       retrieve: () => usage,
-      buidlCostChunk: (cost: string) => `data: ${JSON.stringify({ type: "ping", cost })}\n\n`,
     }
   },
+  extractUsage: (response: any) => response.usageMetadata,
   normalizeUsage: (usage: Usage) => {
     const inputTokens = usage.promptTokenCount ?? 0
     const outputTokens = usage.candidatesTokenCount ?? 0

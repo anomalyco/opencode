@@ -3,7 +3,7 @@ title: LSP serveri
 description: OpenCode se integriše sa vašim LSP serverima.
 ---
 
-OpenCode se integriše sa vašim Language Server Protocol (LSP) serverima kako bi pomogao LLM-u u interakciji s kodnom bazom. Koristi dijagnostiku za slanje povratnih informacija modelu.
+OpenCode se može integrisati sa Language Server Protocol (LSP) serverima kako bi koristio dijagnostiku kao feedback za agenta.
 
 ## Ugrađeni
 
@@ -45,7 +45,7 @@ OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 | yaml-ls            | .yaml, .yml                                                         | Automatski instalira Red Hat yaml-language-server        |
 | zls                | .zig, .zon                                                          | `zig` komanda dostupna                                   |
 
-LSP serveri su automatski omogućeni kada se otkrije jedna od gore navedenih ekstenzija datoteke i zahtjevi su ispunjeni.
+LSP je podrazumijevano isključen. Kada je omogućen, serveri se pokreću kada se otkrije jedna od gore navedenih ekstenzija datoteke i zahtjevi su ispunjeni.
 :::note
 Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postaviti varijablu okruženja `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
 :::
@@ -54,16 +54,35 @@ Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postavit
 
 ## Kako radi
 
-Kada opencode otvori fajl, on:
+Kada je LSP omogućen i opencode otvori fajl, on:
 
 1. Provjerava ekstenziju datoteke u odnosu na sve omogućene LSP servere.
 2. Pokreće odgovarajući LSP server ako već nije pokrenut.
 
 ---
 
+## Najbolje prakse
+
+LSP može pomoći agentu da pronađe i popravi probleme pružanjem dijagnostike iz jezičkih servera. Ovo je korisno u nekim projektima, ali nije uvijek neto pozitivno.
+
+Jezički serveri mogu ispasti iz sinhronizacije, koristiti mnogo memorije, razlikovati se po verziji ili projektu i usporiti agent workflow. U mnogim projektima je bolje da agent direktno pokreće lint, typecheck ili druge dijagnostičke CLI alate, tako da se greške vraćaju u agent loop bez tih kompromisa. Dokumentujte te komande u instrukcijskim fajlovima kao što su `AGENTS.md` ili skills, kako bi agent znao šta treba pokrenuti. Uključite LSP kada vaš projekt ima koristi od dodatnog feedbacka jezičkog servera.
+
+---
+
 ## Konfiguracija
 
-Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfiguraciji.
+Možete omogućiti i prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfiguraciji.
+
+Da biste omogućili sve ugrađene LSP servere, postavite `lsp` na `true`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+Koristite objekt da zadržite ugrađene servere omogućene dok konfigurirate izmjene ili prilagođene servere.
 
 ```json title="opencode.json"
 {
@@ -132,7 +151,7 @@ Opcije inicijalizacije razlikuju se od LSP servera. Provjerite dokumentaciju va�
 
 ### Onemogućavanje LSP servera
 
-Da biste onemogućili **sve** LSP servere globalno, postavite `lsp` na `false`:
+Ako je `lsp` izostavljen, svi LSP serveri su onemogućeni. Da biste onemogućili sve LSP servere nakon što ih je druga konfiguracija omogućila, postavite `lsp` na `false`:
 
 ```json title="opencode.json" {3}
 {

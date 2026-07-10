@@ -35,13 +35,13 @@ opencode, **Build** ve **Plan** olmak üzere iki yerleşik birincil agent ile bi
 
 Alt agent'lar, birincil agent'ların belirli görevler için çağırabileceği uzman yardımcılardır. Ayrıca mesajlarınızda **@ bahsederek** bunları manuel olarak da çağırabilirsiniz.
 
-opencode, **General** ve **Explore** olmak üzere iki yerleşik alt agent ile birlikte gelir. Buna aşağıda bakacağız.
+OpenCode, **General**, **Explore** ve **Scout** olmak üzere üç yerleşik alt agent ile birlikte gelir. Buna aşağıda bakacağız.
 
 ---
 
 ## Yerleşik
 
-opencode iki yerleşik birincil agent ve iki yerleşik alt agent ile birlikte gelir.
+OpenCode iki yerleşik birincil agent ve üç yerleşik alt agent ile birlikte gelir.
 
 ---
 
@@ -80,6 +80,14 @@ Karmaşık soruları araştırmak ve çok adımlı görevleri yürütmek için g
 _Mod_: `subagent`
 
 Kod tabanlarını keşfetmeye yönelik hızlı, salt okunur bir agent. Dosyalar değiştirilemiyor. Dosyaları kalıplara göre hızla bulmanız, anahtar sözcükler için kod aramanız veya kod tabanıyla ilgili soruları yanıtlamanız gerektiğinde bunu kullanın.
+
+---
+
+### Scout Kullanımı
+
+_Mod_: `subagent`
+
+Harici dokümanlar ve bağımlılık araştırmaları için salt okunur bir agent. Bir bağımlılık repository'sini OpenCode'un yönetilen cache'ine clone etmeniz, kütüphane kaynak kodunu incelemeniz veya workspace'inizi değiştirmeden yerel kodu upstream implementasyonlarla karşılaştırmanız gerektiğinde bunu kullanın.
 
 ---
 
