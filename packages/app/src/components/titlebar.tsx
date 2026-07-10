@@ -25,6 +25,7 @@ import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/comp
 import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabKey, useTabs } from "@/context/tabs"
+import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 
@@ -324,13 +325,20 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const route = layout.route()
               const activeSession = session()
               if (route.type === "session" && activeSession) {
-                tabs.newDraft({ server: route.server ?? server.key, directory: activeSession.directory }, "")
+                const sessionTab = {
+                  type: "session" as const,
+                  server: route.server ?? server.key,
+                  sessionId: activeSession.id,
+                }
+                const model = tabs.stateValue<PromptSession>(sessionTab, "prompt")?.model.current()
+                tabs.newDraft({ server: sessionTab.server, directory: activeSession.directory }, "", model)
                 return
               }
 
               const activeTab = currentTab()
               if (activeTab?.type === "draft") {
-                tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "")
+                const model = tabs.stateValue<PromptSession>(activeTab, "prompt")?.model.current()
+                tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
                 return
               }
 
