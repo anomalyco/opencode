@@ -60,13 +60,14 @@ type Dependencies = {
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
+  readonly models: SessionRunnerModel.Interface
   readonly config: Settings
 }
 
 export type AutoInput = {
   readonly sessionID: SessionSchema.ID
   readonly messages: readonly SessionMessage.Info[]
-  readonly request: LLMRequest
+  readonly model: Model
 }
 
 export type ManualInput = {
@@ -217,6 +218,15 @@ const planContent = (messages: readonly SessionMessage.Info[], tokens: number) =
 
 const make = (dependencies: Dependencies) => {
   const config = dependencies.config
+  const failed = Effect.fnUntraced(function* (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly reason: SessionMessage.Compaction["reason"]
+    readonly error: SessionError.Error
+    readonly inputID?: SessionMessage.ID
+  }) {
+    yield* dependencies.events.publish(SessionEvent.Compaction.Failed, input)
+    return { status: "failed" as const, error: input.error }
+  })
   const execute = Effect.fn("SessionCompaction.execute")(function* (plan: Plan) {
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: plan.sessionID,
@@ -227,7 +237,7 @@ const make = (dependencies: Dependencies) => {
 
     const chunks: string[] = []
     let failure: SessionError.Error | undefined
-    const summarized = yield* dependencies.llm
+    yield* dependencies.llm
       .stream(
         LLM.request({
           model: plan.model,
@@ -251,34 +261,31 @@ const make = (dependencies: Dependencies) => {
           }
           return Effect.void
         }),
-        Effect.as(true),
         Effect.catchTag("LLM.Error", (error) =>
           Effect.sync(() => {
             failure = toSessionError(error)
-            return false
           }),
         ),
         Effect.onInterrupt(() =>
           plan.reason === "auto"
-            ? dependencies.events.publish(SessionEvent.Compaction.Failed, {
+            ? failed({
                 sessionID: plan.sessionID,
                 reason: plan.reason,
                 error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
                 inputID: plan.inputID,
-              })
+              }).pipe(Effect.asVoid)
             : Effect.void,
         ),
       )
     const summary = chunks.join("")
-    if (!summarized || failure || !summary.trim()) {
+    if (failure || !summary.trim()) {
       const error = failure ?? { type: "compaction.failed" as const, message: "Compaction produced no summary" }
-      yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
+      return yield* failed({
         sessionID: plan.sessionID,
         reason: plan.reason,
         error,
         inputID: plan.inputID,
       })
-      return { status: "failed" as const, error }
     }
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: plan.sessionID,
@@ -293,38 +300,65 @@ const make = (dependencies: Dependencies) => {
     if (content)
       return yield* execute({
         sessionID: input.sessionID,
-        model: input.request.model,
+        model: input.model,
         reason: "auto",
         ...content,
       })
     const error = { type: "compaction.unavailable" as const, message: "Nothing to compact yet" }
-    yield* dependencies.events.publish(SessionEvent.Compaction.Failed, {
+    return yield* failed({
       sessionID: input.sessionID,
       reason: "auto",
       error,
     })
-    return { status: "failed" as const, error }
   })
   const required = (input: AutoInput) => {
     if (!config.auto) return false
-    const context = input.request.model.route.defaults.limits?.context
+    const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const last = input.messages.findLast(
       (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const output = input.request.generation?.maxTokens ?? input.request.model.route.defaults.limits?.output ?? 0
+    const output = input.model.route.defaults.limits?.output ?? 0
     const used =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (used <= 0) return false
     return used >= context - (output || config.buffer)
   }
-  return {
+  const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
+    const content = planContent(input.messages, config.tokens)
+    if (!content)
+      return yield* failed({
+        sessionID: input.session.id,
+        reason: "manual",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+        inputID: input.inputID,
+      })
+    const resolved = yield* dependencies.models.resolve(input.session).pipe(
+      Effect.catch((cause) =>
+        failed({
+          sessionID: input.session.id,
+          reason: "manual",
+          error: toSessionError(cause),
+          inputID: input.inputID,
+        }),
+      ),
+    )
+    if ("status" in resolved) return resolved
+    return yield* execute({
+      sessionID: input.session.id,
+      model: resolved.model,
+      reason: "manual",
+      inputID: input.inputID,
+      ...content,
+    })
+  })
+  return Service.of({
     required,
     compact,
-    execute,
-  }
+    compactManual,
+  })
 }
 
 export const layer = Layer.effect(
@@ -334,47 +368,7 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
-    const configured = settings(yield* config.entries())
-    const compaction = make({ events, llm, config: configured })
-
-    return Service.of({
-      required: compaction.required,
-      compact: compaction.compact,
-      compactManual: Effect.fn("SessionCompaction.compactManual")(function* (input) {
-        const content = planContent(input.messages, configured.tokens)
-        if (!content) {
-          const error = { type: "compaction.unavailable" as const, message: "Nothing to compact yet" }
-          yield* events.publish(SessionEvent.Compaction.Failed, {
-            sessionID: input.session.id,
-            reason: "manual",
-            error,
-            inputID: input.inputID,
-          })
-          return { status: "failed", error }
-        }
-        const resolved = yield* models.resolve(input.session).pipe(
-          Effect.catch((cause) => {
-            const error = toSessionError(cause)
-            return events
-              .publish(SessionEvent.Compaction.Failed, {
-                sessionID: input.session.id,
-                reason: "manual",
-                error,
-                inputID: input.inputID,
-              })
-              .pipe(Effect.as({ status: "failed" as const, error }))
-          }),
-        )
-        if ("status" in resolved) return resolved
-        return yield* compaction.execute({
-          sessionID: input.session.id,
-          model: resolved.model,
-          reason: "manual",
-          inputID: input.inputID,
-          ...content,
-        })
-      }),
-    })
+    return make({ events, llm, models, config: settings(yield* config.entries()) })
   }),
 )
 
