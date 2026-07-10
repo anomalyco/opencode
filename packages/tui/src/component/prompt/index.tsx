@@ -25,7 +25,7 @@ import { useRoute } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
-import { editorSelectionKey, useEditorContext } from "../../context/editor"
+import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
@@ -54,7 +54,6 @@ import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, u
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
-import { getEditorRangeLabel, hasEditorRangeSelection, withEditorContext } from "../../prompt/editor-context"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
@@ -112,6 +111,32 @@ function randomIndex(count: number) {
 
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
+}
+
+function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
+  return (
+    selection.selection.start.line !== selection.selection.end.line ||
+    selection.selection.start.character !== selection.selection.end.character
+  )
+}
+
+function getEditorRangeLabel(selection: EditorSelection["ranges"][number]) {
+  if (!hasEditorRangeSelection(selection)) return
+  if (selection.selection.start.line === selection.selection.end.line) return `#${selection.selection.start.line}`
+  return `#${selection.selection.start.line}-${selection.selection.end.line}`
+}
+
+function formatEditorContext(selection: EditorSelection) {
+  const selected = selection.ranges.filter(hasEditorRangeSelection)
+  if (selected.length === 0)
+    return `<system-reminder>Note: The user opened the file "${selection.filePath}". This may or may not be relevant to the current task.</system-reminder>\n`
+
+  const ranges = selected.map((range, index) => {
+    const prefix = selected.length > 1 ? `Selection ${index + 1}: ` : ""
+    return `Note: The user selected ${prefix}${getEditorRangeLabel(range)} from "${selection.filePath}". \`\`\`${range.text}\`\`\`\n\n`
+  })
+
+  return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
 }
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
@@ -1020,7 +1045,6 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const editorSelection = editorContext()
     const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
-    const prompt = pendingEditorSelection ? withEditorContext(pendingEditorSelection, inputText) : { text: inputText }
 
     if (store.mode === "shell") {
       move.startSubmit()
@@ -1096,10 +1120,27 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
+      if (pendingEditorSelection) {
+        // Keep editor context hidden while admitting it before the corresponding user prompt.
+        const error = await sdk.api.session
+          .synthetic({
+            sessionID,
+            text: formatEditorContext(pendingEditorSelection),
+            resume: false,
+          })
+          .then(
+            () => undefined,
+            (error) => error,
+          )
+        if (error) {
+          toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
+          return false
+        }
+      }
       const error = await sdk.api.session
         .prompt({
           sessionID,
-          ...prompt,
+          text: inputText,
           files: store.prompt.files,
           agents: store.prompt.agents,
         })

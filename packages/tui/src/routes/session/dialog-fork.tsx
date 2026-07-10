@@ -8,7 +8,6 @@ import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
 import { Locale } from "../../util/locale"
-import { userPromptText } from "../../prompt/editor-context"
 
 export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
   const data = useData()
@@ -32,7 +31,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       prompt:
         message?.type === "user"
           ? {
-              text: userPromptText(message),
+              text: message.text,
               files: message.files?.map((file) => ({
                 uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
                 name: file.name,
@@ -64,7 +63,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       .filter((message) => message.type === "user")
       .toReversed()
       .map((message) => ({
-        title: userPromptText(message).replace(/\n/g, " "),
+        title: message.text.replace(/\n/g, " "),
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: () => fork(message.id),
