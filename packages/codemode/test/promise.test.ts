@@ -63,6 +63,25 @@ const completedTool = (trace: Trace) =>
     run: () => Effect.succeed(trace.completed),
   })
 
+/** Never settles, and holds interruption cleanup for `cleanupMs` so a drain can outlast a timeout. */
+const stubbornTool = (trace: Trace) =>
+  Tool.make({
+    description: "Never settle; clean up slowly when interrupted",
+    input: Schema.Struct({ cleanupMs: Schema.Number }),
+    output: Schema.Number,
+    run: ({ cleanupMs }) =>
+      Effect.never.pipe(
+        Effect.onInterrupt(() =>
+          Effect.andThen(
+            Effect.sleep(cleanupMs),
+            Effect.sync(() => {
+              trace.interrupted += 1
+            }),
+          ),
+        ),
+      ),
+  })
+
 const run = (
   code: string,
   options: { trace?: Trace; limits?: CodeMode.ExecutionLimits } = {},
@@ -76,6 +95,7 @@ const run = (
           fail: failingTool,
           interrupt: interruptedTool,
           completed: completedTool(trace),
+          stubborn: stubbornTool(trace),
         },
       },
       code,
@@ -203,18 +223,21 @@ describe("first-class promise values", () => {
     expect(result.warnings).toBeUndefined()
   })
 
-  test("a fire-and-forget call completes before the execution ends", async () => {
+  test("a fire-and-forget call is interrupted when the program returns", async () => {
     const trace = makeTrace()
-    const result = await value(
+    const result = await run(
       `
         tools.host.sleepy({ id: 1, ms: 30 })
         return "done"
       `,
       { trace },
     )
-    expect(result).toBe("done")
-    expect(trace.completed).toBe(1)
-    expect(trace.interrupted).toBe(0)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toBeUndefined()
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
   test("a never-awaited failing call preserves the result and reports the rejection", async () => {
@@ -261,21 +284,43 @@ describe("first-class promise values", () => {
     ])
   })
 
-  test("drains and reports promises started by an async function after an await", async () => {
-    const result = await run(`
-      const run = async () => {
-        await tools.host.sleepy({ id: 1 })
-        tools.host.fail({})
-      }
-      run()
-      return "done"
-    `)
+  test("a budget-consuming value does not starve warnings", async () => {
+    const result = await run(
+      `
+        Promise.reject(new Error("boom"))
+        return "x".repeat(500)
+      `,
+      { limits: { maxOutputBytes: 128 } },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.truncated).toBe(true)
+    expect(typeof result.value).toBe("string")
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: boom" },
+    ])
+  })
+
+  test("an un-awaited async function's pending chain is interrupted at the return", async () => {
+    const trace = makeTrace()
+    const result = await run(
+      `
+        const run = async () => {
+          await tools.host.sleepy({ id: 1, ms: 60000 })
+          tools.host.fail({})
+        }
+        run()
+        return "done"
+      `,
+      { trace },
+    )
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value).toBe("done")
-    expect(result.warnings).toStrictEqual([
-      { kind: "ToolFailure", message: "Unhandled rejection from an un-awaited promise: Lookup refused" },
-    ])
+    expect(result.warnings).toBeUndefined()
+    expect(trace.starts).toEqual([1])
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(1)
   })
 
   test("reports every unhandled rejection in promise creation order", async () => {
@@ -346,8 +391,8 @@ describe("first-class promise values", () => {
       await value(
         `
           const launch = async () => {
-            tools.host.sleepy({ id: 1, ms: 40 })
-            Promise.all([tools.host.sleepy({ id: 2, ms: 40 })])
+            tools.host.sleepy({ id: 1, ms: 60000 })
+            Promise.all([tools.host.sleepy({ id: 2, ms: 60000 })])
             return "returned"
           }
           return await launch()
@@ -355,9 +400,11 @@ describe("first-class promise values", () => {
         { trace },
       ),
     ).toBe("returned")
+    // Both calls outlive launch() itself - they belong to the execution, not the function -
+    // and are interrupted only when the whole program returns.
     expect(trace.starts).toEqual([1, 2])
-    expect(trace.completed).toBe(2)
-    expect(trace.interrupted).toBe(0)
+    expect(trace.completed).toBe(0)
+    expect(trace.interrupted).toBe(2)
   })
 })
 
@@ -846,7 +893,7 @@ describe("timeout interruption of forked calls", () => {
     const trace = makeTrace()
     const result = await run(
       `
-        tools.host.sleepy({ id: 1, ms: 60000 })
+        tools.host.stubborn({ cleanupMs: 400 })
         return "done"
       `,
       { trace, limits: { timeoutMs: 100 } },
@@ -869,7 +916,7 @@ describe("timeout interruption of forked calls", () => {
     const result = await run(
       `
         tools.host.fail({})
-        tools.host.sleepy({ id: 1, ms: 60000 })
+        tools.host.stubborn({ cleanupMs: 400 })
         return "done"
       `,
       { limits: { timeoutMs: 100 } },

@@ -145,7 +145,7 @@ interface Failure {
 }
 ```
 
-`toolCalls` contains the names of calls admitted by the runtime in call order. It is retained on failure so hosts can audit partial execution without exposing inputs or host failures. A successful execution may also contain `warnings`: runtime-authored, non-fatal diagnostics alongside a valid value - unhandled rejections from promises the program started but never observed, or background work interrupted by the timeout after the program returned. Failure has an `error`; success may have `warnings`; program-authored console output stays in `logs`. Keeping the value on an unhandled rejection is a deliberate divergence from Node's crash-on-unhandled-rejection default: the computed value and the background failure are independently useful to the model, so the result carries both. When warnings are cut by `maxOutputBytes`, a final `Truncated` diagnostic marks the omission in-band, and `truncated` marks any result, warning, or log truncation (see Execution Limits).
+`toolCalls` contains the names of calls admitted by the runtime in call order. It is retained on failure so hosts can audit partial execution without exposing inputs or host failures. A successful execution may also contain `warnings`: runtime-authored, non-fatal diagnostics alongside a valid value - unhandled rejections from promises that failed before the program returned without ever being awaited, or background work interrupted by the timeout after the program returned. Anything still running when the program returns is interrupted - race losers and fire-and-forget calls alike - so a program must await every call whose completion matters. Failure has an `error`; success may have `warnings`; program-authored console output stays in `logs`. Keeping the value on an unhandled rejection is a deliberate divergence from Node's crash-on-unhandled-rejection default: the computed value and the background failure are independently useful to the model, so the result carries both. When warnings are cut by `maxOutputBytes`, a final `Truncated` diagnostic marks the omission in-band, and `truncated` marks any result, warning, or log truncation (see Execution Limits).
 
 ### Tool-call hooks
 
@@ -262,7 +262,7 @@ The limits are exactly three knobs:
 | ---------------- | -------------------: | -------------------------------------------------------------------- |
 | `timeoutMs`      |    none - no timeout | Wall-clock execution time.                                           |
 | `maxToolCalls`   |     none - unlimited | Tool calls admitted during the execution.                            |
-| `maxOutputBytes` | none - no truncation | Retained payload: result value, warnings, and logs.                   |
+| `maxOutputBytes` | none - no truncation | Retained result value and logs; warnings separately.                  |
 
 No limit has a default, on purpose: execution budgets are host policy, not library policy - a host that wants a bound sets one; a host that can interrupt the execution fiber (as OpenCode does on user cancel) may set no timeout, and a host with its own tool-output truncation (as OpenCode has) may leave `maxOutputBytes` unset. A host with neither should set `maxOutputBytes`, or oversized results silently flood model context.
 
@@ -280,11 +280,11 @@ const runtime = CodeMode.make({
 
 Limits are safe integers. `timeoutMs` must be at least `1`; the others may be `0`. Invalid configuration throws a `RangeError` when `CodeMode.make` or `CodeMode.execute` is called. An explicitly `undefined` value is the same as leaving the limit unset.
 
-`maxOutputBytes` is a payload budget, not a strict byte cap on the final rendered tool message. It counts the serialized result value, retained warning diagnostics, and retained log lines. Fixed truncation notices and framing added by a host when it renders the structured result are additional and may make the final message exceed the configured number.
+`maxOutputBytes` is a payload budget, not a strict byte cap on the final rendered tool message. It counts the serialized result value and retained log lines; warning diagnostics are bounded by a separate budget of the same size, so a large value never silences runtime diagnostics. Fixed truncation notices and framing added by a host when it renders the structured result are additional and may make the final message exceed the configured number.
 
-Exceeding a configured `maxOutputBytes` never fails the execution. An oversized result value is replaced by its truncated serialized text plus an explanatory marker, leading warnings and logs are kept within the remaining budget, omitted entries receive a summary marker, and the result carries `truncated: true`.
+Exceeding a configured `maxOutputBytes` never fails the execution. An oversized result value is replaced by its truncated serialized text plus an explanatory marker, logs are kept within the remaining budget, warnings are kept within their own budget, omitted entries receive a summary marker, and the result carries `truncated: true`.
 
-When configured, the timeout interrupts in-flight tool Effects, including eagerly started calls the program has not awaited (their fibers are supervised by the execution). The interpreter yields cooperatively between steps, so the timeout also interrupts pure busy loops (`while (true) {}`) - no separate work budget exists. Tool implementations remain responsible for making their external operations interruptible or independently bounded. If the timeout fires after the program has already returned a valid value - while the runtime is waiting on un-awaited background work - the result stays successful: the computed value is returned with a `TimeoutExceeded` warning instead of being discarded.
+When configured, the timeout interrupts in-flight tool Effects, including eagerly started calls the program has not awaited (their fibers are supervised by the execution). The interpreter yields cooperatively between steps, so the timeout also interrupts pure busy loops (`while (true) {}`) - no separate work budget exists. Tool implementations remain responsible for making their external operations interruptible or independently bounded. If the timeout fires after the program has already returned a valid value - while the runtime is interrupting leftover work and waiting for its cleanup - the result stays successful: the computed value is returned with a `TimeoutExceeded` warning instead of being discarded.
 
 Two interpreter internals are fixed constants rather than knobs: at most 8 tool calls run concurrently, and values crossing a data boundary may nest at most 32 levels deep (deeper values fail as `InvalidDataValue`, which reads better than a native stack-overflow error). Neither is part of the public contract.
 
@@ -301,9 +301,10 @@ Failures are data:
 | `InvalidToolOutput`     | Tool output failed schema decoding or safe-data copying.                                                 |
 | `InvalidDataValue`      | Program data violated the plain-data contract (depth, circularity, blocked properties, non-data values). |
 | `ToolCallLimitExceeded` | Calls exceeded `maxToolCalls`.                                                                           |
-| `TimeoutExceeded`       | Execution exceeded `timeoutMs`.                                                                          |
+| `TimeoutExceeded`       | Execution exceeded `timeoutMs`; as a warning, background work was interrupted after the program returned. |
 | `ToolFailure`           | A tool refused or failed.                                                                                |
 | `ExecutionFailure`      | The program threw or another execution error occurred.                                                   |
+| `Truncated`             | Warning-only marker: preceding warnings were omitted by `maxOutputBytes`.                                |
 
 Unknown host failures, defects, invalid outputs, and copying failures are sanitized. To return a safe operational refusal, fail with `toolError`:
 

@@ -177,7 +177,7 @@ function formatResult(result: CodeMode.Result) {
         .join("\n")
         .trim()
   const warnings =
-    result.ok && result.warnings !== undefined && result.warnings.length > 0
+    result.ok && result.warnings && result.warnings.length > 0
       ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined

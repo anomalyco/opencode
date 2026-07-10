@@ -116,9 +116,9 @@ ultimate source of truth.
 - [x] `Promise.race` settles from the first result without cancelling losers at settlement time.
 - [x] Real promise values from `Promise.all`, `Promise.allSettled`, and `Promise.race`; separately constructed
       combinator batches overlap as in normal JavaScript.
-- [x] Un-awaited (unobserved) work is drained before successful completion; unhandled failures become
-      `Success.warnings` diagnostics. Observed leftovers (race losers, fail-fast `Promise.all` stragglers) are
-      interrupted at completion since no future await can exist.
+- [x] All still-pending work (race losers, fail-fast `Promise.all` stragglers, and un-awaited calls alike) is
+      interrupted when the program returns; rejections that settled un-awaited become `Success.warnings`
+      diagnostics.
 - [x] `try`/`catch` can handle awaited tool and promise failures.
 - [ ] `Promise.any`.
 - [ ] Promise chaining with `.then`, `.catch`, and `.finally`.

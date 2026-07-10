@@ -67,18 +67,20 @@ Every sandbox promise starts eagerly on a run-once fiber owned by the whole Code
 async functions, `Promise.all`, `Promise.allSettled`, `Promise.race`, `Promise.resolve`, and `Promise.reject`. Nested
 functions therefore cannot end the lifetime of work they started. Independent aggregate batches overlap, and rejection
 is observed at the eventual `await`. `Promise.race` uses native non-cancelling settlement semantics: its first result
-wins while losers continue running. At normal completion CodeMode drains unobserved promises to empty (fire-and-forget
-work finishes, and its failures become `Success.warnings` diagnostics), then interrupts whatever remains active - all
-of it observed (race losers, fail-fast `Promise.all` stragglers), and since the program has returned, no future await
-can exist. An unobserved promise that itself awaits an observed loser transitively keeps that loser alive through the
-draining phase; interruption applies only to work nothing unobserved still depends on. A fatal program failure or host interruption closes the execution promise scope and interrupts its active
-fibers instead. A timeout does the same, except that a value the program already returned is preserved alongside a
-`TimeoutExceeded` warning rather than discarded. At most eight tool calls execute concurrently.
+wins while losers continue running. At normal completion CodeMode interrupts everything still running - race losers,
+fail-fast `Promise.all` stragglers, and fire-and-forget calls alike: the program has returned, so no future await can
+exist, and work whose completion matters must be awaited by the program. Waiting for any class of leftover instead
+would let it hold the execution open, or deadlock it when queued work needs tool-call permits the leftovers occupy.
+Rejections that settled un-awaited before the return become `Success.warnings` diagnostics. A fatal program failure or
+host interruption closes the execution promise scope and interrupts its active fibers instead. A timeout does the
+same, except that a value the program already returned is preserved alongside a `TimeoutExceeded` warning rather than
+discarded. At most eight tool calls execute concurrently.
 
 The public execution-policy knobs are `timeoutMs`, `maxToolCalls`, and `maxOutputBytes`. The package supplies no
 defaults because budgets are host policy. The interpreter also enforces fixed internal boundaries for tool-call
 concurrency and data nesting depth. `maxOutputBytes` bounds retained payload bytes, not the complete rendered message;
-fixed truncation notices and host-added framing are intentionally outside the budget.
+warning diagnostics have an equal separate budget so a large value cannot starve them, and fixed truncation notices and
+host-added framing are intentionally outside the budgets.
 
 ### Data, files, and failures
 

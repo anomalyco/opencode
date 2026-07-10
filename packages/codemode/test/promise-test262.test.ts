@@ -245,6 +245,195 @@ describe("Test262 Promise statics", () => {
     `)
     expect(result).toEqual([true, true, true, true, true, true, true, true])
   })
+
+  test("Promise.all resolves duplicate members into every slot", async () => {
+    // Sources:
+    // test/built-ins/Promise/all/invoke-resolve-on-promises-every-iteration-of-promise.js
+    // test/built-ins/Promise/all/invoke-resolve-on-values-every-iteration-of-promise.js
+    // (adapted: CodeMode has no observable Promise.resolve hook, so per-iteration
+    //  handling of a repeated member is asserted through the resolved slots)
+    expect(
+      await value(`
+        const settled = Promise.resolve(3)
+        const computed = (async () => "computed")()
+        return [
+          await Promise.all([settled, settled, settled]),
+          await Promise.all([computed, "plain", computed]),
+        ]
+      `),
+    ).toEqual([
+      [3, 3, 3],
+      ["computed", "plain", "computed"],
+    ])
+  })
+
+  test("Promise.allSettled records duplicate members independently", async () => {
+    // Source: test/built-ins/Promise/allSettled/invoke-resolve-on-promises-every-iteration-of-promise.js
+    // (adapted: per-iteration handling of a repeated member is asserted through the
+    //  outcome records instead of a Promise.resolve hook)
+    expect(
+      await value(`
+        const good = Promise.resolve(1)
+        const bad = Promise.reject(2)
+        return await Promise.allSettled([good, bad, good, bad])
+      `),
+    ).toEqual([
+      { status: "fulfilled", value: 1 },
+      { status: "rejected", reason: 2 },
+      { status: "fulfilled", value: 1 },
+      { status: "rejected", reason: 2 },
+    ])
+  })
+
+  test("combinators adopt members that settled before the call", async () => {
+    // Sources:
+    // test/built-ins/Promise/all/reject-immed.js
+    // test/built-ins/Promise/allSettled/reject-immed.js
+    // test/built-ins/Promise/race/reject-immed.js
+    // (adapted: immediately-rejecting thenables become sandbox promises that settled,
+    //  and were even observed, before the combinator call)
+    expect(
+      await value(`
+        const fulfilled = Promise.resolve("done")
+        const rejected = Promise.reject("failed")
+        try { await rejected } catch {}
+        const observe = async (promise) => {
+          try { return ["fulfilled", await promise] } catch (reason) { return ["rejected", reason] }
+        }
+        return [
+          await observe(Promise.all([fulfilled, rejected])),
+          await Promise.allSettled([rejected, fulfilled]),
+          await observe(Promise.race([rejected, fulfilled])),
+        ]
+      `),
+    ).toEqual([
+      ["rejected", "failed"],
+      [
+        { status: "rejected", reason: "failed" },
+        { status: "fulfilled", value: "done" },
+      ],
+      ["rejected", "failed"],
+    ])
+  })
+
+  test("combinator results follow input order, not settlement order", async () => {
+    // Sources:
+    // test/built-ins/Promise/all/resolve-non-thenable.js
+    // test/built-ins/Promise/allSettled/resolved-all-mixed.js
+    // (adapted: members are created, and therefore settle, in reverse of input order;
+    //  deferred settlement is not expressible without host-async work in this corpus)
+    expect(
+      await value(`
+        const third = Promise.resolve("c")
+        const failing = (async () => { throw "b" })()
+        try { await failing } catch {}
+        const second = (async () => "b")()
+        const first = Promise.resolve("a")
+        return [
+          await Promise.all([first, second, third]),
+          await Promise.allSettled([first, failing, third]),
+        ]
+      `),
+    ).toEqual([
+      ["a", "b", "c"],
+      [
+        { status: "fulfilled", value: "a" },
+        { status: "rejected", reason: "b" },
+        { status: "fulfilled", value: "c" },
+      ],
+    ])
+  })
+
+  test("Promise.race ignores a rejected loser once the first contender wins", async () => {
+    // Source: test/built-ins/Promise/race/reject-ignored-immed.js
+    // (adapted: the losing rejection comes from an async function instead of a thenable;
+    //  the exact-equality check also asserts the loser leaves no unhandled-rejection warning)
+    expect(
+      await execute(`
+        const loser = (async () => { throw "lost" })()
+        return await Promise.race([Promise.resolve("won"), loser])
+      `),
+    ).toEqual({ ok: true, value: "won", toolCalls: [] })
+  })
+
+  test("Promise.race([]) returns a promise whose CodeMode failure is catchable", async () => {
+    // Sources:
+    // test/built-ins/Promise/race/S25.4.4.3_A2.1_T1.js
+    // test/built-ins/Promise/race/S25.4.4.3_A5.1_T1.js
+    // (adapted: upstream requires Promise.race([]) to never settle; CodeMode intentionally
+    //  rejects with a catchable diagnostic instead of hanging, so this asserts the sandbox
+    //  divergence rather than the spec never-settles behavior)
+    expect(
+      await value(`
+        const empty = Promise.race([])
+        try {
+          await empty
+          return "settled"
+        } catch (error) {
+          return [empty instanceof Promise, error instanceof Error]
+        }
+      `),
+    ).toEqual([true, true])
+  })
+
+  test("Promise.resolve passes the same sandbox promise through nested chains", async () => {
+    // Source: test/built-ins/Promise/resolve/S25.4.4.5_A2.2_T1.js
+    // (adapted: no executor construction, and identity is observed with Array includes
+    //  because promises are not comparable data values in CodeMode)
+    expect(
+      await value(`
+        const promise = Promise.resolve({ id: 1 })
+        return [
+          [promise].includes(Promise.resolve(promise)),
+          [promise].includes(Promise.resolve(Promise.resolve(promise))),
+          (await Promise.resolve(Promise.resolve(promise))).id,
+        ]
+      `),
+    ).toEqual([true, true, 1])
+  })
+
+  test("Promise.resolve of a rejected promise preserves identity and reason", async () => {
+    // Source: test/built-ins/Promise/resolve/S25.4.4.5_A2.3_T1.js
+    // (adapted: the source promise is already rejected instead of rejected later)
+    expect(
+      await value(`
+        const rejected = Promise.reject("oops")
+        const adopted = Promise.resolve(rejected)
+        const identity = [rejected].includes(adopted)
+        try {
+          await adopted
+          return "fulfilled"
+        } catch (reason) {
+          return [identity, reason]
+        }
+      `),
+    ).toEqual([true, "oops"])
+  })
+
+  test("Promise.reject uses a promise reason without flattening it", async () => {
+    // Sources:
+    // test/built-ins/Promise/reject-via-fn-immed.js
+    // test/built-ins/Promise/reject-via-fn-deferred.js
+    // (adapted: the promise reason goes through Promise.reject instead of executor reject)
+    expect(
+      await value(`
+        const observe = async (reason) => {
+          try {
+            await Promise.reject(reason)
+            return "fulfilled"
+          } catch (caught) {
+            const identity = [reason].includes(caught)
+            try { return [identity, caught instanceof Promise, await caught] }
+            catch (inner) { return [identity, caught instanceof Promise, "rethrew " + inner] }
+          }
+        }
+        return [await observe(Promise.resolve(1)), await observe(Promise.reject("inner"))]
+      `),
+    ).toEqual([
+      [true, true, 1],
+      [true, true, "rethrew inner"],
+    ])
+  })
 })
 
 describe("Test262 async functions and await", () => {
@@ -363,6 +552,27 @@ describe("Test262 async functions and await", () => {
         return (await thenable) === thenable
       `),
     ).toBe(true)
+  })
+
+  test("await returns non-promise operands unchanged", async () => {
+    // Source: test/language/expressions/await/await-non-promise.js
+    // (adapted: only value pass-through is asserted here; the spec tick ordering around
+    //  await of non-promises is covered by the failing interleaving test below)
+    expect(
+      await value(`
+        const object = { id: 1 }
+        const array = [1, 2]
+        return [
+          await 1,
+          await "text",
+          await true,
+          (await null) === null,
+          (await undefined) === undefined,
+          (await object) === object,
+          (await array) === array,
+        ]
+      `),
+    ).toEqual([1, "text", true, true, true, true, true])
   })
 })
 

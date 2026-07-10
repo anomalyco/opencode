@@ -93,9 +93,7 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
-  // Runtime-authored, non-fatal diagnostics alongside a valid value (stderr to `value`'s
-  // stdout): unhandled rejections, background work interrupted by the timeout. Program-
-  // authored console output stays in `logs`.
+  // Runtime-authored non-fatal diagnostics; program console output stays in `logs`.
   warnings: Schema.optionalKey(Schema.Array(Diagnostic)),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),

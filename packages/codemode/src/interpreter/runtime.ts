@@ -611,8 +611,8 @@ const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<s
   return out
 }
 
-// Promise work has execution lifetime, while observation only controls whether a settled
-// rejection is reported. Awaiting work during final draining must not conflate the two.
+// Promise work lives until the program returns, while observation only controls whether a
+// settled rejection is reported. Neither extends execution: completion interrupts all work.
 class PromiseRuntime<R> {
   private readonly active = new Set<SandboxPromise>()
   private readonly ids = new WeakMap<SandboxPromise, number>()
@@ -664,29 +664,23 @@ class PromiseRuntime<R> {
     return Fiber.await(promise.fiber)
   }
 
-  // Unobserved rejections that already settled, in creation order. Consumed by normal-
-  // completion draining and by the timeout path when the program value already exists.
+  // Unobserved rejections that already settled, in creation order.
   diagnostics(): Array<Diagnostic> {
     return [...this.failures].sort(([left], [right]) => left - right).map(([, failure]) => failure)
   }
 
-  // Normal-completion lifecycle. Unobserved promises are fire-and-forget work nothing ever
-  // took responsibility for: wait for them (their side effects were the point) and report
-  // their failures. Once none remain, whatever is still active is necessarily observed - race
-  // losers and fail-fast Promise.all stragglers the program moved past - and since the program
-  // has returned, no future await can exist: interrupt instead of waiting. Loops until active
-  // is literally empty because a straggler can create new promises before its interrupt lands.
+  // Normal-completion lifecycle. Once the program returns, no future await can exist, so
+  // everything still running - race losers, fail-fast stragglers, and fire-and-forget calls
+  // alike - is interrupted rather than awaited: work whose completion matters must be awaited
+  // by the program. Waiting for any class of leftover instead would let it hold the execution
+  // open (or deadlock it, when queued work needs tool-call permits the leftovers occupy).
+  // interruptAll signals every fiber synchronously before awaiting termination, so no
+  // straggler can spawn new work between interrupts; the loop re-checks as a backstop
+  // because a straggler can create promises before its interrupt lands.
   drain(): Effect.Effect<Array<Diagnostic>> {
     const self = this
     return Effect.gen(function* () {
       while (self.active.size > 0) {
-        const unobserved = [...self.active].filter((promise) => !self.observed.has(promise))
-        if (unobserved.length > 0) {
-          for (const promise of unobserved) yield* Fiber.await(promise.fiber)
-          continue
-        }
-        // Signals every leftover synchronously before awaiting termination, so no straggler
-        // can spawn new work between interrupts; the loop re-checks as a backstop.
         yield* Fiber.interruptAll([...self.active].map((promise) => promise.fiber))
       }
       return self.diagnostics()
@@ -2242,7 +2236,7 @@ class Interpreter<R> {
       // Promise.resolve of a promise is that promise (JS flattens); anything else is a
       // promise already fulfilled with the value. Pre-settled values still fork a scope-owned
       // fiber so every promise shares one lifecycle (an abandoned reject is reported, teardown
-      // is uniform); an inert fast path is possible if this ever shows up in profiles.
+      // is uniform).
       const value = args[0]
       return value instanceof SandboxPromise ? Effect.succeed(value) : this.createPromise(Effect.succeed(value))
     }
@@ -3513,7 +3507,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
     // Set once the program body returned and its value crossed the data boundary, so a timeout
     // firing during the final drain reports "completed with interrupted background work"
     // instead of discarding the computed value as a plain timeout.
-    let drained: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
+    let returned: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
 
     const base = Effect.acquireUseRelease(
       Scope.make("parallel"),
@@ -3526,7 +3520,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
           // Validate the result before draining so an invalid value is a fatal completion that
           // closes the promise scope instead of waiting for unrelated work.
           const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
-          drained = { value: result, promises }
+          returned = { value: result, promises }
           const warnings = yield* promises.drain()
           return {
             ok: true,
@@ -3547,7 +3541,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
               duration: timeoutMs,
               orElse: () =>
                 Effect.sync(() => {
-                  if (drained === undefined) {
+                  if (returned === undefined) {
                     return {
                       ok: false,
                       error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
@@ -3558,13 +3552,13 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
                   // The timeout warning leads so byte-budget truncation cuts it last.
                   return {
                     ok: true,
-                    value: drained.value,
+                    value: returned.value,
                     warnings: [
                       {
                         kind: "TimeoutExceeded",
                         message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await or explicitly settle all started promises.`,
                       },
-                      ...drained.promises.diagnostics(),
+                      ...returned.promises.diagnostics(),
                     ],
                     ...logged(),
                     toolCalls: tools.calls,
@@ -3603,11 +3597,12 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
 }
 
 /**
- * Bounds retained payload bytes (serialized result value, warning diagnostics, and logs) to
- * `maxOutputBytes`. Fixed truncation notices are added outside that payload budget, as is any
- * framing added when a host renders the structured result. Truncation never fails the execution;
- * `truncated: true` marks affected results. Only runs when the host set `maxOutputBytes` - with
- * the limit absent, output passes through unbounded.
+ * Bounds retained program payload bytes (serialized result value and logs) to `maxOutputBytes`.
+ * Warning diagnostics are bounded by a separate budget of the same size so a large value can
+ * never starve runtime-authored diagnostics. Fixed truncation notices are added outside those
+ * budgets, as is any framing added when a host renders the structured result. Truncation never
+ * fails the execution; `truncated: true` marks affected results. Only runs when the host set
+ * `maxOutputBytes` - with the limit absent, output passes through unbounded.
  */
 const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   let truncated = false
@@ -3629,17 +3624,15 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
 
   const warnings = result.ok ? (result.warnings ?? []) : []
   const keptWarnings: Array<Diagnostic> = []
-  const warningBudget = Math.max(0, maxOutputBytes - valueBytes)
   let warningBytes = 0
   for (const warning of warnings) {
     const bytes = utf8ByteLength(JSON.stringify(warning)) + 1
-    if (warningBytes + bytes > warningBudget) break
+    if (warningBytes + bytes > maxOutputBytes) break
     warningBytes += bytes
     keptWarnings.push(warning)
   }
   if (keptWarnings.length < warnings.length) {
     truncated = true
-    // In-band marker, like the value and log markers; outside the payload budget.
     keptWarnings.push({
       kind: "Truncated",
       message: `${warnings.length - keptWarnings.length} additional warnings omitted by the output limit.`,
@@ -3648,7 +3641,7 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
 
   const logs = result.logs ?? []
   const kept: Array<string> = []
-  const logBudget = Math.max(0, maxOutputBytes - valueBytes - warningBytes)
+  const logBudget = Math.max(0, maxOutputBytes - valueBytes)
   let logBytes = 0
   for (const line of logs) {
     const lineBytes = utf8ByteLength(line) + 1
