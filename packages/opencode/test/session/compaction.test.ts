@@ -1408,27 +1408,53 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "reconciles stale Next Steps with the preserved recent tail audit",
+    "reconciles stale Next Move with the preserved recent tail audit",
     () => {
       const stub = llm()
-      const stale = `## Goal
+      const stale = `## Objective
 - Fix compaction summaries
 
-## Progress
-### Done
+## Important Details
+- (none)
+
+## Work State
+### Completed
 - Implemented the fix
 
-## Next Steps
-- run tests`
-      const reconciled = `## Goal
+### Active
+- (none)
+
+### Blocked
+- (none)
+
+## Next Move
+1. run tests
+2. (none)
+
+## Relevant Files
+- (none)`
+      const reconciled = `## Objective
 - Fix compaction summaries
 
-## Progress
-### Done
+## Important Details
+- (none)
+
+## Work State
+### Completed
 - Implemented the fix
 - tests were run and passed
 
-## Next Steps
+### Active
+- (none)
+
+### Blocked
+- (none)
+
+## Next Move
+1. (none)
+2. (none)
+
+## Relevant Files
 - (none)`
       stub.push((input) =>
         reply(JSON.stringify(input.messages.at(-1)).includes("tests were run and passed") ? reconciled : stale)(input),
@@ -1469,8 +1495,8 @@ describe("session.compaction.process", () => {
             .filter((part): part is SessionV1.TextPart => part.type === "text")
             .map((part) => part.text)
             .join("\n") ?? ""
-        expect(text).toContain("## Next Steps")
-        expect(text.match(/## Next Steps\n([\s\S]*?)(?:\n## |$)/)?.[1]?.toLowerCase() ?? "").not.toContain(
+        expect(text).toContain("## Next Move")
+        expect(text.match(/## Next Move\n([\s\S]*?)(?:\n## |$)/)?.[1]?.toLowerCase() ?? "").not.toContain(
           "run tests",
         )
       }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ preserve_recent_tokens: 10_000 }) }))
@@ -1513,8 +1539,8 @@ describe("session.compaction.process", () => {
         expect(captured).toContain("<previous-summary>")
         expect(captured).toContain("summary one")
         expect(captured.match(/summary one/g)?.length).toBe(1)
-        expect(captured).toContain("## Constraints & Preferences")
-        expect(captured).toContain("## Progress")
+        expect(captured).toContain("## Important Details")
+        expect(captured).toContain("## Work State")
       }).pipe(withCompaction({ llm: stub.llmLayer }))
     },
     { git: true },

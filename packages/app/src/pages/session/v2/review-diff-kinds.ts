@@ -1,14 +1,33 @@
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { Kind } from "@/components/file-tree-v2"
+import { normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
 
 export type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
 
 export function normalizePath(p: string) {
-  return p.replaceAll("\\", "/").replace(/\/+$/, "")
+  return normalizeFileTreeV2Path(p)
 }
 
 export function filterRenderableDiff(value: SnapshotFileDiff | VcsFileDiff): value is RenderDiff {
   return typeof value.file === "string"
+}
+
+export function reviewDiffNeedsLoad(diff: RenderDiff) {
+  if (diff.additions === 0 && diff.deletions === 0) return false
+  return !diff.patch || !/^@@ /m.test(diff.patch)
+}
+
+export function reviewRootDirectory(root: string) {
+  return root === "/" || /^[A-Za-z]:[/\\]?$/.test(root) ? root : root.replace(/[/\\]+$/, "")
+}
+
+export function reviewDiffDirectory(root: string, file: string) {
+  const path = normalizePath(file)
+  const index = path.lastIndexOf("/")
+  const separator = root.includes("\\") ? "\\" : "/"
+  const base = reviewRootDirectory(root)
+  if (index < 0) return base
+  return `${base.endsWith(separator) ? base : base + separator}${path.slice(0, index).replaceAll("/", separator)}`
 }
 
 export function reviewDiffKinds(diffs: RenderDiff[]) {

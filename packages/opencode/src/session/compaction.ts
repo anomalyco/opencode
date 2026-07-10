@@ -93,7 +93,7 @@ function recentTailAudit(messages: SessionV1.WithParts[]) {
   if (!text) return undefined
   return [
     "<recent-preserved-tail-audit>",
-    "Use this text-only view only to reconcile Done, In Progress, Blocked, and Next Steps. Do not copy it wholesale into the summary.",
+    "Use this text-only view only to reconcile Work State and Next Move. Do not copy it wholesale into the summary.",
     truncate(text, RECENT_TAIL_AUDIT_MAX_CHARS),
     "</recent-preserved-tail-audit>",
   ].join("\n")

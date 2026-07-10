@@ -99,7 +99,7 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
         : undefined
   const prices = remote.billing?.token_prices
   // Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
-  const usdPerMillion = prices ? 10_000 / prices.batch_size : 0
+  const usdPerMillion = prices && prices.batch_size > 0 ? 10_000 / prices.batch_size : 0
 
   const model: CopilotModel = {
     id: key,
