@@ -45,16 +45,9 @@ export default {
           CONSTRAINT \`fk_instruction_state_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      // Pre-beta instruction prose is superseded by value deltas. Remove only
-      // messages projected from those events, then remove the obsolete facts.
-      yield* tx.run(`
-        DELETE FROM \`session_message\`
-        WHERE \`id\` IN (
-          SELECT 'msg_' || substr(\`id\`, 5)
-          FROM \`event\`
-          WHERE \`type\` = 'session.instructions.updated.1'
-        );
-      `)
+      // Persisted System rows were exclusively pre-beta instruction prose,
+      // including fork copies whose message IDs no longer match the source event.
+      yield* tx.run(`DELETE FROM \`session_message\` WHERE \`type\` = 'system';`)
       yield* tx.run(`
         UPDATE \`session\`
         SET \`fork_seq\` = COALESCE(

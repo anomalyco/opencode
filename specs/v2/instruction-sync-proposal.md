@@ -108,7 +108,7 @@ Once per physical attempt, before input promotion:
 7. Read projected messages, epoch values, blobs, and post-epoch deltas in one database transaction.
 8. Render initial instructions and interleave derived update messages by durable sequence.
 
-Session movement cannot race a boundary: `MoveSession` interrupts the active drain and awaits idle before publishing `session.moved`, the same serialization Session removal uses.
+`MoveSession` interrupts any active drain and awaits idle before publishing `session.moved`, matching the best-effort ordering used by Session removal.
 
 The blob inserts, durable event, and fold-cache advance share the event transaction.
 

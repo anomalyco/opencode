@@ -304,7 +304,11 @@ const lineage = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
   const inherited =
     session?.parentID && session.forkSeq !== null
-      ? yield* lineage(db, session.parentID, session.forkSeq ?? undefined)
+      ? yield* lineage(
+          db,
+          session.parentID,
+          through === undefined ? session.forkSeq : Math.min(session.forkSeq, through),
+        )
       : []
   return [...inherited, { sessionID, ...(through === undefined ? {} : { through }) }]
 })

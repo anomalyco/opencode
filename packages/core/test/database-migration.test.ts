@@ -508,7 +508,7 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("deletes pre-beta instruction events and only their projected messages", async () => {
+  test("deletes pre-beta instruction events and projected System messages", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -540,7 +540,6 @@ describe("DatabaseMigration", () => {
           { id: "evt_other", type: "session.synthetic.1" },
         ])
         expect(yield* db.all(sql`SELECT id, type FROM session_message ORDER BY id`)).toEqual([
-          { id: "msg_other", type: "system" },
           { id: "msg_user", type: "user" },
         ])
         expect(yield* db.get(sql`SELECT * FROM instruction_entry`)).toEqual({

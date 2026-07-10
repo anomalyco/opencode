@@ -1038,6 +1038,35 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("caps nested fork instruction ancestry at the selected message", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "First")
+      yield* session.resume(sessionID)
+      systemBaseline = "Changed context"
+      const second = yield* admit(session, "Second")
+      yield* session.resume(sessionID)
+
+      const child = yield* session.fork({ sessionID, messageID: second.id })
+      const inheritedFirst = (yield* session.messages({ sessionID: child.id })).find(
+        (message) => message.type === "user" && message.text === "First",
+      )
+      if (!inheritedFirst) return yield* Effect.die(new Error("Nested fork boundary message not found"))
+      const grandchild = yield* session.fork({ sessionID: child.id, messageID: inheritedFirst.id })
+
+      expect(
+        yield* (yield* Database.Service).db
+          .select()
+          .from(InstructionStateTable)
+          .where(eq(InstructionStateTable.session_id, grandchild.id))
+          .get(),
+      ).toMatchObject({
+        initial_values: { "test/context": Instructions.hash("Initial context") },
+        current_values: { "test/context": Instructions.hash("Initial context") },
+      })
+    }),
+  )
+
   it.effect("rebuilds a missing instruction cache without admitting another delta", () =>
     Effect.gen(function* () {
       const session = yield* setup
