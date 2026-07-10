@@ -96,6 +96,12 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
+// After the spawned process exits, wait this long before forcing the output
+// streams to finish. A surviving descendant that inherited a stdio handle
+// keeps the pipe open so it never reaches EOF; this grace window lets any
+// final buffered output flush in the normal case before we unblock consumers.
+const EXIT_STREAM_GRACE_MS = 1000
+
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -242,6 +248,7 @@ export const make = Effect.gen(function* () {
   const setupOutput = (
     command: ChildProcess.StandardCommand,
     proc: NodeChildProcess.ChildProcess,
+    signal: ExitSignal,
     out: ChildProcess.StdoutConfig,
     err: ChildProcess.StderrConfig,
   ) => {
@@ -257,6 +264,15 @@ export const make = Effect.gen(function* () {
           onError: (cause) => toPlatformError("fromReadable(stderr)", toError(cause), command),
         })
       : Stream.empty
+
+    // Once the process has exited, finish the output streams after a short
+    // grace period even if a surviving descendant kept an inherited stdio
+    // handle open (so the pipe never reaches EOF). Otherwise consumers such as
+    // `runStream` block forever waiting for the stream to end. The grace window
+    // lets any final buffered output flush in the normal case first.
+    const interruptOnExit = Deferred.await(signal).pipe(Effect.delay(EXIT_STREAM_GRACE_MS), Effect.asVoid)
+    if (proc.stdout) stdout = Stream.interruptWhen(stdout, interruptOnExit)
+    if (proc.stderr) stderr = Stream.interruptWhen(stderr, interruptOnExit)
 
     if (Sink.isSink(out.stream)) stdout = Stream.transduce(stdout, out.stream)
     if (Sink.isSink(err.stream)) stderr = Stream.transduce(stderr, err.stream)
@@ -275,6 +291,16 @@ export const make = Effect.gen(function* () {
       })
       proc.on("exit", (...args) => {
         exit = args
+        // Complete as soon as the process terminates. Waiting for `close`
+        // instead would hang forever whenever a descendant keeps an inherited
+        // stdio handle open after the spawned process has already exited
+        // (e.g. a background server started by the command). That left the
+        // caller blocked indefinitely, defeating any timeout. `close` below
+        // remains as a fallback for the rare case where `exit` is missed.
+        if (!end) {
+          end = true
+          Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        }
       })
       proc.on("close", (...args) => {
         if (end) return
@@ -403,7 +429,7 @@ export const make = Effect.gen(function* () {
           )
 
           const fd = yield* setupFds(command, proc, extra)
-          const out = setupOutput(command, proc, sout, serr)
+          const out = setupOutput(command, proc, signal, sout, serr)
           let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
@@ -431,7 +457,7 @@ export const make = Effect.gen(function* () {
               const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
               if (!opts?.forceKillAfter) return attempt
               return Effect.timeoutOrElse(attempt, {
-                duration: opts.forceKillAfter,
+                duration: opts?.forceKillAfter,
                 orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
               })
             },

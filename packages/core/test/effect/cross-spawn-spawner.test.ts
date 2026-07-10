@@ -6,11 +6,14 @@ import { Effect, Exit, Stream } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { testEffect } from "../lib/effect"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)
 const fx = testEffect(live)
+const appLive = LayerNode.compile(AppProcess.node)
+const appFx = testEffect(appLive)
 
 function js(code: string, opts?: ChildProcess.CommandOptions) {
   return ChildProcess.make("node", ["-e", code], opts)
@@ -285,6 +288,30 @@ describe("cross-spawn spawner", () => {
         expect(running).toBe(false)
       }),
     )
+
+    fx.effect(
+      "does not block when a descendant keeps the stdio pipe open",
+      Effect.gen(function* () {
+        // Parent hangs and spawns a grandchild that inherits the stdio pipe
+        // and runs forever. The grandchild keeps the pipe write end open, so
+        // the parent's `close` event never fires. The caller must still return
+        // promptly when killed (regression test for the permanent-block bug).
+        const handle = yield* ChildProcess.make(
+          process.execPath,
+          [
+            "-e",
+            [
+              "const { spawn } = require('child_process')",
+              "spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e9)'], { stdio: 'inherit' })",
+              "setInterval(() => {}, 1e9)",
+            ].join("\n"),
+          ],
+        )
+        const started = Date.now()
+        yield* handle.kill({ forceKillAfter: 500 })
+        expect(Date.now() - started).toBeLessThan(10_000)
+      }),
+    )
   })
 
   describe("error handling", () => {
@@ -420,6 +447,32 @@ describe("cross-spawn spawner", () => {
           ),
         )
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
+  })
+
+  describe("runStream", () => {
+    appFx.effect(
+      "does not block when a descendant keeps the stdio pipe open",
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+        // pwsh launches a background node that inherits the stdio pipe and
+        // survives, then pwsh exits immediately. The pipe never reaches EOF,
+        // which used to block runStream forever. It must finish after a grace.
+        const exit = yield* Effect.exit(
+          AppProcess.Service.use((svc) =>
+            svc
+              .runStream(
+                ChildProcess.make("pwsh", [
+                  "-NoProfile",
+                  "-Command",
+                  "Start-Process -FilePath node -ArgumentList '-e','setInterval(()=>{},1e9)' -WindowStyle Hidden; exit 0",
+                ]),
+              )
+              .pipe(Stream.runCollect),
+          ),
+        )
+        expect(Exit.isSuccess(exit)).toBe(true)
       }),
     )
   })
