@@ -65,6 +65,8 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
   )
   const searching = createMemo(() => props.state.filter().trim().length > 0)
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
+  // Changes-only trees omit "M" — every row is already a change; A/D stay visible.
+  const treeKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
   const activeDiff = createMemo(() => {
     // A focused comment takes over the preview until the preview applies it and
     // clears the focus; the owner then persists the file as the active selection.
@@ -123,7 +125,7 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
           diffs={diffs}
           filteredFiles={filteredFiles}
           searching={searching}
-          kinds={kinds}
+          kinds={treeKinds}
           activeDiff={activeDiff}
         />
       }

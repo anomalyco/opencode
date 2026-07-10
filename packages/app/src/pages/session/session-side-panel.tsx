@@ -18,6 +18,7 @@ import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import { normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
 import { SessionContextUsage } from "@/components/session-context-usage"
 
 const reviewTabID = "session-side-panel-review-tab"
@@ -107,11 +108,9 @@ export function SessionSidePanel(props: {
       return "mix" as const
     }
 
-    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
-
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {
-      const file = normalize(diff.file)
+      const file = normalizeFileTreeV2Path(diff.file)
       const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
 
       out.set(file, kind)
@@ -226,7 +225,6 @@ export function SessionSidePanel(props: {
     const active = activeTab()
     return active !== "review" && active !== "context" && active !== "empty"
   })
-  const browserKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
 
   createEffect(() => {
@@ -509,7 +507,7 @@ export function SessionSidePanel(props: {
                               (browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB) === SESSION_OPEN_FILE_TAB
                             }
                             active={file.pathFromTab(browserTab() ?? activeFileTab() ?? "")}
-                            kinds={browserKinds()}
+                            kinds={kinds()}
                             state={props.fileBrowserState!}
                             onSelect={(path) => previewTab(file.tab(path))}
                             onSelectPermanent={(path) => openTab(file.tab(path))}

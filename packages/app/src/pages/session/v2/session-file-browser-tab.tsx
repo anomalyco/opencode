@@ -3,7 +3,7 @@ import { createQuery } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
-import FileTree, { type Kind } from "@/components/file-tree"
+import FileTreeV2, { type Kind } from "@/components/file-tree-v2"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -111,9 +111,7 @@ export function SessionFileBrowserTab(props: {
           <Show
             when={query()}
             fallback={
-              <FileTree
-                path=""
-                class="pt-1"
+              <FileTreeV2
                 active={props.active}
                 kinds={props.kinds}
                 onFileClick={(node) => props.onSelect(node.path)}
