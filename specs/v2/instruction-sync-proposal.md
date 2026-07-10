@@ -91,7 +91,8 @@ Once per physical attempt, before input promotion:
 6. Promote pending input.
 7. Read projected messages, epoch values, blobs, and post-epoch deltas in one database transaction.
 8. Render initial instructions and interleave derived update messages by durable sequence.
-9. Recheck Session Location immediately before provider dispatch.
+
+Session movement cannot race a boundary: `MoveSession` interrupts the active drain and awaits idle before publishing `session.moved`, the same serialization Session removal uses.
 
 The blob inserts, durable event, and fold-cache advance share the event transaction.
 

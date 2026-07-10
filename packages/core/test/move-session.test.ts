@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { eq } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -15,11 +15,25 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+
+// Records the execution serialization a move must perform before relocating.
+const executionCalls: string[] = []
+const recordingExecution = Layer.succeed(
+  SessionExecution.Service,
+  SessionExecution.Service.of({
+    active: Effect.succeed(new Set()),
+    resume: () => Effect.void,
+    wake: () => Effect.void,
+    interrupt: (sessionID) => Effect.sync(() => void executionCalls.push(`interrupt:${sessionID}`)),
+    awaitIdle: (sessionID) => Effect.sync(() => void executionCalls.push(`awaitIdle:${sessionID}`)),
+  }),
+)
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -32,6 +46,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
     ]),
+    [[SessionExecution.node, recordingExecution]],
   ),
 )
 
@@ -92,10 +107,13 @@ describe("MoveSession", () => {
         .run()
         .pipe(Effect.orDie)
 
+      executionCalls.length = 0
       yield* MoveSession.Service.use((service) =>
         service.moveSession({ sessionID, destination: { directory: moved }, moveChanges: true }),
       )
 
+      // The move stops active execution before any relocation side effect.
+      expect(executionCalls).toEqual([`interrupt:${sessionID}`, `awaitIdle:${sessionID}`])
       expect(yield* Effect.promise(() => fs.readFile(path.join(moved, "tracked.txt"), "utf8"))).toBe("changed\n")
       expect(yield* Effect.promise(() => fs.readFile(path.join(moved, "untracked.txt"), "utf8"))).toBe("new\n")
       expect(yield* Effect.promise(() => fs.readFile(path.join(source, "tracked.txt"), "utf8"))).toBe("initial\n")
