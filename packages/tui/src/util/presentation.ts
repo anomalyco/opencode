@@ -1,38 +1,34 @@
+import { wordmarkGradient } from "../logo"
+
 const logo = {
   left: ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"],
   right: ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"],
 }
 
+const wordmark_logo = ["███    ███", "████  ████", "██ ████ ██", "██  ██  ██", "██      ██"]
+
 const reset = "\x1b[0m"
 const bold = "\x1b[1m"
 const dim = "\x1b[90m"
 
-function wordmark(pad = "") {
-  const draw = (line: string, fg: string, shadow: string, bg: string) =>
-    [...line]
-      .map((char) => {
-        if (char === "_") return `${bg} ${reset}`
-        if (char === "^") return `${fg}${bg}▀${reset}`
-        if (char === "~") return `${shadow}▀${reset}`
-        if (char === " ") return " "
-        return `${fg}${char}${reset}`
-      })
-      .join("")
-
-  return logo.left.map((line, index) => {
-    const left = draw(line, dim, "\x1b[38;5;235m", "\x1b[48;5;235m")
-    const right = draw(logo.right[index] ?? "", reset, "\x1b[38;5;238m", "\x1b[48;5;238m")
-    return `${pad}${left} ${right}`
+function wordmark(mode: "dark" | "light", pad = "") {
+  return wordmark_logo.map((line, index) => {
+    const hex = wordmarkGradient[mode][index] ?? wordmarkGradient[mode][wordmarkGradient[mode].length - 1]
+    const color = hex
+      .slice(1)
+      .match(/.{2}/g)!
+      .map((value) => Number.parseInt(value, 16))
+    return `${pad}\x1b[38;2;${color.join(";")}m${line}${reset}`
   })
 }
 
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
+export function sessionEpilogue(input: { title: string; sessionID?: string; mode: "dark" | "light" }) {
   const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
   return [
-    ...wordmark("  "),
+    ...wordmark(input.mode, "  "),
     "",
     `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}opencode -s ${input.sessionID}${reset}`,
+    `  ${weak("Continue")}${bold}mammouth -s ${input.sessionID}${reset}`,
     "",
   ].join("\n")
 }
