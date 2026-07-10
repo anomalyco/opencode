@@ -33,7 +33,7 @@ different order of precedence.
 Configuration files are **merged together**, not replaced.
 :::
 
-Configuration files are merged together, not replaced. Settings from the following config locations are combined. Later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
+Settings from the following config locations are combined. Later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
 
 For example, if your global config sets `autoupdate: true` and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include both settings.
 
@@ -41,16 +41,19 @@ For example, if your global config sets `autoupdate: true` and your project conf
 
 ### Precedence order
 
-Config sources are loaded in this order (later sources override earlier ones):
+Config sources are merged in this order, lowest to highest precedence (later sources override earlier ones):
 
-1. **Remote config** (from `.well-known/opencode`) - organizational defaults
-2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
-3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
-4. **Project config** (`opencode.json` in project) - project-specific settings
-5. **`.opencode` directories** - agents, commands, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
-7. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
-8. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
+| # | Source                    | Set via                                      | Role                      |
+| - | ------------------------- | -------------------------------------------- | ------------------------- |
+| 1 | Remote config             | `.well-known/opencode`                       | Organizational defaults   |
+| 2 | Global config             | `~/.config/opencode/opencode.json`           | User preferences          |
+| 3 | Custom config             | `OPENCODE_CONFIG` env var                    | Custom overrides          |
+| 4 | Project config            | `opencode.json` or `.opencode/opencode.json` | Project-specific settings |
+| 5 | `.opencode` directories   | `.opencode/` up to the Git root              | Agents, commands, plugins |
+| 6 | Inline config             | `OPENCODE_CONFIG_CONTENT` env var            | Runtime overrides         |
+| 7 | Organization config       | Logged-in account's active org               | Remote org settings       |
+| 8 | Managed config files      | Per-platform system dir                      | Admin-controlled          |
+| 9 | macOS managed preferences | `.mobileconfig` via MDM                      | Highest priority, locked  |
 
 This means project configs can override global defaults, and global configs can override remote organizational defaults. Managed settings override everything.
 
@@ -108,17 +111,24 @@ Global config overrides remote organizational defaults.
 
 ### Per project
 
-Add `opencode.json` in your project root. Project config has the highest precedence among standard config files - it overrides both global and remote configs.
+Starting in the current working directory, OpenCode traverses up to the nearest Git directory and merges every match it finds along the way.
+
+The following files are picked up **at any level between the working directory and the repository root**, in this order:
+
+- `opencode.json`
+- `opencode.jsonc`
+- `.opencode/opencode.json`
+- `.opencode/opencode.jsonc`
+
+Working directory config overrides the global config and the remote well-known defaults. Organization, managed, and MDM settings still take priority over it (see the precedence order above).
 
 For project-specific TUI settings, add `tui.json` alongside it.
 
 :::tip
-Place project specific config in the root of your project.
+Place project specific config in a `.opencode/` directory at your project root.
 :::
 
-When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
-
-This is also safe to be checked into Git and uses the same schema as the global one.
+This is safe to be checked into Git and respects the global configuration schema.
 
 ---
 
