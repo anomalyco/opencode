@@ -123,6 +123,7 @@ type ServerEntry = {
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
+const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 export interface Interface {
   readonly servers: () => Effect.Effect<ServerInfo[]>
@@ -311,7 +312,7 @@ export const layer = Layer.effect(
                   elicitationID: input.params.elicitationId,
                   message: input.params.message,
                 },
-                fields: [{ key: "elicitation", type: "external", url: input.params.url }],
+                fields: [{ key: URL_ELICITATION_FIELD_KEY, type: "external", url: input.params.url }],
               })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
@@ -355,7 +356,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
           if (!formID) return
-          yield* forms.reply({ id: formID, answer: { elicitation: true } }).pipe(Effect.ignore)
+          yield* forms.reply({ id: formID, answer: { [URL_ELICITATION_FIELD_KEY]: true } }).pipe(Effect.ignore)
         }),
     } satisfies MCPClient.ElicitationHandler
 
