@@ -10,7 +10,12 @@ function ok<T>(data: T) {
 }
 
 function form(id: string, sessionID: string): FormInfo {
-  return { id, sessionID, title: "Input requested", fields: [] }
+  return {
+    id,
+    sessionID,
+    title: "Input requested",
+    fields: [{ type: "external", url: "https://example.com/form" }],
+  }
 }
 
 function formCreated(info: FormInfo): V2Event {

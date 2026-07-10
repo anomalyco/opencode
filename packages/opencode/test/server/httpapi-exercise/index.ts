@@ -840,7 +840,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: {
         title: "External form",
-        fields: [{ type: "link", url: "https://example.com/form" }],
+        fields: [{ type: "external", url: "https://example.com/form" }],
       },
     }))
     .json(200, (body) => {
