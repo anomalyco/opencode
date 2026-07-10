@@ -160,8 +160,10 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {props.diffs.length} {language.t("ui.sessionTurn.diffs.changed")}{" "}
-          {language.t(props.diffs.length === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+          {language.t(
+            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
+            { count: String(props.diffs.length) },
+          )}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
@@ -1241,12 +1243,13 @@ export function MessageTimeline(props: {
     const initialRow = timelineRowByKey().get(props.rowKey)!
     const item = createMemo(() => virtualItemByKey().get(props.rowKey) ?? initialItem)
     const row = createMemo(() => timelineRowByKey().get(props.rowKey) ?? initialRow)
-    const asyncFile = () => {
+    const tool = () => {
       const value = row()
-      if (value._tag !== "AssistantPart" || value.group.type !== "part") return false
+      if (value._tag !== "AssistantPart" || value.group.type !== "part") return
       const part = getMsgPart(value.group.ref.messageID, value.group.ref.partID)
-      return part?.type === "tool" && ["edit", "write", "apply_patch"].includes(part.tool)
+      if (part?.type === "tool") return part
     }
+    const asyncFile = () => ["edit", "write", "apply_patch"].includes(tool()?.tool ?? "")
     const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
     let contentMeasureFrame: number | undefined
 
@@ -1276,6 +1279,8 @@ export function MessageTimeline(props: {
           width: "100%",
           height: `${item().size}px`,
           overflow: "clip",
+          // Rounded virtual measurements can otherwise clip a framed row's outer paint.
+          "overflow-clip-margin": row()._tag === "TurnGap" ? undefined : "0.5px",
         }}
       >
         <div
@@ -1381,7 +1386,7 @@ export function MessageTimeline(props: {
               "w-full": true,
               "pb-4": true,
               "pr-3": true,
-              "pl-2": settings.general.newLayoutDesigns(),
+              "pl-2.5": settings.general.newLayoutDesigns(),
               "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !settings.general.newLayoutDesigns(),
             }}
