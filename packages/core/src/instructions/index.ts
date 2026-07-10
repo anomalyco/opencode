@@ -38,6 +38,20 @@ export interface Source {
   readonly removed: (previous: Schema.Json) => string | undefined
 }
 
+export declare namespace Source {
+  /** The typed definition supplied when constructing a source. */
+  export interface Definition<A> {
+    readonly key: Key
+    readonly codec: Schema.Codec<A, Schema.Json>
+    readonly read: Effect.Effect<A | Unavailable | Removed>
+    readonly render: {
+      readonly first: (current: A) => string
+      readonly changed: (previous: A, current: A) => string
+      readonly removed?: (previous: A) => string
+    }
+  }
+}
+
 /** Ordered sources; identical values render identical bytes. */
 export type Instructions = ReadonlyArray<Source>
 
@@ -71,16 +85,7 @@ export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError
 export const empty: Instructions = []
 
 /** Closes a typed definition into one `Source`, so differently typed sources compose. */
-export function make<A>(source: {
-  readonly key: Key
-  readonly codec: Schema.Codec<A, Schema.Json>
-  readonly read: Effect.Effect<A | Unavailable | Removed>
-  readonly render: {
-    readonly first: (current: A) => string
-    readonly changed: (previous: A, current: A) => string
-    readonly removed?: (previous: A) => string
-  }
-}): Instructions {
+export function make<A>(source: Source.Definition<A>): Instructions {
   const decode = Schema.decodeUnknownOption(source.codec)
   const encode = Schema.encodeSync(source.codec)
   const first = (value: A) => requireText(source.key, "first", source.render.first(value))
