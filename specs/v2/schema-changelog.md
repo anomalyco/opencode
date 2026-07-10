@@ -1,5 +1,7 @@
 # V2 Schema Changelog
 
+Status: **Historical pre-release compatibility ledger.** Older entries retain the names and behavior that were accurate when written; current contracts live in Protocol, Schema, Core, and the indexed specifications.
+
 ## 2026-07-09: Make Session Input Storage Pending-Only And Rename It To Session Pending
 
 - Rename the `SessionInput` schema namespace to `SessionPending` and the `session_input` table to `session_pending`.
@@ -147,9 +149,7 @@ Compatibility:
 - Preserve full durable history; compaction changes only the active model representation.
 - Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
 
-Record V2 database, durable-event, projected-message, HTTP, and generated SDK schema changes here. Each entry states why the contract changed and whether consumers or stored data need compatibility handling. Commit messages for schema-affecting changes should include the same summary.
-
-This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
+The entries below record meaningful contract changes from the pre-release V2 rebuild. Mechanical file moves and internal refactors were omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
 
 ## 2026-06-04 Event-Sourced Session Input Cutover
 
@@ -905,7 +905,7 @@ Change:
 - Request Context Epoch replacement after an agent switch, dynamically re-observe the effective agent during retries, and fence first-epoch creation against the authoritative effective agent.
 - Fence existing-epoch replacement against the authoritative effective agent and block cross-agent provider turns while replacement context is unavailable.
 - Group the System Context algebra, registry, and built-ins under `system-context/`; keep source producers and Context Epoch persistence with their owning Skill, instruction, and Session modules; rename projected conversation selection to Session History.
-- Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
+- Add the then-current V1-to-V2 runtime-context parity checklist to `specs/v2/session.md` (later removed with the completed migration plan).
 
 Compatibility:
 

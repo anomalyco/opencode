@@ -1,8 +1,8 @@
 # Catalog / Config / Plugin Lifecycle Options
 
-Status: current core has selected replayable Location-scoped Catalog transforms, aligned with option B. Reload/watch behavior and deferred external plugin activation remain design work; the option comparison below is retained as historical context.
+Status: **Historical decision record.** Option B, replayable Location-scoped Catalog transforms, was selected and implemented. All interfaces and flows below are historical option sketches, not current API reference; current behavior is owned by Core.
 
-We need to choose where provider/model inputs live and how visible catalog state changes after boot. The designs below compare config, models.dev, auth, plugin activation/disablement, config edits, and policy changes under each option.
+The decision compared where provider/model inputs live and how visible catalog state changes after boot. The designs below preserve that comparison.
 
 ## Scenarios
 
@@ -15,7 +15,7 @@ We need to choose where provider/model inputs live and how visible catalog state
 - Config edit: authored configuration changes while the location is open.
 - Policy: allowed/denied provider selection changes after providers exist.
 
-## A. Config Transforms, Service Reload
+## A. Rejected: Config Transforms, Service Reload
 
 `Config` merges its ordered documents and then runs ordered, replayable plugin transforms. Each transform is a callback receiving `Draft<Config.Info>` and may mutate any config field.
 
@@ -27,13 +27,9 @@ const transform = yield * Config.transform()
 yield *
   transform((config) => {
     config.providers ??= {}
-    config.providers.acme = {
-      /* ... */
-    }
+    config.providers.acme = {/* ... */}
     config.model = "acme/code"
-    config.permissions = [
-      /* ... */
-    ]
+    config.permissions = [/* ... */]
   })
 ```
 
@@ -188,7 +184,7 @@ policy config changes
 - One reload produces at most one `Catalog.Event.Updated` notification.
 - Deferred plugin activation avoids blocking readiness, but plugin completions may cause repeated full-service reload batches during startup.
 
-## B. Catalog Transforms
+## B. Selected: Catalog Transforms
 
 Plugins register replayable catalog transforms. Each transform receives a `Catalog.Editor` whose helper methods mutate a private catalog draft; `Catalog` rematerializes visible records from its active transforms.
 
