@@ -5,7 +5,6 @@ import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
-  SessionReviewV2SidebarToggle,
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
 import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
@@ -113,9 +112,6 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebarOpened()}
-      sidebarToggle={
-        <SessionReviewV2SidebarToggle opened={props.state.sidebarOpened()} onToggle={props.state.toggleSidebar} />
-      }
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.

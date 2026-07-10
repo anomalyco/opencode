@@ -1,6 +1,6 @@
 import { createMemo, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import { createSortable } from "@thisbeyond/solid-dnd"
+import { useSortable } from "@dnd-kit/solid/sortable"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -31,6 +31,7 @@ export function FileVisual(props: { path: string; active?: boolean; temporary?: 
 
 export function SortableTab(props: {
   tab: string
+  index: () => number
   temporary?: boolean
   onTabClose: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
@@ -38,7 +39,14 @@ export function SortableTab(props: {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
-  const sortable = createSortable(props.tab)
+  const sortable = useSortable({
+    get id() {
+      return props.tab
+    },
+    get index() {
+      return props.index()
+    },
+  })
   const path = createMemo(() => file.pathFromTab(props.tab))
   const content = createMemo(() => {
     const value = path()
@@ -46,7 +54,7 @@ export function SortableTab(props: {
     return <FileVisual path={value} temporary={props.temporary} />
   })
   return (
-    <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
+    <div ref={sortable.ref} class="h-full flex items-center">
       <div class="relative">
         <Tabs.Trigger
           value={props.tab}

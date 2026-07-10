@@ -7,7 +7,7 @@ import {
   SessionFilePanelV2Empty,
   SessionFilePanelV2Title,
 } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
-import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
+import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
 import FileTree, { type Kind } from "@/components/file-tree"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -98,12 +98,9 @@ export function SessionFileBrowserTab(props: {
       <SessionFilePanelV2
         toolbar
         toolbarStart={
-          <>
-            <SessionReviewV2SidebarToggle opened={sidebarOpened()} onToggle={props.state.toggleSidebar} />
-            <Show when={!sidebarOpened()}>
-              <SessionFilePanelV2Title>{title()}</SessionFilePanelV2Title>
-            </Show>
-          </>
+          <Show when={!sidebarOpened()}>
+            <SessionFilePanelV2Title>{title()}</SessionFilePanelV2Title>
+          </Show>
         }
         sidebar={
           <SessionReviewV2Sidebar

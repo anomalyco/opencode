@@ -26,7 +26,6 @@ export type SessionReviewV2Props = {
   empty?: JSX.Element
   sidebarOpen?: boolean
   sidebar?: JSX.Element
-  sidebarToggle?: JSX.Element
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
@@ -199,7 +198,6 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
 
   const toolbarStart = () => (
     <>
-      {props.sidebarToggle}
       <Show when={showCollapsedMeta()}>
         <div data-slot="session-review-v2-toolbar-collapsed-meta">
           <Show when={title()}>
