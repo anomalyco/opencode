@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
+  "theme": "linden",
   "name": "OpenCode",
   "description": "OpenCode documentation.",
   "colors": {
