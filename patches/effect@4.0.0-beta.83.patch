@@ -1,0 +1,57 @@
+diff --git a/dist/unstable/httpapi/HttpApiSchema.js b/dist/unstable/httpapi/HttpApiSchema.js
+index ecb6603d1ee4e89e92174b3a1100e8c9c720b3f3..08b832b6b3e9e4d10df156eca36b16f571f67f6e 100644
+--- a/dist/unstable/httpapi/HttpApiSchema.js
++++ b/dist/unstable/httpapi/HttpApiSchema.js
+@@ -151,7 +151,7 @@ export const StreamSse = options => {
+   const events = options.events ?? (options.data === undefined ? undefined : Schema.Struct({
+     id: Schema.UndefinedOr(Schema.String),
+     event: Schema.String,
+-    data: Schema.fromJsonString(options.data)
++    data: sseDataJsonSchema(options.data)
+   }));
+   if (events === undefined) {
+     throw new Error("StreamSse requires either an events schema or a data schema");
+@@ -166,6 +166,14 @@ export const StreamSse = options => {
+     error: options.error ?? Schema.Never
+   });
+ };
++const sseDataJsonSchema = data => {
++  const identifier = SchemaAST.resolveIdentifier(data.ast);
++  return identifier === undefined ? Schema.fromJsonString(data) : Schema.fromJsonString(data).annotate({
++    // The SSE transport field is a JSON string. Give that wrapper its own
++    // OpenAPI identifier so it does not claim the decoded data schema's name.
++    identifier: `${identifier}Stream`
++  });
++};
+ /**
+  * Creates a streaming `Uint8Array` success response schema.
+  *
+diff --git a/src/unstable/httpapi/HttpApiSchema.ts b/src/unstable/httpapi/HttpApiSchema.ts
+index f2920365cf0328146523ce2e2dba04d6a8809a4a..5482d635cdf01a72063ff683d244fab891910211 100644
+--- a/src/unstable/httpapi/HttpApiSchema.ts
++++ b/src/unstable/httpapi/HttpApiSchema.ts
+@@ -433,7 +433,7 @@ export const StreamSse: {
+   const events = options.events ?? (options.data === undefined ? undefined : Schema.Struct({
+     id: Schema.UndefinedOr(Schema.String),
+     event: Schema.String,
+-    data: Schema.fromJsonString(options.data)
++    data: sseDataJsonSchema(options.data)
+   }))
+   if (events === undefined) {
+     throw new Error("StreamSse requires either an events schema or a data schema")
+@@ -449,6 +449,15 @@ export const StreamSse: {
+   })
+ }
+ 
++const sseDataJsonSchema = (data: Schema.Constraint) => {
++  const identifier = SchemaAST.resolveIdentifier(data.ast)
++  return identifier === undefined ? Schema.fromJsonString(data) : Schema.fromJsonString(data).annotate({
++    // The SSE transport field is a JSON string. Give that wrapper its own
++    // OpenAPI identifier so it does not claim the decoded data schema's name.
++    identifier: `${identifier}Stream`
++  })
++}
++
+ /**
+  * Creates a streaming `Uint8Array` success response schema.
+  *

@@ -1,18 +1,15 @@
 export * as PtyTicket from "./ticket"
 
 import { WorkspaceV2 } from "../workspace"
-import { PositiveInt } from "../schema"
+import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { PtyID } from "./schema"
-import { Cache, Context, Duration, Effect, Layer, Schema } from "effect"
-import { LayerNode } from "../effect/layer-node"
+import { Cache, Context, Duration, Effect, Layer } from "effect"
+import { makeGlobalNode } from "../effect/app-node"
 
 const DEFAULT_TTL = Duration.seconds(60)
 const CAPACITY = 10_000
 
-export const ConnectToken = Schema.Struct({
-  ticket: Schema.String,
-  expires_in: PositiveInt,
-})
+export const ConnectToken = PtyTicket.ConnectToken
 
 export type Scope = {
   readonly ptyID: PtyID
@@ -54,7 +51,6 @@ export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
     })
   })
 
-export const layer = Layer.effect(Service, make())
+const layer = Layer.effect(Service, make())
 
-export const defaultLayer = layer
-export const node = LayerNode.make(layer, [])
+export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })

@@ -25,11 +25,11 @@ export interface McpOAuthCallbacks {
 
 export class McpOAuthProvider implements OAuthClientProvider {
   constructor(
-    private mcpName: string,
-    private serverUrl: string,
-    private config: McpOAuthConfig,
+    protected mcpName: string,
+    protected serverUrl: string,
+    protected config: McpOAuthConfig,
     private callbacks: McpOAuthCallbacks,
-    private auth: McpAuth.Interface,
+    protected auth: McpAuth.Interface,
   ) {}
 
   get redirectUrl(): string {
@@ -53,7 +53,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    // Check config first (pre-registered client)
     if (this.config.clientId) {
       return {
         client_id: this.config.clientId,
@@ -164,10 +163,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   async invalidateCredentials(type: "all" | "client" | "tokens"): Promise<void> {
     const entry = await Effect.runPromise(this.auth.get(this.mcpName))
-    if (!entry) {
-      return
-    }
-
+    if (!entry) return
     switch (type) {
       case "all":
         await Effect.runPromise(this.auth.remove(this.mcpName))
@@ -181,6 +177,63 @@ export class McpOAuthProvider implements OAuthClientProvider {
         await Effect.runPromise(this.auth.set(this.mcpName, entry))
         break
     }
+  }
+}
+
+export class McpOAuthPendingProvider extends McpOAuthProvider {
+  private pendingClientInfo?: OAuthClientInformationFull
+  private pendingTokens?: OAuthTokens
+
+  override async clientInformation(): Promise<OAuthClientInformation | undefined> {
+    if (!this.config.clientId) return this.pendingClientInfo
+    return {
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+    }
+  }
+
+  override async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+    this.pendingClientInfo = info
+  }
+
+  override async tokens(): Promise<OAuthTokens | undefined> {
+    return this.pendingTokens
+  }
+
+  override async saveTokens(tokens: OAuthTokens): Promise<void> {
+    this.pendingTokens = tokens
+  }
+
+  override async invalidateCredentials(type: "all" | "client" | "tokens"): Promise<void> {
+    if (type === "all" || type === "client") this.pendingClientInfo = undefined
+    if (type === "all" || type === "tokens") this.pendingTokens = undefined
+  }
+
+  async commit(): Promise<void> {
+    if (!this.pendingTokens) return
+    await Effect.runPromise(
+      this.auth.set(
+        this.mcpName,
+        {
+          tokens: {
+            accessToken: this.pendingTokens.access_token,
+            refreshToken: this.pendingTokens.refresh_token,
+            expiresAt: this.pendingTokens.expires_in ? Date.now() / 1000 + this.pendingTokens.expires_in : undefined,
+            scope: this.pendingTokens.scope,
+          },
+          clientInfo:
+            this.pendingClientInfo && !this.config.clientId
+              ? {
+                  clientId: this.pendingClientInfo.client_id,
+                  clientSecret: this.pendingClientInfo.client_secret,
+                  clientIdIssuedAt: this.pendingClientInfo.client_id_issued_at,
+                  clientSecretExpiresAt: this.pendingClientInfo.client_secret_expires_at,
+                }
+              : undefined,
+        },
+        this.serverUrl,
+      ),
+    )
   }
 }
 
