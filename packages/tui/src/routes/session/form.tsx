@@ -16,14 +16,9 @@ import { useBindings, useOpencodeModeStack } from "../../keymap"
 const FORM_MODE = "form"
 
 type Field = Exclude<FormField, { type: "external" }>
-type ExternalField = Extract<FormField, { type: "external" }>
 
 function isField(field: FormField): field is Field {
   return field.type !== "external"
-}
-
-function isExternal(field: FormField): field is ExternalField {
-  return field.type === "external"
 }
 
 function fieldLabel(field: FormField) {
@@ -35,7 +30,7 @@ function truncate(label: string, max: number) {
 }
 
 function validateText(field: Field, text: string): string | undefined {
-  if (field.type !== "string") return
+  if (field.type !== "string") return undefined
   if (field.minLength !== undefined && text.length < field.minLength)
     return `Must be at least ${field.minLength} characters`
   if (field.maxLength !== undefined && text.length > field.maxLength)
@@ -61,17 +56,19 @@ function validateText(field: Field, text: string): string | undefined {
       return "Expected a date (YYYY-MM-DD)"
   }
   if (field.format === "date-time" && Number.isNaN(new Date(text).getTime())) return "Expected a date and time"
+  return undefined
 }
 
-function validateSelection(field: Field, value: FormValue | undefined) {
-  if (field.type !== "multiselect" || value === undefined) return
+function validateSelection(field: Field, value: FormValue | undefined): string | undefined {
+  if (field.type !== "multiselect" || value === undefined) return undefined
   if (!Array.isArray(value)) return "Expected selections"
   if (field.required && value.length === 0) return "Select at least one option"
   if (field.minItems !== undefined && value.length < field.minItems) return `Select at least ${field.minItems}`
   if (field.maxItems !== undefined && value.length > field.maxItems) return `Select at most ${field.maxItems}`
+  return undefined
 }
 
-function validateValue(field: Field, value: FormValue | undefined) {
+function validateValue(field: Field, value: FormValue | undefined): string | undefined {
   if (value === undefined) return field.required ? "Answer required" : undefined
   if (field.required && (value === "" || (Array.isArray(value) && value.length === 0))) {
     return field.type === "multiselect" ? "Select at least one option" : "Answer required"
@@ -83,14 +80,14 @@ function validateValue(field: Field, value: FormValue | undefined) {
     if (field.options && !field.custom && !field.options.some((option) => option.value === value)) {
       return "Select an available option"
     }
-    return
+    return undefined
   }
   if (field.type === "number" || field.type === "integer") {
     if (typeof value !== "number" || !Number.isFinite(value)) return "Expected a number"
     if (field.type === "integer" && !Number.isInteger(value)) return "Expected an integer"
     if (typeof field.minimum === "number" && value < field.minimum) return `Must be at least ${field.minimum}`
     if (typeof field.maximum === "number" && value > field.maximum) return `Must be at most ${field.maximum}`
-    return
+    return undefined
   }
   if (field.type === "boolean") return typeof value === "boolean" ? undefined : "Expected yes or no"
   const invalid = validateSelection(field, value)
@@ -102,6 +99,7 @@ function validateValue(field: Field, value: FormValue | undefined) {
   ) {
     return "Select only available options"
   }
+  return undefined
 }
 
 function fieldRows(field: Field): { value: FormValue; label: string; description?: string }[] {
@@ -128,11 +126,6 @@ function selectedRow(field: Field | undefined, value: FormValue | undefined) {
   return 0
 }
 
-function customDefault(field: Field) {
-  if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return
-  if (!field.options.some((option) => option.value === field.default)) return field.default
-}
-
 function display(field: Field, value: FormValue | undefined) {
   if (value === undefined) return ""
   const label = (item: string | number | boolean) =>
@@ -152,10 +145,6 @@ function requestOptions(form: FormWithLocation) {
 }
 
 export function FormPrompt(props: { form: FormWithLocation }) {
-  return <FieldsPrompt form={props.form} />
-}
-
-function FieldsPrompt(props: { form: FormWithLocation }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -164,22 +153,23 @@ function FieldsPrompt(props: { form: FormWithLocation }) {
   const modeStack = useOpencodeModeStack()
   const clipboard = useClipboard()
   const toast = useToast()
-  const configuredFields = () => props.form.fields.filter(isField)
+  const configuredFields = props.form.fields.filter(isField)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
     answers: Object.fromEntries(
-      configuredFields().flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
+      configuredFields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
     ) as Record<string, FormValue | undefined>,
     custom: Object.fromEntries(
-      configuredFields().flatMap((field) => {
-        const value = customDefault(field)
-        return value === undefined ? [] : [[field.key, value]]
+      configuredFields.flatMap((field) => {
+        if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return []
+        if (field.options.some((option) => option.value === field.default)) return []
+        return [[field.key, field.default]]
       }),
     ) as Record<string, string>,
     externalReady: {} as Record<string, boolean>,
-    selected: selectedRow(configuredFields()[0], configuredFields()[0]?.default),
+    selected: selectedRow(configuredFields[0], configuredFields[0]?.default),
     editing: false,
     error: "",
   })
@@ -208,11 +198,10 @@ function FieldsPrompt(props: { form: FormWithLocation }) {
   const single = createMemo(() => {
     const list = fields()
     if (list.length !== 1) return false
-    const field = list[0]!
+    const field = list[0]
     if (field.type === "external") return false
     return field.type === "boolean" || (field.type === "string" && field.options !== undefined)
   })
-  const answerable = createMemo(() => fields().filter(isField))
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
   const tabbed = createMemo(() => {
     const width = fields().reduce((sum, item) => sum + truncate(fieldLabel(item), 24).length + 3, "Confirm".length + 3)
@@ -232,7 +221,7 @@ function FieldsPrompt(props: { form: FormWithLocation }) {
   })
   const externalField = createMemo(() => {
     const current = field()
-    return current && isExternal(current) ? current : undefined
+    return current?.type === "external" ? current : undefined
   })
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
   const rows = createMemo(() => {
@@ -534,7 +523,9 @@ function FieldsPrompt(props: { form: FormWithLocation }) {
       setStore("error", `External action must be acknowledged: ${fieldLabel(unacknowledged)}`)
       return
     }
-    const invalid = answerable().find((field) => validateValue(field, store.answers[field.key]))
+    const invalid = fields()
+      .filter(isField)
+      .find((field) => validateValue(field, store.answers[field.key]))
     if (invalid) {
       setStore("error", validateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
       return
