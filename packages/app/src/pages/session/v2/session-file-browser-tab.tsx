@@ -2,11 +2,7 @@ import { createMemo, createSignal, createUniqueId, Show } from "solid-js"
 import { createQuery } from "@tanstack/solid-query"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
-import {
-  SessionFilePanelV2,
-  SessionFilePanelV2Empty,
-  SessionFilePanelV2Title,
-} from "@opencode-ai/session-ui/v2/session-file-panel-v2"
+import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
 import FileTree, { type Kind } from "@/components/file-tree"
 import { useFile } from "@/context/file"
@@ -96,12 +92,7 @@ export function SessionFileBrowserTab(props: {
   return (
     <Tabs.Content value={props.tab} class="h-full min-h-0 overflow-hidden">
       <SessionFilePanelV2
-        toolbar
-        toolbarStart={
-          <Show when={!sidebarOpened()}>
-            <SessionFilePanelV2Title>{title()}</SessionFilePanelV2Title>
-          </Show>
-        }
+        toolbar={false}
         sidebar={
           <SessionReviewV2Sidebar
             open={sidebarOpened()}
