@@ -1,7 +1,7 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
+  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE", "FENGRU_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE", "FENGRU_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {
@@ -14,10 +14,6 @@
       "passThroughEnv": ["*"]
     },
     "@opencode-ai/app#test": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "@opencode-ai/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

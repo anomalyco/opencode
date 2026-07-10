@@ -14,12 +14,12 @@ import { AttentionSoundName, type TuiConfig } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"
-import defaultSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
-import questionSoundPath from "@opencode-ai/ui/audio/bip-bop-03.mp3" with { type: "file" }
-import permissionSoundPath from "@opencode-ai/ui/audio/staplebops-06.mp3" with { type: "file" }
-import errorSoundPath from "@opencode-ai/ui/audio/nope-03.mp3" with { type: "file" }
-import doneSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
-import subagentDoneSoundPath from "@opencode-ai/ui/audio/yup-01.mp3" with { type: "file" }
+import defaultSoundPath from "./assets/bip-bop-01.mp3" with { type: "file" }
+import questionSoundPath from "./assets/bip-bop-03.mp3" with { type: "file" }
+import permissionSoundPath from "./assets/staplebops-06.mp3" with { type: "file" }
+import errorSoundPath from "./assets/nope-03.mp3" with { type: "file" }
+import doneSoundPath from "./assets/bip-bop-01.mp3" with { type: "file" }
+import subagentDoneSoundPath from "./assets/yup-01.mp3" with { type: "file" }
 
 type FocusState = "unknown" | "focused" | "blurred"
 

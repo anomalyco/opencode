@@ -1,4 +1,4 @@
-# opencode database guide
+# fengru database guide
 
 ## Database
 
@@ -8,9 +8,9 @@
 ## Development server
 
 - Running `bun dev` from `packages/opencode` starts the live interactive TUI. Do not run it as a blocking foreground command when you need to inspect the result.
-- Start it in `tmux` instead: `tmux new-session -d -s opencode-dev 'bun dev'`.
-- Capture the current TUI output with: `tmux capture-pane -pt opencode-dev`.
-- Stop the session explicitly when done: `tmux kill-session -t opencode-dev`.
+- Start it in `tmux` instead: `tmux new-session -d -s fengru-dev 'bun dev'`.
+- Capture the current TUI output with: `tmux capture-pane -pt fengru-dev`.
+- Stop the session explicitly when done: `tmux kill-session -t fengru-dev`.
 
 # Module shape
 
@@ -69,7 +69,7 @@ import { SessionStatus } from "@/session/status"
 Barrels in multi-sibling directories force every import through the barrel to
 evaluate every sibling, which defeats tree-shaking and slows module load.
 
-# opencode Effect rules
+# fengru Effect rules
 
 Use these rules when writing or migrating Effect code.
 

@@ -5,22 +5,21 @@
   skill's content.
 -->
 
-# Customizing opencode
+# Customizing Fengru
 
-opencode validates its own config strictly and refuses to start when a field
+Fengru validates its own config strictly and refuses to start when a field
 is wrong. The shapes below cover the common surface area, but they are a
 **summary, not the source of truth**.
 
 ## Full schema reference
 
 The authoritative list of every config option — with field types, enums,
-defaults, and descriptions — lives in the published JSON Schema:
-
-**<https://opencode.ai/config.json>**
+defaults, and descriptions — lives in the published JSON Schema (see the upstream
+OpenCode project at https://opencode.ai/config.json).
 
 If a field is not documented in this skill, or you need to confirm an exact
 shape before writing config, **fetch that URL and read the schema directly**
-rather than guessing. opencode hard-fails on invalid config, so the cost of a
+rather than guessing. Fengru hard-fails on invalid config, so the cost of a
 wrong shape is a broken startup.
 
 Independently, every `opencode.json` should declare

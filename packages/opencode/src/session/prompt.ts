@@ -59,6 +59,8 @@ import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
+import { EnginePromptService } from "./prompt-engine"
+import { EnginePrompt } from "./prompt-engine"
 import { LLMEvent } from "@opencode-ai/llm"
 
 // @ts-ignore
@@ -123,6 +125,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const engineSvc = yield* Effect.serviceOption(EnginePromptService)
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -1120,6 +1123,90 @@ export const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
+
+      if (Option.isSome(engineSvc) && engineSvc.value.isEnabled) {
+        // eslint-disable-next-line
+        const textParts = message.parts.filter((p: any) => p.type === "text") as Array<{ text?: string }>
+        const goalText = textParts.map((p) => p.text ?? "").join("\n")
+        if (goalText) {
+          yield* Effect.logInfo("SessionPrompt.engine", { sessionID: input.sessionID, goal: goalText.substring(0, 80) })
+
+          const engine = engineSvc.value.getAdapter().getEngine()
+          const hasTools = engine && engine.registry.getAll().length > 0
+          if (!hasTools) {
+            yield* Effect.logInfo("SessionPrompt.engineFallback", { sessionID: input.sessionID, reason: "no tools registered" })
+            return yield* loop({ sessionID: input.sessionID })
+          }
+
+          // Create engine result message upfront so streaming can update it in-place
+          const engineInfo = yield* Effect.gen(function* () {
+            const ag = input.agent ? yield* agents.get(input.agent) : yield* agents.defaultInfo()
+            const model = yield* currentModel(input.sessionID)
+            const ctx = yield* InstanceState.context
+            const agentName = input.agent ?? ag?.name ?? ""
+
+            const info = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              role: "assistant" as const,
+              parentID: message.info.id,
+              sessionID: input.sessionID,
+              mode: input.agent ?? "",
+              agent: agentName,
+              modelID: model.modelID as ModelV2.ID,
+              providerID: model.providerID as ProviderV2.ID,
+              path: { cwd: ctx.directory, root: ctx.worktree },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: Date.now() },
+            })
+            const part = yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: info.id,
+              sessionID: input.sessionID,
+              type: "text",
+              text: "Planning engine task...",
+            })
+            return { info, part }
+          })
+
+          // Run engine → stream progress → finalize message
+          yield* engineSvc.value.runEngineLoop(
+            input.sessionID,
+            goalText,
+            input.agent ?? "",
+            () => Effect.succeed(message),
+            // Final message: update the pre-created message with final text
+            (finalText: string) =>
+              Effect.gen(function* () {
+                yield* sessions.updatePart({
+                  id: engineInfo.part.id,
+                  messageID: engineInfo.info.id,
+                  sessionID: input.sessionID,
+                  type: "text",
+                  text: finalText,
+                } as any)
+                return { info: engineInfo.info, parts: [engineInfo.part] } as SessionV1.WithParts
+              }),
+            // Streaming progress: update text in-place after each step
+            (progressText: string) =>
+              Effect.gen(function* () {
+                yield* sessions.updatePart({
+                  id: engineInfo.part.id,
+                  messageID: engineInfo.info.id,
+                  sessionID: input.sessionID,
+                  type: "text",
+                  text: progressText,
+                } as any)
+              }),
+          )
+          // "full" mode: engine only, no loop. "tool" mode: chain into loop
+          if (engineSvc.value.mode === "full") {
+            return yield* lastAssistant(input.sessionID)
+          }
+          return yield* loop({ sessionID: input.sessionID })
+        }
+      }
+
       return yield* loop({ sessionID: input.sessionID })
     })
 
@@ -1582,6 +1669,9 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
+        EnginePrompt.enabledLayer({ enabled: true, mode: "tool" }).pipe(
+          Layer.provide(ToolRegistry.defaultLayer),
+        ),
       ),
     ),
   ),

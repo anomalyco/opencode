@@ -7,11 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/Fengrru/Fengru.git",
     "directory": "packages/http-recorder"
   },
-  "homepage": "https://github.com/anomalyco/opencode/tree/dev/packages/http-recorder",
-  "bugs": "https://github.com/anomalyco/opencode/issues",
+  "homepage": "https://github.com/Fengrru/Fengru/tree/dev/packages/http-recorder",
+  "bugs": "https://github.com/Fengrru/Fengru/issues",
   "keywords": [
     "effect",
     "http",

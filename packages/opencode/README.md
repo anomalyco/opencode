@@ -1,15 +1,18 @@
-# js
+# Fengru
 
-To install dependencies:
+Fengru is the main package of the Fengru project — an open source AI coding agent with transactional execution runtime.
+
+## Development
 
 ```bash
 bun install
+bun dev
 ```
 
-To run:
+## Build
 
 ```bash
-bun run index.ts
+bun run script/build.ts --single
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+This package uses Bun and the Effect-TS framework. See the root [CONTEXT.md](../../CONTEXT.md) for the complete runtime architecture.

@@ -44,7 +44,7 @@ it.live("live filesystem or process behavior", () =>
 
 - `it.effect(...)` — pure Effect behavior with `TestClock` and
   `TestConsole`.
-- `it.instance(...)` — service behavior that needs one scoped opencode
+- `it.instance(...)` — service behavior that needs one scoped fengru
   instance.
 - `it.live(...)` — real time, filesystem mtimes, child processes, git,
   locks, servers, watchers, or OS behavior.
