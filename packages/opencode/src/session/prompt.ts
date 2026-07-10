@@ -1340,11 +1340,10 @@ const layer = Layer.effect(
       },
     )
 
-    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
-      input: LoopInput,
-    ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
-    })
+    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = (input: LoopInput) =>
+      state
+        .ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+        .pipe(Effect.withSpan("SessionPrompt.loop", { root: true, attributes: { "session.id": input.sessionID } }))
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
