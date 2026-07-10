@@ -34,9 +34,9 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.4.3",
-    "@opentui/keymap": ">=0.4.3",
-    "@opentui/solid": ">=0.4.3"
+    "@opentui/core": "0.0.0-20260711-50570ec3",
+    "@opentui/keymap": "0.0.0-20260711-50570ec3",
+    "@opentui/solid": "0.0.0-20260711-50570ec3"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {

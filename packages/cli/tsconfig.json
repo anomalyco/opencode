@@ -6,5 +6,6 @@
     "jsxImportSource": "@opentui/solid",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "noUncheckedIndexedAccess": false
-  }
+  },
+  "exclude": ["dist", "dist-node"]
 }
