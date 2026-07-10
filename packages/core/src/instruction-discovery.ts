@@ -84,11 +84,7 @@ const layer = Layer.effect(
       load: () =>
         observe().pipe(
           Effect.map((files) =>
-            files === Instructions.unavailable
-              ? source(files)
-              : files.length === 0
-                ? source(Instructions.removed)
-                : source(files),
+            Array.isArray(files) && files.length === 0 ? source(Instructions.removed) : source(files),
           ),
           Effect.catch(() => Effect.succeed(source(Instructions.unavailable))),
           Effect.catchDefect(() => Effect.succeed(source(Instructions.unavailable))),

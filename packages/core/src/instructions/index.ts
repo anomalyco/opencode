@@ -2,7 +2,7 @@ export * as Instructions from "./index"
 
 import { createHash } from "crypto"
 import { Instruction } from "@opencode-ai/schema/instruction"
-import { Effect, Option, Schema } from "effect"
+import { Data, Effect, Option, Schema } from "effect"
 
 export const Key = Instruction.Key
 export type Key = Instruction.Key
@@ -13,36 +13,33 @@ export type Values = Instruction.Values
 export const Delta = Instruction.Delta
 export type Delta = Instruction.Delta
 
-export const unavailable = Symbol.for("@opencode/Instructions.Unavailable")
+type NonValue = Data.TaggedEnum<{ Unavailable: {}; Removed: {} }>
+const NonValue = Data.taggedEnum<NonValue>()
+
+/** The read failed temporarily; the stored value stands. */
+export const unavailable = NonValue.Unavailable()
 export type Unavailable = typeof unavailable
 
-export const removed = Symbol.for("@opencode/Instructions.Removed")
+/** An observed absence: the source exists but its value is gone. */
+export const removed = NonValue.Removed()
 export type Removed = typeof removed
 
-export interface Source<A> {
-  readonly key: Key
-  readonly codec: Schema.Codec<A, Schema.Json>
-  readonly read: Effect.Effect<A | Unavailable | Removed>
-  readonly render: {
-    readonly first: (current: A) => string
-    readonly changed: (previous: A, current: A) => string
-    readonly removed?: (previous: A) => string
-  }
-}
-
-const InstructionsTypeId: unique symbol = Symbol.for("@opencode/Instructions")
-
-export interface Instructions {
-  readonly [InstructionsTypeId]: ReadonlyArray<PackedSource>
-}
-
-interface PackedSource {
+/**
+ * One composable instruction source over canonical JSON — the same
+ * representation that is hashed, stored, and replayed. `make` builds one from
+ * a typed definition; renderers returning `undefined` skip (undecodable or
+ * unrenderable historical values).
+ */
+export interface Source {
   readonly key: Key
   readonly read: Effect.Effect<Schema.Json | Unavailable | Removed>
   readonly first: (value: Schema.Json) => string | undefined
   readonly changed: (previous: Schema.Json, current: Schema.Json) => string | undefined
   readonly removed: (previous: Schema.Json) => string | undefined
 }
+
+/** Ordered sources; identical values render identical bytes. */
+export type Instructions = ReadonlyArray<Source>
 
 export type ReadResult = ReadonlyArray<{
   readonly key: Key
@@ -71,20 +68,30 @@ export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError
   }
 }
 
-export const empty = instructions([])
+export const empty: Instructions = []
 
-export function make<A>(source: Source<A>): Instructions {
+/** Closes a typed definition into one `Source`, so differently typed sources compose. */
+export function make<A>(source: {
+  readonly key: Key
+  readonly codec: Schema.Codec<A, Schema.Json>
+  readonly read: Effect.Effect<A | Unavailable | Removed>
+  readonly render: {
+    readonly first: (current: A) => string
+    readonly changed: (previous: A, current: A) => string
+    readonly removed?: (previous: A) => string
+  }
+}): Instructions {
   const decode = Schema.decodeUnknownOption(source.codec)
   const encode = Schema.encodeSync(source.codec)
   const first = (value: A) => requireText(source.key, "first", source.render.first(value))
   const decodeValue = (value: Schema.Json) => Option.getOrUndefined(decode(value))
-  return instructions([
+  return [
     {
       key: source.key,
       read: source.read.pipe(
-        Effect.map((value): Schema.Json | Unavailable | Removed => {
-          if (value === unavailable) return unavailable
-          if (value === removed) return removed
+        Effect.map((value) => {
+          if (isUnavailable(value)) return unavailable
+          if (isRemoved(value)) return removed
           return encode(value)
         }),
       ),
@@ -106,42 +113,35 @@ export function make<A>(source: Source<A>): Instructions {
           : requireText(source.key, "removed", source.render.removed(decoded))
       },
     },
-  ])
+  ]
 }
 
 export function combine(values: ReadonlyArray<Instructions>): Instructions {
-  const sources = values.flatMap((value) => value[InstructionsTypeId])
+  const sources = values.flat()
   const keys = new Set<Key>()
   for (const source of sources) {
     if (keys.has(source.key)) throw new DuplicateKeyError({ key: source.key })
     keys.add(source.key)
   }
-  return instructions(sources)
+  return sources
 }
 
 export function read(value: Instructions): Effect.Effect<ReadResult> {
   return Effect.forEach(
-    value[InstructionsTypeId],
-    (source) =>
-      source.read.pipe(
-        Effect.map((observed): ReadResult[number] => {
-          if (observed === unavailable) return { key: source.key, value: unavailable }
-          if (observed === removed) return { key: source.key, value: removed }
-          return { key: source.key, value: observed }
-        }),
-      ),
+    value,
+    (source) => source.read.pipe(Effect.map((observed) => ({ key: source.key, value: observed }))),
     { concurrency: "unbounded" },
   )
 }
 
 export function diff(observed: ReadResult, previous?: Values): Effect.Effect<Admission, InitializationBlocked> {
-  const blocked = previous ? [] : observed.flatMap((entry) => (entry.value === unavailable ? [entry.key] : []))
+  const blocked = previous ? [] : observed.flatMap((entry) => (isUnavailable(entry.value) ? [entry.key] : []))
   if (blocked.length > 0) return Effect.fail(new InitializationBlocked({ keys: blocked }))
   const delta: Record<string, Hash | Instruction.Removed> = {}
   const blobs: Record<string, Schema.Json> = {}
   for (const entry of observed) {
-    if (entry.value === unavailable) continue
-    if (entry.value === removed) {
+    if (isUnavailable(entry.value)) continue
+    if (isRemoved(entry.value)) {
       if (previous && Object.hasOwn(previous, entry.key)) delta[entry.key] = Instruction.removed
       continue
     }
@@ -155,7 +155,7 @@ export function diff(observed: ReadResult, previous?: Values): Effect.Effect<Adm
 
 export function renderInitial(value: Instructions, values: Readonly<Record<string, Schema.Json>>) {
   return render(
-    value[InstructionsTypeId].flatMap((source) => {
+    value.flatMap((source) => {
       if (!Object.hasOwn(values, source.key)) return []
       const text = source.first(values[source.key])
       return text === undefined ? [] : [text]
@@ -169,7 +169,7 @@ export function renderUpdate(
   delta: Readonly<Record<string, Schema.Json | null>>,
 ) {
   return render(
-    value[InstructionsTypeId].flatMap((source) => {
+    value.flatMap((source) => {
       if (!Object.hasOwn(delta, source.key)) return []
       const current = delta[source.key]
       if (current === null) {
@@ -232,12 +232,18 @@ export function diffByKey<A>(
   }
 }
 
-function instructions(sources: ReadonlyArray<PackedSource>): Instructions {
-  return { [InstructionsTypeId]: sources }
-}
-
 function render(parts: ReadonlyArray<string>) {
   return parts.join("\n\n")
+}
+
+// Reference-equality guards: `A` in a typed source may itself be JSON shaped
+// like these singletons, so identity, never structure, discriminates.
+function isUnavailable(value: unknown): value is Unavailable {
+  return value === unavailable
+}
+
+function isRemoved(value: unknown): value is Removed {
+  return value === removed
 }
 
 function canonical(value: Schema.Json): string {
