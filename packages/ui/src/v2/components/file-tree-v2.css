@@ -14,6 +14,7 @@
   justify-content: flex-start;
   gap: 6px;
   padding-right: 8px;
+  overflow: visible;
   border: none;
   border-radius: 6px;
   background-color: transparent;

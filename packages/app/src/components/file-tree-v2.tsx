@@ -112,7 +112,7 @@ function GuideLines(props: { level: number }) {
     <For each={Array.from({ length: props.level })}>
       {(_, index) => (
         <div
-          class="absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 group-hover/file-tree-v2:opacity-50"
+          class="absolute top-0 -mt-[2px] h-[calc(100%+2px)] w-px pointer-events-none bg-border-weak-base opacity-0 group-hover/file-tree-v2:opacity-50"
           style={`left: ${guideLineLeft(index())}px`}
         />
       )}
