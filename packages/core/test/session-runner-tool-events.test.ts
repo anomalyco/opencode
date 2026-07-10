@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import { LLMEvent } from "@opencode-ai/llm"
 import { Money } from "@opencode-ai/schema/money"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -16,7 +16,7 @@ const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
 const capture = (providerMetadataKey = "anthropic") => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
-  const events = EventV2.Service.of({
+  const events: Pick<EventV2.Interface, "publish"> = {
     publish: (definition, data) =>
       Effect.sync(() => {
         const event = { id: EventV2.ID.create(), type: definition.type, data } as EventV2.Payload<typeof definition>
@@ -28,16 +28,7 @@ const capture = (providerMetadataKey = "anthropic") => {
         })
         return event
       }),
-    subscribe: () => Stream.empty,
-    log: () => Stream.empty,
-    sequences: () => Effect.succeed(new Map()),
-    listen: () => Effect.succeed(Effect.void),
-    project: () => Effect.void,
-    replay: () => Effect.void,
-    replayAll: () => Effect.succeed(undefined),
-    remove: () => Effect.void,
-    claim: () => Effect.void,
-  })
+  }
   return {
     published,
     publisher: createLLMEventPublisher(events, {

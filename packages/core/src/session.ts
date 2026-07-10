@@ -581,7 +581,7 @@ const layer = Layer.effect(
         yield* shellLocks.withLock(input.sessionID)(
           Effect.gen(function* () {
             activeShells.add(input.sessionID)
-            if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
+            yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
               return yield* shell.create({ command: input.command, cwd: session.location.directory, timeout: 0 })
