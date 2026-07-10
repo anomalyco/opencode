@@ -8,9 +8,8 @@ integrations, references, skills, and tools; intercept model requests and tool
 execution; and call a subset of the V2 client.
 
 <Warning>
-  The V2 plugin API is beta. Entrypoints, hooks, draft shapes, and configuration
-  may change before the stable release. Use the `/v2` exports described on this
-  page.
+  The V2 plugin API is beta. Entrypoints, hooks, draft shapes, and configuration may change before the stable release.
+  Use the `/v2` exports described on this page.
 </Warning>
 
 ## Load plugins
@@ -34,10 +33,10 @@ Add ordered entries to the `plugins` field in `opencode.json(c)`:
       "package": "./plugins/reviewer.ts",
       "options": {
         "agent": "reviewer",
-        "strict": true
-      }
-    }
-  ]
+        "strict": true,
+      },
+    },
+  ],
 }
 ```
 
@@ -80,12 +79,7 @@ applied in order:
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": [
-    "./plugins/reviewer.ts",
-    "-acme.reviewer",
-    "-opencode.provider.*",
-    "opencode.provider.openai"
-  ]
+  "plugins": ["./plugins/reviewer.ts", "-acme.reviewer", "-opencode.provider.*", "opencode.provider.openai"],
 }
 ```
 
@@ -133,9 +127,7 @@ export default Plugin.define({
   id: "acme.reviewer",
   setup: async (ctx) => {
     const description =
-      typeof ctx.options.description === "string"
-        ? ctx.options.description
-        : "Reviews code for regressions"
+      typeof ctx.options.description === "string" ? ctx.options.description : "Reviews code for regressions"
 
     await ctx.agent.transform((agents) => {
       agents.update("reviewer", (agent) => {
@@ -148,7 +140,25 @@ export default Plugin.define({
 ```
 
 `setup` runs each time the plugin is activated. Register long-lived behavior
-during setup; do not wait there on an infinite event stream.
+during setup; do not wait there on an infinite event stream. It may return a
+synchronous or asynchronous cleanup function. OpenCode awaits that cleanup
+when the plugin is disabled, reloaded, or shut down:
+
+```ts
+setup: async (ctx) => {
+  const controller = new AbortController()
+  const task = synchronize(ctx, controller.signal)
+
+  return async () => {
+    controller.abort()
+    await task
+  }
+}
+```
+
+Hook registrations are released automatically with the same plugin scope. Use
+the returned cleanup for resources the plugin owns, such as timers, watchers,
+connections, and background tasks.
 
 ### Context
 
@@ -157,22 +167,22 @@ Its read and action methods use the same inputs and responses as the client. It
 adds plugin-only methods for transforms, runtime hooks, reloads, registrations,
 and plugin options.
 
-| Capability | Available operations |
-| --- | --- |
-| `ctx.agent` | `list`, `transform`, `reload` |
-| `ctx.catalog.provider` | `list`, `get` |
-| `ctx.catalog.model` | `list`, `default` |
-| `ctx.catalog` | `transform`, `reload` |
-| `ctx.command` | `list`, `transform`, `reload` |
-| `ctx.integration` | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
-| `ctx.plugin` | `list` currently active plugin IDs |
-| `ctx.reference` | `list`, `transform`, `reload` |
-| `ctx.session` | `create`, `get`, `prompt`, `command`, `interrupt`, and `hook` |
-| `ctx.skill` | `list`, `transform`, `reload` |
-| `ctx.tool` | `transform` and `hook` |
-| `ctx.aisdk` | `hook` |
-| `ctx.event` | `subscribe` to the current public server event stream |
-| `ctx.options` | Readonly options from the matching config object |
+| Capability             | Available operations                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `ctx.agent`            | `list`, `transform`, `reload`                                                                |
+| `ctx.catalog.provider` | `list`, `get`                                                                                |
+| `ctx.catalog.model`    | `list`, `default`                                                                            |
+| `ctx.catalog`          | `transform`, `reload`                                                                        |
+| `ctx.command`          | `list`, `transform`, `reload`                                                                |
+| `ctx.integration`      | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
+| `ctx.plugin`           | `list` currently active plugin IDs                                                           |
+| `ctx.reference`        | `list`, `transform`, `reload`                                                                |
+| `ctx.session`          | `create`, `get`, `prompt`, `command`, `interrupt`, and `hook`                                |
+| `ctx.skill`            | `list`, `transform`, `reload`                                                                |
+| `ctx.tool`             | `transform` and `hook`                                                                       |
+| `ctx.aisdk`            | `hook`                                                                                       |
+| `ctx.event`            | `subscribe` to the current public server event stream                                        |
+| `ctx.options`          | Readonly options from the matching config object                                             |
 
 ### Transform hooks
 
@@ -180,15 +190,15 @@ Transform hooks let a plugin modify how OpenCode is configured. Use them to add
 or remove definitions, override settings, choose defaults, and provide tools or
 other sources.
 
-| Transform | Draft operations |
-| --- | --- |
-| `agent.transform` | `list`, `get`, `default`, `update`, `remove` |
-| `catalog.transform` | Provider `list`, `get`, `update`, `remove`; model `get`, `update`, `remove`; default model `get`, `set` |
-| `command.transform` | `list`, `get`, `update`, `remove` |
-| `integration.transform` | Integration `list`, `get`, `update`, `remove`; method `list`, `update`, `remove` |
-| `reference.transform` | `add`, `remove`, `list` |
-| `skill.transform` | `source`, `list` |
-| `tool.transform` | `add` |
+| Transform               | Draft operations                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `agent.transform`       | `list`, `get`, `default`, `update`, `remove`                                                            |
+| `catalog.transform`     | Provider `list`, `get`, `update`, `remove`; model `get`, `update`, `remove`; default model `get`, `set` |
+| `command.transform`     | `list`, `get`, `update`, `remove`                                                                       |
+| `integration.transform` | Integration `list`, `get`, `update`, `remove`; method `list`, `update`, `remove`                        |
+| `reference.transform`   | `add`, `remove`, `list`                                                                                 |
+| `skill.transform`       | `source`, `list`                                                                                        |
+| `tool.transform`        | `add`                                                                                                   |
 
 Here's an example that keeps models synced from a remote source:
 
@@ -216,7 +226,8 @@ export default Plugin.define({
     }
 
     await refresh()
-    setInterval(() => void refresh().catch(console.error), 60_000)
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
   },
 })
 ```
@@ -231,13 +242,13 @@ without restarting OpenCode.
 Runtime hooks intercept live operations. Their event objects expose specific
 mutable fields:
 
-| Hook | Mutable fields |
-| --- | --- |
-| `ctx.aisdk.hook("sdk", callback)` | `sdk`, after inspecting `model`, `package`, and `options` |
-| `ctx.aisdk.hook("language", callback)` | `language`, after inspecting `model`, `sdk`, and `options` |
-| `ctx.session.hook("request", callback)` | `system`, `messages`, and the `tools` record immediately before model dispatch |
-| `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes |
-| `ctx.tool.hook("execute.after", callback)` | `result`, `output`, and `outputPaths`, after execution settles |
+| Hook                                        | Mutable fields                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| `ctx.aisdk.hook("sdk", callback)`           | `sdk`, after inspecting `model`, `package`, and `options`                      |
+| `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
+| `ctx.session.hook("request", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
+| `ctx.tool.hook("execute.after", callback)`  | `result`, `output`, and `outputPaths`, after execution settles                 |
 
 For example, remove a tool from selected model requests and normalize another
 tool's input:

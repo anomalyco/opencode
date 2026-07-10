@@ -1044,22 +1044,7 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const editorSelection = editorContext()
-    const editorParts =
-      editorSelection && editor.labelState() === "pending"
-        ? [
-            {
-              type: "text" as const,
-              text: formatEditorContext(editorSelection),
-              synthetic: true,
-              metadata: {
-                kind: "editor_context",
-                source: editorSelection.source ?? "editor",
-                filePath: editorSelection.filePath,
-                ranges: editorSelection.ranges,
-              },
-            },
-          ]
-        : []
+    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
 
     if (store.mode === "shell") {
       move.startSubmit()
@@ -1135,10 +1120,27 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
+      if (pendingEditorSelection) {
+        // Keep editor context hidden while admitting it before the corresponding user prompt.
+        const error = await sdk.api.session
+          .synthetic({
+            sessionID,
+            text: formatEditorContext(pendingEditorSelection),
+            resume: false,
+          })
+          .then(
+            () => undefined,
+            (error) => error,
+          )
+        if (error) {
+          toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
+          return false
+        }
+      }
       const error = await sdk.api.session
         .prompt({
           sessionID,
-          text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
+          text: inputText,
           files: store.prompt.files,
           agents: store.prompt.agents,
         })
@@ -1150,7 +1152,7 @@ export function Prompt(props: PromptProps) {
         toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
         return false
       }
-      if (editorParts.length > 0) editor.markSelectionSent()
+      if (pendingEditorSelection) editor.markSelectionSent()
     }
     history.append({
       ...store.prompt,
@@ -1163,7 +1165,7 @@ export function Prompt(props: PromptProps) {
 
     // temporary hack to make sure the message is sent
     if (!props.sessionID) {
-      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+      if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({
           type: "session",

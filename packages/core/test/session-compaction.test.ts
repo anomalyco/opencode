@@ -147,10 +147,11 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         messages: [userMessage],
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
-    ).toBe(true)
+    ).toEqual({ status: "completed" })
     expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
 
     expect(requests).toHaveLength(1)
+    expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(yield* store.context(sessionID)).toMatchObject([
       { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },

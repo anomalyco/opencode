@@ -130,7 +130,9 @@ export function fromPromise(plugin: PromisePlugin) {
           },
         }
 
-        yield* Effect.promise(() => Promise.resolve(plugin.setup(context2)))
+        const cleanup = yield* Effect.promise(() => Promise.resolve(plugin.setup(context2)))
+        if (!cleanup) return
+        yield* Effect.addFinalizer(() => Effect.promise(() => Promise.resolve(cleanup())))
       }),
   })
 }

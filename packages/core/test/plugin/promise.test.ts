@@ -97,6 +97,33 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.effect("runs the setup cleanup when the plugin scope closes", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const host = yield* PluginHost.make(plugin)
+      const events: string[] = []
+      const promisePlugin = Plugin.define({
+        id: "promise-cleanup",
+        setup: async () => {
+          events.push("setup")
+          return async () => {
+            await Promise.resolve()
+            events.push("cleanup")
+          }
+        },
+      })
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* PluginPromise.fromPromise(promisePlugin).effect(host)
+          expect(events).toEqual(["setup"])
+        }),
+      )
+
+      expect(events).toEqual(["setup", "cleanup"])
+    }),
+  )
+
   it.effect("constructs plain Promise tool declarations in the host", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service

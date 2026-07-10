@@ -25,6 +25,15 @@ export default Plugin.define({
 ```
 
 Plugin setup registers hooks imperatively through each domain's `hook` method.
+It may return a synchronous or asynchronous cleanup function. OpenCode awaits
+the cleanup when the plugin is unloaded or replaced:
+
+```ts
+setup: async (ctx) => {
+  const timer = setInterval(refresh, 60_000)
+  return () => clearInterval(timer)
+}
+```
 
 Configuration supplied for the plugin is available as `ctx.options`.
 
