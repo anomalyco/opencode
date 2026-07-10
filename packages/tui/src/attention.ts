@@ -14,12 +14,13 @@ import { AttentionSoundName, type Config } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"
-import defaultSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
-import questionSoundPath from "@opencode-ai/ui/audio/bip-bop-03.mp3" with { type: "file" }
-import permissionSoundPath from "@opencode-ai/ui/audio/staplebops-06.mp3" with { type: "file" }
-import errorSoundPath from "@opencode-ai/ui/audio/nope-03.mp3" with { type: "file" }
-import doneSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
-import subagentDoneSoundPath from "@opencode-ai/ui/audio/yup-01.mp3" with { type: "file" }
+import {
+  defaultSoundPath,
+  questionSoundPath,
+  permissionSoundPath,
+  errorSoundPath,
+  subagentDoneSoundPath,
+} from "#attention-sounds"
 
 type FocusState = "unknown" | "focused" | "blurred"
 
@@ -51,7 +52,7 @@ const BUILTIN_PACK: RegisteredSoundPack = {
     question: questionSoundPath,
     permission: permissionSoundPath,
     error: errorSoundPath,
-    done: doneSoundPath,
+    done: defaultSoundPath,
     subagent_done: subagentDoneSoundPath,
   },
 }

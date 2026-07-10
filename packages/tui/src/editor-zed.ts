@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite"
+import { Database } from "#zed-sqlite"
 import { statSync } from "node:fs"
 import { readFile as readFileAsync } from "node:fs/promises"
 import os from "node:os"

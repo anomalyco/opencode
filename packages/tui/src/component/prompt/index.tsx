@@ -26,6 +26,7 @@ import { editorSelectionKey, useEditorContext, type EditorSelection } from "../.
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
+import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -529,7 +530,7 @@ export function Prompt(props: PromptProps) {
             pasted: [],
           })
           restoreExtmarksFromPrompt(store.prompt)
-          input.cursorOffset = Bun.stringWidth(normalized)
+          input.cursorOffset = stringWidth(normalized)
         },
       },
       {
