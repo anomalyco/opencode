@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { onCleanup } from "solid-js"
 import { ClipboardProvider } from "../../../src/context/clipboard"
-import type { FormInfoWithLocation } from "../../../src/context/data"
+import type { FormWithLocation } from "../../../src/context/data"
 import { KVProvider } from "../../../src/context/kv"
 import { SDKProvider } from "../../../src/context/sdk"
 import { ThemeProvider } from "../../../src/context/theme"
@@ -75,7 +75,7 @@ async function mountForm(width = 80) {
         title: "Authorize access",
       },
     ],
-  } satisfies FormInfoWithLocation
+  } satisfies FormWithLocation
   const { FormPrompt } = await import("../../../src/routes/session/form")
 
   function Harness() {

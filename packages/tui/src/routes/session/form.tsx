@@ -5,7 +5,7 @@ import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import open from "open"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { FormField, FormValue } from "@opencode-ai/sdk/v2"
-import type { FormInfoWithLocation } from "../../context/data"
+import type { FormWithLocation } from "../../context/data"
 import { useSDK } from "../../context/sdk"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
@@ -141,7 +141,7 @@ function display(field: Field, value: FormValue | undefined) {
   return label(value)
 }
 
-function requestOptions(form: FormInfoWithLocation) {
+function requestOptions(form: FormWithLocation) {
   if (form.sessionID !== "global" || !form.location) return undefined
   return {
     headers: {
@@ -151,11 +151,11 @@ function requestOptions(form: FormInfoWithLocation) {
   }
 }
 
-export function FormPrompt(props: { form: FormInfoWithLocation }) {
+export function FormPrompt(props: { form: FormWithLocation }) {
   return <FieldsPrompt form={props.form} />
 }
 
-function FieldsPrompt(props: { form: FormInfoWithLocation }) {
+function FieldsPrompt(props: { form: FormWithLocation }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
