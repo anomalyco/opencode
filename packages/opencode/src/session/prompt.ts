@@ -1343,7 +1343,16 @@ const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = (input: LoopInput) =>
       state
         .ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
-        .pipe(Effect.withSpan("SessionPrompt.loop", { root: true, attributes: { "session.id": input.sessionID } }))
+        .pipe(
+          Effect.withSpan("invoke_agent", {
+            root: true,
+            attributes: {
+              "gen_ai.operation.name": "invoke_agent",
+              "gen_ai.conversation.id": input.sessionID,
+              "session.id": input.sessionID,
+            },
+          }),
+        )
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
