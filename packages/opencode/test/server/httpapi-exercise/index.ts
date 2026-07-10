@@ -849,7 +849,7 @@ const scenarios: Scenario[] = [
       check(typeof body.data.id === "string", "form create should return an ID")
       array(body.data.fields)
       object(body.data.fields[0])
-      check(body.data.fields[0].type === "link", "form create should preserve the link field")
+      check(body.data.fields[0].type === "external", "form create should preserve the external field")
     }),
   http.protected
     .get("/api/session/{sessionID}/form/{formID}", "v2.session.form.get")
