@@ -97,6 +97,8 @@ export const bodyFields = {
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
   store: Schema.optional(Schema.Boolean),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
+  prompt_cache_key: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(OpenAIOptions.OpenAIPromptCacheOptions),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
@@ -121,6 +123,7 @@ const OpenAIChatUsage = Schema.Struct({
   prompt_tokens_details: optionalNull(
     Schema.Struct({
       cached_tokens: Schema.optional(Schema.Number),
+      cache_write_tokens: Schema.optional(Schema.Number),
     }),
   ),
   completion_tokens_details: optionalNull(
@@ -332,11 +335,15 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
+  const promptCacheKey = OpenAIOptions.promptCacheKey(request)
+  const promptCacheOptions = OpenAIOptions.promptCacheOptions(request)
   const reasoningEffort = OpenAIOptions.reasoningEffort(request)
   if (reasoningEffort && !OpenAIOptions.isReasoningEffort(reasoningEffort))
     return yield* invalid(`OpenAI Chat does not support reasoning effort ${reasoningEffort}`)
   return {
     ...(store !== undefined ? { store } : {}),
+    ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
+    ...(promptCacheOptions ? { prompt_cache_options: promptCacheOptions } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
   }
 })
@@ -391,13 +398,15 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
   const cached = usage.prompt_tokens_details?.cached_tokens
+  const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens
   const reasoning = usage.completion_tokens_details?.reasoning_tokens
-  const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, cached)
+  const nonCached = ProviderShared.subtractTokens(ProviderShared.subtractTokens(usage.prompt_tokens, cached), cacheWrite)
   return new Usage({
     inputTokens: usage.prompt_tokens,
     outputTokens: usage.completion_tokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
+    cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
     providerMetadata: { openai: usage },

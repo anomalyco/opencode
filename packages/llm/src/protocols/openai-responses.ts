@@ -132,6 +132,7 @@ const OpenAIResponsesCoreFields = {
   store: Schema.optional(Schema.Boolean),
   service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
   prompt_cache_key: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(OpenAIOptions.OpenAIPromptCacheOptions),
   include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(
     Schema.Struct({
@@ -167,7 +168,12 @@ const encodeWebSocketMessage = Schema.encodeSync(Schema.fromJsonString(OpenAIRes
 
 const OpenAIResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
-  input_tokens_details: optionalNull(Schema.Struct({ cached_tokens: Schema.optional(Schema.Number) })),
+  input_tokens_details: optionalNull(
+    Schema.Struct({
+      cached_tokens: Schema.optional(Schema.Number),
+      cache_write_tokens: Schema.optional(Schema.Number),
+    }),
+  ),
   output_tokens: Schema.optional(Schema.Number),
   output_tokens_details: optionalNull(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) })),
   total_tokens: Schema.optional(Schema.Number),
@@ -456,6 +462,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
   const promptCacheKey = OpenAIOptions.promptCacheKey(request)
+  const promptCacheOptions = OpenAIOptions.promptCacheOptions(request)
   const effort = OpenAIOptions.reasoningEffort(request)
   if (effort && !OpenAIOptions.isReasoningEffort(effort))
     return yield* invalid(`OpenAI Responses does not support reasoning effort ${effort}`)
@@ -468,6 +475,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
+    ...(promptCacheOptions ? { prompt_cache_options: promptCacheOptions } : {}),
     ...(include ? { include } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
@@ -507,13 +515,15 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
 const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
+  const cacheWrite = usage.input_tokens_details?.cache_write_tokens
   const reasoning = usage.output_tokens_details?.reasoning_tokens
-  const nonCached = ProviderShared.subtractTokens(usage.input_tokens, cached)
+  const nonCached = ProviderShared.subtractTokens(ProviderShared.subtractTokens(usage.input_tokens, cached), cacheWrite)
   return new Usage({
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
+    cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
     providerMetadata: { openai: usage },

@@ -361,6 +361,34 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.include).toEqual(["reasoning.encrypted_content"])
   })
 
+  test("gpt-5.6 family should use implicit prompt cache options", () => {
+    const options = ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-fast"].map((id) =>
+      ProviderTransform.options({ model: createGpt5Model(id), sessionID, providerOptions: {} }),
+    )
+
+    expect(options.map((item) => item.promptCacheKey)).toEqual([
+      sessionID,
+      sessionID,
+      sessionID,
+      sessionID,
+      sessionID,
+    ])
+    expect(options.map((item) => item.promptCacheOptions)).toEqual([
+      { mode: "implicit", ttl: "30m" },
+      { mode: "implicit", ttl: "30m" },
+      { mode: "implicit", ttl: "30m" },
+      { mode: "implicit", ttl: "30m" },
+      { mode: "implicit", ttl: "30m" },
+    ])
+  })
+
+  test("gpt-5.5 should keep old prompt cache behavior", () => {
+    const result = ProviderTransform.options({ model: createGpt5Model("gpt-5.5"), sessionID, providerOptions: {} })
+
+    expect(result.promptCacheKey).toBe(sessionID)
+    expect(result.promptCacheOptions).toBeUndefined()
+  })
+
   test("Bedrock Mantle gpt-5.5 uses OpenAI Responses defaults", () => {
     const model = {
       ...createGpt5Model("openai.gpt-5.5"),

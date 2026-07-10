@@ -22,17 +22,28 @@ export const OpenAIResponseIncludables = [
 export type OpenAIResponseIncludable = (typeof OpenAIResponseIncludables)[number]
 export const OpenAIServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type OpenAIServiceTier = (typeof OpenAIServiceTiers)[number]
+export const OpenAIPromptCacheModes = ["implicit", "explicit"] as const
+export type OpenAIPromptCacheMode = (typeof OpenAIPromptCacheModes)[number]
+export const OpenAIPromptCacheTTLs = ["30m"] as const
+export type OpenAIPromptCacheTTL = (typeof OpenAIPromptCacheTTLs)[number]
 
 const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
 const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(OpenAIResponseIncludables)
 const SERVICE_TIERS = new Set<string>(OpenAIServiceTiers)
+const PROMPT_CACHE_MODES = new Set<string>(OpenAIPromptCacheModes)
+const PROMPT_CACHE_TTLS = new Set<string>(OpenAIPromptCacheTTLs)
 
 export const OpenAIReasoningEffort = Schema.Literals(OpenAIReasoningEfforts)
 export const OpenAITextVerbosity = TextVerbosity
 export const OpenAIResponseIncludable = Schema.Literals(OpenAIResponseIncludables)
 export const OpenAIServiceTier = Schema.Literals(OpenAIServiceTiers)
+export const OpenAIPromptCacheOptions = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(OpenAIPromptCacheModes)),
+  ttl: Schema.optional(Schema.Literals(OpenAIPromptCacheTTLs)),
+})
+export type OpenAIPromptCacheOptions = Schema.Schema.Type<typeof OpenAIPromptCacheOptions>
 
 const isAnyReasoningEffort = (effort: unknown): effort is ReasoningEffort =>
   typeof effort === "string" && REASONING_EFFORTS.has(effort)
@@ -73,6 +84,22 @@ export const include = (request: LLMRequest): ReadonlyArray<OpenAIResponseInclud
 export const promptCacheKey = (request: LLMRequest) => {
   const value = options(request)?.promptCacheKey
   return typeof value === "string" ? value : undefined
+}
+
+export const promptCacheOptions = (request: LLMRequest): OpenAIPromptCacheOptions | undefined => {
+  const value = options(request)?.promptCacheOptions
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
+  const input = value as Record<string, unknown>
+  const mode =
+    typeof input.mode === "string" && PROMPT_CACHE_MODES.has(input.mode)
+      ? (input.mode as OpenAIPromptCacheMode)
+      : undefined
+  const ttl =
+    typeof input.ttl === "string" && PROMPT_CACHE_TTLS.has(input.ttl)
+      ? (input.ttl as OpenAIPromptCacheTTL)
+      : undefined
+  if (!mode && !ttl) return undefined
+  return { mode, ttl }
 }
 
 export const textVerbosity = (request: LLMRequest) => {

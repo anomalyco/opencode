@@ -40,10 +40,15 @@ export const configure = (input: Config = {}) => {
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
-    responsesRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
+    responsesRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true, promptCaching: true })).model({
+      id,
+    })
   const responsesWebSocket = (id: string | ModelID) =>
-    responsesWebSocketRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
-  const chat = (id: string | ModelID) => chatRoute.with(withOpenAIOptions(id, modelDefaults)).model({ id })
+    responsesWebSocketRoute
+      .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true, promptCaching: true }))
+      .model({ id })
+  const chat = (id: string | ModelID) =>
+    chatRoute.with(withOpenAIOptions(id, modelDefaults, { promptCaching: true })).model({ id })
 
   return {
     id,

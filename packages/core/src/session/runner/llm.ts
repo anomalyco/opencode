@@ -40,6 +40,13 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 
+const GPT56_PROMPT_CACHE_OPTIONS = { mode: "implicit", ttl: "30m" } as const
+
+const promptCacheOptions = (model: { readonly provider: string; readonly id: string }) =>
+  model.provider === "openai" && /(?:^|[/.])gpt-5\.6(?:$|[-_/.])/.test(model.id.toLowerCase())
+    ? GPT56_PROMPT_CACHE_OPTIONS
+    : undefined
+
 /**
  * Runs one durable coding-agent Session until it settles.
  *
@@ -202,9 +209,15 @@ const layer = Layer.effect(
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const promptCache = promptCacheOptions(model)
       const request = LLM.request({
         model,
-        providerOptions: { openai: { promptCacheKey } },
+        providerOptions: {
+          openai: {
+            promptCacheKey,
+            ...(promptCache ? { promptCacheOptions: promptCache } : {}),
+          },
+        },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),

@@ -2484,6 +2484,38 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("adds GPT-5.6 family prompt cache options for OpenAI models", () =>
+    Effect.gen(function* () {
+      yield* setup
+      currentModel = Model.make({ id: "gpt-5.6-luna", provider: "openai", route: OpenAIChat.route })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run with GPT-5.6 cache" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.providerOptions?.openai).toMatchObject({
+        promptCacheKey: sessionID,
+        promptCacheOptions: { mode: "implicit", ttl: "30m" },
+      })
+    }),
+  )
+
+  it.effect("keeps GPT-5.5 session prompt cache behavior unchanged", () =>
+    Effect.gen(function* () {
+      yield* setup
+      currentModel = Model.make({ id: "gpt-5.5", provider: "openai", route: OpenAIChat.route })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run with GPT-5.5 cache" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.providerOptions?.openai?.promptCacheKey).toBe(sessionID)
+      expect(requests[0]?.providerOptions?.openai?.promptCacheOptions).toBeUndefined()
+    }),
+  )
+
   it.effect("fans out one failed run and allows a later retry", () =>
     Effect.gen(function* () {
       yield* setup

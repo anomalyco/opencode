@@ -555,6 +555,7 @@ describe("OpenAI Responses route", () => {
           providerOptions: {
             openai: {
               promptCacheKey: "session_123",
+              promptCacheOptions: { mode: "implicit", ttl: "30m" },
               reasoningEffort: "high",
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
@@ -565,9 +566,40 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.prompt_cache_key).toBe("session_123")
+      expect(prepared.body.prompt_cache_options).toEqual({ mode: "implicit", ttl: "30m" })
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
       expect(prepared.body.text).toEqual({ verbosity: "low" })
+    }),
+  )
+
+  it.effect("enables GPT-5.6 family prompt cache options by default", () =>
+    Effect.gen(function* () {
+      yield* Effect.forEach(["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-fast"], (id) =>
+        Effect.gen(function* () {
+          const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+            LLM.request({
+              model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model(id),
+              prompt: "think",
+              providerOptions: { openai: { promptCacheKey: "session_123" } },
+            }),
+          )
+
+          expect(prepared.body.prompt_cache_key).toBe("session_123")
+          expect(prepared.body.prompt_cache_options).toEqual({ mode: "implicit", ttl: "30m" })
+        }),
+      )
+
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.5"),
+          prompt: "think",
+          providerOptions: { openai: { promptCacheKey: "session_123" } },
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+      expect(prepared.body).not.toHaveProperty("prompt_cache_options")
     }),
   )
 
@@ -705,7 +737,7 @@ describe("OpenAI Responses route", () => {
               input_tokens: 5,
               output_tokens: 2,
               total_tokens: 7,
-              input_tokens_details: { cached_tokens: 1 },
+              input_tokens_details: { cached_tokens: 1, cache_write_tokens: 2 },
               output_tokens_details: { reasoning_tokens: 0 },
             },
           },
@@ -715,8 +747,9 @@ describe("OpenAI Responses route", () => {
       const usage = new Usage({
         inputTokens: 5,
         outputTokens: 2,
-        nonCachedInputTokens: 4,
+        nonCachedInputTokens: 2,
         cacheReadInputTokens: 1,
+        cacheWriteInputTokens: 2,
         reasoningTokens: 0,
         totalTokens: 7,
         providerMetadata: {
@@ -724,7 +757,7 @@ describe("OpenAI Responses route", () => {
             input_tokens: 5,
             output_tokens: 2,
             total_tokens: 7,
-            input_tokens_details: { cached_tokens: 1 },
+            input_tokens_details: { cached_tokens: 1, cache_write_tokens: 2 },
             output_tokens_details: { reasoning_tokens: 0 },
           },
         },

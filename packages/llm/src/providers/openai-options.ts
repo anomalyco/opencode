@@ -4,10 +4,16 @@ import type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/u
 
 export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options"
 
+export interface OpenAIPromptCacheOptionsInput {
+  readonly mode?: "implicit" | "explicit"
+  readonly ttl?: "30m"
+}
+
 export interface OpenAIOptionsInput {
   readonly [key: string]: unknown
   readonly store?: boolean
   readonly promptCacheKey?: string
+  readonly promptCacheOptions?: OpenAIPromptCacheOptionsInput
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto"
   // OpenAI Responses `include` wire field. Mirrors the official SDK's
@@ -30,6 +36,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
     definedEntries({
       store: options?.store,
       promptCacheKey: options?.promptCacheKey,
+      promptCacheOptions: options?.promptCacheOptions,
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
@@ -40,6 +47,9 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
   if (Object.keys(openai).length === 0) return undefined
   return { openai }
 }
+
+export const isGPT56Family = (modelID: string) =>
+  /(?:^|[/.])gpt-5\.6(?:$|[-_/.])/.test(modelID.toLowerCase())
 
 export const gpt5DefaultOptions = (
   modelID: string,
@@ -63,16 +73,23 @@ export const gpt5DefaultOptions = (
   })
 }
 
+const gpt56DefaultOptions = (modelID: string): ProviderOptions | undefined =>
+  isGPT56Family(modelID) ? openAIProviderOptions({ promptCacheOptions: { mode: "implicit", ttl: "30m" } }) : undefined
+
 export const openAIDefaultOptions = (
   modelID: string,
-  options: { readonly textVerbosity?: boolean } = {},
+  options: { readonly textVerbosity?: boolean; readonly promptCaching?: boolean } = {},
 ): ProviderOptions | undefined =>
-  mergeProviderOptions(openAIProviderOptions({ store: false }), gpt5DefaultOptions(modelID, options))
+  mergeProviderOptions(
+    openAIProviderOptions({ store: false }),
+    gpt5DefaultOptions(modelID, options),
+    options.promptCaching === true ? gpt56DefaultOptions(modelID) : undefined,
+  )
 
 export const withOpenAIOptions = <Options extends { readonly providerOptions?: OpenAIProviderOptionsInput }>(
   modelID: string,
   options: Options,
-  defaults: { readonly textVerbosity?: boolean } = {},
+  defaults: { readonly textVerbosity?: boolean; readonly promptCaching?: boolean } = {},
 ): Omit<Options, "providerOptions"> & { readonly providerOptions?: ProviderOptions } => {
   return {
     ...options,
