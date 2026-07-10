@@ -2042,8 +2042,7 @@ function InlineTool(props: {
     if (permission()) return theme.warning
     if (failed()) return theme.error
     if (hover() && props.onClick) return theme.text
-    if (props.complete) return theme.textMuted
-    return theme.text
+    return theme.textMuted
   })
 
   return (
@@ -2103,13 +2102,7 @@ export function InlineToolRow(props: {
         <Match when={true}>
           <Show
             fallback={
-              <text
-                paddingLeft={3}
-                fg={props.color}
-                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
-              >
-                ~ {props.pending}
-              </text>
+              <Spinner color={props.color}>{props.pending}</Spinner>
             }
             when={props.complete || props.failed}
           >
