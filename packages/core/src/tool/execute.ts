@@ -37,16 +37,12 @@ type CollectedFiles = {
 }
 
 export interface Registration {
-  readonly identity: object
   readonly tool: AnyTool
   readonly name: string
   readonly group?: string
 }
 
-export const create = (options: {
-  readonly registrations: ReadonlyMap<string, Registration>
-  readonly current: (name: string) => Registration | undefined
-}) => {
+export const create = (options: { readonly registrations: ReadonlyMap<string, Registration> }) => {
   const runtime = (
     invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
     hooks?: CodeMode.ToolCallHooks,
@@ -115,11 +111,8 @@ export const create = (options: {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const current = options.current(name)
-              if (!current || current.identity !== registration.identity)
-                return yield* Effect.fail(toolError(`Stale tool call: ${name}`))
               const output = yield* settle(
-                current.tool,
+                registration.tool,
                 { type: "tool-call", id: context.toolCallID, name, input },
                 {
                   sessionID: context.sessionID,

@@ -62,7 +62,7 @@ import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -781,6 +781,73 @@ describe("SessionRunnerLLM", () => {
               type: "tool",
               id: "call-location",
               state: { status: "completed", structured: { answer: "HELLO" } },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("executes parallel tool calls against the generation admitted before a registry reload", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const registry = yield* ToolRegistry.Service
+      const scope = yield* Scope.make()
+      const generation: string[] = []
+      yield* registry
+        .register({
+          reloaded: Tool.make({
+            description: "Record the admitted generation",
+            input: Schema.Struct({}),
+            output: Schema.Struct({ generation: Schema.String }),
+            execute: () => Effect.sync(() => generation.push("admitted")).pipe(Effect.as({ generation: "admitted" })),
+          }),
+        })
+        .pipe(Scope.provide(scope))
+      yield* admit(session, "Use the reloaded tool")
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-reloaded-1", name: "reloaded", input: {} }),
+          LLMEvent.toolCall({ id: "call-reloaded-2", name: "reloaded", input: {} }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      yield* Scope.close(scope, Exit.void)
+      yield* registry.register({
+        reloaded: Tool.make({
+          description: "Record the replacement generation",
+          input: Schema.Struct({}),
+          output: Schema.Struct({ generation: Schema.String }),
+          execute: () =>
+            Effect.sync(() => generation.push("replacement")).pipe(Effect.as({ generation: "replacement" })),
+        }),
+      })
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(run)
+
+      expect(generation).toEqual(["admitted", "admitted"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use the reloaded tool" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-reloaded-1",
+              state: { status: "completed", structured: { generation: "admitted" } },
+            },
+            {
+              type: "tool",
+              id: "call-reloaded-2",
+              state: { status: "completed", structured: { generation: "admitted" } },
             },
           ],
         },
@@ -2659,7 +2726,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-interrupted",
               state: {
                 status: "error",
-                error: { type: "tool.stale", message: "Tool execution interrupted: echo" },
+                error: { type: "aborted", message: "Tool execution interrupted: echo" },
               },
             },
           ],

@@ -97,12 +97,7 @@ describe("ToolRegistry", () => {
           .pipe(Effect.map((materialized) => materialized.definitions.map((tool) => tool.name)))
 
       expect(yield* names({ id: "gpt-5", provider: "openai" })).toEqual(["read", "edit", "write", "patch"])
-      expect(yield* names({ id: "claude-sonnet-4", provider: "anthropic" })).toEqual([
-        "read",
-        "edit",
-        "write",
-        "patch",
-      ])
+      expect(yield* names({ id: "claude-sonnet-4", provider: "anthropic" })).toEqual(["read", "edit", "write", "patch"])
     }),
   )
 
@@ -355,7 +350,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("rejects a call when its advertised registration was removed", () =>
+  it.effect("executes the advertised registration after it is removed", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
@@ -363,29 +358,23 @@ describe("ToolRegistry", () => {
       const materialized = yield* service.materialize({ model: testModel })
       yield* Scope.close(scope, Exit.void)
 
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({
-        type: "error",
-        value: "Stale tool call: echo",
-      })
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({ type: "text", value: "echo" })
     }),
   )
 
-  it.effect("rejects only the replaced name from a multi-tool provider turn", () =>
+  it.effect("executes each registration advertised for a provider turn after replacement", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({ first: make(), second: make() })
       const materialized = yield* service.materialize({ model: testModel })
       yield* service.register({ first: make() })
 
-      expect((yield* materialized.settle(call("first"))).result).toEqual({
-        type: "error",
-        value: "Stale tool call: first",
-      })
+      expect((yield* materialized.settle(call("first"))).result).toEqual({ type: "text", value: "first" })
       expect((yield* materialized.settle(call("second"))).result).toEqual({ type: "text", value: "second" })
     }),
   )
 
-  it.effect("treats revealing a previous overlay as stale", () =>
+  it.effect("executes an advertised overlay after the previous registration is revealed", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({ echo: make() })
@@ -394,10 +383,54 @@ describe("ToolRegistry", () => {
       const materialized = yield* service.materialize({ model: testModel })
       yield* Scope.close(overlay, Exit.void)
 
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({
-        type: "error",
-        value: "Stale tool call: echo",
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({ type: "text", value: "echo" })
+    }),
+  )
+
+  it.effect("executes deferred registrations from the advertised generation", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const executed: string[] = []
+      const scope = yield* Scope.make()
+      yield* service
+        .register(
+          {
+            echo: Tool.make({
+              description: "Echo text",
+              input: Schema.Struct({ text: Schema.String }),
+              output: Schema.Struct({ text: Schema.String }),
+              execute: ({ text }) => Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ text })),
+            }),
+          },
+          { deferred: true },
+        )
+        .pipe(Scope.provide(scope))
+      const materialized = yield* service.materialize({ model: testModel })
+      yield* Scope.close(scope, Exit.void)
+      yield* service.register(
+        {
+          echo: Tool.make({
+            description: "Echo text",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ text })),
+          }),
+        },
+        { deferred: true },
+      )
+
+      const settlement = yield* materialized.settle({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "call-execute",
+          name: "execute",
+          input: { code: 'return await tools.echo({ text: "admitted" })' },
+        },
       })
+
+      expect(settlement.result).toMatchObject({ type: "text" })
+      expect(executed).toEqual(["old:admitted"])
     }),
   )
 

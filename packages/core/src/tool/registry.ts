@@ -58,7 +58,6 @@ const registryLayer = Layer.effect(
     const resources = yield* ToolOutputStore.Service
     const toolHooks = yield* ToolHooks.Service
     type Registration = {
-      readonly identity: object
       readonly tool: AnyTool
       readonly name: string
       readonly group?: string
@@ -134,18 +133,6 @@ const registryLayer = Layer.effect(
       }
     })
 
-    const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised: object) {
-      const registration = local.get(input.call.name)?.at(-1)?.registration
-      if (!registration || registration.identity !== advertised) {
-        const message = `Stale tool call: ${input.call.name}`
-        return {
-          result: { type: "error" as const, value: message },
-          error: { type: "tool.stale" as const, message },
-        }
-      }
-      return yield* settleTool(input, registration.tool)
-    })
-
     return Service.of({
       register: Effect.fn("ToolRegistry.register")(function* (tools, options) {
         const entries = registrationEntries(tools, options?.group)
@@ -164,7 +151,6 @@ const registryLayer = Layer.effect(
                 {
                   token,
                   registration: {
-                    identity: {},
                     tool: entry.tool,
                     name: entry.name,
                     group: entry.group,
@@ -204,7 +190,6 @@ const registryLayer = Layer.effect(
           deferred.size > 0 && !whollyDisabled("execute", input.permissions ?? [])
             ? ExecuteTool.create({
                 registrations: deferred,
-                current: (name) => local.get(name)?.at(-1)?.registration,
               })
             : undefined
         return {
@@ -215,7 +200,7 @@ const registryLayer = Layer.effect(
           settle: (input) => {
             if (input.call.name === "execute" && execute) return settleTool(input, execute)
             const registration = direct.get(input.call.name)
-            if (registration) return settleWith(input, registration.identity)
+            if (registration) return settleTool(input, registration.tool)
             return Effect.succeed({
               result: { type: "error", value: `Unknown tool: ${input.call.name}` },
               error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },

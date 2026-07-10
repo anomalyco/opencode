@@ -173,7 +173,7 @@ const layer = Layer.effect(
             sessionID,
             assistantMessageID: message.id,
             callID: tool.id,
-            error: { type: "tool.stale", message: `Tool execution interrupted: ${tool.name}` },
+            error: { type: "aborted", message: `Tool execution interrupted: ${tool.name}` },
             executed: tool.executed === true,
           })
         }
@@ -466,9 +466,7 @@ const layer = Layer.effect(
           // implementation becomes a failed tool call the model can read, and the step still
           // settles so the model may recover. A typed infrastructure failure (tool output
           // could not be persisted) also fails the assistant and then fails the drain.
-          const settledFailure = settledCauses.find(
-            (cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause),
-          )
+          const settledFailure = settledCauses.find((cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause))
           const infraError =
             settledFailure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(settledFailure))
           if (settledFailure !== undefined) {
