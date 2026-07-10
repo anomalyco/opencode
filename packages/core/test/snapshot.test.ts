@@ -41,16 +41,21 @@ describe("Snapshot", () => {
           const started = yield* Deferred.make<void>()
           const release = yield* Deferred.make<void>()
           let discoveries = 0
+          let creations = 0
           const instrumented = Git.Service.of({
             ...git,
             repo: {
               ...git.repo,
-              discover: (input) =>
+              discover: (input) => {
+                discoveries++
+                return git.repo.discover(input)
+              },
+              create: (input) =>
                 Effect.gen(function* () {
-                  discoveries++
+                  creations++
                   yield* Deferred.succeed(started, undefined)
                   yield* Deferred.await(release)
-                  return yield* git.repo.discover(input)
+                  return yield* git.repo.create(input)
                 }),
             },
           })
@@ -67,13 +72,16 @@ describe("Snapshot", () => {
             const interrupted = yield* snapshot.capture().pipe(Effect.forkChild)
             yield* Deferred.await(started)
             expect(discoveries).toBe(1)
+            expect(creations).toBe(1)
             yield* Fiber.interrupt(interrupted)
 
             const capture = yield* snapshot.capture().pipe(Effect.forkChild)
             expect(discoveries).toBe(1)
+            expect(creations).toBe(1)
             yield* Deferred.succeed(release, undefined)
             expect(yield* Fiber.join(capture)).toBeDefined()
             expect(discoveries).toBe(1)
+            expect(creations).toBe(1)
           }).pipe(Effect.provide(layer))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
