@@ -788,19 +788,19 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("executes parallel tool calls against the generation admitted before a registry reload", () =>
+  it.effect("executes the tool advertised before a registry reload", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const registry = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
-      const generation: string[] = []
+      const executions: string[] = []
       yield* registry
         .register({
           reloaded: Tool.make({
-            description: "Record the admitted generation",
+            description: "Record the advertised tool",
             input: Schema.Struct({}),
-            output: Schema.Struct({ generation: Schema.String }),
-            execute: () => Effect.sync(() => generation.push("admitted")).pipe(Effect.as({ generation: "admitted" })),
+            output: Schema.Struct({ value: Schema.String }),
+            execute: () => Effect.sync(() => executions.push("advertised")).pipe(Effect.as({ value: "advertised" })),
           }),
         })
         .pipe(Scope.provide(scope))
@@ -808,8 +808,7 @@ describe("SessionRunnerLLM", () => {
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.toolCall({ id: "call-reloaded-1", name: "reloaded", input: {} }),
-          LLMEvent.toolCall({ id: "call-reloaded-2", name: "reloaded", input: {} }),
+          LLMEvent.toolCall({ id: "call-reloaded", name: "reloaded", input: {} }),
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
@@ -823,17 +822,16 @@ describe("SessionRunnerLLM", () => {
       yield* Scope.close(scope, Exit.void)
       yield* registry.register({
         reloaded: Tool.make({
-          description: "Record the replacement generation",
+          description: "Record the replacement tool",
           input: Schema.Struct({}),
-          output: Schema.Struct({ generation: Schema.String }),
-          execute: () =>
-            Effect.sync(() => generation.push("replacement")).pipe(Effect.as({ generation: "replacement" })),
+          output: Schema.Struct({ value: Schema.String }),
+          execute: () => Effect.sync(() => executions.push("replacement")).pipe(Effect.as({ value: "replacement" })),
         }),
       })
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(run)
 
-      expect(generation).toEqual(["admitted", "admitted"])
+      expect(executions).toEqual(["advertised"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use the reloaded tool" },
         {
@@ -841,13 +839,8 @@ describe("SessionRunnerLLM", () => {
           content: [
             {
               type: "tool",
-              id: "call-reloaded-1",
-              state: { status: "completed", structured: { generation: "admitted" } },
-            },
-            {
-              type: "tool",
-              id: "call-reloaded-2",
-              state: { status: "completed", structured: { generation: "admitted" } },
+              id: "call-reloaded",
+              state: { status: "completed", structured: { value: "advertised" } },
             },
           ],
         },
@@ -855,7 +848,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("starts a real runner turn after default prompt recording", () =>
+  it.effect("starts a real runner step after default prompt recording", () =>
     Effect.gen(function* () {
       const session = yield* setup
 
@@ -919,7 +912,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("retries the first provider turn after system context becomes available", () =>
+  it.effect("retries the first request after system context becomes available", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const { db } = yield* Database.Service
@@ -2093,7 +2086,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("reloads a model switch before a tool-driven continuation turn", () =>
+  it.effect("reloads a model switch before a tool-driven continuation step", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const events = yield* EventV2.Service
@@ -2122,7 +2115,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("restores durable reasoning provider metadata in a second-turn request", () =>
+  it.effect("restores durable reasoning provider metadata in the next request", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Think first")
@@ -2194,7 +2187,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("replays durable provider-executed tool results inline in a second-turn request", () =>
+  it.effect("replays durable provider-executed tool results inline in the next request", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Search first")
@@ -2406,7 +2399,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("steers an active provider turn with newly recorded prompts", () =>
+  it.effect("steers an active step with newly recorded prompts", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Start working")
@@ -2626,7 +2619,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("coalesces multiple active steering prompts into one continuation turn", () =>
+  it.effect("coalesces multiple active steering prompts into one continuation step", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Start working")
@@ -2653,7 +2646,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("runs steering input accepted while the active provider turn fails", () =>
+  it.effect("runs steering input accepted while the active step fails", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Start working")
@@ -3290,7 +3283,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("durably fails blocked local tools when a provider turn is interrupted", () =>
+  it.effect("durably fails blocked local tools when a step is interrupted", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Interrupt blocked tool")
@@ -3346,7 +3339,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("interrupts a blocked provider turn without local tool execution", () =>
+  it.effect("interrupts a blocked step without local tool execution", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Interrupt provider")

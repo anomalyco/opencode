@@ -7,7 +7,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { executeTool, settleTool, testModel, toolDefinitions } from "./lib/tool"
+import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -52,6 +52,15 @@ const make = (permission?: string) => {
   return permission ? Tool.withPermission(tool, permission) : tool
 }
 
+const constant = (text: string) =>
+  Tool.make({
+    description: "Return text",
+    input: Schema.Struct({ text: Schema.String }),
+    output: Schema.Struct({ text: Schema.String }),
+    execute: () => Effect.succeed({ text }),
+    toModelOutput: ({ output }) => [{ type: "text" as const, text: output.text }],
+  })
+
 describe("ToolRegistry", () => {
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
@@ -82,25 +91,6 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("materializes all permission-eligible edit tools before request policy", () =>
-    Effect.gen(function* () {
-      const service = yield* ToolRegistry.Service
-      yield* service.register({
-        read: make(),
-        edit: make("edit"),
-        write: make("edit"),
-        patch: make("edit"),
-      })
-      const names = (model: ToolRegistry.MaterializeInput["model"]) =>
-        service
-          .materialize({ model })
-          .pipe(Effect.map((materialized) => materialized.definitions.map((tool) => tool.name)))
-
-      expect(yield* names({ id: "gpt-5", provider: "openai" })).toEqual(["read", "edit", "write", "patch"])
-      expect(yield* names({ id: "claude-sonnet-4", provider: "anthropic" })).toEqual(["read", "edit", "write", "patch"])
-    }),
-  )
-
   it.effect("keeps permission decoration isolated between registrations", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -117,7 +107,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("reuses model definitions across provider turns", () =>
+  it.effect("reuses model definitions across requests", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({ echo: make() })
@@ -196,7 +186,7 @@ describe("ToolRegistry", () => {
         }),
       })
       expect(
-        yield* service.materialize({ model: testModel }).pipe(
+        yield* service.materialize().pipe(
           Effect.flatMap((materialized) =>
             materialized.settle({
               sessionID,
@@ -214,7 +204,7 @@ describe("ToolRegistry", () => {
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({ echo: make() })
-      const materialized = yield* service.materialize({ model: testModel })
+      const materialized = yield* service.materialize()
       const exit = yield* materialized.settle(call("echo", "call-retention-failure")).pipe(Effect.exit)
 
       expect(Exit.isFailure(exit)).toBe(true)
@@ -340,54 +330,34 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("executes the unchanged registration advertised for a provider turn", () =>
-    Effect.gen(function* () {
-      const service = yield* ToolRegistry.Service
-      yield* service.register({ echo: make() })
-      const materialized = yield* service.materialize({ model: testModel })
-
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({ type: "text", value: "echo" })
-    }),
-  )
-
-  it.effect("executes the advertised registration after it is removed", () =>
+  it.effect("executes the tool advertised in a model request", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
-      yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
-      const materialized = yield* service.materialize({ model: testModel })
+      yield* service.register({ echo: constant("advertised") }).pipe(Scope.provide(scope))
+      const request = yield* service.materialize()
       yield* Scope.close(scope, Exit.void)
+      yield* service.register({ echo: constant("replacement") })
 
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({ type: "text", value: "echo" })
+      expect((yield* request.settle(call("echo"))).result).toEqual({ type: "text", value: "advertised" })
+      expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "replacement" })
     }),
   )
 
-  it.effect("executes each registration advertised for a provider turn after replacement", () =>
+  it.effect("reveals the previous registration after an overlay closes", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({ first: make(), second: make() })
-      const materialized = yield* service.materialize({ model: testModel })
-      yield* service.register({ first: make() })
-
-      expect((yield* materialized.settle(call("first"))).result).toEqual({ type: "text", value: "first" })
-      expect((yield* materialized.settle(call("second"))).result).toEqual({ type: "text", value: "second" })
-    }),
-  )
-
-  it.effect("executes an advertised overlay after the previous registration is revealed", () =>
-    Effect.gen(function* () {
-      const service = yield* ToolRegistry.Service
-      yield* service.register({ echo: make() })
+      yield* service.register({ echo: constant("base") })
       const overlay = yield* Scope.make()
-      yield* service.register({ echo: make() }).pipe(Scope.provide(overlay))
-      const materialized = yield* service.materialize({ model: testModel })
-      yield* Scope.close(overlay, Exit.void)
+      yield* service.register({ echo: constant("overlay") }).pipe(Scope.provide(overlay))
 
-      expect((yield* materialized.settle(call("echo"))).result).toEqual({ type: "text", value: "echo" })
+      expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "overlay" })
+      yield* Scope.close(overlay, Exit.void)
+      expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "base" })
     }),
   )
 
-  it.effect("executes deferred registrations from the advertised generation", () =>
+  it.effect("executes deferred tools advertised in a model request", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const executed: string[] = []
@@ -405,7 +375,7 @@ describe("ToolRegistry", () => {
           { deferred: true },
         )
         .pipe(Scope.provide(scope))
-      const materialized = yield* service.materialize({ model: testModel })
+      const materialized = yield* service.materialize()
       yield* Scope.close(scope, Exit.void)
       yield* service.register(
         {
@@ -425,41 +395,12 @@ describe("ToolRegistry", () => {
           type: "tool-call",
           id: "call-execute",
           name: "execute",
-          input: { code: 'return await tools.echo({ text: "admitted" })' },
+          input: { code: 'return await tools.echo({ text: "request" })' },
         },
       })
 
       expect(settlement.result).toMatchObject({ type: "text" })
-      expect(executed).toEqual(["old:admitted"])
-    }),
-  )
-
-  it.effect("keeps captured execution running after registration mutation", () =>
-    Effect.gen(function* () {
-      const service = yield* ToolRegistry.Service
-      const started = yield* Deferred.make<void>()
-      const release = yield* Deferred.make<void>()
-      const scope = yield* Scope.make()
-      yield* service
-        .register({
-          echo: Tool.make({
-            description: "Echo text",
-            input: Schema.Struct({ text: Schema.String }),
-            output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) =>
-              Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as({ text })),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
-          }),
-        })
-        .pipe(Scope.provide(scope))
-      const materialized = yield* service.materialize({ model: testModel })
-      const settlement = yield* materialized.settle(call("echo")).pipe(Effect.forkChild)
-      yield* Deferred.await(started)
-      yield* Scope.close(scope, Exit.void)
-      yield* service.register({ echo: make() })
-      yield* Deferred.succeed(release, undefined)
-
-      expect(yield* Fiber.join(settlement)).toMatchObject({ result: { type: "text", value: "echo" } })
+      expect(executed).toEqual(["old:request"])
     }),
   )
 })

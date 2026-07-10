@@ -36,19 +36,19 @@ type CollectedFiles = {
   readonly files: Array<typeof ExecuteFile.Type>
 }
 
-export interface Registration {
+interface Registration {
   readonly tool: AnyTool
   readonly name: string
   readonly group?: string
 }
 
-export const create = (options: { readonly registrations: ReadonlyMap<string, Registration> }) => {
+export const create = (registrations: ReadonlyMap<string, Registration>) => {
   const runtime = (
     invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
     hooks?: CodeMode.ToolCallHooks,
   ) => {
     const tools: Record<string, Tool.Definition<never> | Record<string, Tool.Definition<never>>> = {}
-    for (const [name, registration] of options.registrations) {
+    for (const [name, registration] of registrations) {
       const child = definition(name, registration.tool)
       const value = Tool.make({
         description: child.description,

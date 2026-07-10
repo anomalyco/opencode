@@ -12,7 +12,6 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
-import { testModel } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -255,14 +254,10 @@ describe("PluginV2", () => {
       })
 
       yield* plugins.activate([plugin])
-      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
-        "plugin_tool",
-      )
+      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain("plugin_tool")
 
       yield* plugins.activate([])
-      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).not.toContain(
-        "plugin_tool",
-      )
+      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).not.toContain("plugin_tool")
     }),
   )
 
@@ -291,7 +286,7 @@ describe("PluginV2", () => {
 
       yield* plugins.activate([plugin])
 
-      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toEqual([
+      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toEqual([
         "plain",
         "context_7_look_up",
         "execute",
@@ -350,7 +345,7 @@ describe("PluginV2", () => {
 
       yield* plugins.activate([plugin])
 
-      const materialized = yield* registry.materialize({ model: testModel })
+      const materialized = yield* registry.materialize()
       const settlement = yield* materialized.settle({
         sessionID: SessionV2.ID.make("ses_hooks"),
         agent: AgentV2.ID.make("build"),

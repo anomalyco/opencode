@@ -80,53 +80,8 @@ export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
 }
 
 /**
- * Runs one durable coding-agent Session until it settles.
- *
- * Keep this as orchestration over smaller collaborators rather than rebuilding the legacy
- * `SessionPrompt` monolith. Implement the unchecked items in small reviewed slices:
- *
- * - Session ownership and controls
- *   - [x] Coordinate one local active drain per Session; explicit resumes join and prompt wakeups coalesce.
- *   - [ ] Replace local ownership with durable multi-node ownership when clustered.
- *   - [x] Publish durable historical execution lifecycle and bounded retry observations.
- *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
- *   - [x] Honor optional agent step limits.
- *   - [ ] Bound repeated identical tool calls (provider retries are bounded).
- *
- * - Runtime context assembly
- *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
- *
- * - One step
- *   - [x] Translate every projected V2 Session message variant into canonical
- *     `@opencode-ai/llm` messages.
- *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
- *   - [x] Stream exactly one `llm.stream(request)` call per attempt.
- *   - [x] Persist assistant text and usage events incrementally as they arrive.
- *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
- *   - [x] Persist reasoning, provider errors, and tool-call events incrementally as they arrive.
- *
- * - Tool settlement and continuation
- *   - [x] Durably record each tool call before side effects begin.
- *   - [x] Authorize and execute recorded local calls through a core-owned registry hook.
- *   - [x] Persist typed success, failure, and provider-executed tool outcomes.
- *   - [x] Start each recorded local call eagerly and await all settlements before continuation.
- *   - [ ] Add scoped runtime context, progress updates, attachment normalization,
- *     plugins, and cancellation settlement.
- *   - [x] Reload projected history and start the next explicit step after local tool results.
- *   - [x] Continue for durable user steering accepted during an active step.
- *   - [ ] Continue for compaction or another continuation condition when required.
- *
- * - Post-run maintenance
- *   - [ ] Settle final status and expose durable output events to replayable consumers.
- *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
- *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
- *
- * Use `llm.stream(request)` for each attempt. Keep tool execution and continuation here.
- * Durable continuation recovery remains a separate future slice with an explicit retry policy.
- *
- * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
- * step. Registry definitions are advertised, local tool calls are settled durably, and an
- * explicit loop starts the next step after local settlement. Configured agent step limits bound the loop.
+ * Runs one durable coding-agent Session until it settles. Each step reloads projected history,
+ * materializes tools, makes one model request, and settles local calls before continuation.
  */
 
 const layer = Layer.effect(
@@ -239,9 +194,7 @@ const layer = Layer.effect(
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, checkpoint.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
-      const toolMaterialization = isLastStep
-        ? undefined
-        : yield* tools.materialize({ permissions: agentInfo.permissions, model })
+      const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agentInfo.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
@@ -457,8 +410,8 @@ const layer = Layer.effect(
           const toolsInterrupted = settledCauses.some(Cause.hasInterrupts)
           const userDeclined = settledCauses.some(isUserDeclined)
 
+          if (settled._tag === "Failure") yield* FiberSet.clear(toolFibers)
           if (userDeclined || streamInterrupted || toolsInterrupted) {
-            yield* FiberSet.clear(toolFibers)
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
             yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
           }
@@ -509,9 +462,7 @@ const layer = Layer.effect(
 
           const stepFailure = publisher.stepFailure()
           const stepSettlement = publisher.stepSettlement()
-          const stepEndedCleanly =
-            !streamInterrupted && !toolsInterrupted && infraError === undefined && !providerFailed && !stepFailure
-          if (stepSettlement && stepEndedCleanly) yield* publishStepEnd(stepSettlement)
+          if (stepSettlement && !stepFailure) yield* publishStepEnd(stepSettlement)
           if (stepFailure)
             yield* serialized(publisher.publishStepFailure(stepSettlement ? stepUsage(stepSettlement) : undefined))
 
@@ -523,7 +474,7 @@ const layer = Layer.effect(
           if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
           return {
             _tag: "Completed",
-            needsContinuation: !providerFailed && needsContinuation,
+            needsContinuation,
             step: currentStep,
           } as const
         }),

@@ -34,7 +34,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { registerToolPlugin, settleTool, testModel } from "./lib/tool"
+import { registerToolPlugin, settleTool } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",

@@ -27,7 +27,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, settleTool, testModel, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, settleTool, toolIdentity, waitForTool } from "./lib/tool"
 
 const childText = "child final response"
 const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: ProviderV2.ID.make("test") })
@@ -146,9 +146,7 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
-            SubagentTool.name,
-          )
+          expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,

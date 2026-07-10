@@ -148,7 +148,7 @@ Invalid input never invokes the tool. Invalid output never produces a successful
 
 `toModelOutput` is pure and total. When omitted, the encoded output remains structured output; an encoded string is also projected as text. Projection does not receive invocation identity because presentation depends only on validated input and output.
 
-Step materialization captures the effective registration identity for each advertised name without retaining its handler. Settlement rejects the call as stale if that registration was removed or replaced, including when closing an overlay reveals the previously effective registration. The current handler is captured only after this check; removing or replacing its registration afterward does not affect the running invocation.
+Each model request captures the effective registered `Tool` value for every advertised name. Settlement executes those captured values; later registration changes affect later requests.
 
 ## Output Bounding
 
@@ -165,7 +165,7 @@ Outcomes remain distinct:
 - `ToolFailure` is an expected model-visible failure.
 - Interruption cancels the invocation and is not a tool result.
 - Unexpected typed errors and defects follow the runner's operational failure policy.
-- Unknown, invalid, and stale calls become explicit model-visible settlement errors without invoking a handler.
+- Unknown and invalid calls become explicit model-visible settlement errors without invoking a handler.
 
 Leaf tools translate only errors they deliberately classify as recoverable. Broad cause-catching around an executor is invalid because it consumes interruption and defects.
 
@@ -175,8 +175,7 @@ Leaf tools translate only errors they deliberately classify as recoverable. Broa
 - **Codec boundary:** execution observes decoded input; projection observes encoded output.
 - **Durable identity:** invocation-owned records use the exact Session, agent, assistant message, and call IDs supplied by the runner.
 - **Scoped registration:** closing a Scope removes exactly its registration and reveals any prior active overlay.
-- **Captured execution:** registration changes cannot alter an invocation after effective lookup.
-- **Stale rejection:** a call never executes a registration other than the one advertised for its step.
+- **Captured execution:** a call executes the registered `Tool` value advertised in its model request.
 - **Storage encapsulation:** domain output does not change according to model-output bounding or retention policy.
 
 ## Follow-Up
