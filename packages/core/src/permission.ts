@@ -123,9 +123,19 @@ const layer = Layer.effect(
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const pending = new Map<ID, Pending>()
-    // Tracks coalesced request IDs → the primary request ID they share an action with.
+    // Tracks coalesced request IDs → the primary request ID they share an equivalent permission with.
     // Only the primary request triggers a UI dialog; coalesced requests piggyback on its decision.
+    // Coalescing key: sessionID + action + sorted resources + sorted save — only truly identical
+    // requests coalesce. Two fs_write calls to DIFFERENT files must each show their own dialog,
+    // because the permission system evaluates per (action, resource) pair.
     const coalesced = new Map<ID, ID>()
+
+    /** Build a normalized coalescing key from a pending request. */
+    function coalescingKey(req: Request): string {
+      const resources = [...req.resources].sort().join("\0")
+      const save = req.save ? [...req.save].sort().join("\0") : ""
+      return `${req.sessionID}\x00${req.action}\x00${resources}\x00${save}`
+    }
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
@@ -188,13 +198,14 @@ const layer = Layer.effect(
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
           const item = { request, agent, deferred }
 
-          // Check for a coalescing candidate: same action already pending in this session.
-          // The coalescing key is the permission action (e.g. "fs_write"), NOT the specific resource,
-          // because the user grants permission per-type, not per-file.
+          // Check for a coalescing candidate: an equivalent permission already pending in this session.
+          // The coalescing key includes sessionID + action + normalized resources + normalized save,
+          // because the permission system evaluates per (action, resource) pair.
+          // Two fs_write calls to different files must NOT coalesce — they need separate user approval.
+          const key = coalescingKey(request)
           for (const [existingId, existing] of pending) {
-            if (existing.request.sessionID !== request.sessionID) continue
-            if (existing.request.action !== request.action) continue
-            // Found a match — coalesce: don't publish a new event, just map to the primary.
+            if (coalescingKey(existing.request) !== key) continue
+            // Found an equivalent request — coalesce: don't publish a new event, just map to the primary.
             pending.set(request.id, item)
             coalesced.set(request.id, existingId)
             return item
