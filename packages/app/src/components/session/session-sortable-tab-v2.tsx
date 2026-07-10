@@ -1,36 +1,17 @@
 import { createMemo, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import { createSortable } from "@thisbeyond/solid-dnd"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { useSortable } from "@dnd-kit/solid/sortable"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { getFilename } from "@opencode-ai/core/util/path"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
+import { FileVisual } from "./session-sortable-tab"
 
-export function FileVisual(props: { path: string; active?: boolean; temporary?: boolean }): JSX.Element {
-  return (
-    <div class="flex items-center gap-x-1.5 min-w-0">
-      <Show
-        when={!props.active}
-        fallback={<FileIcon node={{ path: props.path, type: "file" }} class="size-4 shrink-0" />}
-      >
-        <span class="relative inline-flex size-4 shrink-0">
-          <FileIcon node={{ path: props.path, type: "file" }} class="absolute inset-0 size-4 tab-fileicon-color" />
-          <FileIcon node={{ path: props.path, type: "file" }} mono class="absolute inset-0 size-4 tab-fileicon-mono" />
-        </span>
-      </Show>
-      <span class="text-14-medium truncate" classList={{ italic: props.temporary }}>
-        {getFilename(props.path)}
-      </span>
-    </div>
-  )
-}
-
-export function SortableTab(props: {
+export function SortableTabV2(props: {
   tab: string
+  index: () => number
   temporary?: boolean
   onTabClose: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
@@ -38,7 +19,14 @@ export function SortableTab(props: {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
-  const sortable = createSortable(props.tab)
+  const sortable = useSortable({
+    get id() {
+      return props.tab
+    },
+    get index() {
+      return props.index()
+    },
+  })
   const path = createMemo(() => file.pathFromTab(props.tab))
   const content = createMemo(() => {
     const value = path()
@@ -46,7 +34,7 @@ export function SortableTab(props: {
     return <FileVisual path={value} temporary={props.temporary} />
   })
   return (
-    <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
+    <div ref={sortable.ref} class="h-full flex items-center">
       <div class="relative">
         <Tabs.Trigger
           value={props.tab}
