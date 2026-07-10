@@ -31,6 +31,8 @@ import { useProviders } from "@/hooks/use-providers"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { Persist, persisted } from "@/utils/persist"
 import createPresence from "solid-presence"
+import { useLocal } from "@/context/local"
+import { createPromptModelSelection } from "@/pages/session/composer/prompt-model-selection"
 
 const workspaceBarEnabled = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
@@ -54,8 +56,10 @@ export default function NewSessionPage() {
   const openProviderSettings = useSettingsDialog("providers")
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
+  const local = useLocal()
+  const model = createPromptModelSelection({ agent: local.agent.current })
 
-  useComposerCommands()
+  useComposerCommands({ model })
 
   let inputRef: HTMLDivElement | undefined
 
@@ -63,6 +67,7 @@ export default function NewSessionPage() {
     sessionKey: route.sessionKey,
     sessionID: () => route.params.id,
     queryOptions: serverSync().queryOptions,
+    model,
   })
   const projectControls = createPromptProjectControls()
   const projectController = createPromptProjectController({

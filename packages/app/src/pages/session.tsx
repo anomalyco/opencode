@@ -69,7 +69,7 @@ import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { restorePromptModel, syncPromptModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import {
   clampSessionPanelWidth,
   SESSION_PANEL_WIDTH_MIN,
@@ -556,6 +556,17 @@ export default function Page() {
       },
     ),
   )
+
+  let restoredModelSession: string | undefined
+  createEffect(() => {
+    const id = params.id
+    if (!id || !prompt.ready() || !local.session.ready()) return
+    if (restoredModelSession !== id) {
+      restoredModelSession = id
+      if (restorePromptModel(local, prompt)) return
+    }
+    syncPromptModel(local, prompt)
+  })
 
   createEffect(
     on(

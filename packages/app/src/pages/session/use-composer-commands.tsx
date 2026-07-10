@@ -1,6 +1,6 @@
 import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
-import { useLocal } from "@/context/local"
+import { useLocal, type ModelSelection } from "@/context/local"
 import { useSettings } from "@/context/settings"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "@/components/prompt-input/editor-dom"
@@ -14,7 +14,7 @@ const withCategory = (category: string) => {
   })
 }
 
-export const useComposerCommands = () => {
+export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
@@ -22,6 +22,7 @@ export const useComposerCommands = () => {
   const settings = useSettings()
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
+  const model = input.model ?? local.model
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
 
@@ -43,7 +44,7 @@ export const useComposerCommands = () => {
     }
     const { DialogSelectModel } = await import("@/components/dialog-select-model")
     owner.run(() => {
-      void dialog.show(() => <DialogSelectModel model={local.model} />, restoreComposer)
+      void dialog.show(() => <DialogSelectModel model={model} />, restoreComposer)
     })
   }
 
@@ -61,7 +62,7 @@ export const useComposerCommands = () => {
       title: language.t("command.model.variant.cycle"),
       description: language.t("command.model.variant.cycle.description"),
       keybind: "shift+mod+d",
-      onSelect: () => local.model.variant.cycle(),
+      onSelect: () => model.variant.cycle(),
     }),
     agentCommand({
       id: "agent.cycle",
