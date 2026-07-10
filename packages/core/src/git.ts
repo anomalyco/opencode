@@ -189,14 +189,12 @@ const layer = Layer.effect(
       if (!dotgit) return undefined
 
       const cwd = path.dirname(dotgit)
-      const git = run(cwd, proc)
-      const result = yield* git(["rev-parse", "--show-toplevel", "--git-dir", "--git-common-dir"])
-      if (result.exitCode !== 0) return undefined
-      const [topLevel, gitDir, commonDir] = result.text.replace(/[\r\n]+$/, "").split(/\r?\n/)
+      const result = yield* run(cwd, proc)(["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
+      const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
       if (!gitDir || !commonDir) return undefined
 
       return new Repository({
-        worktree: AbsolutePath.make(resolvePath(cwd, topLevel)),
+        worktree: AbsolutePath.make(topLevel ? resolvePath(cwd, topLevel) : cwd),
         gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir)),
         commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir)),
       })
