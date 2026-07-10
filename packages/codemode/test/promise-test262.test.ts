@@ -16,8 +16,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
 
-const execute = (code: string) =>
-  Effect.runPromise(CodeMode.execute({ code, tools: {}, limits: { timeoutMs: 1_000 } }))
+const execute = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {}, limits: { timeoutMs: 1_000 } }))
 
 const value = async (code: string) => {
   const result = await execute(code)
@@ -450,7 +449,10 @@ describe("Test262 async functions and await", () => {
         const promises = [declaration(), expression(), arrow()]
         return [promises.map((item) => item instanceof Promise), await Promise.all(promises)]
       `),
-    ).toEqual([[true, true, true], [1, 2, 3]])
+    ).toEqual([
+      [true, true, true],
+      [1, 2, 3],
+    ])
   })
 
   test("async bodies adopt returns and reject throws before and after await", async () => {
@@ -479,13 +481,7 @@ describe("Test262 async functions and await", () => {
           await observe(throwsAfter()),
         ]
       `),
-    ).toEqual([
-      ["body"],
-      ["fulfilled", 42],
-      ["fulfilled", 43],
-      ["rejected", 1],
-      ["rejected", 2],
-    ])
+    ).toEqual([["body"], ["fulfilled", 42], ["fulfilled", 43], ["rejected", 1], ["rejected", 2]])
   })
 
   test("default-parameter throws reject instead of escaping the call", async () => {
@@ -578,7 +574,7 @@ describe("Test262 async functions and await", () => {
 
 describe("Test262 expected Promise conformance", () => {
   for (const name of ["all", "allSettled", "race"] as const) {
-    test.failing(`Promise.${name} rejects invalid input with TypeError`, async () => {
+    test(`Promise.${name} rejects invalid input with TypeError`, async () => {
       // Sources:
       // test/built-ins/Promise/all/S25.4.4.1_A3.1_T1.js
       // test/built-ins/Promise/all/S25.4.4.1_A3.1_T2.js
@@ -634,7 +630,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toBe(true)
   })
 
-  test.failing("Promise.all settles after reactions attached to its inputs", async () => {
+  test("Promise.all settles after reactions attached to its inputs", async () => {
     // Sources:
     // test/built-ins/Promise/all/S25.4.4.1_A7.2_T1.js
     // test/built-ins/Promise/all/S25.4.4.1_A8.1_T1.js
@@ -653,7 +649,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([1, 2, 3, 4, 5])
   })
 
-  test.failing("Promise.allSettled settles after reactions attached to its inputs", async () => {
+  test("Promise.allSettled settles after reactions attached to its inputs", async () => {
     // Sources:
     // test/built-ins/Promise/allSettled/resolved-sequence.js
     // test/built-ins/Promise/allSettled/resolved-sequence-extra-ticks.js
@@ -674,7 +670,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([1, 2, 3, 4, 5])
   })
 
-  test.failing("Promise.race settles in a reaction after its winning input", async () => {
+  test("Promise.race settles in a reaction after its winning input", async () => {
     // Sources:
     // test/built-ins/Promise/race/S25.4.4.3_A6.1_T1.js
     // test/built-ins/Promise/race/resolved-sequence-extra-ticks.js
@@ -692,7 +688,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([1, 2, 3, 4, 5])
   })
 
-  test.failing("then reactions route and propagate fulfillment and rejection", async () => {
+  test("then reactions route and propagate fulfillment and rejection", async () => {
     // Sources:
     // test/built-ins/Promise/prototype/then/prfm-fulfilled.js
     // test/built-ins/Promise/prototype/then/prfm-rejected.js
@@ -726,7 +722,7 @@ describe("Test262 expected Promise conformance", () => {
     ])
   })
 
-  test.failing("then reactions preserve breadth-first queue order", async () => {
+  test("then reactions preserve breadth-first queue order", async () => {
     // Source: test/built-ins/Promise/prototype/then/S25.4.4_A1.1_T1.js
     expect(
       await value(`
@@ -741,7 +737,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
   })
 
-  test.failing("then rejects direct self-resolution for fulfilled and rejected sources", async () => {
+  test("then rejects direct self-resolution for fulfilled and rejected sources", async () => {
     // Sources:
     // test/built-ins/Promise/prototype/then/resolve-settled-fulfilled-self.js
     // test/built-ins/Promise/prototype/then/resolve-settled-rejected-self.js
@@ -761,7 +757,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual(["TypeError", "TypeError"])
   })
 
-  test.failing("catch delegates rejection handling and preserves fulfillment", async () => {
+  test("catch delegates rejection handling and preserves fulfillment", async () => {
     // Sources:
     // test/built-ins/Promise/prototype/catch/S25.4.5.1_A2.1_T1.js
     // test/built-ins/Promise/prototype/catch/S25.4.5.1_A3.1_T1.js
@@ -776,7 +772,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([1, 4])
   })
 
-  test.failing("finally preserves or replaces the original settlement", async () => {
+  test("finally preserves or replaces the original settlement", async () => {
     // Sources:
     // test/built-ins/Promise/prototype/finally/resolution-value-no-override.js
     // test/built-ins/Promise/prototype/finally/rejection-reason-no-fulfill.js
@@ -799,7 +795,109 @@ describe("Test262 expected Promise conformance", () => {
     ])
   })
 
-  test.failing("await always resumes in a later reaction and interleaves async functions", async () => {
+  test("then ignores non-callable handlers", async () => {
+    // Sources:
+    // test/built-ins/Promise/prototype/then/S25.4.5.3_A4.1_T1.js
+    // test/built-ins/Promise/prototype/then/S25.4.5.3_A4.1_T2.js
+    // test/built-ins/Promise/prototype/then/S25.4.5.3_A5.1_T1.js
+    // test/built-ins/Promise/prototype/then/S25.4.5.3_A5.2_T1.js
+    // (adapted: only non-callable handlers are probed; callables that are not plain
+    //  functions, such as tool references, intentionally throw in CodeMode)
+    expect(
+      await value(`
+        const observe = async (promise) => {
+          try { return ["fulfilled", await promise] } catch (reason) { return ["rejected", reason] }
+        }
+        return await Promise.all([
+          observe(Promise.resolve(1).then(2)),
+          observe(Promise.resolve(4).then(null, null)),
+          observe(Promise.resolve(5).then({}, "x")),
+          observe(Promise.reject(3).then(null, "x")),
+          observe(Promise.reject(6).then(7, {})),
+        ])
+      `),
+    ).toEqual([
+      ["fulfilled", 1],
+      ["fulfilled", 4],
+      ["fulfilled", 5],
+      ["rejected", 3],
+      ["rejected", 6],
+    ])
+  })
+
+  test("finally waits for a returned promise and preserves or replaces settlement", async () => {
+    // Sources:
+    // test/built-ins/Promise/prototype/finally/resolved-observable-then-calls.js
+    // test/built-ins/Promise/prototype/finally/rejected-observable-then-calls.js
+    // test/built-ins/Promise/prototype/finally/resolution-value-no-override.js
+    expect(
+      await value(`
+        const observe = async (promise) => {
+          try { return ["fulfilled", await promise] } catch (reason) { return ["rejected", reason] }
+        }
+        const order = []
+        const cleanup = async () => {
+          await Promise.resolve()
+          order.push("cleanup")
+        }
+        const settled = await Promise.resolve("kept").finally(() => cleanup())
+        order.push("settled:" + settled)
+        return [
+          await observe(Promise.resolve(1).finally(() => Promise.resolve(99))),
+          order,
+          await observe(Promise.resolve(2).finally(() => Promise.reject(3))),
+          await observe(Promise.reject(4).finally(() => Promise.resolve(99))),
+        ]
+      `),
+    ).toEqual([
+      ["fulfilled", 1],
+      ["cleanup", "settled:kept"],
+      ["rejected", 3],
+      ["rejected", 4],
+    ])
+  })
+
+  test("then adopts a returned rejected promise", async () => {
+    // Sources:
+    // test/built-ins/Promise/prototype/then/rxn-handler-fulfilled-return-abrupt.js
+    // test/built-ins/Promise/resolve/resolve-promise.js
+    // (adapted: the fulfillment handler returns an already-rejected promise instead of
+    //  throwing, and the rejection handler recovers with a fulfilled promise)
+    expect(
+      await value(`
+        const observe = async (promise) => {
+          try { return ["fulfilled", await promise] } catch (reason) { return ["rejected", reason] }
+        }
+        return await Promise.all([
+          observe(Promise.resolve(1).then(() => Promise.reject("bad"))),
+          observe(Promise.reject(2).then(undefined, () => Promise.resolve("ok"))),
+        ])
+      `),
+    ).toEqual([
+      ["rejected", "bad"],
+      ["fulfilled", "ok"],
+    ])
+  })
+
+  test("independent reactions on one source each observe the same settlement", async () => {
+    // Source: test/built-ins/Promise/prototype/then/S25.4.4_A2.1_T1.js
+    // (adapted: the multiple-reactions family is asserted through the values every
+    //  reaction returns instead of a shared completion counter)
+    expect(
+      await value(`
+        const fulfilled = Promise.resolve(7)
+        const rejected = Promise.reject(8)
+        return await Promise.all([
+          fulfilled.then((value) => "first:" + value),
+          fulfilled.then((value) => "second:" + value),
+          rejected.catch((reason) => "first:" + reason),
+          rejected.catch((reason) => "second:" + reason),
+        ])
+      `),
+    ).toEqual(["first:7", "second:7", "first:8", "second:8"])
+  })
+
+  test("await always resumes in a later reaction and interleaves async functions", async () => {
     // Sources:
     // test/language/expressions/await/async-await-interleaved.js
     // test/language/expressions/await/await-non-promise.js
@@ -814,7 +912,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual(["first:1", "second:1", "first:2", "second:2"])
   })
 
-  test.failing("an async function rejects when it resolves with its own promise", async () => {
+  test("an async function rejects when it resolves with its own promise", async () => {
     // Adapted from the self-resolution requirement represented by:
     // test/built-ins/Promise/resolve-self.js
     // test/built-ins/Promise/resolve/S25.4.4.5_A4.1_T1.js

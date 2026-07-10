@@ -43,6 +43,8 @@ import {
   isRecord,
   type MemberReference,
   OptionalShortCircuit,
+  PromiseInstanceMethodReference,
+  type PromiseInstanceMethodName,
   PromiseMethodReference,
   type PromiseMethodName,
   PromiseNamespace,
@@ -219,6 +221,34 @@ const normalizeError = (error: unknown): Diagnostic => {
   }
 }
 
+// V8 parity: a combinator subscribes to its members with ordinary reactions, so its own
+// settlement lands one reaction turn after the deciding member. Capturing the exit first
+// confines the delay to the settlement, not the observation of members.
+const settleAfterTurn = <A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.exit(body), (exit) => Effect.andThen(Effect.yieldNow, exit))
+
+// A promise can never resolve with itself (JS rejects the chaining cycle with a TypeError):
+// adopting its own settlement would wait forever.
+const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
+  new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
+
+type ReactionHandler = CodeModeFunction | CoercionFunction | UriFunction
+
+// Reactions accept the same callables as array-method callbacks; other callables fail
+// loudly, and non-callables are ignored as in JS (`.then(undefined, f)` relies on this).
+const reactionHandler = (value: unknown, method: string, node: AstNode): ReactionHandler | undefined => {
+  if (value instanceof CodeModeFunction || value instanceof CoercionFunction || value instanceof UriFunction) {
+    return value
+  }
+  if (typeofValue(value) === "function") {
+    throw new InterpreterRuntimeError(
+      `${method} handlers must be plain functions; wrap other callables in an arrow function, e.g. (value) => tools.ns.tool(value).`,
+      node,
+    )
+  }
+  return undefined
+}
+
 // Shared by catch bindings and Promise.allSettled rejection reasons.
 const caughtErrorValue = (thrown: unknown): unknown => {
   if (thrown instanceof ProgramThrow) return thrown.value
@@ -235,6 +265,7 @@ const isRuntimeReference = (value: unknown): boolean =>
   value instanceof GlobalMethodReference ||
   value instanceof PromiseNamespace ||
   value instanceof PromiseMethodReference ||
+  value instanceof PromiseInstanceMethodReference ||
   value instanceof SandboxPromise ||
   value instanceof CoercionFunction ||
   value instanceof UriFunction ||
@@ -279,6 +310,7 @@ const typeofValue = (value: unknown): string => {
     value instanceof IntrinsicReference ||
     value instanceof GlobalMethodReference ||
     value instanceof PromiseMethodReference ||
+    value instanceof PromiseInstanceMethodReference ||
     value instanceof PromiseNamespace ||
     value instanceof ErrorConstructorReference
   )
@@ -768,7 +800,6 @@ class Interpreter<R> {
         if (result.kind === "break" || result.kind === "continue") {
           throw new InterpreterRuntimeError(`Unexpected '${result.kind}' outside of a loop.`, statement)
         }
-
       }
 
       // The program body runs inside an implicit async function, so a returned promise
@@ -797,13 +828,13 @@ class Interpreter<R> {
   // `await promise`: succeed with the fulfilled value or re-raise the failure so try/catch
   // observes it exactly like a synchronous throw at the await site. Settlement is idempotent
   // (fiber exits replay), so awaiting the same promise repeatedly never re-runs the call.
+  // The post-settlement yield defers the continuation one reaction turn, as in JS: awaiters
+  // never resume inline, so async functions and handlers interleave in attach order.
   private settlePromise(promise: SandboxPromise): Effect.Effect<unknown, unknown, never> {
     const promises = this.promises
     return Effect.suspend(() => {
       promises.markObserved(promise)
-      return Effect.flatMap(promises.await(promise), (exit) =>
-        Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
-      )
+      return Effect.flatMap(promises.await(promise), (exit) => Effect.andThen(Effect.yieldNow, exit))
     })
   }
 
@@ -980,7 +1011,6 @@ class Interpreter<R> {
         if (result.kind === "return") {
           return result
         }
-
       }
 
       return { kind: "none" } satisfies StatementResult
@@ -1007,7 +1037,6 @@ class Interpreter<R> {
         if (result.kind === "return") {
           return result
         }
-
       } while (yield* self.evaluateExpression(testNode))
 
       return { kind: "none" } satisfies StatementResult
@@ -1550,11 +1579,11 @@ class Interpreter<R> {
       case "UpdateExpression":
         return this.evaluateUpdateExpression(node)
       case "AwaitExpression": {
-        // `await` resolves a promise value; awaiting anything else is a passthrough no-op,
-        // matching real JS semantics for non-thenables.
+        // `await` resolves a promise and passes anything else through, but always defers
+        // its continuation one reaction turn (in JS every await suspends).
         const self = this
         return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
-          value instanceof SandboxPromise ? self.settlePromise(value) : Effect.succeed(value),
+          value instanceof SandboxPromise ? self.settlePromise(value) : Effect.as(Effect.yieldNow, value),
         )
       }
       case "NewExpression":
@@ -2025,6 +2054,9 @@ class Interpreter<R> {
       if (callable instanceof PromiseMethodReference) {
         return yield* self.invokePromiseMethod(callable, args, node)
       }
+      if (callable instanceof PromiseInstanceMethodReference) {
+        return yield* self.invokePromiseInstanceMethod(callable, args, node)
+      }
       if (callable instanceof CodeModeFunction) {
         return yield* self.invokeFunction(callable, args)
       }
@@ -2248,7 +2280,7 @@ class Interpreter<R> {
           new InterpreterRuntimeError(
             `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
             node,
-          ),
+          ).as("TypeError"),
         ),
       )
     }
@@ -2261,47 +2293,45 @@ class Interpreter<R> {
 
     switch (ref.name) {
       case "all": {
-        // Each observation re-raises its member's failure, so Effect.all rejects on the first
-        // failure without waiting for the rest and preserves input order when all fulfill.
-        // Its failure-time interruption only unsubscribes the sibling waiters: the underlying
-        // fibers stay execution-owned and keep running, as in JS.
+        // Each observation re-raises its member's failure (flatten runs the awaited Exit), so
+        // Effect.all rejects on the first failure without waiting for the rest and preserves
+        // input order when all fulfill. Its failure-time interruption only unsubscribes the
+        // sibling waiters: the underlying fibers stay execution-owned and keep running, as in JS.
         const observations = items.map((item) =>
-          item instanceof SandboxPromise
-            ? Effect.flatMap(this.promises.await(item), (exit) =>
-                Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
-              )
-            : Effect.succeed(item),
+          item instanceof SandboxPromise ? Effect.flatten(this.promises.await(item)) : Effect.succeed(item),
         )
-        return this.createPromise(Effect.all(observations, { concurrency: "unbounded" }))
+        return this.createPromise(settleAfterTurn(Effect.all(observations, { concurrency: "unbounded" })))
       }
       case "allSettled": {
         const observations = items.map((item) =>
           item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item as unknown)),
         )
         return this.createPromise(
-          Effect.gen(function* () {
-            const outcomes: Array<unknown> = []
-            for (const observation of observations) {
-              const exit = yield* observation
-              if (Exit.isSuccess(exit)) {
+          settleAfterTurn(
+            Effect.gen(function* () {
+              const outcomes: Array<unknown> = []
+              for (const observation of observations) {
+                const exit = yield* observation
+                if (Exit.isSuccess(exit)) {
+                  outcomes.push(
+                    Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
+                  )
+                  continue
+                }
+                if (Cause.hasInterruptsOnly(exit.cause)) {
+                  // Execution teardown (timeout/host interruption), not a program-level rejection.
+                  return yield* Effect.failCause(exit.cause)
+                }
                 outcomes.push(
-                  Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
+                  Object.assign(Object.create(null) as SafeObject, {
+                    status: "rejected",
+                    reason: caughtErrorValue(Cause.squash(exit.cause)),
+                  }),
                 )
-                continue
               }
-              if (Cause.hasInterruptsOnly(exit.cause)) {
-                // Execution teardown (timeout/host interruption), not a program-level rejection.
-                return yield* Effect.failCause(exit.cause)
-              }
-              outcomes.push(
-                Object.assign(Object.create(null) as SafeObject, {
-                  status: "rejected",
-                  reason: caughtErrorValue(Cause.squash(exit.cause)),
-                }),
-              )
-            }
-            return outcomes
-          }),
+              return outcomes
+            }),
+          ),
         )
       }
       case "race": {
@@ -2320,13 +2350,88 @@ class Interpreter<R> {
         )
         // First settlement (fulfilled OR rejected) wins; losing work stays execution-owned
         // and is interrupted at normal completion (already observed) or by teardown.
-        return this.createPromise(
-          Effect.flatMap(Effect.raceAll(observations), (exit) =>
-            Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
-          ),
-        )
+        return this.createPromise(settleAfterTurn(Effect.flatten(Effect.raceAll(observations))))
       }
     }
+  }
+
+  // Observes a source settlement as a reaction: teardown interruption propagates without
+  // running handlers, and a real settlement defers one reaction turn so handlers never run
+  // inline (which also guarantees the caller's `box` is assigned before handlers see it).
+  private reactionExit(source: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>, unknown, R> {
+    const promises = this.promises
+    return Effect.gen(function* () {
+      const exit = yield* promises.await(source)
+      if (!Exit.isSuccess(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
+      yield* Effect.yieldNow
+      return exit
+    })
+  }
+
+  // Promise.prototype.then/catch/finally: attaching a reaction marks the source observed
+  // (its rejection now belongs to the chain) and returns a new scope-owned promise.
+  private invokePromiseInstanceMethod(
+    ref: PromiseInstanceMethodReference,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<SandboxPromise, never, R> {
+    const method = `Promise.prototype.${ref.name}`
+    this.promises.markObserved(ref.promise)
+    if (ref.name === "finally") {
+      return this.chainFinally(ref.promise, reactionHandler(args[0], method, node), method, node)
+    }
+    const onFulfilled = ref.name === "then" ? reactionHandler(args[0], method, node) : undefined
+    const onRejected = reactionHandler(ref.name === "then" ? args[1] : args[0], method, node)
+    return this.chainReaction(ref.promise, onFulfilled, onRejected, method, node)
+  }
+
+  // The derived promise settles from the matching handler: its return value fulfills
+  // (returned promises are adopted; returning the derived promise itself is a cycle), its
+  // throw rejects, and a missing handler passes the source settlement through.
+  private chainReaction(
+    source: SandboxPromise,
+    onFulfilled: ReactionHandler | undefined,
+    onRejected: ReactionHandler | undefined,
+    method: string,
+    node: AstNode,
+  ): Effect.Effect<SandboxPromise, never, R> {
+    const self = this
+    const box: { derived?: SandboxPromise } = {}
+    const body = Effect.gen(function* () {
+      const exit = yield* self.reactionExit(source)
+      const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
+      if (handler === undefined) return yield* exit
+      const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
+      const result = yield* self.applyCollectionCallback(handler, method, node)([input])
+      if (result === box.derived) return yield* Effect.fail(selfResolutionError(node))
+      if (result instanceof SandboxPromise) return yield* self.settlePromise(result)
+      return result
+    })
+    return Effect.map(this.createPromise(body), (derived) => {
+      box.derived = derived
+      return derived
+    })
+  }
+
+  // Cleanup runs on both outcomes; its fulfillment is discarded and the original settlement
+  // replays, while a throw or returned rejection replaces it, as in JS.
+  private chainFinally(
+    source: SandboxPromise,
+    cleanup: ReactionHandler | undefined,
+    method: string,
+    node: AstNode,
+  ): Effect.Effect<SandboxPromise, never, R> {
+    const self = this
+    return this.createPromise(
+      Effect.gen(function* () {
+        const exit = yield* self.reactionExit(source)
+        if (cleanup !== undefined) {
+          const result = yield* self.applyCollectionCallback(cleanup, method, node)([])
+          if (result instanceof SandboxPromise) yield* self.settlePromise(result)
+        }
+        return yield* exit
+      }),
+    )
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
@@ -2358,10 +2463,22 @@ class Interpreter<R> {
       return yield* invocation.evaluateExpression(fn.body)
     })
     if (!fn.async) return run
-    return this.createPromise(
-      Effect.flatMap(run, (value) =>
-        value instanceof SandboxPromise ? invocation.settlePromise(value) : Effect.succeed(value),
+    // An async function's promise adopts a returned promise's settlement - except its own,
+    // which rejects as a JS chaining cycle. Every await yields, so `box.own` is assigned
+    // before the body can return a reference to it.
+    const box: { own?: SandboxPromise } = {}
+    return Effect.map(
+      this.createPromise(
+        Effect.flatMap(run, (value) => {
+          if (!(value instanceof SandboxPromise)) return Effect.succeed(value)
+          if (value === box.own) return Effect.fail(selfResolutionError())
+          return invocation.settlePromise(value)
+        }),
       ),
+      (promise) => {
+        box.own = promise
+        return promise
+      },
     )
   }
 
@@ -3079,6 +3196,7 @@ class Interpreter<R> {
     | MemberReference
     | ToolReference
     | PromiseMethodReference
+    | PromiseInstanceMethodReference
     | IntrinsicReference
     | GlobalMethodReference
     | ComputedValue
@@ -3199,20 +3317,15 @@ class Interpreter<R> {
         return new ComputedValue(undefined)
       }
 
-      // Any property access on a promise is a confused program (`p.then(...)`, `p.value`);
-      // reading `undefined` here would hide the missing await, so both paths get an explicit,
+      // Promises expose only the chaining methods; other property reads are a confused
+      // program (`p.value`) where `undefined` would hide the missing await, so they get an
       // await-hinting error instead of the forgiving unknown-property fallthrough.
       if (objectValue instanceof SandboxPromise) {
         if (key === "then" || key === "catch" || key === "finally") {
-          throw new InterpreterRuntimeError(
-            `Promise.prototype.${String(key)} is not supported in CodeMode; use await instead (with try/catch to handle failures) - e.g. \`const result = await tools.ns.tool(...)\`.`,
-            propertyNode,
-            "UnsupportedSyntax",
-            [supportedSyntaxMessage],
-          )
+          return new PromiseInstanceMethodReference(objectValue, key as PromiseInstanceMethodName)
         }
         throw new InterpreterRuntimeError(
-          "This value is an un-awaited Promise and has no readable properties; await it first - e.g. `const result = await tools.ns.tool(...)`.",
+          "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.",
           objectNode,
           "InvalidDataValue",
         )
@@ -3265,6 +3378,7 @@ class Interpreter<R> {
         reference === undefined ||
         reference instanceof ToolReference ||
         reference instanceof PromiseMethodReference ||
+        reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference
       )
@@ -3302,6 +3416,7 @@ class Interpreter<R> {
         reference === undefined ||
         reference instanceof ToolReference ||
         reference instanceof PromiseMethodReference ||
+        reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference
       ) {

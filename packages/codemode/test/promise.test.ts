@@ -3,8 +3,9 @@ import { Effect, Schema } from "effect"
 import { CodeMode, Tool, toolError } from "../src/index.js"
 
 // Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly on
-// supervised fibers, `await` settles them, and Promise.all/allSettled/race/resolve/reject are
-// ordinary functions over arbitrary arrays mixing promises and plain values.
+// supervised fibers, `await` settles them, Promise.all/allSettled/race/resolve/reject are
+// ordinary functions over arbitrary arrays mixing promises and plain values, and
+// .then/.catch/.finally chain reactions onto any promise.
 
 type Trace = {
   starts: Array<number>
@@ -184,7 +185,7 @@ describe("first-class promise values", () => {
     expect(result.toolCalls).toStrictEqual([{ name: "host.sleepy" }])
   })
 
-  test("await of a non-promise value is a passthrough no-op", async () => {
+  test("await of a non-promise value passes it through unchanged", async () => {
     expect(await value(`return await 42`)).toBe(42)
     expect(await value(`const x = await "s"; return x`)).toBe("s")
     expect(await value(`return await null`)).toBeNull()
@@ -935,16 +936,124 @@ describe("timeout interruption of forked calls", () => {
   })
 })
 
-describe("unsupported promise surface", () => {
-  test(".then/.catch/.finally give a clear await-instead error", async () => {
-    for (const method of ["then", "catch", "finally"]) {
-      const diagnostic = await error(`return tools.host.sleepy({ id: 1 }).${method}((x) => x)`)
-      expect(diagnostic.kind).toBe("UnsupportedSyntax")
-      expect(diagnostic.message).toContain(`Promise.prototype.${method} is not supported`)
-      expect(diagnostic.message).toContain("await")
-    }
+describe("promise chaining", () => {
+  test("then transforms tool results and adopts returned promises across a chain", async () => {
+    expect(
+      await value(`
+        return await tools.host
+          .sleepy({ id: 2 })
+          .then((id) => tools.host.sleepy({ id: id + 1 }))
+          .then((id) => id * 10)
+      `),
+    ).toBe(30)
   })
 
+  test("handlers are deferred and run in attach order", async () => {
+    expect(
+      await value(`
+        const order = []
+        const promise = Promise.resolve(1)
+        promise.then(() => order.push("h1"))
+        promise.then(() => order.push("h2"))
+        order.push("sync")
+        await promise
+        return order
+      `),
+    ).toEqual(["sync", "h1", "h2"])
+  })
+
+  test("catch recovers a tool failure and preserves fulfillment", async () => {
+    expect(
+      await value(`
+        return [
+          await tools.host.fail({}).catch((error) => error.message),
+          await tools.host.sleepy({ id: 4 }).catch(() => "unused"),
+        ]
+      `),
+    ).toEqual(["Lookup refused", 4])
+  })
+
+  test("finally observes settlement without changing the value", async () => {
+    expect(
+      await value(`
+        const events = []
+        const result = await tools.host.sleepy({ id: 5 }).finally(() => events.push("cleanup"))
+        return [result, events]
+      `),
+    ).toEqual([5, ["cleanup"]])
+  })
+
+  test("a settled, un-awaited rejected chain tail warns exactly once", async () => {
+    const result = await run(`
+      Promise.reject(new Error("boom")).then((value) => value)
+      await Promise.resolve()
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    // The source rejection belongs to the chain (no warning); only the derived tail warns.
+    expect(result.warnings).toStrictEqual([
+      { kind: "ExecutionFailure", message: "Unhandled rejection from an un-awaited promise: Uncaught: boom" },
+    ])
+  })
+
+  test("a catch handler silences the chain's rejection warning", async () => {
+    const result = await run(`
+      Promise.reject(new Error("boom")).catch(() => "handled")
+      await Promise.resolve()
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.warnings).toBeUndefined()
+  })
+
+  test("non-plain-function handlers fail loudly instead of being ignored", async () => {
+    const diagnostic = await error(`return await tools.host.sleepy({ id: 1 }).then(tools.host.completed)`)
+    expect(diagnostic.message).toContain("Promise.prototype.then handlers must be plain functions")
+  })
+
+  test("chaining methods are opaque references until called", async () => {
+    expect(await value(`return typeof tools.host.sleepy({ id: 1 }).then`)).toBe("function")
+  })
+})
+
+describe("combinator settlement timing", () => {
+  test("a combinator settling one reaction turn after the program returns is interrupted silently", async () => {
+    // The aggregate's one-turn settlement delay (V8 parity) means an immediately-returning
+    // program abandons it while still pending: interrupted like any pending work, so no
+    // rejection warning survives - the member itself was observed by the combinator.
+    const result = await run(`
+      Promise.all([Promise.reject(new Error("boom"))])
+      return "done"
+    `)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toBe("done")
+    expect(result.warnings).toBeUndefined()
+  })
+
+  test("a combinator settles one reaction turn after its members, as in V8", async () => {
+    // Regression for the race winner flip: Promise.all's settlement burns a reaction turn,
+    // so a plain resolved value entered in the same race wins, and a fail-fast aggregate
+    // cannot beat it into rejection.
+    expect(
+      await value(`
+        const pending = tools.host.sleepy({ id: 9, ms: 60000 })
+        const winner = await Promise.race([Promise.all([Promise.resolve(1)]), Promise.resolve(2)])
+        try {
+          const raced = await Promise.race([Promise.all([Promise.reject("x"), pending]), Promise.resolve("ok")])
+          return [winner, "fulfilled", raced]
+        } catch (reason) {
+          return [winner, "rejected", reason]
+        }
+      `),
+    ).toEqual([2, "fulfilled", "ok"])
+  })
+})
+
+describe("unsupported promise surface", () => {
   test("other property reads on a promise hint at the missing await", async () => {
     const diagnostic = await error(`return tools.host.sleepy({ id: 1 }).value`)
     expect(diagnostic.kind).toBe("InvalidDataValue")

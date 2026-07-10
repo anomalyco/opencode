@@ -64,10 +64,13 @@ path lookup, namespace browsing, deterministic ranking, and pagination.
 ### Tool execution
 
 Every sandbox promise starts eagerly on a run-once fiber owned by the whole CodeMode execution, including tool calls,
-async functions, `Promise.all`, `Promise.allSettled`, `Promise.race`, `Promise.resolve`, and `Promise.reject`. Nested
-functions therefore cannot end the lifetime of work they started. Independent aggregate batches overlap, and rejection
-is observed at the eventual `await`. `Promise.race` uses native non-cancelling settlement semantics: its first result
-wins while losers continue running. At normal completion CodeMode interrupts everything still running - race losers,
+async functions, chained `.then`/`.catch`/`.finally` reactions, `Promise.all`, `Promise.allSettled`, `Promise.race`,
+`Promise.resolve`, and `Promise.reject`. Nested functions therefore cannot end the lifetime of work they started.
+Independent aggregate batches overlap, and rejection is observed at the eventual `await` or chained rejection handler.
+`Promise.race` uses native non-cancelling settlement semantics: its first result wins while losers continue running.
+Reaction ordering matches what V8 makes observable - handlers and await continuations are deferred and run in attach
+order, and a combinator settles one reaction turn after its deciding member - without promising exact microtask-count
+parity beyond that. At normal completion CodeMode interrupts everything still running - race losers,
 fail-fast `Promise.all` stragglers, and fire-and-forget calls alike: the program has returned, so no future await can
 exist, and work whose completion matters must be awaited by the program. Waiting for any class of leftover instead
 would let it hold the execution open, or deadlock it when queued work needs tool-call permits the leftovers occupy.

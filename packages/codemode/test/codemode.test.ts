@@ -672,9 +672,10 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("not a general-purpose runtime")
     expect(instructions).not.toContain("Standard modern JavaScript works")
     expect(instructions).not.toContain("TypeScript type annotations")
-    for (const missing of ["Modules/imports", "classes", "generators", "fetch", "promise chaining"]) {
+    for (const missing of ["Modules/imports", "classes", "generators", "fetch", "new Promise(...)"]) {
       expect(instructions).toContain(missing)
     }
+    expect(instructions).not.toContain("promise chaining")
     expect(instructions).toContain("URL, URLSearchParams, and URI encoding helpers")
     expect(instructions).not.toContain("host globals")
     expect(instructions).toContain("Use Code Mode tools for external operations")

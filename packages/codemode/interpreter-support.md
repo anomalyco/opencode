@@ -92,7 +92,8 @@ ultimate source of truth.
 - [x] Optional property access and optional calls.
 - [x] Function/tool calls and spread arguments.
 - [x] Sequence expressions (the comma operator).
-- [x] `await` for sandbox promises; awaiting a plain value is a no-op.
+- [x] `await` for sandbox promises; a plain value passes through unchanged, though every `await` still defers its
+      continuation one reaction turn.
 - [x] `new` for Error types, Date, RegExp, Map, Set, URL, and URLSearchParams.
 - [x] Arithmetic operators: `+`, `-`, `*`, `/`, `%`, and `**`.
 - [x] Equality and ordering: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, and `>=`.
@@ -116,12 +117,21 @@ ultimate source of truth.
 - [x] `Promise.race` settles from the first result without cancelling losers at settlement time.
 - [x] Real promise values from `Promise.all`, `Promise.allSettled`, and `Promise.race`; separately constructed
       combinator batches overlap as in normal JavaScript.
+- [x] Promise chaining with `.then`, `.catch`, and `.finally`: handlers run deferred in attach order, returned
+      promises are adopted, handler throws reject the derived promise, `.finally` preserves the original settlement
+      unless its cleanup fails, and direct self-resolution rejects with a `TypeError`.
+- [x] Every `await` (including of plain values and already-settled promises) defers its continuation one reaction
+      turn, so concurrent async functions interleave at await points as in JavaScript.
+- [x] Combinators settle one reaction turn after their deciding member (V8-observable ordering): reactions already
+      attached to members run first, and an aggregate cannot beat a plain value settling in the same turn into a
+      `Promise.race`. Exact microtask-count parity beyond this observable ordering is not a documented guarantee.
 - [x] All still-pending work (race losers, fail-fast `Promise.all` stragglers, and un-awaited calls alike) is
       interrupted when the program returns; rejections that settled un-awaited become `Success.warnings`
-      diagnostics.
+      diagnostics. A combinator abandoned inside its final settlement turn counts as pending and is interrupted
+      without a warning.
 - [x] `try`/`catch` can handle awaited tool and promise failures.
 - [ ] `Promise.any`.
-- [ ] Promise chaining with `.then`, `.catch`, and `.finally`.
+- [ ] Thenable assimilation (objects with a `then` method are plain data, not promises).
 - [ ] Custom promise construction with `new Promise(...)`.
 - [ ] Async iterables, host streams, and stream consumption.
 
