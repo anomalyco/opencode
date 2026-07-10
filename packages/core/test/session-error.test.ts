@@ -17,10 +17,35 @@ import {
 } from "@opencode-ai/llm"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
-import { toSessionError } from "@opencode-ai/core/session/to-session-error"
+import { sanitizeErrorMessage, toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 
 const llm = (reason: LLMError["reason"]) => new LLMError({ module: "test", method: "stream", reason })
+
+describe("sanitizeErrorMessage", () => {
+  test("bounds html provider bodies for 503 retry notices", () => {
+    const html = `<html>
+<head><title>503 Service Temporarily Unavailable</title></head>
+<body>
+<center><h1>503 Service Temporarily Unavailable</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>`
+    expect(sanitizeErrorMessage(`Provider request failed with HTTP 503: ${html}`)).toBe(
+      "Provider temporarily unavailable (HTTP 503)",
+    )
+    expect(
+      toSessionError(llm(new ProviderInternalReason({ message: `Provider request failed with HTTP 503: ${html}`, status: 503 }))),
+    ).toEqual({
+      type: "provider.internal",
+      message: "Provider temporarily unavailable (HTTP 503)",
+    })
+  })
+
+  test("leaves plain text messages unchanged", () => {
+    expect(sanitizeErrorMessage("Service unavailable")).toBe("Service unavailable")
+  })
+})
 
 describe("toSessionError", () => {
   test("maps every LLM reason to the open wire type", () => {

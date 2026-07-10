@@ -1678,15 +1678,26 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
   )
 }
 
+export function formatRetryNotice(attempt: number, error: { message: string; type: string }) {
+  // Defense in depth: core already sanitizes HTML bodies, but bound multi-line markup if it
+  // still reaches the TUI so a single nginx page cannot dominate the transcript.
+  const message = error.message.includes("<")
+    ? error.message
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120) || error.type
+    : error.message
+  return `Retry attempt ${attempt} scheduled: ${message} [${error.type}]`
+}
+
 function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
   const { theme } = useTheme()
   return (
     <Show when={props.retry}>
       {(retry) => (
         <box paddingLeft={3} marginTop={1}>
-          <text fg={theme.textMuted}>
-            Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
-          </text>
+          <text fg={theme.textMuted}>{formatRetryNotice(retry().attempt, retry().error)}</text>
         </box>
       )}
     </Show>
