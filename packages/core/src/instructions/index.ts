@@ -1,17 +1,17 @@
 export * as Instructions from "./index"
 
 import { createHash } from "crypto"
-import { InstructionSync } from "@opencode-ai/schema/instruction-sync"
+import { Instruction } from "@opencode-ai/schema/instruction"
 import { Effect, Option, Schema } from "effect"
 
-export const Key = InstructionSync.Key
-export type Key = InstructionSync.Key
-export const Hash = InstructionSync.Hash
-export type Hash = InstructionSync.Hash
-export const Values = InstructionSync.Values
-export type Values = InstructionSync.Values
-export const Delta = InstructionSync.Delta
-export type Delta = InstructionSync.Delta
+export const Key = Instruction.Key
+export type Key = Instruction.Key
+export const Hash = Instruction.Hash
+export type Hash = Instruction.Hash
+export const Values = Instruction.Values
+export type Values = Instruction.Values
+export const Delta = Instruction.Delta
+export type Delta = Instruction.Delta
 
 export const unavailable = Symbol.for("@opencode/Instructions.Unavailable")
 export type Unavailable = typeof unavailable
@@ -137,12 +137,12 @@ export function read(value: Instructions): Effect.Effect<ReadResult> {
 export function diff(observed: ReadResult, previous?: Values): Effect.Effect<Admission, InitializationBlocked> {
   const blocked = previous ? [] : observed.flatMap((entry) => (entry.value === unavailable ? [entry.key] : []))
   if (blocked.length > 0) return Effect.fail(new InitializationBlocked({ keys: blocked }))
-  const delta: Record<string, Hash | InstructionSync.Removed> = {}
+  const delta: Record<string, Hash | Instruction.Removed> = {}
   const blobs: Record<string, Schema.Json> = {}
   for (const entry of observed) {
     if (entry.value === unavailable) continue
     if (entry.value === removed) {
-      if (previous && Object.hasOwn(previous, entry.key)) delta[entry.key] = InstructionSync.removed
+      if (previous && Object.hasOwn(previous, entry.key)) delta[entry.key] = Instruction.removed
       continue
     }
     const next = hash(entry.value)
@@ -204,7 +204,7 @@ export function applyDelta<A>(
 export function applyHashDelta(values: Values, delta: Delta): Values {
   const result: Record<string, Hash> = { ...values }
   for (const [key, value] of Object.entries(delta)) {
-    if (value === InstructionSync.removed) delete result[key]
+    if (value === Instruction.removed) delete result[key]
     else result[key] = value
   }
   return result

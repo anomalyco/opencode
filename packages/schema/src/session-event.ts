@@ -14,7 +14,7 @@ import { SessionMessage } from "./session-message.js"
 import { Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
-import { InstructionSync } from "./instruction-sync.js"
+import { Instruction } from "./instruction.js"
 import { Agent } from "./agent.js"
 import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
@@ -180,7 +180,7 @@ export const InstructionsUpdated = Event.durable({
   },
   schema: {
     ...Base,
-    delta: InstructionSync.Delta,
+    delta: Instruction.Delta,
   },
 })
 export type InstructionsUpdated = typeof InstructionsUpdated.Type

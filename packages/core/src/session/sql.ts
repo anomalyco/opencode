@@ -11,7 +11,7 @@ import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
-import type { InstructionSync } from "@opencode-ai/schema/instruction-sync"
+import type { Instruction } from "@opencode-ai/schema/instruction"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SyntheticData, UserData } from "@opencode-ai/schema/session-pending"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
@@ -168,7 +168,7 @@ export const InstructionEntryTable = sqliteTable(
 )
 
 export const InstructionBlobTable = sqliteTable("instruction_blob", {
-  hash: text().$type<InstructionSync.Hash>().primaryKey(),
+  hash: text().$type<Instruction.Hash>().primaryKey(),
   value: text({ mode: "json" }).notNull().$type<Schema.Json>(),
 })
 
@@ -179,6 +179,6 @@ export const InstructionStateTable = sqliteTable("instruction_state", {
     .references(() => SessionTable.id, { onDelete: "cascade" }),
   epoch_start: integer().notNull(),
   through_seq: integer().notNull(),
-  initial_values: text({ mode: "json" }).notNull().$type<InstructionSync.Values>(),
-  current_values: text({ mode: "json" }).notNull().$type<InstructionSync.Values>(),
+  initial_values: text({ mode: "json" }).notNull().$type<Instruction.Values>(),
+  current_values: text({ mode: "json" }).notNull().$type<Instruction.Values>(),
 })
