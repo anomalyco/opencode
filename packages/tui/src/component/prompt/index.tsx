@@ -1088,6 +1088,17 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
+      sync.session.optimisticUserMessage({
+        sessionID,
+        text: inputText,
+        parts: [...editorParts, ...nonTextParts],
+        agent: agent.name,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
+          variant,
+        },
+      })
       sdk.client.session
         .prompt(
           {
@@ -1108,6 +1119,7 @@ export function Prompt(props: PromptProps) {
           { throwOnError: true },
         )
         .catch((error) => {
+          sync.session.clearOptimisticUserMessage(sessionID)
           toast.show({
             title: "Failed to send prompt",
             message: errorMessage(error),
@@ -1128,15 +1140,14 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPartIndex", new Map())
     props.onSubmit?.()
 
-    // temporary hack to make sure the message is sent
     if (!props.sessionID) {
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
-      setTimeout(() => {
+      queueMicrotask(() => {
         route.navigate({
           type: "session",
           sessionID,
         })
-      }, 50)
+      })
     }
     input.clear()
     if (finishMoveProgress) move.finishSubmit()

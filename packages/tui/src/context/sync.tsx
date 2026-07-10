@@ -144,6 +144,32 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const optimisticBySession = new Map<string, string>()
+
+    function clearOptimisticUserMessage(sessionID: string) {
+      const messageID = optimisticBySession.get(sessionID)
+      if (!messageID) return
+      optimisticBySession.delete(sessionID)
+      const messages = store.message[sessionID]
+      if (messages) {
+        const match = search(messages, messageID, (m) => m.id)
+        if (match.found) {
+          setStore(
+            "message",
+            sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+        }
+      }
+      setStore(
+        "part",
+        produce((draft) => {
+          delete draft[messageID]
+        }),
+      )
+    }
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -313,6 +339,12 @@ export const {
         }
 
         case "message.updated": {
+          if (event.properties.info.role === "user") {
+            const optimisticID = optimisticBySession.get(event.properties.info.sessionID)
+            if (optimisticID && optimisticID !== event.properties.info.id) {
+              clearOptimisticUserMessage(event.properties.info.sessionID)
+            }
+          }
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -605,6 +637,8 @@ export const {
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
                 const currentMessages = draft.message[sessionID] ?? []
+                const optimisticID = optimisticBySession.get(sessionID)
+                const optimisticIDs = optimisticID ? new Set([optimisticID]) : new Set<string>()
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]
                   const current = currentMessages.find((item) => item.id === message.info.id)
@@ -612,7 +646,9 @@ export const {
                 })
                 infos.push(
                   ...currentMessages.filter(
-                    (message) => tracker.messages.has(message.id) && !infos.some((item) => item.id === message.id),
+                    (message) =>
+                      (tracker.messages.has(message.id) || optimisticIDs.has(message.id)) &&
+                      !infos.some((item) => item.id === message.id),
                   ),
                 )
                 const removed = infos.slice(0, -100)
@@ -658,6 +694,63 @@ export const {
           syncingSessions.set(sessionID, task)
           return task
         },
+        optimisticUserMessage(input: {
+          sessionID: string
+          text: string
+          parts?: Array<Omit<Part, "id" | "sessionID" | "messageID">>
+          agent: string
+          model: {
+            providerID: string
+            modelID: string
+            variant?: string
+          }
+        }) {
+          clearOptimisticUserMessage(input.sessionID)
+          const messageID = `opt_${crypto.randomUUID()}`
+          optimisticBySession.set(input.sessionID, messageID)
+          const created = Date.now()
+          const message: Message = {
+            id: messageID,
+            sessionID: input.sessionID,
+            role: "user",
+            time: { created },
+            agent: input.agent,
+            model: input.model,
+          }
+          const parts: Part[] = [
+            ...(input.parts ?? []).map(
+              (part) =>
+                ({
+                  ...part,
+                  id: `opt_${crypto.randomUUID()}`,
+                  sessionID: input.sessionID,
+                  messageID,
+                }) as Part,
+            ),
+            {
+              id: `opt_${crypto.randomUUID()}`,
+              sessionID: input.sessionID,
+              messageID,
+              type: "text",
+              text: input.text,
+            },
+          ]
+          const messages = store.message[input.sessionID]
+          if (!messages) {
+            setStore("message", input.sessionID, [message])
+          } else {
+            setStore(
+              "message",
+              input.sessionID,
+              produce((draft) => {
+                draft.push(message)
+              }),
+            )
+          }
+          setStore("part", messageID, parts)
+          return messageID
+        },
+        clearOptimisticUserMessage,
       },
       bootstrap,
     }
