@@ -12,8 +12,8 @@ import { Tool } from "./tool"
 export const name = "subagent"
 
 const NO_TEXT = "Subagent completed without a text response."
-const BACKGROUND_STARTED =
-  "The subagent is working in the background. You will be notified automatically when it finishes. DO NOT sleep, poll, or proactively check on its progress."
+const backgroundStarted = (sessionID: SessionSchema.ID) =>
+  `The subagent is working in the background (id: ${sessionID}). You will be notified automatically when it finishes. DO NOT sleep, poll, or proactively check on its progress.`
 
 export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The configured agent to run as the subagent" }),
@@ -168,7 +168,11 @@ export const Plugin = {
                 if (background) {
                   yield* runtime.job.background(info.id)
                   yield* notifyWhenDone(context.sessionID, child.id, input.description)
-                  return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
+                  return {
+                    sessionID: child.id,
+                    status: "running" as const,
+                    output: backgroundStarted(child.id),
+                  }
                 }
 
                 const result = yield* runtime.job.block({ id: child.id, sessionID: context.sessionID }).pipe(
@@ -180,7 +184,11 @@ export const Plugin = {
                 )
                 if (result?.type === "backgrounded") {
                   yield* notifyWhenDone(context.sessionID, child.id, input.description)
-                  return { sessionID: child.id, status: "running" as const, output: BACKGROUND_STARTED }
+                  return {
+                    sessionID: child.id,
+                    status: "running" as const,
+                    output: backgroundStarted(child.id),
+                  }
                 }
                 if (result?.info.status === "error")
                   return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })

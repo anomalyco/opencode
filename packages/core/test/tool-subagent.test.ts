@@ -281,7 +281,10 @@ describe("SubagentTool", () => {
             },
           })
           const childID = outputSessionID(settled.output?.structured)
-          expect(settled.output?.structured).toMatchObject({ status: "running" })
+          expect(settled.output?.structured).toMatchObject({
+            status: "running",
+            output: expect.stringContaining(`id: ${childID}`),
+          })
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]
           expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)
