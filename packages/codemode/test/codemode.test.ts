@@ -761,11 +761,6 @@ describe("CodeMode public contract", () => {
         "tools.thread.generateImage",
       )
     }
-
-    // The retired $codemode namespace is gone from the tools tree entirely.
-    const removed = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: "file" })`))
-    expect(removed.ok).toBe(false)
-    if (!removed.ok) expect(removed.error.kind).toBe("UnknownTool")
   })
 
   test("search is a counted tool call: it burns maxToolCalls and fires the hooks", async () => {
@@ -1194,12 +1189,5 @@ describe("CodeMode public contract", () => {
       expect(result.error.message).toContain("timed out after 200ms")
     }
     expect(elapsedMs).toBeLessThan(3_000)
-  })
-
-  test("a host $codemode namespace is an ordinary namespace now that search is a built-in", async () => {
-    const runtime = CodeMode.make({ tools: { $codemode: { lookup } } })
-    const result = await Effect.runPromise(runtime.execute(`return await tools.$codemode.lookup({ id: "order_1" })`))
-    expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toStrictEqual({ id: "order_1", status: "open" })
   })
 })

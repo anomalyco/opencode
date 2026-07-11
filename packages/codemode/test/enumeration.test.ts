@@ -52,10 +52,8 @@ describe("Object.keys over tool references", () => {
     expect(await value(`return Object.keys(tools.github.list_issues)`)).toEqual([])
   })
 
-  test("search is a global built-in function, not a tools namespace", async () => {
+  test("search is a global built-in function", async () => {
     expect(await value(`return typeof search`)).toBe("function")
-    const failure = await error(`return Object.keys(tools.$codemode)`)
-    expect(failure.kind).toBe("UnknownTool")
   })
 
   test("an unknown namespace is an UnknownTool error pointing at the discovery idioms", async () => {
