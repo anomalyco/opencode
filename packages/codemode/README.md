@@ -1,11 +1,11 @@
 # @opencode-ai/codemode
 
-CodeMode is a lightweight, JavaScript-like DSL for model-written orchestration programs, backed by a pure JavaScript
-tree-walking interpreter: program source is never handed to `eval`, `new Function`, or a VM. A program can only call
-the schema-described tools its host
-supplies: it can sequence calls, transform plain data, branch, loop, and run independent calls in parallel, without
-ambient filesystem, process, network, module, or application authority. Instead of many model round trips, the model
-writes one small program that does the orchestration in code.
+CodeMode is a lightweight, JavaScript-like DSL for model-written orchestration programs. Programs run inside
+CodeMode's own interpreter and are never executed as actual JavaScript, so the only thing a program can reach is the
+schema-described tool tree its host supplies. Within that boundary it can sequence tool calls, transform plain data,
+branch, loop, and run independent calls in parallel - with no ambient filesystem, process, network, module, or
+application authority. Instead of many model round trips, the model writes one small program that does the
+orchestration in code.
 
 The supported language and standard-library surface is documented exhaustively in the
 [interpreter support checklist](./interpreter-support.md).
