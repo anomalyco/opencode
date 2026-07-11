@@ -1426,6 +1426,32 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("public provider info omits invalid models", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "test",
+    name: "Test",
+    env: [],
+    models: {
+      valid: {
+        id: "valid",
+        name: "Valid",
+        cost: { input: 1, output: 1 },
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider)
+  provider.models.invalid = {
+    ...provider.models.valid,
+    id: ModelV2.ID.make("invalid"),
+    cost: { ...provider.models.valid.cost, input: Number.NaN },
+  }
+
+  const result = Provider.toPublicInfo(provider)
+
+  expect(result.models.valid).toBeDefined()
+  expect(result.models.invalid).toBeUndefined()
+})
+
 it.instance("model variants are generated for reasoning models", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")

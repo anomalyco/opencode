@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.17.15",
+  "version": "1.17.18",
   "description": "",
   "type": "module",
   "exports": {
@@ -47,6 +47,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@corvu/drawer": "catalog:",
     "@dnd-kit/abstract": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/helpers": "0.5.0",
@@ -88,6 +89,7 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
+    "solid-presence": "0.2.0",
     "tailwindcss": "catalog:"
   }
 }

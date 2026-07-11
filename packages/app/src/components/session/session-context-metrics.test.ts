@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message } from "@opencode-ai/sdk/v2/client"
-import { getSessionContext, getSessionTokenTotal } from "./session-context-metrics"
+import { getSessionContext } from "./session-context-metrics"
 
 const assistant = (
   id: string,
@@ -38,10 +38,10 @@ const user = (id: string) => {
 }
 
 describe("getSessionContext", () => {
-  test("computes usage from latest assistant with tokens", () => {
+  test("computes token totals and usage from latest assistant with tokens", () => {
     const messages = [
       user("u1"),
-      assistant("a1", { input: 0, output: 0, reasoning: 0, read: 0, write: 0 }, 0.5),
+      assistant("a1", { input: 600, output: 200, reasoning: 100, read: 50, write: 50 }, 0.5),
       assistant("a2", { input: 300, output: 100, reasoning: 50, read: 25, write: 25 }, 1.25),
     ]
     const providers = [
@@ -60,6 +60,8 @@ describe("getSessionContext", () => {
     const ctx = getSessionContext(messages, providers)
 
     expect(ctx?.message.id).toBe("a2")
+    expect(ctx?.total).toBe(500)
+    expect(ctx?.input).toBe(300)
     expect(ctx?.usage).toBe(50)
     expect(ctx?.providerLabel).toBe("OpenAI")
     expect(ctx?.modelLabel).toBe("GPT-4.1")
@@ -93,16 +95,5 @@ describe("getSessionContext", () => {
     const ctx = getSessionContext(undefined, undefined)
 
     expect(ctx).toBeUndefined()
-  })
-
-  test("computes stored session token totals", () => {
-    expect(
-      getSessionTokenTotal({
-        input: 10,
-        output: 20,
-        reasoning: 30,
-        cache: { read: 40, write: 50 },
-      }),
-    ).toBe(150)
   })
 })
