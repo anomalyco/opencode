@@ -80,7 +80,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const [store, setStore] = createStore<{
       current?: string
       draft?: State
-      promoting?: State
       last?: {
         type: "agent" | "model" | "variant"
         agent?: string
@@ -124,7 +123,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const scope = createMemo<State | undefined>(() => {
       const session = id()
-      if (!session) return store.draft ?? store.promoting
+      if (!session) return store.draft
       return saved.session[session] ?? handoff.get(handoffKey(serverSDK().scope, sdk().directory, session))
     })
 
@@ -137,13 +136,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       if (!next) return
       if (saved.session[session] !== undefined) {
         handoff.delete(key)
-        setStore("promoting", undefined)
         return
       }
 
       setSaved("session", session, clone(next))
       handoff.delete(key)
-      setStore("promoting", undefined)
     })
 
     const configuredModel = () => {
@@ -377,7 +374,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       session: {
         ready: savedReady,
         reset() {
-          setStore({ draft: undefined, promoting: undefined })
+          setStore("draft", undefined)
         },
         promote(dir: string, session: string, state?: State) {
           const next = clone(state ?? snapshot())
@@ -388,8 +385,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (dir === sdk().directory) {
             setSaved("session", session, next)
           }
-
-          setStore("promoting", next)
           setStore("draft", undefined)
         },
         restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
