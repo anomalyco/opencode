@@ -247,7 +247,6 @@ export function Session() {
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
@@ -263,7 +262,6 @@ export function Session() {
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
-    if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
@@ -671,7 +669,6 @@ export function Session() {
         batch(() => {
           const isVisible = sidebarVisible()
           setSidebar(() => (isVisible ? "hide" : "auto"))
-          setSidebarOpen(!isVisible)
         })
         dialog.clear()
       },
