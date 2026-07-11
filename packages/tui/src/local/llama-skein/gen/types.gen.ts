@@ -32,6 +32,25 @@ export type ResourceSnapshot = {
     gpus?: Array<GpuSnapshot>;
     vram?: VramInfo;
     loaded_model?: LoadedModelInfo;
+    inference?: InferenceInfo;
+};
+
+/**
+ * Live inference load: in-flight model-dispatched requests vs. serving slots. The exact busy signal for schedulers — GPU utilization is sampled over a window and reads low between tokens; this does not.
+ */
+export type InferenceInfo = {
+    /**
+     * Model-dispatched HTTP requests currently being served, including any queued behind a model load or a busy slot.
+     */
+    in_flight?: number;
+    /**
+     * Total serving slots across running models (--parallel/-np per model command, default 1 each). 0 when no model is running.
+     */
+    slots_total?: number;
+    /**
+     * True when every slot of every running model is occupied (in_flight >= slots_total > 0) — a new request would queue. False when no model is running: the host is idle, it just needs a swap-in.
+     */
+    busy?: boolean;
 };
 
 export type LoadedModelInfo = {

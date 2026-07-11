@@ -159,7 +159,12 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const modelID = sessionModel?.id ?? last?.modelID
     const provider = providerID ? props.api.state.provider.find((item) => item.id === providerID) : undefined
     const model = provider && modelID ? provider.models[modelID] : undefined
-    const ctx = model?.limit.context ?? 0
+    // Show the enforced hard context ceiling (configured_ctx / --ctx-size),
+    // not the safe trim budget or a models.dev catalog native — the latter
+    // displayed "467k" while the backend rejected prompts at 3072. contextMax
+    // is the wall the request actually hits; fall back to context (the safe
+    // budget) for providers that don't report a distinct hard ceiling (cloud).
+    const ctx = model?.limit.contextMax ?? model?.limit.context ?? 0
     const seconds = last?.time.completed ? Math.max(0, (last.time.completed - last.time.created) / 1000) : 0
     const tokensPerSecond = last && seconds > 0 && last.tokens.output > 0 ? last.tokens.output / seconds : null
     const isLocal = Boolean(provider?.options?.["baseURL"])
@@ -176,10 +181,19 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  // String-equality memo: state() is a fresh object per message update, so
+  // keying the effect on it directly would restart the poll every stream tick.
+  const hardwareBaseURL = createMemo(() => state().baseURL)
+
   createEffect(on(
-    () => state().baseURL,
+    hardwareBaseURL,
     (url) => {
-      if (!url) { setMem(null); setTuning(null); return }
+      // The last committed sample belongs to the previous provider — drop it
+      // before polling the new one, or its totals render against the new host
+      // (and stick forever if the new backend lacks /api/hardware).
+      setMem(null)
+      setTuning(null)
+      if (!url) return
       const llamaClient = new LlamaSkeinClient({
         client: createClient(createConfig({ baseUrl: normalizeBaseURL(url) })),
       })
@@ -215,10 +229,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   // fork: poll remaining credits for pay-as-you-go cloud providers. Server-side
   // probe registry decides support per provider (provider/balance.ts); local
   // providers and providers without a probe simply return nothing.
+  const balanceProviderID = createMemo(() => (state().isLocal ? null : state().providerID))
+
   createEffect(on(
-    () => (state().isLocal ? null : state().providerID),
+    balanceProviderID,
     (providerID) => {
-      if (!providerID) { setBalance(null); return }
+      setBalance(null)
+      if (!providerID) return
       const poll = async () => {
         try {
           const res = await props.api.client.provider.balance({ providerID })

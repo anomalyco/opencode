@@ -1367,6 +1367,14 @@ async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string
     if (!modelID) return false
     const ctrlBase = baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
     const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
+    // The 413's max_ctx is the model's native ceiling; on a VRAM-constrained
+    // host it does not load (this is what bumped configs to 262144/110592 and
+    // OOM'd on reload). Probe /api/fit at the target size and only grow when it
+    // actually fits — otherwise surface the overflow rather than write an
+    // unloadable ctx-size the model will crash-loop on.
+    const probe = await client.getModelFit({ model: modelID, ctx: maxCtx }).catch(() => null)
+    const fit = probe?.data
+    if (!fit || fit.fit_level === "no") return false
     const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: maxCtx } })
     return !patch.error
   } catch {
@@ -1485,7 +1493,13 @@ async function discoverOpenAICompatibleModels(input: {
         const reportedContext =
           numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? existingModel?.limit.context ?? 0
         const context = fit?.maxSafeCtx ?? reportedContext
-        const contextMax = fit ? (fit.configuredCtx ?? reportedContext ?? undefined) : undefined
+        // contextMax is the enforced hard n_ctx used as the display ceiling.
+        // Prefer fit's configured_ctx; when fit is unavailable fall back to the
+        // backend's self-reported context_length (the fork emits this straight
+        // from --ctx-size) — NOT existingModel.limit.context, which may carry a
+        // models.dev catalog native (the ~467k that masked the real 3072 wall).
+        const contextMax =
+          fit?.configuredCtx ?? numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? undefined
         const output = numberFrom(item.max_output_tokens) ?? existingModel?.limit.output ?? 0
         discovered[modelID] = {
           id: ModelV2.ID.make(modelID),
@@ -2170,7 +2184,11 @@ export const layer = Layer.effect(
       return yield* InstanceState.use(state, (s) => {
         const model = s.providers[providerID]?.models[modelID]
         if (!model || !Number.isFinite(context) || context <= 0) return false
-        model.limit = { ...model.limit, context }
+        // Update contextMax too: it's the enforced hard n_ctx the sidebar shows.
+        // The user just set --ctx-size to this value, so it's the new ceiling.
+        // The next discovery re-reads it from the (now patched) backend, so it
+        // does not revert to a capacity number.
+        model.limit = { ...model.limit, context, contextMax: context }
         return true
       })
     })
