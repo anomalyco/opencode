@@ -9,7 +9,7 @@ import { RunFooterView } from "../src/mini/footer.view"
 import { RUN_THEME_FALLBACK } from "../src/mini/theme"
 import type { FooterState, FooterSubagentState, FooterView } from "../src/mini/types"
 
-test("subagent inspector is discoverable and closable", async () => {
+test("down opens subagents from an empty prompt", async () => {
   const [state] = createSignal<FooterState>({
     phase: "idle",
     status: "",
@@ -97,25 +97,6 @@ test("subagent inspector is discoverable and closable", async () => {
     app.mockInput.pressArrow("down")
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Select subagent")
-
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("esc back")
-
-    app.mockInput.pressEscape()
-    await app.renderOnce()
-    expect(app.captureCharFrame()).not.toContain("esc back")
-
-    app.mockInput.pressArrow("down")
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-    const lines = app.captureCharFrame().split("\n")
-    const y = lines.findIndex((line) => line.includes("esc back"))
-    const x = lines[y].indexOf("esc back")
-    await app.mockMouse.click(x, y)
-    await app.renderOnce()
-    expect(app.captureCharFrame()).not.toContain("esc back")
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

@@ -149,9 +149,6 @@ export function RunFooterSubagentBody(props: {
                   <span style={{ fg: footer().muted }}>{"  " + subtitle()}</span>
                 </Show>
               </text>
-              <text fg={footer().muted} wrapMode="none" flexShrink={0} onMouseUp={() => props.onClose()}>
-                esc back
-              </text>
               <Show when={interruptHint()}>
                 {(hint) => (
                   <text fg={footer().muted} wrapMode="none" truncate flexShrink={0}>

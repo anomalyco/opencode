@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
 import { SplitBorder } from "../../../ui/border"
-import { useBindings, useOpencodeModeStack, useCommandShortcut } from "../../../keymap"
+import { useBindings, useOpencodeModeStack } from "../../../keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
 
@@ -105,8 +105,6 @@ export function Composer(props: ComposerProps) {
     ],
   }))
 
-  const closeHint = useCommandShortcut("session.child_first")
-
   return (
     <ComposerContext.Provider value={ctx}>
       <box flexShrink={0} visible={props.open}>
@@ -121,32 +119,35 @@ export function Composer(props: ComposerProps) {
           paddingBottom={1}
         >
           <box gap={1}>
-            <Show
-              when={tabList().length > 1}
-              fallback={
-                <box flexDirection="row" paddingLeft={1}>
+            <box flexDirection="row" justifyContent="space-between" paddingLeft={1}>
+              <Show
+                when={tabList().length > 1}
+                fallback={
                   <text fg={theme.text} attributes={TextAttributes.BOLD}>
                     {tabList()[0]?.label ?? ""}
                   </text>
+                }
+              >
+                <box flexDirection="row" gap={2}>
+                  <For each={tabList()}>
+                    {(t) => {
+                      const isActive = createMemo(() => store.active === t.id)
+                      return (
+                        <text
+                          fg={isActive() ? theme.text : theme.textMuted}
+                          attributes={isActive() ? TextAttributes.BOLD : undefined}
+                        >
+                          {t.label}
+                        </text>
+                      )
+                    }}
+                  </For>
                 </box>
-              }
-            >
-              <box flexDirection="row" gap={2} paddingLeft={1}>
-                <For each={tabList()}>
-                  {(t) => {
-                    const isActive = createMemo(() => store.active === t.id)
-                    return (
-                      <text
-                        fg={isActive() ? theme.text : theme.textMuted}
-                        attributes={isActive() ? TextAttributes.BOLD : undefined}
-                      >
-                        {t.label}
-                      </text>
-                    )
-                  }}
-                </For>
-              </box>
-            </Show>
+              </Show>
+              <text fg={theme.textMuted} onMouseUp={close}>
+                esc
+              </text>
+            </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>
@@ -168,12 +169,6 @@ export function Composer(props: ComposerProps) {
                   <span style={{ fg: theme.textMuted }}>←/→</span>
                 </text>
               </Show>
-              <text>
-                <span style={{ fg: theme.text }}>
-                  <b>close</b>{" "}
-                </span>
-                <span style={{ fg: theme.textMuted }}>{closeHint()}</span>
-              </text>
             </box>
           </box>
         </box>
