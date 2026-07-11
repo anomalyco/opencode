@@ -10,6 +10,7 @@ export type PartRef = {
 
 export type SessionRow =
   | { type: "message"; messageID: string }
+  | { type: "compaction-queued"; inputID: string }
   | { type: "part"; ref: PartRef }
   | {
       type: "group"
@@ -31,6 +32,14 @@ export function createSessionRows(sessionID: Accessor<string>) {
     const boundary = revertBoundary()
     const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages, inputs)
     partitionPending(rows, pendingPermissions())
+    const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
+    rows.splice(
+      position === -1 ? rows.length : position,
+      0,
+      ...data.session.compaction
+        .list(sessionID())
+        .map((inputID): SessionRow => ({ type: "compaction-queued", inputID })),
+    )
     return rows
   }
 
@@ -54,6 +63,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(sessionID, (id) => {
       setRows(reconcile(reduce()))
+      void data.session.compaction.refresh(id).catch(() => undefined)
       void data.session.message.refresh(id).then(
         () => {
           if (sessionID() !== id) return
@@ -69,6 +79,13 @@ export function createSessionRows(sessionID: Accessor<string>) {
     on(revertBoundary, () => {
       setRows(reconcile(reduce()))
     }),
+  )
+
+  createEffect(
+    on(
+      () => data.session.compaction.list(sessionID()).map((inputID) => inputID),
+      () => setRows(reconcile(reduce())),
+    ),
   )
 
   createEffect(

@@ -63,6 +63,7 @@ type Data = {
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessageInfo[]>
     input: Record<string, string[]>
+    compaction: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -91,6 +92,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         status: {},
         message: {},
         input: {},
+        compaction: {},
         permission: {},
         form: {},
       },
@@ -110,6 +112,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function setSessionStatus(sessionID: string, status: DataSessionStatus) {
       setStore("session", "status", sessionID, status)
+    }
+
+    function addCompaction(sessionID: string, inputID: string) {
+      if (store.session.compaction[sessionID]?.includes(inputID)) return
+      setStore("session", "compaction", sessionID, [...(store.session.compaction[sessionID] ?? []), inputID])
+    }
+
+    function removeCompaction(sessionID: string, inputID?: string) {
+      if (!inputID || !store.session.compaction[sessionID]?.includes(inputID)) return
+      setStore(
+        "session",
+        "compaction",
+        sessionID,
+        store.session.compaction[sessionID].filter((id) => id !== inputID),
+      )
     }
 
     const message = {
@@ -221,6 +238,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           delete draft.status[sessionID]
           delete draft.message[sessionID]
           delete draft.input[sessionID]
+          delete draft.compaction[sessionID]
           delete draft.permission[sessionID]
           delete draft.form[sessionID]
           for (const [rootID, family] of Object.entries(draft.family)) {
@@ -611,8 +629,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           setSessionStatus(event.data.sessionID, "running")
           break
         case "session.compaction.admitted":
+          addCompaction(event.data.sessionID, event.data.inputID)
           break
         case "session.compaction.started":
+          removeCompaction(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: event.data.inputID ?? messageIDFromEvent(event.id),
@@ -689,6 +709,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.failed":
+          removeCompaction(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
@@ -819,6 +840,24 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           has(sessionID: string, inputID: string) {
             return store.session.input[sessionID]?.includes(inputID) ?? false
+          },
+        },
+        compaction: {
+          list(sessionID: string) {
+            return store.session.compaction[sessionID] ?? []
+          },
+          async refresh(sessionID: string) {
+            if (!store.session.compaction[sessionID]) setStore("session", "compaction", sessionID, [])
+            setStore(
+              "session",
+              "compaction",
+              sessionID,
+              reconcile(
+                (await sdk.api.session.pending.list({ sessionID }))
+                  .filter((item) => item.type === "compaction")
+                  .map((item) => item.id),
+              ),
+            )
           },
         },
         async refresh(sessionID: string) {
@@ -1098,9 +1137,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       sdk.event.listen(({ details }) => {
         if (details.type === "server.connected") {
           const messages = connected ? Object.keys(store.session.message) : []
+          const compactions = connected ? Object.keys(store.session.compaction) : []
           connected = true
           refreshActive()
-          void Promise.allSettled([bootstrap(), ...messages.map(result.session.message.refresh)])
+          void Promise.allSettled([
+            bootstrap(),
+            ...messages.map(result.session.message.refresh),
+            ...compactions.map(result.session.compaction.refresh),
+          ])
           return
         }
         handleEvent(details)

@@ -1048,6 +1048,14 @@ test("tracks session status from active sessions and execution events", async ()
     expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
 
     emitEvent(events, {
+      id: "evt_manual_compaction_admitted",
+      created: 0,
+      type: "session.compaction.admitted",
+      durable: durable("session-manual", 1),
+      data: { sessionID: "session-manual", inputID: "message-compaction" },
+    })
+    await wait(() => data.session.compaction.list("session-manual").includes("message-compaction"))
+    emitEvent(events, {
       id: "evt_manual_compaction_started",
       created: 1,
       type: "session.compaction.started",
@@ -1064,6 +1072,7 @@ test("tracks session status from active sessions and execution events", async ()
       const message = data.session.message.get("session-manual", "message-compaction")
       return message?.type === "compaction" && message.status === "running" && message.summary === "Streamed summary"
     })
+    expect(data.session.compaction.list("session-manual")).toEqual([])
     const compactionRow = manualRows.find(
       (row) => row.type === "message" && row.messageID === "message-compaction",
     )
@@ -1132,6 +1141,98 @@ test("tracks session status from active sessions and execution events", async ()
       autoCompactionRow,
     )
     expect(rows.some((row) => row.type === "message" && row.messageID === "msg_compaction_ended")).toBeFalse()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("restores queued compaction from durable pending input", async () => {
+  const events = createEventStream()
+  const sessionID = "session-compaction-queued"
+  let pending = [
+    {
+      admittedSeq: 3,
+      id: "message-compaction-queued",
+      sessionID,
+      timeCreated: 1,
+      type: "compaction" as const,
+    },
+    {
+      admittedSeq: 4,
+      id: "message-compaction-later",
+      sessionID,
+      timeCreated: 2,
+      type: "compaction" as const,
+    },
+  ]
+  const calls = createFetch((url) => {
+    if (url.pathname !== `/api/session/${sessionID}/pending`) return
+    return json({ data: pending })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let rows!: ReturnType<typeof createSessionRows>
+
+  function Probe() {
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.session.compaction.list(sessionID).length === 2)
+    expect(data.session.compaction.list(sessionID)).toEqual([
+      "message-compaction-queued",
+      "message-compaction-later",
+    ])
+    await wait(() => rows.filter((row) => row.type === "compaction-queued").length === 2)
+    expect(rows.filter((row) => row.type === "compaction-queued")).toEqual([
+      { type: "compaction-queued", inputID: "message-compaction-queued" },
+      { type: "compaction-queued", inputID: "message-compaction-later" },
+    ])
+
+    emitEvent(events, {
+      id: "evt_compaction_started",
+      created: 2,
+      type: "session.compaction.started",
+      durable: durable(sessionID, 4),
+      data: {
+        sessionID,
+        reason: "manual",
+        recent: "",
+        inputID: "message-compaction-queued",
+      },
+    })
+    await wait(() => data.session.compaction.list(sessionID).length === 1)
+    expect(data.session.compaction.list(sessionID)).toEqual(["message-compaction-later"])
+
+    emitEvent(events, {
+      id: "evt_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      durable: durable(sessionID, 5),
+      data: { sessionID, reason: "manual", text: "Summary", recent: "" },
+    })
+    expect(data.session.compaction.list(sessionID)).toEqual(["message-compaction-later"])
+
+    pending = []
+    emitEvent(events, {
+      id: "evt_reconnected",
+      type: "server.connected",
+      data: {},
+    })
+    await wait(() => data.session.compaction.list(sessionID).length === 0)
   } finally {
     app.renderer.destroy()
   }

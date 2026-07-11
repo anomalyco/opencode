@@ -1059,6 +1059,9 @@ function SessionRowView(props: { row: SessionRow; message: (messageID: string) =
             <Show when={props.message(row().messageID)}>{(message) => <SessionMessageView message={message()} />}</Show>
           )}
         </Match>
+        <Match when={props.row.type === "compaction-queued"}>
+          <CompactionQueued />
+        </Match>
         <Match when={props.row.type === "part" ? props.row : undefined}>
           {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
         </Match>
@@ -1366,6 +1369,20 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           />
         </box>
       </Show>
+    </box>
+  )
+}
+
+function CompactionQueued() {
+  const { theme } = useTheme()
+  return (
+    <box flexDirection="row" alignItems="center">
+      <box border={["top"]} borderColor={theme.border} flexGrow={1} />
+      <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
+        <text fg={theme.textMuted}>◇</text>
+        <text fg={theme.textMuted}>Compaction queued</text>
+      </box>
+      <box border={["top"]} borderColor={theme.border} flexGrow={1} />
     </box>
   )
 }
