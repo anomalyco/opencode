@@ -189,6 +189,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setStore("current", undefined)
           return
         }
+        if (item.name === agent.current()?.name) return
 
         batch(() => {
           setStore("current", item.name)
