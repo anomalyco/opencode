@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, Context } from "effect"
+import { Effect, Layer, Record, Result, Schema, Context, Semaphore } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -54,6 +54,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fsys = yield* FSUtil.Service
     const decode = Schema.decodeUnknownOption(Info)
+    // Serialize auth.json mutations so concurrent set/remove cannot clobber each other
+    // (unlocked read-modify-write previously dropped providers under parallel login).
+    const lock = Semaphore.makeUnsafe(1)
 
     const all = Effect.fn("Auth.all")(function* () {
       if (process.env.OPENCODE_AUTH_CONTENT) {
@@ -71,21 +74,29 @@ const layer = Layer.effect(
     })
 
     const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
-      const norm = key.replace(/\/+$/, "")
-      const data = yield* all()
-      if (norm !== key) delete data[key]
-      delete data[norm + "/"]
-      yield* fsys
-        .writeJson(file, { ...data, [norm]: info }, 0o600)
-        .pipe(Effect.mapError(fail("Failed to write auth data")))
+      yield* lock.withPermits(1)(
+        Effect.gen(function* () {
+          const norm = key.replace(/\/+$/, "")
+          const data = yield* all()
+          if (norm !== key) delete data[key]
+          delete data[norm + "/"]
+          yield* fsys
+            .writeJson(file, { ...data, [norm]: info }, 0o600)
+            .pipe(Effect.mapError(fail("Failed to write auth data")))
+        }),
+      )
     })
 
     const remove = Effect.fn("Auth.remove")(function* (key: string) {
-      const norm = key.replace(/\/+$/, "")
-      const data = yield* all()
-      delete data[key]
-      delete data[norm]
-      yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+      yield* lock.withPermits(1)(
+        Effect.gen(function* () {
+          const norm = key.replace(/\/+$/, "")
+          const data = yield* all()
+          delete data[key]
+          delete data[norm]
+          yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+        }),
+      )
     })
 
     return Service.of({ get, all, set, remove })
