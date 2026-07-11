@@ -265,6 +265,39 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("omits HTML error bodies from user-facing provider messages", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        status: 503,
+        message: "Provider request failed with HTTP 503",
+      })
+      expect(error.reason.message).not.toMatch(/<html/i)
+      expect(error.reason.message).not.toMatch(/nginx/i)
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response(
+            "<html>\n<head><title>503 Service Temporarily Unavailable</title></head>\n<body><center><h1>503 Service Temporarily Unavailable</h1></center><hr><center>nginx</center></body>\n</html>",
+            { status: 503, headers: { "retry-after-ms": "0" } },
+          ),
+          new Response(
+            "<html>\n<head><title>503 Service Temporarily Unavailable</title></head>\n<body><center><h1>503 Service Temporarily Unavailable</h1></center></body>\n</html>",
+            { status: 503, headers: { "retry-after-ms": "0" } },
+          ),
+          new Response(
+            "<html>\n<head><title>503 Service Temporarily Unavailable</title></head>\n<body><center><h1>503 Service Temporarily Unavailable</h1></center></body>\n</html>",
+            { status: 503 },
+          ),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("marks 504 and 529 status responses retryable", () =>
     Effect.gen(function* () {
       const failWith = (status: number) =>

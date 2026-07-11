@@ -201,9 +201,15 @@ const responseBody = (body: string | void, request: HttpClientRequest.HttpClient
   return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
 
+// HTML/gateway error pages are useless (and noisy) in TUI retry notices (#35640).
+const isHtmlErrorBody = (body: string) => /^\s*<(!doctype\s+html|html[\s>])/i.test(body)
+
 const providerMessage = (status: number, body: { readonly body?: string }) => {
-  if (body.body && body.body.length <= 500) return `Provider request failed with HTTP ${status}: ${body.body}`
-  return `Provider request failed with HTTP ${status}`
+  const text = body.body
+  if (!text || text.length > 500 || isHtmlErrorBody(text)) {
+    return `Provider request failed with HTTP ${status}`
+  }
+  return `Provider request failed with HTTP ${status}: ${text}`
 }
 
 const responseHttp = (input: {

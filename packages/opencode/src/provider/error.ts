@@ -29,11 +29,29 @@ function isOpenAiErrorRetryable(e: APICallError) {
 
 // Providers not reliably handled in this function:
 // - z.ai: can accept overflow silently (needs token-count/context-window checks)
+const isHtmlMarkup = (value: string) => /<!doctype\s+html|<html[\s>]/i.test(value)
+
 function message(providerID: ProviderV2.ID, e: APICallError) {
   return iife(() => {
     const msg = e.message
+
+    // Message may already embed an HTML error page (e.g. LLM executor appends body).
+    // Never surface raw markup in TUI/retry notices (#35640 / #15406).
+    if (isHtmlMarkup(msg)) {
+      if (e.statusCode === 401) {
+        return "Unauthorized: request was blocked by a gateway or proxy. Your authentication token may be missing or expired — try running `opencode auth login <your provider URL>` to re-authenticate."
+      }
+      if (e.statusCode === 403) {
+        return "Forbidden: request was blocked by a gateway or proxy. You may not have permission to access this resource — check your account and provider settings."
+      }
+      if (e.statusCode === 502 || e.statusCode === 503 || e.statusCode === 504) {
+        return `Provider temporarily unavailable (HTTP ${e.statusCode})`
+      }
+      return e.statusCode ? `Provider request failed with HTTP ${e.statusCode}` : "Provider request failed"
+    }
+
     if (msg === "") {
-      if (e.responseBody) return e.responseBody
+      if (e.responseBody && !isHtmlMarkup(e.responseBody)) return e.responseBody
       if (e.statusCode) {
         const err = STATUS_CODES[e.statusCode]
         if (err) return err
@@ -56,12 +74,15 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
 
     // If responseBody is HTML (e.g. from a gateway or proxy error page),
     // provide a human-readable message instead of dumping raw markup
-    if (/^\s*<!doctype|^\s*<html/i.test(e.responseBody)) {
+    if (isHtmlMarkup(e.responseBody)) {
       if (e.statusCode === 401) {
         return "Unauthorized: request was blocked by a gateway or proxy. Your authentication token may be missing or expired — try running `opencode auth login <your provider URL>` to re-authenticate."
       }
       if (e.statusCode === 403) {
         return "Forbidden: request was blocked by a gateway or proxy. You may not have permission to access this resource — check your account and provider settings."
+      }
+      if (e.statusCode === 502 || e.statusCode === 503 || e.statusCode === 504) {
+        return `Provider temporarily unavailable (HTTP ${e.statusCode})`
       }
       return msg
     }
