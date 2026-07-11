@@ -1367,15 +1367,18 @@ async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string
     if (!modelID) return false
     const ctrlBase = baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
     const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
-    // The 413's max_ctx is the model's native ceiling; on a VRAM-constrained
-    // host it does not load (this is what bumped configs to 262144/110592 and
-    // OOM'd on reload). Probe /api/fit at the target size and only grow when it
-    // actually fits — otherwise surface the overflow rather than write an
-    // unloadable ctx-size the model will crash-loop on.
-    const probe = await client.getModelFit({ model: modelID, ctx: maxCtx }).catch(() => null)
-    const fit = probe?.data
-    if (!fit || fit.fit_level === "no") return false
-    const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: maxCtx } })
+    // The 413's max_ctx is often the model's NATIVE ceiling, which on a
+    // VRAM-constrained host does not load (this is what set z4 to 393216 >
+    // trained 262144 and OOM'd on reload). Cap the new ctx at max_fit_ctx — the
+    // largest hard n_ctx that fits this host's VRAM, capped at the trained
+    // context. (fit_level can't gate this: fit trusts any configured/hypothetical
+    // ctx and reports "perfect"/"marginal", never "no", so it would always pass.)
+    const probe = await client.getModelFit({ model: modelID }).catch(() => null)
+    const maxFit = probe?.data?.max_fit_ctx ?? 0
+    if (maxFit <= 0) return false // can't determine a safe ceiling — surface the overflow
+    const target = Math.min(maxCtx, maxFit)
+    if (target <= 0) return false
+    const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: target } })
     return !patch.error
   } catch {
     return false
