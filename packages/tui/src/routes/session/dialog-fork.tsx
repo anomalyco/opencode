@@ -1,4 +1,5 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { unwrap } from "solid-js/store"
 import { useData } from "../../context/data"
 import { useRoute } from "../../context/route"
 import { useSDK } from "../../context/sdk"
@@ -38,7 +39,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
                 description: file.description,
                 mention: file.mention,
               })),
-              agents: structuredClone(message.agents ?? []),
+              agents: structuredClone(unwrap(message.agents ?? [])),
               pasted: [],
             }
           : undefined,
