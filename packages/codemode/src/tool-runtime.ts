@@ -599,7 +599,7 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
         ...(complete
           ? []
           : [
-              '- Browse one namespace: `search({ query: "", namespace: "<name>" })`. Search is synchronous - no await needed.',
+              '- Browse one namespace: `search({ query: "", namespace: "<name>" })`.',
               "- If search returns `next`, repeat the same search with `offset: next.offset`.",
             ]),
       ]
