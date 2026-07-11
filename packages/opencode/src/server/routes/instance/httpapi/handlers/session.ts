@@ -276,8 +276,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     }) {
       yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
       const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
-      const defaultAgent = yield* agentSvc.defaultAgent()
-      const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
+      // Prefer the last user message's agent. Only resolve defaultAgent when
+      // needed — default_agent configured as a subagent throws, which previously
+      // aborted /compact even when the session already had a valid agent.
+      const lastUserAgent = messages.findLast((message) => message.info.role === "user")?.info.agent
+      const currentAgent = lastUserAgent ?? (yield* agentSvc.defaultAgent())
 
       yield* compactSvc.create({
         sessionID: ctx.params.sessionID,
