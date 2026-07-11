@@ -2181,7 +2181,7 @@ function BlockTool(props: {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text paddingLeft={3} fg={permission() ? theme.warning : theme.textMuted}>
+                  <text fg={permission() ? theme.warning : theme.textMuted}>
                     {title()}
                   </text>
                 }
@@ -2193,7 +2193,7 @@ function BlockTool(props: {
         }
       >
         {(path) => (
-          <box paddingLeft={3} flexDirection="row" gap={1} minWidth={0}>
+          <box flexDirection="row" gap={1} minWidth={0}>
             <Show
               when={props.spinner}
               fallback={
@@ -2208,7 +2208,7 @@ function BlockTool(props: {
             </Show>
             <FilePath
               value={path().value}
-              maxWidth={Math.max(2, ctx.width - 7 - Bun.stringWidth(path().label))}
+              maxWidth={Math.max(2, ctx.width - 4 - Bun.stringWidth(path().label) - (props.spinner ? 2 : 0))}
               fg={permission() ? theme.warning : theme.textMuted}
             />
           </box>
@@ -2663,7 +2663,7 @@ function ApplyPatch(props: ToolProps) {
           path={
             targets().length === 1
               ? {
-                  label: props.part.state.status === "error" ? "# Patch failed" : "# Preparing patch",
+                  label: props.part.state.status === "error" ? "# Patch failed" : "Patching",
                   value: pathFormatter.format(targets()[0]),
                 }
               : undefined
@@ -2673,7 +2673,7 @@ function ApplyPatch(props: ToolProps) {
               ? undefined
               : props.part.state.status === "error"
                 ? "# Patch failed"
-                : "# Preparing patch..."
+                : "Patching"
           }
           part={props.part}
           spinner={props.part.state.status === "streaming"}
