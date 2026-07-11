@@ -213,6 +213,8 @@ interface RequestDescriptor {
   readonly binary?: true
 }
 
+const maxSseEventBytes = 16 * 1024 * 1024
+
 export function make(options: ClientOptions) {
   const fetch = options.fetch ?? globalThis.fetch
 
@@ -289,7 +291,7 @@ export function make(options: ClientOptions) {
             throw new ClientError("Transport", { cause })
           }
           buffer += decoder.decode(next.value, { stream: !next.done })
-          if (buffer.length > 1_048_576) throw new ClientError("MalformedResponse")
+          if (buffer.length > maxSseEventBytes) throw new ClientError("SseEventTooLarge")
           const trailingCarriageReturn = !next.done && buffer.endsWith("\r")
           if (trailingCarriageReturn) buffer = buffer.slice(0, -1)
           buffer = buffer.replaceAll("\r\n", "\n").replaceAll("\r", "\n")

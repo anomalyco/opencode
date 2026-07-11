@@ -284,6 +284,43 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
   })
 })
 
+test("event.subscribe accepts a fragmented SSE event below the size limit", async () => {
+  const event = { id: "evt_large", type: "test.large", data: { output: "x".repeat(12 * 1024 * 1024) } }
+  const encoded = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            for (let offset = 0; offset < encoded.length; offset += 64 * 1024) {
+              controller.enqueue(encoded.slice(offset, offset + 64 * 1024))
+            }
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+})
+
+test("event.subscribe rejects an SSE event above the size limit", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(`data: ${JSON.stringify({ output: "x".repeat(16 * 1024 * 1024) })}`, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+    name: "ClientError",
+    reason: "SseEventTooLarge",
+  })
+})
+
 test("session methods use the public HTTP contract", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = []
   const client = OpenCode.make({
