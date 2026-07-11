@@ -1641,9 +1641,11 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={true}>
               {props.hint ?? (
-                <box marginLeft={1}>
-                  <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
-                </box>
+                <Show when={props.sessionID}>
+                  <box marginLeft={1}>
+                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
+                  </box>
+                </Show>
               )}
             </Match>
           </Switch>
