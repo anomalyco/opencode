@@ -13,6 +13,7 @@ import * as Client from "effect/unstable/sql/SqlClient"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
 import * as Statement from "effect/unstable/sql/Statement"
+import { DatabaseMigration } from "./migration"
 import { Sqlite } from "./sqlite"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
@@ -53,16 +54,32 @@ const make = (options: Config) =>
       ? Statement.defaultTransforms(options.transformResultNames).array
       : undefined
 
+    // SQLITE_ERROR (errcode 1) usually means the statement no longer matches
+    // the schema. When the migration table shows ids from a newer build,
+    // include that in the message so the failure explains itself instead of
+    // surfacing as an opaque "SQL logic error".
+    const message = (cause: unknown) => {
+      const base = "Failed to execute statement"
+      if ((cause as { errcode?: number })?.errcode !== 1) return base
+      try {
+        const rows = native.prepare("SELECT id FROM migration").all() as Array<{ id: string }>
+        const unknown = DatabaseMigration.newer(rows.map((row) => row.id))
+        if (unknown.length > 0)
+          return `${base}: database was migrated by a newer version of opencode (${unknown[unknown.length - 1]}); update this installation`
+      } catch {}
+      return base
+    }
+
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
-        statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         try {
+          const statement = native.prepare(query)
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
           return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
         } catch (cause) {
           return Effect.fail(
             new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              reason: classifySqliteError(cause, { message: message(cause), operation: "execute" }),
             }),
           )
         }
@@ -70,17 +87,17 @@ const make = (options: Config) =>
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
-        statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
-        statement.setReturnArrays(true)
         try {
+          const statement = native.prepare(query)
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
+          statement.setReturnArrays(true)
           return Effect.succeed(
             statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
           )
         } catch (cause) {
           return Effect.fail(
             new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              reason: classifySqliteError(cause, { message: message(cause), operation: "execute" }),
             }),
           )
         }

@@ -15,12 +15,32 @@ export type Migration = {
   up: (tx: Transaction) => Effect.Effect<void, unknown>
 }
 
+// Migration ids sorting past our newest known migration were applied by a
+// newer build sharing this database. Unknown ids sorting before it are
+// retired ids (e.g. 20260530232709_lovely_romulus) and stay allowed.
+export function newer(ids: Iterable<string>) {
+  const known = new Set(migrations.map((migration) => migration.id))
+  const latest = migrations.reduce((max, migration) => (migration.id > max ? migration.id : max), "")
+  return Array.from(ids)
+    .filter((id) => !known.has(id) && id > latest)
+    .sort()
+}
+
 export function apply(db: Database) {
   return lock.withPermit(
     Effect.gen(function* () {
       const tables = yield* db.all<{ name: string }>(
         sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
       )
+      if (tables.some((table) => table.name === "migration")) {
+        const unknown = newer(
+          (yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id),
+        )
+        if (unknown.length > 0)
+          yield* Effect.logWarning(
+            `database contains migrations from a newer version of opencode (${unknown[unknown.length - 1]}); queries may fail until this installation is updated`,
+          )
+      }
       if (tables.some((table) => table.name === "session")) return yield* applyOnly(db, migrations)
       if (tables.length > 0) return yield* Effect.die("Database is not empty and has no session table")
       yield* db.transaction((tx) =>

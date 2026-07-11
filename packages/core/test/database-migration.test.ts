@@ -8,6 +8,7 @@ import { Effect, Layer } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
+import { layer as coreSqlite } from "@opencode-ai/core/database/sqlite.bun"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
@@ -109,6 +110,46 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
+  test("still starts against a database migrated by a newer version", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(sql`INSERT INTO migration (id, time_completed) VALUES ('99991231000000_from_the_future', 1)`)
+        yield* DatabaseMigration.apply(db)
+      }),
+    )
+  })
+
+  test("newer() flags only unknown ids past the newest known migration", () => {
+    expect(DatabaseMigration.newer(["20260530232709_lovely_romulus"])).toEqual([])
+    expect(DatabaseMigration.newer([migrations[0]!.id])).toEqual([])
+    expect(DatabaseMigration.newer(["99991231000000_from_the_future"])).toEqual(["99991231000000_from_the_future"])
+  })
+
+  test("explains schema errors caused by a database migrated by a newer version", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "newer.sqlite")
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(sql`INSERT INTO migration (id, time_completed) VALUES ('99991231000000_from_the_future', 1)`)
+        // Reference a column this build expects but the "newer" schema no
+        // longer has — the same prepare-time failure a renamed or dropped
+        // column produces.
+        const exit = yield* Effect.exit(db.all(sql`SELECT column_dropped_by_newer_build FROM session`))
+        expect(exit._tag).toBe("Failure")
+        const reason = ((exit as any).cause?.reasons ?? [])[0]
+        // Typed failure, not a defect: prepare errors used to escape as Die.
+        expect(reason?._tag).toBe("Fail")
+        const rendered = String(reason?.error) + JSON.stringify(reason?.error)
+        expect(rendered).toContain("newer version of opencode")
+        expect(rendered).toContain("99991231000000_from_the_future")
+      }).pipe(Effect.provide(coreSqlite({ filename })), Effect.scoped),
+    )
   })
 
   test("backfills existing Context Epoch rows to the build agent", async () => {
