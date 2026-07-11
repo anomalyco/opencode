@@ -1394,6 +1394,7 @@ function RevertMessage(props: {
     readonly deletions: number
   }>
 }) {
+  const ctx = use()
   const { theme } = useTheme()
   const route = useRouteData("session")
   const sdk = useSDK()
@@ -1436,7 +1437,17 @@ function RevertMessage(props: {
               {(file) => (
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <text fg={theme.textMuted}>{statusLabel(file.status)}</text>
-                  <FilePath value={file.file} maxWidth={60} fg={theme.text} />
+                  <FilePath
+                    value={file.file}
+                    maxWidth={Math.max(
+                      2,
+                      ctx.width -
+                        5 -
+                        (file.additions > 0 ? Bun.stringWidth(`+${file.additions}`) + 1 : 0) -
+                        (file.deletions > 0 ? Bun.stringWidth(`-${file.deletions}`) + 1 : 0),
+                    )}
+                    fg={theme.text}
+                  />
                   <Show when={file.additions > 0}>
                     <text fg={theme.diffAdded}>+{file.additions}</text>
                   </Show>
@@ -2128,6 +2139,7 @@ export function InlineToolRow(props: {
 
 function BlockTool(props: {
   title?: string
+  path?: { label: string; value: string }
   children?: JSX.Element
   onClick?: () => void
   part?: SessionMessageAssistantTool
@@ -2161,18 +2173,45 @@ function BlockTool(props: {
         props.onClick?.()
       }}
     >
-      <Show when={props.title}>
-        {(title) => (
-          <Show
-            when={props.spinner}
-            fallback={
-              <text paddingLeft={3} fg={permission() ? theme.warning : theme.textMuted}>
-                {title()}
-              </text>
-            }
-          >
-            <Spinner color={permission() ? theme.warning : theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
+      <Show
+        when={props.path}
+        fallback={
+          <Show when={props.title}>
+            {(title) => (
+              <Show
+                when={props.spinner}
+                fallback={
+                  <text paddingLeft={3} fg={permission() ? theme.warning : theme.textMuted}>
+                    {title()}
+                  </text>
+                }
+              >
+                <Spinner color={permission() ? theme.warning : theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
+              </Show>
+            )}
           </Show>
+        }
+      >
+        {(path) => (
+          <box paddingLeft={3} flexDirection="row" gap={1} minWidth={0}>
+            <Show
+              when={props.spinner}
+              fallback={
+                <text flexShrink={0} fg={permission() ? theme.warning : theme.textMuted}>
+                  {path().label}
+                </text>
+              }
+            >
+              <Spinner color={permission() ? theme.warning : theme.textMuted}>
+                {path().label.replace(/^# /, "")}
+              </Spinner>
+            </Show>
+            <FilePath
+              value={path().value}
+              maxWidth={Math.max(2, ctx.width - 7 - Bun.stringWidth(path().label))}
+              fg={permission() ? theme.warning : theme.textMuted}
+            />
+          </box>
         )}
       </Show>
       {props.children}
@@ -2267,7 +2306,10 @@ function Write(props: ToolProps) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + pathFormatter.format(stringValue(props.input.path))} part={props.part}>
+        <BlockTool
+          path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
+          part={props.part}
+        >
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -2493,7 +2535,7 @@ function Edit(props: ToolProps) {
     <Switch>
       <Match when={file()}>
         {(item) => (
-          <BlockTool title={"← Edit " + pathFormatter.format(path())} part={props.part}>
+          <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
             <box paddingLeft={1}>
               <diff
                 diff={item().patch}
@@ -2521,11 +2563,12 @@ function Edit(props: ToolProps) {
       </Match>
       <Match when={true}>
         <BlockTool
-          title={
+          path={
             stringValue(props.input.path)
-              ? "← Edit " + pathFormatter.format(stringValue(props.input.path))
-              : "# Preparing edit..."
+              ? { label: "← Edit", value: pathFormatter.format(stringValue(props.input.path)) }
+              : undefined
           }
+          title={stringValue(props.input.path) ? undefined : "# Preparing edit..."}
           part={props.part}
           spinner={props.part.state.status === "streaming"}
         />
@@ -2566,7 +2609,10 @@ function ApplyPatch(props: ToolProps) {
           <For each={files()}>
             {(file) => (
               <BlockTool
-                title={`${file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched"} ${pathFormatter.format(file.relativePath)}`}
+                path={{
+                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
+                  value: pathFormatter.format(file.relativePath),
+                }}
                 part={props.part}
               >
                 <box paddingLeft={1}>
@@ -2600,7 +2646,10 @@ function ApplyPatch(props: ToolProps) {
           <For each={applied()}>
             {(file) => (
               <BlockTool
-                title={`${file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched"} ${pathFormatter.format(file.resource)}`}
+                path={{
+                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
+                  value: pathFormatter.format(file.resource),
+                }}
                 part={props.part}
               >
                 <text fg={file.type === "delete" ? theme.diffRemoved : theme.textMuted}>{file.resource}</text>
@@ -2611,9 +2660,17 @@ function ApplyPatch(props: ToolProps) {
       </Match>
       <Match when={true}>
         <BlockTool
+          path={
+            targets().length === 1
+              ? {
+                  label: props.part.state.status === "error" ? "# Patch failed" : "# Preparing patch",
+                  value: pathFormatter.format(targets()[0]),
+                }
+              : undefined
+          }
           title={
             targets().length === 1
-              ? `${props.part.state.status === "error" ? "# Patch failed" : "# Preparing patch"} ${pathFormatter.format(targets()[0])}`
+              ? undefined
               : props.part.state.status === "error"
                 ? "# Patch failed"
                 : "# Preparing patch..."
