@@ -11,7 +11,7 @@ const skillConcurrency = 4
 const fileConcurrency = 8
 
 // ---------------------------------------------------------------------------
-// 远程 index 字段校验：防止 skill.name / files 路径穿越写出缓存目录
+// Validate remote index fields so skill.name / files cannot escape the cache.
 // ---------------------------------------------------------------------------
 
 function isSafeSegment(value: string) {
