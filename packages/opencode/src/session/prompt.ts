@@ -215,10 +215,23 @@ const layer = Layer.effect(
 
       const ag = yield* agents.get("title")
       if (!ag) return
-      const mdl = ag.model
-        ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
-        : ((yield* provider.getSmallModel(input.providerID)) ??
-          (yield* provider.getModel(input.providerID, input.modelID)))
+
+      // Typed Fail from getModel/getSmallModel used to kill the forked fiber; with
+      // Effect.ignore at the call site that left titles stuck on the default name (#13710).
+      // Effect.option only maps Fail→None (defects still surface via catchCause below).
+      const mdlOpt = yield* Effect.gen(function* () {
+        if (ag.model) return yield* provider.getModel(ag.model.providerID, ag.model.modelID)
+        return (
+          (yield* provider.getSmallModel(input.providerID)) ??
+          (yield* provider.getModel(input.providerID, input.modelID))
+        )
+      }).pipe(
+        Effect.tapError((err) => Effect.logWarning("title model resolution failed", { error: err })),
+        Effect.option,
+      )
+      if (Option.isNone(mdlOpt)) return
+      const mdl = mdlOpt.value
+
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
@@ -238,7 +251,10 @@ const layer = Layer.effect(
           Stream.filter(LLMEvent.is.textDelta),
           Stream.map((e) => e.text),
           Stream.mkString,
-          Effect.orDie,
+          // Fail channel errors: log and yield empty title instead of dying the fiber.
+          Effect.catchAll((err) =>
+            Effect.logWarning("title generation LLM call failed", { error: err }).pipe(Effect.as("")),
+          ),
         )
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
@@ -1136,7 +1152,16 @@ const layer = Layer.effect(
               modelID: lastUser.model.modelID,
               providerID: lastUser.model.providerID,
               history: msgs,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Cause.hasInterruptsOnly(cause)
+                  ? Effect.void
+                  : Effect.logWarning("title generation background task failed", {
+                      error: Cause.squash(cause),
+                    }),
+              ),
+              Effect.forkIn(scope),
+            )
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
