@@ -1,4 +1,5 @@
 import type { RGBA } from "@opentui/core"
+import { createMemo } from "solid-js"
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
@@ -6,12 +7,22 @@ export interface FilePathProps {
   value: string
   maxWidth: number
   fg?: RGBA
+  basenameFg?: RGBA
 }
 
 export function FilePath(props: FilePathProps) {
+  const display = createMemo(() => {
+    const value = truncateFilePath(props.value, props.maxWidth)
+    const index = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"))
+    return {
+      parent: value.slice(0, index + 1),
+      basename: value.slice(index + 1),
+    }
+  })
   return (
     <text fg={props.fg} wrapMode="none" truncate>
-      {truncateFilePath(props.value, props.maxWidth)}
+      <span style={{ fg: props.fg }}>{display().parent}</span>
+      <span style={{ fg: props.basenameFg ?? props.fg }}>{display().basename}</span>
     </text>
   )
 }

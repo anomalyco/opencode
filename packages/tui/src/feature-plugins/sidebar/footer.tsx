@@ -3,6 +3,7 @@ import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Show } from "solid-js"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
+import { FilePath } from "../../ui/file-path"
 
 const id = "internal:sidebar-footer"
 
@@ -19,12 +20,7 @@ function View(props: { api: TuiPluginApi; directory: string }) {
   const path = createMemo(() => {
     const out = abbreviateHome(props.directory, paths.home)
     const branch = props.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
-    const text = branch ? out + ":" + branch : out
-    const list = text.split("/")
-    return {
-      parent: list.slice(0, -1).join("/"),
-      name: list.at(-1) ?? "",
-    }
+    return branch ? out + ":" + branch : out
   })
 
   return (
@@ -62,10 +58,7 @@ function View(props: { api: TuiPluginApi; directory: string }) {
           </box>
         </box>
       </Show>
-      <text>
-        <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
-        <span style={{ fg: theme().text }}>{path().name}</span>
-      </text>
+      <FilePath value={path()} maxWidth={38} fg={theme().textMuted} basenameFg={theme().text} />
       <text fg={theme().textMuted}>
         <span style={{ fg: theme().success }}>•</span> <b>Open</b>
         <span style={{ fg: theme().text }}>
