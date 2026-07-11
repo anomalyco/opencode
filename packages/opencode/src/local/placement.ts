@@ -84,6 +84,8 @@ const FIT_RANK: Record<NonNullable<ModelFit["fit_level"]>, number> = {
   tight: 2,
   marginal: 1,
   no: 0,
+  // VRAM couldn't be read — we can't tell if the model fits, so don't place on it.
+  unknown: 0,
 }
 
 function normalizeBaseURL(url: string): string {

@@ -442,9 +442,17 @@ export type ModelFit = {
      */
     backend: 'llamacpp' | 'mlx' | 'vllm';
     /**
-     * How well the model fits this host.
+     * How well the model fits this host. "unknown" means host VRAM could not be read yet (not that the model does not fit); max_safe_ctx is 0 in that case.
      */
-    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no';
+    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no' | 'unknown';
+    /**
+     * True when a configured model's --ctx-size is materially below the context VRAM could safely hold. Signals a starved config that the fit report would otherwise hide behind the small configured_ctx.
+     */
+    under_configured?: boolean;
+    /**
+     * Largest --ctx-size (hard n_ctx) that fits this host's VRAM, capped at the trained context. The grow target for an under-configured model. 0 when VRAM is unknown.
+     */
+    max_fit_ctx?: number;
     /**
      * How the model would run given memory.
      */
