@@ -17,11 +17,12 @@ function View(props: { api: TuiPluginApi; directory: string }) {
   )
   const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
   const show = createMemo(() => !has() && !done())
-  const path = createMemo(() => {
-    const out = abbreviateHome(props.directory, paths.home)
+  const location = createMemo(() => {
     const branch = props.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
-    return branch ? out + ":" + branch : out
+    return { path: abbreviateHome(props.directory, paths.home), branch }
   })
+  const suffix = createMemo(() => (location().branch ? `:${location().branch}` : ""))
+  const suffixWidth = createMemo(() => Math.min(Bun.stringWidth(suffix()), 36))
 
   return (
     <box gap={1}>
@@ -58,7 +59,19 @@ function View(props: { api: TuiPluginApi; directory: string }) {
           </box>
         </box>
       </Show>
-      <FilePath value={path()} maxWidth={38} fg={theme().textMuted} basenameFg={theme().text} />
+      <box flexDirection="row" minWidth={0}>
+        <FilePath
+          value={location().path}
+          maxWidth={Math.max(2, 38 - suffixWidth())}
+          fg={theme().textMuted}
+          basenameFg={theme().text}
+        />
+        <Show when={suffix()}>
+          <text width={suffixWidth()} wrapMode="none" truncate fg={theme().textMuted}>
+            {suffix()}
+          </text>
+        </Show>
+      </box>
       <text fg={theme().textMuted}>
         <span style={{ fg: theme().success }}>•</span> <b>Open</b>
         <span style={{ fg: theme().text }}>

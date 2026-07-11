@@ -27,9 +27,14 @@ describe("truncateFilePath", () => {
     expect(truncateFilePath("dir/file\\name.ts", 14)).toBe("…/file\\name.ts")
   })
 
-  test("preserves root-level absolute paths", () => {
+  test("preserves absolute roots", () => {
     expect(truncateFilePath("/file.ts", 7)).toBe("/fi….ts")
     expect(truncateFilePath("C:\\file.ts", 9)).toBe("C:\\fi….ts")
+    expect(truncateFilePath("/usr/local/bin/file.ts", 14)).toBe("/…/bin/file.ts")
+    expect(truncateFilePath("C:\\Users\\kit\\src\\file.ts", 16)).toBe("C:\\…\\src\\file.ts")
+    expect(truncateFilePath("C:/Users/kit/src/file.ts", 16)).toBe("C:/…/src/file.ts")
+    expect(truncateFilePath("C:\\Users\\kit/src/file.ts", 16)).toBe("C:\\…\\src\\file.ts")
+    expect(truncateFilePath("\\\\server\\share\\src\\file.ts", 25)).toBe("\\\\server\\share\\…\\file.ts")
   })
 
   test("measures terminal columns without splitting graphemes", () => {

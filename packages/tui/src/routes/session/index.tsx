@@ -2652,7 +2652,11 @@ function ApplyPatch(props: ToolProps) {
                 }}
                 part={props.part}
               >
-                <text fg={file.type === "delete" ? theme.diffRemoved : theme.textMuted}>{file.resource}</text>
+                <FilePath
+                  value={file.resource}
+                  maxWidth={Math.max(2, ctx.width - 3)}
+                  fg={file.type === "delete" ? theme.diffRemoved : theme.textMuted}
+                />
               </BlockTool>
             )}
           </For>
@@ -2676,7 +2680,7 @@ function ApplyPatch(props: ToolProps) {
                 : "Patching"
           }
           part={props.part}
-          spinner={props.part.state.status === "streaming"}
+          spinner={props.part.state.status === "streaming" || props.part.state.status === "running"}
         />
       </Match>
     </Switch>

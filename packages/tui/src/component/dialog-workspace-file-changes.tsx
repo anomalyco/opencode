@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { VcsFileStatus } from "@opencode-ai/sdk/v2"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -33,10 +33,13 @@ export function DialogWorkspaceFileChanges(props: {
   const dialog = useDialog()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
+  const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
   const [store, setStore] = createStore({ active: "yes" as WorkspaceFileChangesChoice })
   const height = createMemo(() => Math.min(props.files.length, 8))
-  const fileNameWidth = createMemo(() => 48 - Math.max(Math.max(7, ...props.files.map(changeCountWidth)) - 7, 0))
+  const fileNameWidth = createMemo(
+    () => Math.max(2, Math.min(60, dimensions().width - 2) - 6 - Math.max(7, ...props.files.map(changeCountWidth))),
+  )
 
   function confirm() {
     props.onSelect(store.active)

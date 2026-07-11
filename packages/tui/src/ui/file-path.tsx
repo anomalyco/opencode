@@ -31,10 +31,19 @@ export function truncateFilePath(value: string, maxWidth: number) {
   if (maxWidth <= 0) return ""
   if (Bun.stringWidth(value) <= maxWidth) return value
 
-  const separator = value.includes("/") ? "/" : "\\"
-  const drive = separator === "\\" ? value.match(/^[A-Za-z]:\\/)?.[0] : undefined
-  const root = drive ?? (value.startsWith(separator) ? separator : "")
-  const segments = value.slice(root.length).split(separator).filter(Boolean)
+  const drive = value.match(/^([A-Za-z]:)([\\/])/)
+  const unc = value.match(/^(\\\\|\/\/)([^\\/]+)[\\/]([^\\/]+)(?:[\\/]|$)/)
+  const windows = drive !== null || unc !== null || (!value.includes("/") && value.includes("\\"))
+  const separator = drive?.[2] ?? (unc?.[1] === "//" ? "/" : windows ? "\\" : "/")
+  const root = drive
+    ? drive[1] + separator
+    : unc
+      ? unc[1] + unc[2] + separator + unc[3] + separator
+      : value.startsWith("/")
+        ? "/"
+        : ""
+  const source = value.slice(drive?.[0].length ?? unc?.[0].length ?? root.length)
+  const segments = source.split(windows ? /[\\/]/ : separator).filter(Boolean)
   const basename = segments.at(-1) ?? value
   if (segments.length < 2) {
     const rootWidth = Bun.stringWidth(root)
@@ -42,9 +51,9 @@ export function truncateFilePath(value: string, maxWidth: number) {
     return root + truncateBasename(basename, maxWidth - rootWidth)
   }
 
-  const prefix = `…${separator}`
+  const prefix = `${root}…${separator}`
   const basenameWidth = maxWidth - Bun.stringWidth(prefix)
-  if (basenameWidth <= 0) return takeStart("…", maxWidth)
+  if (basenameWidth <= 0) return takeStart(prefix, maxWidth)
   const compact = truncateBasename(basename, basenameWidth)
   if (compact !== basename) return prefix + compact
 

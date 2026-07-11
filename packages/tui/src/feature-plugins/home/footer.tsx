@@ -16,16 +16,31 @@ function Directory(props: { api: TuiPluginApi; maxWidth: number }) {
   const dir = createMemo(() => {
     const selected = destination?.destination()
     if (!selected || selected.type === "new") return
-    const out = abbreviateHome(selected.directory, paths.home)
     const branch =
       selected.directory === (props.api.state.path.directory || paths.cwd) ? props.api.state.vcs?.branch : undefined
-    if (branch) return out + ":" + branch
-    return out
+    return { path: abbreviateHome(selected.directory, paths.home), branch }
   })
 
   return (
     <Show when={dir()}>
-      {(value) => <FilePath value={value()} maxWidth={props.maxWidth} fg={theme().textMuted} />}
+      {(value) => {
+        const suffix = () => (value().branch ? `:${value().branch}` : "")
+        const suffixWidth = () => Math.min(Bun.stringWidth(suffix()), Math.max(0, props.maxWidth - 2))
+        return (
+          <box flexDirection="row" minWidth={0}>
+            <FilePath
+              value={value().path}
+              maxWidth={Math.max(2, props.maxWidth - suffixWidth())}
+              fg={theme().textMuted}
+            />
+            <Show when={suffix()}>
+              <text width={suffixWidth()} wrapMode="none" truncate fg={theme().textMuted}>
+                {suffix()}
+              </text>
+            </Show>
+          </box>
+        )
+      }}
     </Show>
   )
 }
