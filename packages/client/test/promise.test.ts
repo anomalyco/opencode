@@ -272,6 +272,23 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
   expect(events[1]?.type === "session.model.selected" && events[1].created).toBe(1_717_171_717_000)
 })
 
+test("event.subscribe accepts supported large SSE events", async () => {
+  const largeEvent = {
+    id: "evt_large",
+    created: 0,
+    type: "server.connected",
+    data: { payload: "x".repeat(1_100_000) },
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(`data: ${JSON.stringify(largeEvent)}\n\n`, { headers: { "content-type": "text/event-stream" } }),
+  })
+
+  const next = await client.event.subscribe()[Symbol.asyncIterator]().next()
+  expect(next.value).toEqual(largeEvent)
+})
+
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

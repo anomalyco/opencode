@@ -279,6 +279,7 @@ export function make(options: ClientOptions) {
       if (response.body === null) throw new ClientError("MalformedResponse")
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
+      const maxBufferLength = 32 * 1024 * 1024
       let buffer = ""
       try {
         while (true) {
@@ -289,7 +290,7 @@ export function make(options: ClientOptions) {
             throw new ClientError("Transport", { cause })
           }
           buffer += decoder.decode(next.value, { stream: !next.done })
-          if (buffer.length > 1_048_576) throw new ClientError("MalformedResponse")
+          if (buffer.length > maxBufferLength) throw new ClientError("MalformedResponse")
           const trailingCarriageReturn = !next.done && buffer.endsWith("\r")
           if (trailingCarriageReturn) buffer = buffer.slice(0, -1)
           buffer = buffer.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
