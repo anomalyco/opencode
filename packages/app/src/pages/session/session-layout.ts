@@ -1,16 +1,16 @@
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { useLayout } from "@/context/layout"
-import { useServer } from "@/context/server"
-import { useSDK } from "@/context/sdk"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
+import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 
 export const useSessionKey = () => {
   const params = useParams()
-  const server = useServer()
   const sdk = useSDK()
-  const scope = createMemo(() => server.scope())
+  const serverSDK = useServerSDK()
+  const scope = createMemo(() => serverSDK().scope)
   const dir = createMemo(() => params.dir ?? base64Encode(sdk().directory))
   const workspaceKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(dir())))
   const sessionKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(dir(), params.id)))

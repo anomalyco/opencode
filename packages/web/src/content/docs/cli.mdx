@@ -37,6 +37,7 @@ opencode [project]
 | <nobr><code>{"--prompt"}</code></nobr>      |       | Prompt to use                                                           |
 | <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use in the form of provider/model                              |
 | <nobr><code>{"--agent"}</code></nobr>       |       | Agent to use                                                            |
+| <nobr><code>{"--auto"}</code></nobr>        |       | Auto-approve permissions that are not explicitly denied                 |
 | <nobr><code>{"--port"}</code></nobr>        |       | Port to listen on                                                       |
 | <nobr><code>{"--hostname"}</code></nobr>    |       | Hostname to listen on                                                   |
 | <nobr><code>{"--mdns"}</code></nobr>        |       | Enable mDNS discovery                                                   |
@@ -361,26 +362,26 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flags
 
-| Flag                                                         | Short | Description                                                                |
-| ------------------------------------------------------------ | ----- | -------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>                      |       | The command to run, use message for args                                   |
-| <nobr><code>{"--continue"}</code></nobr>                     | `-c`  | Continue the last session                                                  |
-| <nobr><code>{"--session"}</code></nobr>                      | `-s`  | Session ID to continue                                                     |
-| <nobr><code>{"--fork"}</code></nobr>                         |       | Fork the session when continuing (use with `--continue` or `--session`)    |
-| <nobr><code>{"--share"}</code></nobr>                        |       | Share the session                                                          |
-| <nobr><code>{"--model"}</code></nobr>                        | `-m`  | Model to use in the form of provider/model                                 |
-| <nobr><code>{"--agent"}</code></nobr>                        |       | Agent to use                                                               |
-| <nobr><code>{"--file"}</code></nobr>                         | `-f`  | File(s) to attach to message                                               |
-| <nobr><code>{"--format"}</code></nobr>                       |       | Format: default (formatted) or json (raw JSON events)                      |
-| <nobr><code>{"--title"}</code></nobr>                        |       | Title for the session (uses truncated prompt if no value provided)         |
-| <nobr><code>{"--attach"}</code></nobr>                       |       | Attach to a running opencode server (e.g., http://localhost:4096)          |
-| <nobr><code>{"--password"}</code></nobr>                     | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
-| <nobr><code>{"--username"}</code></nobr>                     | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>                          |       | Directory to run in, or path on the remote server when attaching           |
-| <nobr><code>{"--port"}</code></nobr>                         |       | Port for the local server (defaults to random port)                        |
-| <nobr><code>{"--variant"}</code></nobr>                      |       | Model variant (provider-specific reasoning effort)                         |
-| <nobr><code>{"--thinking"}</code></nobr>                     |       | Show thinking blocks                                                       |
-| <nobr><code>{"--dangerously-skip-permissions"}</code></nobr> |       | Auto-approve permissions that are not explicitly denied (dangerous!)       |
+| Flag                                     | Short | Description                                                                |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | The command to run, use message for args                                   |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue the last session                                                  |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Session ID to continue                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Fork the session when continuing (use with `--continue` or `--session`)    |
+| <nobr><code>{"--share"}</code></nobr>    |       | Share the session                                                          |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Model to use in the form of provider/model                                 |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agent to use                                                               |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | File(s) to attach to message                                               |
+| <nobr><code>{"--format"}</code></nobr>   |       | Format: default (formatted) or json (raw JSON events)                      |
+| <nobr><code>{"--title"}</code></nobr>    |       | Title for the session (uses truncated prompt if no value provided)         |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Attach to a running opencode server (e.g., http://localhost:4096)          |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Directory to run in, or path on the remote server when attaching           |
+| <nobr><code>{"--port"}</code></nobr>     |       | Port for the local server (defaults to random port)                        |
+| <nobr><code>{"--variant"}</code></nobr>  |       | Model variant (provider-specific reasoning effort)                         |
+| <nobr><code>{"--thinking"}</code></nobr> |       | Show thinking blocks                                                       |
+| <nobr><code>{"--auto"}</code></nobr>     |       | Auto-approve permissions that are not explicitly denied                    |
 
 ---
 

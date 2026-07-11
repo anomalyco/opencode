@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import type { ModelSelection } from "@/context/local"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
@@ -20,17 +21,23 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
 
 let params: { id?: string } = {}
+let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 const prompt = {
-  ready: () => Object.assign(() => true, { promise: Promise.resolve(true) }),
+  ready: Object.assign(() => true, { promise: Promise.resolve(true) }),
   current: () => promptValue,
   cursor: () => 0,
   dirty: () => true,
+  model: {
+    current: () => undefined,
+    set: () => undefined,
+  },
   reset: () => undefined,
   set: () => undefined,
   context: {
@@ -41,6 +48,7 @@ const prompt = {
     replaceComments: () => undefined,
     items: () => [],
   },
+  capture: () => prompt,
 }
 
 const clientFor = (directory: string) => {
@@ -78,7 +86,7 @@ beforeAll(async () => {
     useNavigate: () => () => undefined,
     useParams: () => params,
     useLocation: () => ({}),
-    useSearchParams: () => [{}, () => undefined],
+    useSearchParams: () => [search, () => undefined],
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -128,7 +136,10 @@ beforeAll(async () => {
 
   mock.module("@/context/tabs", () => ({
     useTabs: () => ({
-      promoteDraft: () => undefined,
+      draft: () => ({ server: "project-server" }),
+      promoteDraft: (draftID: string, session: { server: string; sessionId: string }) => {
+        promotedDrafts.push({ draftID, ...session })
+      },
     }),
   }))
 
@@ -185,6 +196,10 @@ beforeAll(async () => {
 
   mock.module("@/context/server-sync", () => ({
     useServerSync: () => () => ({
+      session: {
+        remember: () => undefined,
+        set: () => undefined,
+      },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
@@ -229,7 +244,9 @@ beforeEach(() => {
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
+  promotedDrafts.length = 0
   params = {}
+  search = {}
   sentShell.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
@@ -304,6 +321,33 @@ describe("prompt submit worktree selection", () => {
     expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/worktree-a" }])
   })
 
+  test("promotes drafts using the selected project's server", async () => {
+    search = { draftId: "draft-1" }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server", sessionId: "session-1" }])
+  })
+
   test("includes the selected variant on optimistic prompts", async () => {
     params = { id: "session-1" }
     variant = "high"
@@ -335,6 +379,39 @@ describe("prompt submit worktree selection", () => {
       message: {
         agent: "agent",
         model: { providerID: "provider", modelID: "model", variant: "high" },
+      },
+    })
+  })
+
+  test("uses an injected model selection", async () => {
+    params = { id: "session-1" }
+    const model = {
+      current: () => ({ id: "draft-model", provider: { id: "draft-provider" } }),
+      variant: { current: () => "draft-variant" },
+    } as unknown as ModelSelection
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      model,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(optimistic[0]).toMatchObject({
+      message: {
+        model: { providerID: "draft-provider", modelID: "draft-model", variant: "draft-variant" },
       },
     })
   })

@@ -23,6 +23,7 @@ const words = [
 
 const sourceID = "ses_smoke_source"
 const targetID = "ses_smoke_target"
+const childID = "ses_smoke_child"
 const directory = "C:/OpenCode/SmokeProject"
 const projectID = "proj_smoke_timeline"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
@@ -126,9 +127,11 @@ function toolPart(
   tool: string,
   input: Record<string, unknown>,
   outputLength = 160,
+  metadataOverride?: Record<string, unknown>,
 ): MessagePart {
   const metadata =
-    tool === "apply_patch"
+    metadataOverride ??
+    (tool === "apply_patch"
       ? { files: [patchFile(index, "update"), patchFile(index + 1, index % 2 === 0 ? "add" : "delete")] }
       : tool === "edit" || tool === "write"
         ? {
@@ -138,7 +141,7 @@ function toolPart(
           }
         : tool === "question"
           ? { answers: [["Proceed"], ["Keep sample output"]] }
-          : {}
+          : {})
   return {
     id: id(`prt_tool_${tool}_${partIndex}`, index),
     type: "tool",
@@ -244,7 +247,25 @@ function turn(index: number): Message[] {
 const targetMessages = Array.from({ length: 72 }, (_, index) => turn(index)).flat()
 const sourceMessages = Array.from({ length: 12 }, (_, index) => [
   userMessage(sourceID, index + 1000, 120),
-  assistantMessage(sourceID, index + 1000, id("msg_user", index + 1000), [textPart(index + 1000, 0, 240)]),
+  assistantMessage(sourceID, index + 1000, id("msg_user", index + 1000), [
+    textPart(index + 1000, 0, 240),
+    ...(index === 11
+      ? [
+          toolPart(
+            index + 1000,
+            1,
+            "task",
+            { description: "Inspect child navigation", subagent_type: "explore" },
+            160,
+            { sessionId: childID },
+          ),
+        ]
+      : []),
+  ]),
+]).flat()
+const childMessages = Array.from({ length: 4 }, (_, index) => [
+  userMessage(childID, index + 2000, 120),
+  assistantMessage(childID, index + 2000, id("msg_user", index + 2000), [textPart(index + 2000, 0, 240)]),
 ]).flat()
 
 function renderable(part: MessagePart) {
@@ -298,19 +319,32 @@ export const fixture = {
       version: "dev",
       time: { created: 1700000001000, updated: 1700000001000 },
     },
+    {
+      id: childID,
+      parentID: sourceID,
+      slug: "child",
+      projectID,
+      directory,
+      title: "Inspect child navigation",
+      version: "dev",
+      time: { created: 1700000002000, updated: 1700000002000 },
+    },
   ],
   sourceID,
   targetID,
-  messages: { [sourceID]: sourceMessages, [targetID]: targetMessages },
+  childID,
+  messages: { [sourceID]: sourceMessages, [targetID]: targetMessages, [childID]: childMessages },
   expected: {
     sourceTitle: "Uncommitted changes inquiry",
     targetTitle: "Example Game: sample jump movement & sample physics analysis",
+    childTitle: "Inspect child navigation",
     sourceMessageIDs: sourceMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
     targetMessageIDs: targetMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
+    childMessageIDs: childMessages.filter((message) => message.info.role === "user").map((message) => message.info.id),
     targetPartIDs: targetMessages.flatMap((message) =>
       orderedParts(message)
         .filter(renderable)

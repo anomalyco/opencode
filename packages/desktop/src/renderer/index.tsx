@@ -17,12 +17,13 @@ import {
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { MemoryRouter } from "@solidjs/router"
+import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { initializationData, initializationReady } from "./initialization"
+import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
@@ -64,6 +65,10 @@ void window.api.updater.subscribe(setUpdaterState)
 
 const deepLinkEvent = "opencode:deep-link"
 
+type DesktopWindowState = {
+  id?: string
+}
+
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
   window.__OPENCODE__ ??= {}
@@ -77,7 +82,35 @@ const listenForDeepLinks = () => {
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
-const createPlatform = (): Platform => {
+function windowLastActiveUrlKey(windowID: string) {
+  return `opencode.desktop.window.${windowID}.last-active-url`
+}
+
+function getLastActiveUrl(windowID: string) {
+  if (typeof localStorage !== "object") return "/"
+  try {
+    const value = localStorage.getItem(windowLastActiveUrlKey(windowID))
+    if (value?.startsWith("/") && !value.startsWith("//")) return value
+  } catch {}
+  return "/"
+}
+
+function setLastActiveUrl(windowID: string, value: string) {
+  if (typeof localStorage !== "object") return
+  try {
+    localStorage.setItem(windowLastActiveUrlKey(windowID), value)
+  } catch {}
+}
+
+function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
+  const history = createMemoryHistory()
+  const initialUrl = getLastActiveUrl(props.windowID)
+  if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
+  onCleanup(history.listen((value) => setLastActiveUrl(props.windowID, value)))
+  return <MemoryRouter {...props} history={history} />
+}
+
+const createPlatform = (windowState: DesktopWindowState): Platform => {
   const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
@@ -136,6 +169,7 @@ const createPlatform = (): Platform => {
     platform: "desktop",
     os,
     version: pkg.version,
+    windowID: windowState.id,
 
     async openDirectoryPickerDialog(opts) {
       return window.api.openDirectoryPicker({
@@ -282,8 +316,16 @@ window.api.onMenuCommand((id) => {
 })
 listenForDeepLinks()
 
-render(() => {
-  const platform = createPlatform()
+function LoadingSplash() {
+  return (
+    <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+      <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+    </div>
+  )
+}
+
+function DesktopRoot(props: { windowState: DesktopWindowState }) {
+  const platform = createPlatform(props.windowState)
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -303,6 +345,10 @@ render(() => {
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
+  const router = (props: BaseRouterProps) => (
+    <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
+  )
+  const onboarding = Promise.withResolvers<void>()
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -332,12 +378,6 @@ render(() => {
 
   function App() {
     const wslServers = useWslServers()
-    const splash = (
-      <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
-        <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-      </div>
-    )
-
     const ready = createMemo(
       () => !defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading,
     )
@@ -362,12 +402,22 @@ render(() => {
     const effectiveDefaultServer = createMemo(() =>
       ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
     )
-
     return (
-      <Show when={ready()} fallback={splash}>
+      <Show when={ready()} fallback={<LoadingSplash />}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+            <AppInterface
+              defaultServer={key}
+              servers={servers()}
+              router={router}
+              startup={onboarding.promise}
+              serverScoped={
+                <DesktopFirstLaunchOnboarding
+                  initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
+                  onLoaded={onboarding.resolve}
+                />
+              }
+            >
               <Inner />
             </AppInterface>
           )}
@@ -389,5 +439,20 @@ render(() => {
         <Show when={true}>{(_) => <App />}</Show>
       </AppBaseProviders>
     </PlatformProvider>
+  )
+}
+
+render(() => {
+  const [windowState] = createResource(async () => {
+    const api = window.api as typeof window.api & {
+      getWindowID?: () => Promise<string>
+    }
+    return { id: await api.getWindowID?.() }
+  })
+
+  return (
+    <Show when={windowState.latest} fallback={<LoadingSplash />} keyed>
+      {(state) => <DesktopRoot windowState={state} />}
+    </Show>
   )
 }, root!)

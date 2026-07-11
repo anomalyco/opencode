@@ -2,10 +2,10 @@ import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } 
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { FileSearchHandle } from "@opencode-ai/ui/file"
+import type { FileSearchHandle } from "@opencode-ai/session-ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
-import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
-import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
+import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
+import { createLineCommentController } from "@opencode-ai/session-ui/line-comment-annotations"
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -172,6 +172,14 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 }
 
 export function FileTabContent(props: { tab: string }) {
+  return (
+    <Tabs.Content value={props.tab}>
+      <SessionFileView tab={props.tab} />
+    </Tabs.Content>
+  )
+}
+
+export function SessionFileView(props: { tab: string }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
@@ -405,7 +413,7 @@ export function FileTabContent(props: { tab: string }) {
           cacheKey: cacheKey(),
         }}
         enableLineSelection
-        enableHoverUtility
+        enableGutterUtility
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
@@ -413,11 +421,10 @@ export function FileTabContent(props: { tab: string }) {
         }}
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
+        renderGutterUtility={commentsUi.renderGutterUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelected(range)
         }}
-        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelectionEnd(range)
         }}
@@ -440,8 +447,8 @@ export function FileTabContent(props: { tab: string }) {
     </div>
   )
 
-  return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+  const content = () => (
+    <div class="mt-3 relative h-full min-h-0">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
@@ -451,6 +458,8 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
-    </Tabs.Content>
+    </div>
   )
+
+  return content()
 }
