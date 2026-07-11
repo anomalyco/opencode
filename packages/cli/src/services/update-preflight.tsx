@@ -1,31 +1,22 @@
 /** @jsxImportSource @opentui/solid */
-// Update preflight: a split-footer status shown while a freshly launched CLI
-// replaces a version-mismatched background service before the TUI attaches.
-// The footer animates in the terminal's bottom rows, writes a one-line
-// receipt into scrollback, and fully destroys its renderer before the TUI
-// creates its own — the receipt survives above the TUI.
+// Split-footer status shown while a freshly launched CLI replaces a
+// version-mismatched background service before the TUI attaches.
 import { createCliRenderer, RGBA, TextAttributes, type CliRenderer } from "@opentui/core"
-import { createScrollbackWriter, render, useTerminalDimensions } from "@opentui/solid"
+import { render, useTerminalDimensions } from "@opentui/solid"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
 import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { go } from "@opencode-ai/tui/logo"
+import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show, untrack } from "solid-js"
 
 const stages = ["Keeping your session safe", "Starting the new background service", "Connecting to OpenCode"] as const
-
-// Real work is never delayed; each stage label lingers at least this long so
-// its dissolve sweep and rail movement read as deliberate motion.
-const stageFloor = 350
+const stageFloor = 480
+const transitionDuration = 420
+const completionHold = 650
 
 export type Handle = {
-  // Idempotent; returns false when no interactive terminal is available and
-  // the caller should fall back to plain stderr messaging.
   readonly begin: (from?: string) => boolean
-  // Plays the final stage, writes the success receipt, and tears down the
-  // renderer. No-op when begin() never ran.
   readonly finish: () => Promise<void>
-  // Writes a failure receipt and tears down the renderer. No-op when begin()
-  // never ran.
   readonly fail: (message: string) => Promise<void>
 }
 
@@ -56,6 +47,10 @@ type Session = {
 async function open(from?: string): Promise<Session> {
   registerOpencodeSpinner()
   const [active, setActive] = createSignal(0)
+  const [outcome, setOutcome] = createSignal<"running" | "success" | "failure">("running")
+  const [failure, setFailure] = createSignal("")
+  const [animating, setAnimating] = createSignal(true)
+  let resolveOutcome: (() => void) | undefined
   const renderer = await createCliRenderer({
     stdin: process.stdin,
     useMouse: false,
@@ -70,96 +65,124 @@ async function open(from?: string): Promise<Session> {
     consoleMode: "disabled",
     clearOnShutdown: false,
   })
-  const renderTask = render(() => <UpdateFooter from={from} active={active} renderer={renderer} />, renderer)
-  void renderTask.catch(() => {})
-  renderer.requestRender()
+  await render(
+    () => (
+      <UpdateFooter
+        from={from}
+        active={active}
+        outcome={outcome}
+        failure={failure}
+        animating={animating}
+        renderer={renderer}
+        onOutcomeSettled={() => resolveOutcome?.()}
+      />
+    ),
+    renderer,
+  ).catch((error) => {
+    if (!renderer.isDestroyed) renderer.destroy()
+    throw error
+  })
   let shownAt = performance.now()
   const advance = async (stage: number) => {
     const remaining = stageFloor - (performance.now() - shownAt)
     if (remaining > 0) await sleep(remaining)
+    if (outcome() !== "running") return
     setActive(stage)
     shownAt = performance.now()
   }
-  // The service replacement runs entirely inside Service.start without
-  // intermediate callbacks, so the first transition is time-based. Finer
-  // lifecycle hooks (draining, health polling) are a follow-up.
+  // Service.start currently exposes only its start boundary, so this first
+  // transition is time-based. Finer lifecycle callbacks remain follow-up work.
   const auto = advance(1)
-  const close = async (content: () => JSX.Element) => {
-    await auto
-    renderer.writeToScrollback(createScrollbackWriter(content, { startOnNewLine: true, trailingNewline: true }))
-    renderer.requestRender()
-    await bounded(renderer.idle())
-    renderer.externalOutputMode = "passthrough"
-    renderer.screenMode = "main-screen"
-    if (!renderer.isDestroyed) renderer.destroy()
-    await bounded(renderTask)
+  const transitionTo = async (next: "success" | "failure", hold: number) => {
+    const settled = new Promise<void>((resolve) => {
+      resolveOutcome = resolve
+    })
+    setOutcome(next)
+    await settled
+    resolveOutcome = undefined
+    setAnimating(false)
+    await sleep(hold)
   }
+  const close = async () => {
+    setAnimating(false)
+    if (renderer.isDestroyed) return
+    renderer.pause()
+    await renderer.idle()
+    renderer.destroy()
+  }
+  let settled: Promise<void> | undefined
+  const settle = (task: () => Promise<void>) => (settled ??= task())
   return {
-    finish: async () => {
-      await auto
-      await advance(2)
-      await sleep(stageFloor)
-      await close(() => (
-        <box width="100%" flexDirection="row" gap={1}>
-          <text fg={colors.success}>✓</text>
-          <text fg={colors.muted} attributes={TextAttributes.BOLD}>
-            OpenCode
-          </text>
-          <text fg={colors.muted}>updated to</text>
-          <text fg={colors.accent}>{InstallationVersion}</text>
-        </box>
-      ))
-    },
-    fail: async (message) => {
-      await close(() => (
-        <box width="100%" flexDirection="row" gap={1}>
-          <text fg={colors.error}>!</text>
-          <text fg={colors.text}>{message}</text>
-        </box>
-      ))
-    },
+    finish: () =>
+      settle(async () => {
+        await auto
+        await advance(2)
+        await sleep(stageFloor)
+        await transitionTo("success", completionHold)
+        await close()
+      }),
+    fail: (message) =>
+      settle(async () => {
+        setFailure(message)
+        await transitionTo("failure", 250)
+        await close()
+      }),
   }
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-const bounded = (task: Promise<unknown>) =>
-  Promise.race([task, sleep(1_000)]).catch(() => {})
 
 const colors = {
   accent: RGBA.fromHex("#a6b8ff"),
   accentBright: RGBA.fromHex("#eef1ff"),
   accentDim: RGBA.fromHex("#596998"),
   error: RGBA.fromHex("#ff8192"),
-  muted: RGBA.fromIndex(8),
+  muted: RGBA.fromHex("#808080"),
   success: RGBA.fromHex("#8bd5a5"),
-  text: RGBA.defaultForeground(),
+  text: RGBA.fromHex("#eeeeee"),
 }
 
-// The "O" from the OpenCode logo: exactly footer height. "_" is the
-// shadow-filled interior, matching the wordmark's rendering trick.
-const monogram = ["█▀▀█", "█__█", "▀▀▀▀"]
-const monogramInk = RGBA.fromHex("#808080")
-const monogramShadow = RGBA.fromValues(monogramInk.r * 0.25, monogramInk.g * 0.25, monogramInk.b * 0.25)
-
+const monogram = go.right.slice(1)
 const sweepBlend = 8
-const textBright = RGBA.fromHex("#eeeeee")
 const textDim = RGBA.fromHex("#4c4c4c")
-
-// Brightness ramps are precomputed so per-frame cell updates reuse stable
-// RGBA instances instead of allocating one per cell per tick.
 const rampSteps = 32
+
 const ramp = (from: RGBA, to: RGBA) =>
   Array.from({ length: rampSteps + 1 }, (_, step) => {
-    const t = step / rampSteps
-    return RGBA.fromValues(from.r + (to.r - from.r) * t, from.g + (to.g - from.g) * t, from.b + (to.b - from.b) * t)
+    const amount = step / rampSteps
+    return RGBA.fromValues(
+      from.r + (to.r - from.r) * amount,
+      from.g + (to.g - from.g) * amount,
+      from.b + (to.b - from.b) * amount,
+    )
   })
 const railRamp = ramp(colors.accentDim, colors.accentBright)
-const textRamp = ramp(textDim, textBright)
+const monogramRamp = ramp(colors.muted, colors.accent)
+const rampCache = new Map<RGBA, ReadonlyArray<RGBA>>()
+const rampFor = (color: RGBA) => {
+  const cached = rampCache.get(color)
+  if (cached) return cached
+  const result = ramp(textDim, color)
+  rampCache.set(color, result)
+  return result
+}
 const shade = (palette: ReadonlyArray<RGBA>, brightness: number) =>
   palette[Math.round(Math.max(0, Math.min(1, brightness)) * rampSteps)]
 
-function Monogram() {
+type Cell = { readonly char: string; readonly color: RGBA; readonly bold?: boolean }
+const styled = (text: string, color: RGBA, bold?: boolean): Cell[] =>
+  Array.from(text).map((char) => ({ char, color, bold }))
+const phrase = (...segments: ReadonlyArray<readonly [string, RGBA, boolean?]>): Cell[] =>
+  segments.flatMap((segment, index) => [
+    ...(index > 0 ? styled(" ", colors.muted) : []),
+    ...styled(segment[0], segment[1], segment[2]),
+  ])
+
+function Monogram(props: { ink: () => RGBA }) {
+  const shadow = createMemo(() => {
+    const ink = props.ink()
+    return RGBA.fromValues(ink.r * 0.25, ink.g * 0.25, ink.b * 0.25)
+  })
   return (
     <box flexDirection="column">
       <For each={monogram}>
@@ -168,11 +191,11 @@ function Monogram() {
             <For each={Array.from(line)}>
               {(char) =>
                 char === "_" ? (
-                  <text bg={monogramShadow} selectable={false}>
+                  <text bg={shadow()} selectable={false}>
                     {" "}
                   </text>
                 ) : (
-                  <text fg={monogramInk} selectable={false}>
+                  <text fg={props.ink()} selectable={false}>
                     {char}
                   </text>
                 )
@@ -185,45 +208,127 @@ function Monogram() {
   )
 }
 
-function UpdateFooter(props: { from?: string; active: () => number; renderer: CliRenderer }) {
+function createSweep() {
+  const [state, setState] = createSignal<{ from: Cell[]; to: Cell[]; done?: () => void } | undefined>()
+  const [progress, setProgress] = createSignal(0)
+  let elapsed = 0
+  const cells = createMemo(() => {
+    const transition = state()
+    if (!transition) return undefined
+    const length = Math.max(transition.from.length, transition.to.length)
+    const front = progress() * (length + 2 * sweepBlend) - sweepBlend
+    return Array.from({ length }, (_, index) => {
+      const passed = Math.max(0, Math.min(1, (front - index) / sweepBlend))
+      const brightness = smoothstep(Math.abs(passed * 2 - 1))
+      const cell = (passed >= 0.5 ? transition.to[index] : transition.from[index]) ?? {
+        char: " ",
+        color: colors.text,
+      }
+      return { ...cell, color: shade(rampFor(cell.color), brightness) }
+    })
+  })
+  return {
+    start(from: Cell[], to: Cell[], done?: () => void) {
+      elapsed = 0
+      setProgress(0)
+      setState({ from, to, done })
+    },
+    tick(deltaTime: number) {
+      const transition = state()
+      if (!transition) return
+      elapsed = Math.min(transitionDuration, elapsed + deltaTime)
+      setProgress(smoothstep(elapsed / transitionDuration))
+      if (elapsed < transitionDuration) return
+      setState(undefined)
+      transition.done?.()
+    },
+    cells,
+    progress,
+  }
+}
+
+const smoothstep = (value: number) => value * value * (3 - 2 * value)
+const frameDone = Promise.resolve()
+
+function UpdateFooter(props: {
+  from?: string
+  active: () => number
+  outcome: () => "running" | "success" | "failure"
+  failure: () => string
+  animating: () => boolean
+  renderer: CliRenderer
+  onOutcomeSettled: () => void
+}) {
   const term = useTerminalDimensions()
   const [position, setPosition] = createSignal(0)
   const [pulse, setPulse] = createSignal(0)
-  const [sweep, setSweep] = createSignal<{ from: string } | undefined>(undefined)
-  const [sweepProgress, setSweepProgress] = createSignal(0)
-  let sweepValue = 0
-  let sweepVelocity = 0
+  const headerSweep = createSweep()
+  const statusSweep = createSweep()
+  const runningHeader = () =>
+    phrase(
+      ["OpenCode", colors.muted, true],
+      ["is updating", colors.muted],
+      ...(props.from
+        ? ([
+            ["from", colors.muted],
+            [props.from, colors.accentDim],
+          ] as const)
+        : []),
+      ["to", colors.muted],
+      [InstallationVersion, colors.accent],
+    )
+  const completedHeader = phrase(
+    ["OpenCode", colors.muted, true],
+    ["updated to", colors.muted],
+    [InstallationVersion, colors.accent],
+  )
+  const pausedHeader = phrase(["OpenCode", colors.muted, true], ["update paused", colors.muted])
+  const outcomeStatus = () =>
+    props.outcome() === "success"
+      ? [...styled("✓", colors.success), ...styled(" Ready", colors.text)]
+      : [...styled("!", colors.error), ...styled(" " + props.failure(), colors.text)]
   let previousStage: string = stages[0]
-  createEffect(() => {
-    const next = stages[props.active()]
-    if (next === previousStage) return
-    sweepValue = 0
-    sweepVelocity = 0
-    setSweepProgress(0)
-    setSweep({ from: previousStage })
-    previousStage = next
-  })
-  // Stationary dissolve: a front sweeps left to right; ahead of it the old
-  // phrase stays bright, behind it the new phrase is bright, and characters
-  // dip to dim as the front passes over them.
-  const stageCells = createMemo(() => {
-    const state = sweep()
-    if (!state) return undefined
-    const target = stages[props.active()]
-    const progress = sweepProgress()
-    const length = Math.max(target.length, state.from.length)
-    const front = progress * (length + 2 * sweepBlend) - sweepBlend
-    return Array.from({ length }, (_, index) => {
-      const passed = Math.max(0, Math.min(1, (front - index) / sweepBlend))
-      const brightness = Math.abs(passed * 2 - 1)
-      return {
-        char: (passed >= 0.5 ? target[index] : state.from[index]) ?? " ",
-        color: shade(textRamp, brightness),
-      }
-    })
-  })
+  createEffect(
+    on(props.active, (index) => {
+      if (props.outcome() !== "running") return
+      const next = stages[index]
+      if (next === previousStage) return
+      statusSweep.start(styled(previousStage, colors.text), styled(next, colors.text))
+      previousStage = next
+    }),
+  )
+  createEffect(
+    on(
+      props.outcome,
+      (outcome) => {
+        if (outcome === "running") return
+        const visibleStatus = untrack(statusSweep.cells) ?? styled(previousStage, colors.text)
+        let remaining = 2
+        const settled = () => {
+          remaining -= 1
+          if (remaining === 0) props.onOutcomeSettled()
+        }
+        headerSweep.start(runningHeader(), outcome === "success" ? completedHeader : pausedHeader, settled)
+        statusSweep.start([...styled("  ", colors.text), ...visibleStatus], outcomeStatus(), settled)
+      },
+      { defer: true },
+    ),
+  )
+  const header = createMemo(
+    () =>
+      headerSweep.cells() ??
+      (props.outcome() === "success"
+        ? completedHeader
+        : props.outcome() === "failure"
+          ? pausedHeader
+          : runningHeader()),
+  )
+  const monogramInk = createMemo(() =>
+    props.outcome() === "success" ? shade(monogramRamp, headerSweep.progress()) : colors.muted,
+  )
   const rail = createMemo(() => {
-    const width = Math.max(8, Math.min(30, term().width - 39))
+    const width = Math.max(0, Math.min(30, term().width - 39))
+    if (props.outcome() === "success") return Array.from({ length: width }, () => ({ char: "━", color: colors.accent }))
     const filled = Math.round(position() * width)
     const glowRadius = 6
     const span = Math.max(1, filled + glowRadius * 2)
@@ -239,74 +344,66 @@ function UpdateFooter(props: { from?: string; active: () => number; renderer: Cl
     let value = 0
     let velocity = 0
     let phase = 0
-    // Springs integrate inside the renderer's own frame loop, so simulation
-    // steps and painted frames share one clock and one delta.
-    const frame = async (deltaTime: number) => {
+    const frame = (deltaTime: number) => {
+      if (!props.animating()) return frameDone
       const elapsed = Math.min(0.032, deltaTime / 1_000)
       const stiffness = 110
       const damping = 2 * Math.sqrt(stiffness)
-      const target = (props.active() + 1) / stages.length
+      const target = props.outcome() === "success" ? 1 : (props.active() + 1) / stages.length
       velocity += (stiffness * (target - value) - damping * velocity) * elapsed
       value += velocity * elapsed
       setPosition(Math.max(0, Math.min(1, value)))
       phase = (phase + deltaTime / 900) % 1
       setPulse(phase)
-      if (sweep()) {
-        const sweepStiffness = 200
-        const sweepDamping = 2 * Math.sqrt(sweepStiffness)
-        sweepVelocity += (sweepStiffness * (1 - sweepValue) - sweepDamping * sweepVelocity) * elapsed
-        sweepValue += sweepVelocity * elapsed
-        if (sweepValue >= 0.995) setSweep(undefined)
-        else setSweepProgress(sweepValue)
-      }
+      headerSweep.tick(deltaTime)
+      statusSweep.tick(deltaTime)
+      return frameDone
     }
     props.renderer.setFrameCallback(frame)
     onCleanup(() => props.renderer.removeFrameCallback(frame))
   })
 
   return (
-    <box width="100%" height={4} flexDirection="row" gap={1}>
-      <Monogram />
-      <box flexDirection="column" flexGrow={1}>
-        <box flexDirection="row" gap={1}>
-          <text fg={colors.muted} attributes={TextAttributes.BOLD}>
-            OpenCode
-          </text>
-          <text fg={colors.muted}>is updating</text>
-          <Show when={props.from}>
-            <text fg={colors.muted}>from</text>
-            <text fg={colors.accentDim}>{props.from}</text>
-          </Show>
-          <text fg={colors.muted}>to</text>
-          <text fg={colors.accent}>{InstallationVersion}</text>
-        </box>
-        <box flexDirection="row" gap={1}>
-          <spinner frames={SPINNER_FRAMES} interval={80} color={colors.accent} />
-          <Show
-            when={stageCells()}
-            fallback={
-              <text fg={colors.text} truncate>
-                {stages[props.active()]}
-              </text>
-            }
-          >
-            {(cells) => (
-              <box flexDirection="row">
-                <Index each={cells()}>{(cell) => <text fg={cell().color}>{cell().char}</text>}</Index>
-              </box>
-            )}
-          </Show>
-        </box>
-        <box flexDirection="row" gap={1}>
-          <box flexDirection="row">
-            <Index each={rail()}>{(segment) => <text fg={segment().color}>{segment().char}</text>}</Index>
+    <box width="100%" height={4} flexDirection="row" gap={1} live={props.animating()}>
+      <Monogram ink={monogramInk} />
+      <box flexDirection="column" flexGrow={1} overflow="hidden">
+        <CellLine cells={header()} />
+        <Show
+          when={props.outcome() === "running"}
+          fallback={<CellLine cells={statusSweep.cells() ?? outcomeStatus()} />}
+        >
+          <box flexDirection="row" gap={1}>
+            <spinner frames={SPINNER_FRAMES} interval={80} color={colors.accent} />
+            <CellLine cells={statusSweep.cells() ?? styled(stages[props.active()], colors.text)} />
           </box>
+        </Show>
+        <box flexDirection="row" gap={1}>
+          <CellLine cells={rail()} />
           <text fg={colors.muted}>
-            {props.active() + 1}/{stages.length}
+            {props.outcome() === "success" ? stages.length : props.active() + 1}/{stages.length}
           </text>
         </box>
       </box>
     </box>
+  )
+}
+
+function CellLine(props: { cells: ReadonlyArray<Cell> }) {
+  return (
+    <text truncate>
+      <Index each={props.cells}>
+        {(cell) => (
+          <span
+            style={{
+              fg: cell().color,
+              attributes: cell().bold ? TextAttributes.BOLD : TextAttributes.NONE,
+            }}
+          >
+            {cell().char}
+          </span>
+        )}
+      </Index>
+    </text>
   )
 }
 
