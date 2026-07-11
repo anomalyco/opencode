@@ -4,6 +4,9 @@ import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
+import { existsSync, readFileSync } from "fs"
+import { homedir } from "os"
+import { join } from "path"
 
 export type Err = ReturnType<NamedError["toObject"]>
 
@@ -27,6 +30,24 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+
+// 单次重试等待阈值（毫秒）。超过此值时若检测到 OMO fallback 可用则停止重试，
+// 让错误走到 session.error → OMO 接管 fallback。
+export const RETRY_MAX_SINGLE_DELAY_MS = 60_000
+
+// 检测 OMO（oh-my-openagent）是否安装了 fallback 配置。
+// 只在模块加载时执行一次，结果缓存。
+const OMO_HAS_FALLBACK = iife(() => {
+  try {
+    const configPath = join(homedir(), ".config", "opencode", "oh-my-openagent.json")
+    if (!existsSync(configPath)) return false
+    const text = readFileSync(configPath, "utf-8")
+    const config = JSON.parse(text)
+    return config.model_fallback === true || config.runtime_fallback?.enabled === true
+  } catch {
+    return false
+  }
+})
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -183,8 +204,9 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+      if (OMO_HAS_FALLBACK && wait > RETRY_MAX_SINGLE_DELAY_MS) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,
