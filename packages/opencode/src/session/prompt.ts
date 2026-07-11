@@ -1250,7 +1250,14 @@ const layer = Layer.effect(
             }
 
             if (step === 1)
-              yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+              yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning("session summary background task failed", {
+                    error: Cause.squash(cause),
+                  }),
+                ),
+                Effect.forkIn(scope),
+              )
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
@@ -1335,7 +1342,14 @@ const layer = Layer.effect(
           continue
         }
 
-        yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+        yield* compaction.prune({ sessionID }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("session compaction prune background task failed", {
+              error: Cause.squash(cause),
+            }),
+          ),
+          Effect.forkIn(scope),
+        )
         return yield* lastAssistant(sessionID)
       },
     )
