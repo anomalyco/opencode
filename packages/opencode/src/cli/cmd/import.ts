@@ -24,9 +24,9 @@ export type ShareData =
   | { type: "session_diff"; data: unknown }
   | { type: "model"; data: unknown }
 
-/** Extract share ID from a share URL like https://opncd.ai/share/abc123 */
+/** Extract share ID from a share URL like https://opncd.ai/share/abc123 or https://opncd.ai/s/abc123 */
 export function parseShareUrl(url: string): string | null {
-  const match = url.match(/^https?:\/\/[^/]+\/share\/([a-zA-Z0-9_-]+)$/)
+  const match = url.match(/^https?:\/\/[^/]+\/(?:share|s)\/([a-zA-Z0-9_-]+)$/)
   return match ? match[1] : null
 }
 
@@ -109,7 +109,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     const slug = parseShareUrl(file)
     if (!slug) {
       const baseUrl = yield* Effect.orDie(share.url())
-      process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug>`)
+      process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug> or ${baseUrl}/s/<slug>`)
       process.stdout.write(EOL)
       return
     }
