@@ -2,9 +2,9 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { run } from "@opencode-ai/tui"
 import { loadBuiltinPlugins } from "@opencode-ai/tui/builtins"
-import { TuiConfig } from "@opencode-ai/tui/config"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
+import { TuiConfig } from "../../tui-config"
 import { Effect, Option } from "effect"
 import { Server } from "../../services/server"
 import { Updater } from "../../services/updater"
@@ -34,7 +34,7 @@ export default Runtime.handler(Commands, (input) =>
       ),
     )
     yield* Effect.promise(() => preflight.finish())
-    const config = TuiConfig.resolve({}, { terminalSuspend: false })
+    const config = yield* TuiConfig.load()
     let disposeSlots: (() => void) | undefined
     const runFork = Effect.runForkWith(yield* Effect.context())
     yield* run({
