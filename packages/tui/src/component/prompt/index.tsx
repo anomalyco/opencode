@@ -52,6 +52,7 @@ import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { contextUsage } from "../../util/session"
 import { abbreviateHome } from "../../runtime"
+import { usePromptRef } from "../../context/prompt"
 
 registerOpencodeSpinner()
 
@@ -167,6 +168,7 @@ export function Prompt(props: PromptProps) {
   const config = useConfig().data
   const dialog = useDialog()
   const toast = useToast()
+  const promptRef = usePromptRef()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
   const activeSubagents = createMemo(() => {
     if (!props.sessionID) return 0
@@ -1085,16 +1087,18 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void client.api.session
-        .command({
-          sessionID,
-          command: command.slice(1),
-          arguments: args,
-          agent: agent.id,
-          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
-          files: store.prompt.files,
-          agents: store.prompt.agents,
-        })
+      void promptRef.command
+        .track(() =>
+          client.api.session.command({
+            sessionID,
+            command: command.slice(1),
+            arguments: args,
+            agent: agent.id,
+            model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
+            files: store.prompt.files,
+            agents: store.prompt.agents,
+          }),
+        )
         .catch((error) => {
           toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         })
@@ -1558,6 +1562,11 @@ export function Prompt(props: PromptProps) {
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
           <box flexGrow={1} flexShrink={1} minWidth={0}>
             <Switch>
+              <Match when={promptRef.command.pending}>
+                <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                  <Spinner color={themeV2.hue.accent(500)}>Resolving command...</Spinner>
+                </box>
+              </Match>
               <Match when={status() === "running"}>
                 <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                   <box marginLeft={1}>
