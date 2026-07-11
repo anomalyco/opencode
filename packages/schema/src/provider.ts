@@ -17,6 +17,7 @@ export const ID = Schema.String.pipe(
     amazonBedrock: schema.make("amazon-bedrock"),
     azure: schema.make("azure"),
     openrouter: schema.make("openrouter"),
+    edenai: schema.make("edenai"),
     mistral: schema.make("mistral"),
     gitlab: schema.make("gitlab"),
   })),

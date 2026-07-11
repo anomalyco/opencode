@@ -78,6 +78,7 @@ export const iconNames = [
   "fireworks-ai",
   "fastrouter",
   "evroc",
+  "edenai",
   "digitalocean",
   "deepseek",
   "deepinfra",

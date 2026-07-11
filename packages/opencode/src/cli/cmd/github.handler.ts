@@ -18,6 +18,7 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { withBuiltinProviders } from "@opencode-ai/core/models-dev-builtin"
 import { InstanceRef } from "@/effect/instance-ref"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
@@ -165,7 +166,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
       const app = await getAppInfo()
       await installGitHubApp()
 
-      const providers = await Effect.runPromise(modelsDev.get()).then((p) => {
+      const providers = await Effect.runPromise(modelsDev.get()).then(withBuiltinProviders).then((p) => {
         // TODO: add guide for copilot, for now just hide it
         delete p["github-copilot"]
         return p

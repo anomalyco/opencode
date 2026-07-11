@@ -8,6 +8,7 @@ import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai"
 import { CoherePlugin } from "./provider/cohere"
 import { DeepInfraPlugin } from "./provider/deepinfra"
 import { DynamicProviderPlugin } from "./provider/dynamic"
+import { EdenAiPlugin } from "./provider/edenai"
 import { GatewayPlugin } from "./provider/gateway"
 import { GithubCopilotPlugin } from "./provider/github-copilot"
 import { GitLabPlugin } from "./provider/gitlab"
@@ -44,6 +45,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   CloudflareWorkersAIPlugin,
   CoherePlugin,
   DeepInfraPlugin,
+  EdenAiPlugin,
   GatewayPlugin,
   GithubCopilotPlugin,
   GitLabPlugin,

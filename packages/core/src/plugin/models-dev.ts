@@ -3,6 +3,7 @@ import type { ModelV2Info } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 import { EventV2 } from "../event"
 import { ModelsDev } from "../models-dev"
+import { withBuiltinProviders } from "../models-dev-builtin"
 import { ProviderV2 } from "../provider"
 
 function released(date: string) {
@@ -123,7 +124,7 @@ export const ModelsDevPlugin = define({
     const events = yield* EventV2.Service
     yield* ctx.integration.transform(
       Effect.fn(function* (integrations) {
-        const data = yield* modelsDev.get()
+        const data = withBuiltinProviders(yield* modelsDev.get())
         for (const item of Object.values(data)) {
           if (item.env.length === 0) continue
           const integrationID = item.id
@@ -141,7 +142,7 @@ export const ModelsDevPlugin = define({
     )
     yield* ctx.catalog.transform(
       Effect.fn(function* (catalog) {
-        const data = yield* modelsDev.get()
+        const data = withBuiltinProviders(yield* modelsDev.get())
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
           catalog.provider.update(providerID, (provider) => {

@@ -5,6 +5,7 @@ import { Provider as ProviderSubpath } from "@opencode-ai/llm/provider"
 import {
   CloudflareAIGateway,
   CloudflareWorkersAI,
+  EdenAI,
   OpenAI,
   OpenAICompatible,
   OpenRouter,
@@ -41,6 +42,9 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
     expect(OpenRouter.provider.model).toBe(OpenRouter.model)
+    expect(EdenAI.model).toBeFunction()
+    expect(EdenAI.provider.model).toBe(EdenAI.model)
+    expect(EdenAI.configure({ apiKey: "fixture" }).model("@edenai").route.id).toBe("edenai")
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.model).toBe(XAI.model)
     expect(XAI.provider.responses).toBe(XAI.responses)

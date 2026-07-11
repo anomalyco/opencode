@@ -8,6 +8,7 @@ export const profiles = {
   cerebras: { provider: "cerebras", baseURL: "https://api.cerebras.ai/v1" },
   deepinfra: { provider: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai" },
   deepseek: { provider: "deepseek", baseURL: "https://api.deepseek.com/v1" },
+  edenai: { provider: "edenai", baseURL: "https://api.edenai.run/v3" },
   fireworks: { provider: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1" },
   groq: { provider: "groq", baseURL: "https://api.groq.com/openai/v1" },
   openrouter: { provider: "openrouter", baseURL: "https://openrouter.ai/api/v1" },

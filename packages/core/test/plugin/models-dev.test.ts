@@ -158,6 +158,20 @@ describe("ModelsDevPlugin", () => {
               ],
               connections: [],
             }),
+            // Eden AI ships as a built-in provider (see models-dev-builtin.ts), so it
+            // is always merged into the catalog and registers its env-based auth method.
+            new Integration.Info({
+              id: Integration.ID.make("edenai"),
+              name: "Eden AI",
+              methods: [
+                { type: "key" },
+                {
+                  type: "env",
+                  names: ["EDENAI_API_KEY"],
+                },
+              ],
+              connections: [],
+            }),
           ])
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>

@@ -5,6 +5,7 @@ import { CliError, effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import * as Prompt from "../effect/prompt"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { withBuiltinProviders } from "@opencode-ai/core/models-dev-builtin"
 
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
@@ -261,7 +262,7 @@ export const ProvidersListCommand = effectCmd({
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     yield* Prompt.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = Object.entries(yield* Effect.orDie(authSvc.all()))
-    const database = yield* modelsDev.get()
+    const database = withBuiltinProviders(yield* modelsDev.get())
 
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
@@ -361,7 +362,7 @@ export const ProvidersLoginCommand = effectCmd({
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
 
-    const allProviders = yield* modelsDev.get()
+    const allProviders = withBuiltinProviders(yield* modelsDev.get())
     const providers: Record<string, (typeof allProviders)[string]> = {}
     for (const [key, value] of Object.entries(allProviders)) {
       if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) providers[key] = value
@@ -509,7 +510,7 @@ export const ProvidersLogoutCommand = effectCmd({
       yield* Prompt.log.error("No credentials found")
       return
     }
-    const database = yield* modelsDev.get()
+    const database = withBuiltinProviders(yield* modelsDev.get())
     const options = credentials.map(([key, value]) => ({
       label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
       value: key,
