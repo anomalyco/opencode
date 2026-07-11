@@ -1252,9 +1252,11 @@ const layer = Layer.effect(
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(
                 Effect.catchCause((cause) =>
-                  Effect.logWarning("session summary background task failed", {
-                    error: Cause.squash(cause),
-                  }),
+                  Cause.hasInterruptsOnly(cause)
+                    ? Effect.void
+                    : Effect.logWarning("session summary background task failed", {
+                        error: Cause.squash(cause),
+                      }),
                 ),
                 Effect.forkIn(scope),
               )
@@ -1344,9 +1346,11 @@ const layer = Layer.effect(
 
         yield* compaction.prune({ sessionID }).pipe(
           Effect.catchCause((cause) =>
-            Effect.logWarning("session compaction prune background task failed", {
-              error: Cause.squash(cause),
-            }),
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : Effect.logWarning("session compaction prune background task failed", {
+                  error: Cause.squash(cause),
+                }),
           ),
           Effect.forkIn(scope),
         )
