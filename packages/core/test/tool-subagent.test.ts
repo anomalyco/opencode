@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -105,7 +105,7 @@ const layer = AppNodeBuilder.build(
 
 const it = testEffect(layer)
 
-const withSubagent = (location: Location.Ref) =>
+const withSubagent = (location: Location.Ref, permissions: AgentV2.Info["permissions"] = []) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
     yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
@@ -114,7 +114,7 @@ const withSubagent = (location: Location.Ref) =>
         // The caller identity used by executeTool; subagent permission asserts against it.
         draft.update(toolIdentity.agent, (agent) => {
           agent.mode = "primary"
-          agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
+          agent.permissions.push({ action: "*", resource: "*", effect: "allow" }, ...permissions)
         })
         draft.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.mode = "subagent"
@@ -211,6 +211,56 @@ describe("SubagentTool", () => {
           })
           const fallbackChild = yield* sessions.get(outputSessionID(fallback.output?.structured))
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
+        }),
+      ),
+    ),
+  )
+
+  it.live("enforces target-specific subagent permissions before creating a child session", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* SessionV2.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location, [
+            { action: SubagentTool.name, resource: "*", effect: "deny" },
+            { action: SubagentTool.name, resource: "reviewer", effect: "allow" },
+          ])
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          yield* waitForTool(registry, SubagentTool.name)
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-denied-subagent",
+                name: SubagentTool.name,
+                input: { agent: "fallback", description: "denied", prompt: "do not run" },
+              },
+            }),
+          ).toEqual({ type: "error", value: "Subagent denied: fallback" })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
+
+          expect(
+            yield* settleTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-allowed-subagent",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "allowed", prompt: "review this" },
+              },
+            }),
+          ).toMatchObject({ output: { structured: { status: "completed", output: childText } } })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
         }),
       ),
     ),

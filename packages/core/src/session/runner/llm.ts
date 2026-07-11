@@ -14,6 +14,7 @@ import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
+import { SubagentGuidance } from "../../agent/guidance"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
@@ -92,6 +93,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
     const builtins = yield* InstructionBuiltIns.Service
+    const subagentGuidance = yield* SubagentGuidance.Service
     const discovery = yield* InstructionDiscovery.Service
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
@@ -145,6 +147,7 @@ const layer = Layer.effect(
       Effect.all(
         [
           builtins.load(),
+          subagentGuidance.load(agent),
           discovery.load(),
           skillGuidance.load(agent),
           referenceGuidance.load(),
@@ -569,6 +572,7 @@ export const node = makeLocationNode({
     EventV2.node,
     llmClient,
     AgentV2.node,
+    SubagentGuidance.node,
     ToolRegistry.node,
     SessionRunnerModel.node,
     SessionStore.node,
