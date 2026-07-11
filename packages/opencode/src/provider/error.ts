@@ -47,9 +47,13 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
 
     try {
       const body = JSON.parse(e.responseBody)
-      // try to extract common error message fields
-      const errMsg = body.message || body.error || body.error?.message
-      if (errMsg && typeof errMsg === "string") {
+      // Prefer string fields. OpenAI-shaped bodies use { error: { message } },
+      // so reading body.error first would grab the object and skip the message.
+      const errMsg =
+        (typeof body.message === "string" ? body.message : undefined) ||
+        (typeof body.error === "string" ? body.error : undefined) ||
+        (typeof body.error?.message === "string" ? body.error.message : undefined)
+      if (errMsg) {
         return `${msg}: ${errMsg}`
       }
     } catch {}
