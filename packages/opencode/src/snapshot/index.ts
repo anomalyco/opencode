@@ -120,7 +120,16 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               stdin: encodeNulTerminatedPaths(checkIgnorePaths),
             },
           )
-          if (check.code !== 0 && check.code !== 1) return new Set<string>()
+          // git check-ignore: 0 = some ignored, 1 = none ignored; any other code is an error.
+          // Fail closed: treat every candidate as ignored so gitignored files cannot leak into
+          // snapshot patches and later be restored or deleted by /undo (see #28033).
+          if (check.code !== 0 && check.code !== 1) {
+            yield* Effect.logWarning("git check-ignore failed; treating all candidates as ignored", {
+              code: check.code,
+              stderr: check.stderr,
+            })
+            return new Set(files)
+          }
           return new Set(
             check.text
               .split("\0")
