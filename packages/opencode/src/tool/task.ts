@@ -321,7 +321,10 @@ export const TaskTool = Tool.define(
           }),
         (_, exit) =>
           Effect.gen(function* () {
-            if (Exit.hasInterrupts(exit))
+            // Cancel on any abnormal exit (interrupt, fail, or die). Limiting cleanup to
+            // interrupts left subagent sessions orphaned when Effect.orDie converted tool
+            // errors into defects, so the parent continued while the child kept running.
+            if (Exit.isFailure(exit))
               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
           }).pipe(
             Effect.ensuring(
