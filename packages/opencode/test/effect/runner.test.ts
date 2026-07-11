@@ -52,7 +52,7 @@ describe("Runner", () => {
 
       expect(a).toBe("shared")
       expect(b).toBe("shared")
-      expect(yield* Ref.get(calls)).toBe(1)
+      expect(yield* Ref.get(calls)).toBe(2) // queued run also increments
     }),
   )
 
@@ -87,7 +87,7 @@ describe("Runner", () => {
   )
 
   it.live(
-    "second ensureRunning ignores new work if already running",
+    "second ensureRunning queues behind running and executes after",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
@@ -108,12 +108,98 @@ describe("Runner", () => {
       })
 
       expect(a).toBe("first-result")
-      expect(b).toBe("first-result")
-      expect(yield* Ref.get(ran)).toEqual(["first"])
+      expect(b).toBe("second-result")
+      expect(yield* Ref.get(ran)).toEqual(["first", "second"])
     }),
   )
 
   // --- cancel semantics ---
+
+  it.live(
+    "ensureRunning queues behind running and transitions through RunningThenRun",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      const gate = yield* Deferred.make<void>()
+
+      const first = Deferred.await(gate).pipe(Effect.as("first"))
+      const second = Effect.succeed("second")
+
+      const a = yield* runner.ensureRunning(first).pipe(Effect.forkChild)
+      yield* waitForState(runner, "Running")
+
+      const b = yield* runner.ensureRunning(second).pipe(Effect.forkChild)
+      yield* waitForState(runner, "RunningThenRun")
+      expect(runner.state._tag).toBe("RunningThenRun")
+
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.await(a)
+
+      const exitB = yield* Fiber.await(b)
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("second")
+      expect(runner.state._tag).toBe("Idle")
+    }),
+  )
+
+  it.live(
+    "third ensureRunning shares pending in RunningThenRun",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      const gate = yield* Deferred.make<void>()
+      const calls = yield* Ref.make(0)
+
+      const first = Deferred.await(gate).pipe(Effect.as("first"))
+      const work = Effect.gen(function* () {
+        yield* Ref.update(calls, (n) => n + 1)
+        return "queued"
+      })
+
+      const a = yield* runner.ensureRunning(first).pipe(Effect.forkChild)
+      yield* waitForState(runner, "Running")
+
+      const b = yield* runner.ensureRunning(work).pipe(Effect.forkChild)
+      yield* waitForState(runner, "RunningThenRun")
+
+      const c = yield* runner.ensureRunning(work).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      expect(runner.state._tag).toBe("RunningThenRun")
+
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.await(a)
+
+      const [exitB, exitC] = yield* Effect.all([Fiber.await(b), Fiber.await(c)])
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      expect(Exit.isSuccess(exitC)).toBe(true)
+      if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("queued")
+      if (Exit.isSuccess(exitC)) expect(exitC.value).toBe("queued")
+    }),
+  )
+
+  it.live(
+    "cancel in RunningThenRun cancels both current and pending",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("fallback") })
+      const gate = yield* Deferred.make<void>()
+
+      const a = yield* runner.ensureRunning(Deferred.await(gate).pipe(Effect.as("first"))).pipe(Effect.forkChild)
+      yield* waitForState(runner, "Running")
+
+      const b = yield* runner.ensureRunning(Effect.succeed("second")).pipe(Effect.forkChild)
+      yield* waitForState(runner, "RunningThenRun")
+
+      yield* runner.cancel
+      expect(runner.busy).toBe(false)
+
+      const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      expect(Exit.isSuccess(exitA)).toBe(true)
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      if (Exit.isSuccess(exitA)) expect(exitA.value).toBe("fallback")
+      if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("fallback")
+    }),
+  )
 
   it.live(
     "cancel interrupts running work",
