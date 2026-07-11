@@ -32,7 +32,7 @@ CodeMode is an orchestration language, not a general JavaScript runtime or an ap
 The generic runtime lives in `packages/codemode` and is host-neutral:
 
 1. The host builds a tree of `Tool.make(...)` definitions and calls `CodeMode.make(...)` or `CodeMode.execute(...)`.
-2. CodeMode generates model instructions, a budgeted inline catalog, and the internal `$codemode.search` tool.
+2. CodeMode generates model instructions, a budgeted inline catalog, and the global `search(...)` built-in.
 3. TypeScript syntax is transpiled away, Acorn parses the resulting JavaScript, and an owned tree-walking interpreter
    executes it without `eval`.
 4. Tool inputs and outputs cross schema and plain-data boundaries before they become visible on either side.
@@ -46,13 +46,14 @@ advertised as `Promise<unknown>`.
 ### Discovery and model workflow
 
 The model sees a token-budgeted catalog. Every namespace remains visible, and complete signatures are selected
-round-robin across namespaces so one large namespace cannot starve the others. `$codemode.search` is always callable
-and is advertised when the inline catalog is partial.
+round-robin across namespaces so one large namespace cannot starve the others. The global `search(...)` built-in is
+always callable - synchronously, counted as an admitted tool call - and is advertised when the inline catalog is
+partial.
 
 The intended workflow is:
 
-1. Pick an exact signature from the inline catalog, or return `$codemode.search(...)` results and use a selected path
-   in the next execution.
+1. Pick an exact signature from the inline catalog, or return `search(...)` results and use a selected path in the
+   next execution.
 2. Call the exact returned path without guessing or normalizing segments.
 3. Narrow `Promise<unknown>` results before reading fields.
 4. Start independent calls together and await them with `Promise.all`.

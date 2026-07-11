@@ -143,7 +143,6 @@ export const execute = <const Tools extends Record<string, unknown>>(
   options: ExecuteOptions<Tools>,
 ): Effect.Effect<Result, never, Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
-  ToolRuntime.assertValidTools(tools)
   return executeWithLimits(options, resolveExecutionLimits(options.limits), ToolRuntime.searchIndex(tools))
 }
 
@@ -152,7 +151,6 @@ export const make = <const Tools extends Record<string, unknown> = {}>(
   options: Options<Tools> = {} as Options<Tools>,
 ): Runtime<Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
-  ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
   const prepared = ToolRuntime.prepare(tools, options.discovery?.catalogBudget)
 

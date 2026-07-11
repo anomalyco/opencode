@@ -41,7 +41,7 @@ describe("Object.keys over tool references", () => {
       const namespaces = Object.keys(tools)
       return { namespaces, count: namespaces.length }
     `),
-    ).toEqual({ namespaces: ["github", "memory", "playwright", "$codemode"], count: 4 })
+    ).toEqual({ namespaces: ["github", "memory", "playwright"], count: 3 })
   })
 
   test("enumerates tool names at a nested namespace", async () => {
@@ -52,8 +52,10 @@ describe("Object.keys over tool references", () => {
     expect(await value(`return Object.keys(tools.github.list_issues)`)).toEqual([])
   })
 
-  test("the internal discovery namespace enumerates its callable surface", async () => {
-    expect(await value(`return Object.keys(tools.$codemode)`)).toEqual(["search"])
+  test("search is a global built-in function, not a tools namespace", async () => {
+    expect(await value(`return typeof search`)).toBe("function")
+    const failure = await error(`return Object.keys(tools.$codemode)`)
+    expect(failure.kind).toBe("UnknownTool")
   })
 
   test("an unknown namespace is an UnknownTool error pointing at the discovery idioms", async () => {
@@ -68,7 +70,7 @@ describe("Object.keys over tool references", () => {
       const failure = await error(`return Object.${method}(tools)`)
       expect(failure.kind).toBe("InvalidDataValue")
       expect(failure.message).toContain(
-        `Object.${method}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or tools.$codemode.search({ query }) for signatures.`,
+        `Object.${method}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
       )
     }
     const nested = await error(`return Object.entries(tools.github)`)
@@ -146,7 +148,7 @@ describe("for...in", () => {
       }
       return names
     `),
-    ).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate", "$codemode.search"])
+    ).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate"])
   })
 
   test("unsupported values fail with a hint at for...of and Object.keys", async () => {
