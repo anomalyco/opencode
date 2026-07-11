@@ -230,7 +230,8 @@ const layer = Layer.effect(
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
-        const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        const comma = Object.keys(parsed).length ? "," : ""
+        const updated = text.replace(/^\s*\{/, `{\n  "$schema": "https://opencode.ai/config.json"${comma}`)
         yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
       }
       return data

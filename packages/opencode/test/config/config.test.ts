@@ -528,6 +528,19 @@ it.instance("preserves env variables when adding $schema to config", () =>
   ),
 )
 
+it.instance("adds $schema to an empty JSON config without a trailing comma", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const file = path.join(test.directory, "opencode.json")
+    yield* FSUtil.use.writeWithDirs(file, "{}")
+
+    yield* Config.use.get()
+
+    const content = yield* FSUtil.use.readFileString(file)
+    expect(JSON.parse(content)).toEqual({ $schema: "https://opencode.ai/config.json" })
+  }),
+)
+
 it.instance("handles file inclusion substitution", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
