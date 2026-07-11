@@ -7,10 +7,12 @@ import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
+import { LocalPlacement } from "@/local/placement"
+import { Provider } from "@/provider/provider"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -83,6 +85,9 @@ export const TaskTool = Tool.define(
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const background = yield* BackgroundJob.Service
+    // Optional: absent in stripped-down environments (tests); placement is
+    // simply skipped there.
+    const provider = Option.getOrUndefined(yield* Effect.serviceOption(Provider.Service))
     const config = yield* Config.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
@@ -164,10 +169,32 @@ export const TaskTool = Tool.define(
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
       const variant = msg.info.variant
 
-      const model = next.model ?? {
+      const inherited = {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }
+      // fork: a subagent inheriting a local provider queues behind its parent
+      // on the same (often single-slot) llama.cpp server — worse than useless.
+      // Hop to an idle local peer instead. Resumed sessions keep the old
+      // behavior so a running task isn't re-placed away from its warm cache.
+      const placed =
+        !provider || next.model || session || cfg.experimental?.local_subagent_placement === false
+          ? null
+          : yield* provider
+              .list()
+              .pipe(
+                Effect.flatMap((providers) =>
+                  Effect.promise(() =>
+                    LocalPlacement.pick({
+                      parent: inherited,
+                      providers,
+                      allowedModels: cfg.experimental?.local_subagent_placement_models,
+                      promptText: params.prompt,
+                    }),
+                  ),
+                ),
+              )
+      const model = next.model ?? placed ?? inherited
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
@@ -183,6 +210,12 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
+      // Release the local-placement slot reservation (if we hopped to an idle
+      // peer) when the subagent finishes, however it finishes — success,
+      // error, or interrupt. release() is idempotent and a no-op when we
+      // inherited the parent (placed === null).
+      const releaseSlot = Effect.sync(() => placed?.release())
+
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
         const result = yield* ops.prompt({
@@ -192,7 +225,9 @@ export const TaskTool = Tool.define(
             modelID: model.modelID,
             providerID: model.providerID,
           },
-          variant: next.model ? undefined : variant,
+          // A pinned or placed model differs from the parent's — its variant
+          // set may not apply there.
+          variant: next.model || placed ? undefined : variant,
           agent: next.name,
           parts,
         })
@@ -239,7 +274,7 @@ export const TaskTool = Tool.define(
         )
       })
 
-      if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
+      if (yield* background.extend({ id: nextSession.id, run: runTask().pipe(Effect.ensuring(releaseSlot)) })) {
         return {
           title: params.description,
           metadata: {
@@ -268,7 +303,10 @@ export const TaskTool = Tool.define(
           }),
           notify(nextSession.id),
         ]),
-        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+        run: runTask().pipe(
+          Effect.onInterrupt(() => ops.cancel(nextSession.id)),
+          Effect.ensuring(releaseSlot),
+        ),
       })
 
       function backgroundResult() {

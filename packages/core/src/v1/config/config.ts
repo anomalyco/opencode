@@ -179,6 +179,14 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      local_subagent_placement: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "When the parent session runs on a local llama-skein provider, place subagents on an idle peer provider instead of queueing behind the parent (default: true)",
+      }),
+      local_subagent_placement_models: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description:
+          "Model IDs trusted for local subagent placement (the parent's own model is always trusted). Unset: any tool-capable model on an idle provider qualifies",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

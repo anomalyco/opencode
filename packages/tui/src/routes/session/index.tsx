@@ -1503,7 +1503,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  // fork: local models are served by several hosts under identical IDs —
+  // prefix the provider so "which machine ran this" is answerable at a glance.
+  const model = createMemo(() => {
+    const name = Model.name(ctx.providers(), props.message.providerID, props.message.modelID)
+    const provider = ctx.providers()?.get(props.message.providerID)
+    return provider?.options?.["baseURL"] ? `${provider.id}/${name}` : name
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -2301,6 +2307,19 @@ function Task(props: ToolProps) {
     return assistant - first
   })
 
+  // fork: where the subagent actually runs. The task tool records its model
+  // choice in metadata; surface it whenever it differs from the parent
+  // message's model — otherwise a placed subagent silently looks like it
+  // inherited the parent's provider.
+  const placed = createMemo(() => {
+    const model = props.metadata.model as { providerID?: string; modelID?: string } | undefined
+    if (!model?.providerID || !model.modelID) return undefined
+    const parent = (sync.data.message[props.part.sessionID] ?? []).find((x) => x.id === props.part.messageID)
+    if (parent?.role === "assistant" && parent.providerID === model.providerID && parent.modelID === model.modelID)
+      return undefined
+    return `${model.providerID}/${model.modelID}`
+  })
+
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
     if (!description) return ""
@@ -2309,6 +2328,7 @@ function Task(props: ToolProps) {
         Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
         description,
         props.metadata.background === true,
+        placed(),
       ),
     ]
 
@@ -2356,8 +2376,8 @@ export function formatSubagentToolcalls(count: number) {
   return `${count} toolcall${count === 1 ? "" : "s"}`
 }
 
-export function formatSubagentTitle(agent: string, description: string, background: boolean) {
-  return `${agent} Task${background ? " (background)" : ""} — ${description}`
+export function formatSubagentTitle(agent: string, description: string, background: boolean, placed?: string) {
+  return `${agent} Task${background ? " (background)" : ""}${placed ? ` @ ${placed}` : ""} — ${description}`
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {
