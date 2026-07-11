@@ -1,7 +1,7 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, For, Show, createSignal } from "solid-js"
-import { Locale } from "../../util/locale"
+import { FilePath } from "../../ui/file-path"
 
 const id = "internal:sidebar-files"
 
@@ -31,9 +31,11 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           <For each={list()}>
             {(item) => (
               <box flexDirection="row" gap={1} justifyContent="space-between">
-                <text fg={theme().textMuted} wrapMode="none">
-                  {Locale.truncateLeft(item.file, Math.max(2, 36 - changeCountWidth(item)))}
-                </text>
+                <FilePath
+                  value={item.file}
+                  maxWidth={Math.max(2, 36 - changeCountWidth(item))}
+                  fg={theme().textMuted}
+                />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <Show when={item.additions}>
                     <text fg={theme().diffAdded}>+{item.additions}</text>

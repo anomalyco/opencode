@@ -38,6 +38,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
+import { FilePath } from "../../ui/file-path"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
@@ -1435,9 +1436,7 @@ function RevertMessage(props: {
               {(file) => (
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <text fg={theme.textMuted}>{statusLabel(file.status)}</text>
-                  <text fg={theme.text} wrapMode="none">
-                    {Locale.truncateLeft(file.file, 60)}
-                  </text>
+                  <FilePath value={file.file} maxWidth={60} fg={theme.text} />
                   <Show when={file.additions > 0}>
                     <text fg={theme.diffAdded}>+{file.additions}</text>
                   </Show>

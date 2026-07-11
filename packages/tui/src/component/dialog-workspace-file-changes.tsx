@@ -3,7 +3,7 @@ import { useKeyboard } from "@opentui/solid"
 import type { VcsFileStatus } from "@opencode-ai/sdk/v2"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Locale } from "../util/locale"
+import { FilePath } from "../ui/file-path"
 import { useTheme } from "../context/theme"
 import { useTuiConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
@@ -93,9 +93,7 @@ export function DialogWorkspaceFileChanges(props: {
                 <box width={2} flexShrink={0}>
                   <text fg={theme.textMuted}>{statusLabel(item.status)}</text>
                 </box>
-                <text fg={theme.textMuted} wrapMode="none">
-                  {Locale.truncateLeft(item.file, fileNameWidth())}
-                </text>
+                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={theme.textMuted} />
               </box>
               <box flexDirection="row" gap={1} minWidth={7} flexShrink={0} justifyContent="flex-end">
                 <text>
