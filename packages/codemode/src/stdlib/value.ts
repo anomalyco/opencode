@@ -6,6 +6,7 @@ export const errorConstructors = new Set([
   "ReferenceError",
   "EvalError",
   "URIError",
+  "AggregateError",
 ])
 
 export const valueConstructors = new Set(["Date", "RegExp", "Map", "Set", "URL", "URLSearchParams"])
@@ -19,6 +20,9 @@ export const createErrorValue = (name: string, message: string): SafeObject => {
   Object.defineProperty(value, ErrorBrand, { value: name })
   return value
 }
+
+export const createAggregateErrorValue = (errors: Array<unknown>, message: string): SafeObject =>
+  Object.assign(createErrorValue("AggregateError", message), { errors })
 
 export const errorBrandName = (value: unknown): string | undefined =>
   value !== null && typeof value === "object"

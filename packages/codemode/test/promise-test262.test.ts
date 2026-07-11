@@ -573,13 +573,14 @@ describe("Test262 async functions and await", () => {
 })
 
 describe("Test262 expected Promise conformance", () => {
-  for (const name of ["all", "allSettled", "race"] as const) {
+  for (const name of ["all", "allSettled", "race", "any"] as const) {
     test(`Promise.${name} rejects invalid input with TypeError`, async () => {
       // Sources:
       // test/built-ins/Promise/all/S25.4.4.1_A3.1_T1.js
       // test/built-ins/Promise/all/S25.4.4.1_A3.1_T2.js
       // test/built-ins/Promise/allSettled/iter-arg-is-number-reject.js
       // test/built-ins/Promise/race/iter-arg-is-number-reject.js
+      // test/built-ins/Promise/any/iter-arg-is-number-reject.js
       expect(
         await value(`
           try {
@@ -595,7 +596,7 @@ describe("Test262 expected Promise conformance", () => {
     })
   }
 
-  test.failing("Promise.all consumes sparse positions as undefined", async () => {
+  test("Promise.all consumes sparse positions as undefined", async () => {
     // Source: test/built-ins/Array/from/from-array.js (array iterator hole behavior)
     expect(
       await value(`
@@ -607,7 +608,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([2, true, 1])
   })
 
-  test.failing("Promise.allSettled consumes sparse positions as undefined", async () => {
+  test("Promise.allSettled consumes sparse positions as undefined", async () => {
     // Source: test/built-ins/Array/from/from-array.js (array iterator hole behavior)
     expect(
       await value(`
@@ -619,13 +620,24 @@ describe("Test262 expected Promise conformance", () => {
     ).toEqual([2, "fulfilled", true, { status: "fulfilled", value: 1 }])
   })
 
-  test.failing("Promise.race consumes a sparse first position as undefined", async () => {
+  test("Promise.race consumes a sparse first position as undefined", async () => {
     // Source: test/built-ins/Array/from/from-array.js (array iterator hole behavior)
     expect(
       await value(`
         const input = []
         input[1] = 1
         return (await Promise.race(input)) === undefined
+      `),
+    ).toBe(true)
+  })
+
+  test("Promise.any consumes a sparse first position as an undefined fulfillment", async () => {
+    // Source: test/built-ins/Array/from/from-array.js (array iterator hole behavior)
+    expect(
+      await value(`
+        const input = []
+        input[1] = Promise.reject("loses")
+        return (await Promise.any(input)) === undefined
       `),
     ).toBe(true)
   })
@@ -1000,5 +1012,412 @@ describe("Test262 expected Promise conformance", () => {
         }
       `),
     ).toBe(true)
+  })
+})
+
+describe("Test262 Promise.any", () => {
+  test("is a callable static that returns a promise", async () => {
+    // Sources:
+    // test/built-ins/Promise/any/is-function.js
+    // test/built-ins/Promise/any/returns-promise.js
+    expect(
+      await value(`
+        const promise = Promise.any([1])
+        return [typeof Promise.any, promise instanceof Promise, await promise]
+      `),
+    ).toEqual(["function", true, 1])
+  })
+
+  test("fulfills with the first fulfilled member, ignoring rejections", async () => {
+    // Sources:
+    // test/built-ins/Promise/any/resolved-sequence-mixed.js
+    // test/built-ins/Promise/any/resolved-sequence-with-rejections.js
+    // test/built-ins/Promise/any/reject-ignored-immed.js
+    expect(
+      await value(`
+        return [
+          await Promise.any([Promise.reject("a"), Promise.resolve(1), Promise.resolve(2)]),
+          await Promise.any([Promise.reject("a"), "plain", Promise.reject("b")]),
+        ]
+      `),
+    ).toEqual([1, "plain"])
+  })
+
+  test("a fulfillment wins over a later rejection of another member", async () => {
+    // Sources:
+    // test/built-ins/Promise/any/resolve-ignores-late-rejection.js
+    // test/built-ins/Promise/any/resolve-ignores-late-rejection-deferred.js
+    expect(
+      await value(`
+        let rejectLate
+        const late = new Promise((_, reject) => { rejectLate = reject })
+        const result = await Promise.any([late, Promise.resolve("won")])
+        rejectLate("too late")
+        return result
+      `),
+    ).toBe("won")
+  })
+
+  test("rejects with an AggregateError carrying the reasons in input order", async () => {
+    // Sources:
+    // test/built-ins/Promise/any/reject-all-mixed.js
+    // test/built-ins/Promise/any/reject-immed.js
+    // test/built-ins/Promise/any/reject-deferred.js
+    expect(
+      await value(`
+        let rejectLate
+        const late = new Promise((_, reject) => { rejectLate = reject })
+        const aggregate = Promise.any([Promise.reject("first"), late, Promise.reject("third")])
+        rejectLate("second")
+        try {
+          await aggregate
+          return "fulfilled"
+        } catch (error) {
+          return {
+            isAggregate: error instanceof AggregateError,
+            isError: error instanceof Error,
+            name: error.name,
+            message: error.message,
+            errors: error.errors,
+          }
+        }
+      `),
+    ).toEqual({
+      isAggregate: true,
+      isError: true,
+      name: "AggregateError",
+      message: "All promises were rejected",
+      errors: ["first", "second", "third"],
+    })
+  })
+
+  test("rejects an empty input with an empty AggregateError", async () => {
+    // Source: test/built-ins/Promise/any/iter-arg-is-empty-iterable-reject.js
+    expect(
+      await value(`
+        try {
+          await Promise.any([])
+          return "fulfilled"
+        } catch (error) {
+          return [error instanceof AggregateError, error.errors.length]
+        }
+      `),
+    ).toEqual([true, 0])
+  })
+
+  test("consumes a string input as its characters", async () => {
+    // Source: test/built-ins/Promise/any/iter-arg-is-string-resolve.js
+    expect(await value(`return await Promise.any("abc")`)).toBe("a")
+  })
+
+  test("rejects an empty string input with an empty AggregateError", async () => {
+    // Source: test/built-ins/Promise/any/iter-arg-is-empty-string-reject.js
+    expect(
+      await value(`
+        try {
+          await Promise.any("")
+          return "fulfilled"
+        } catch (error) {
+          return [error instanceof AggregateError, error.errors.length]
+        }
+      `),
+    ).toEqual([true, 0])
+  })
+
+  test("fulfills with the first member that does not reject", async () => {
+    // Sources:
+    // test/built-ins/Promise/any/resolve-from-reject-catch.js
+    // test/built-ins/Promise/any/resolve-from-resolve-reject-catch.js
+    expect(
+      await value(`
+        return await Promise.any([
+          Promise.reject("a"),
+          new Promise((resolve, reject) => reject("b")),
+          Promise.all([Promise.reject("c")]),
+          Promise.resolve(Promise.reject("d").catch((reason) => reason)),
+        ])
+      `),
+    ).toBe("d")
+  })
+
+  test("settles after reactions attached to its inputs", async () => {
+    // Source: test/built-ins/Promise/any/resolved-sequence.js
+    expect(
+      await value(`
+        const sequence = [1]
+        const input = Promise.resolve(1)
+        const aggregate = Promise.any([input])
+        aggregate.then(() => sequence.push(4))
+        input.then(() => sequence.push(3)).then(() => sequence.push(5))
+        sequence.push(2)
+        await aggregate
+        await Promise.resolve()
+        return sequence
+      `),
+    ).toEqual([1, 2, 3, 4, 5])
+  })
+})
+
+describe("Test262 AggregateError", () => {
+  test("constructs from an errors collection and an optional message", async () => {
+    // Sources:
+    // test/built-ins/AggregateError/errors-iterabletolist.js
+    // test/built-ins/AggregateError/message-undefined-no-prop.js
+    expect(
+      await value(`
+        const input = ["x", "y"]
+        const withMessage = new AggregateError(input, "msg")
+        const bare = new AggregateError([])
+        return [
+          withMessage.name,
+          withMessage.message,
+          withMessage.errors,
+          withMessage.errors !== input,
+          withMessage instanceof AggregateError,
+          withMessage instanceof Error,
+          bare.message,
+          bare.errors,
+        ]
+      `),
+    ).toEqual(["AggregateError", "msg", ["x", "y"], true, true, true, "", []])
+  })
+
+  test("rejects a non-collection errors argument with TypeError", async () => {
+    // Source: test/built-ins/AggregateError/errors-iterabletolist-failures.js
+    expect(
+      await value(`
+        try {
+          new AggregateError(42)
+          return "constructed"
+        } catch (error) {
+          return error.name
+        }
+      `),
+    ).toBe("TypeError")
+  })
+
+  test("is callable without new", async () => {
+    // Source: test/built-ins/AggregateError/newtarget-is-undefined.js
+    expect(
+      await value(`
+        const error = AggregateError(["x"], "m")
+        return [error instanceof AggregateError, error instanceof Error, error.name, error.message, error.errors]
+      `),
+    ).toEqual([true, true, "AggregateError", "m", ["x"]])
+  })
+
+  test("coerces a non-string message to a string", async () => {
+    // Source: test/built-ins/AggregateError/message-method-prop-cast.js (value coercion only; the
+    // upstream object-with-toString case is omitted because the sandbox has no user toString dispatch)
+    expect(
+      await value(`
+        return [
+          new AggregateError([], 42).message,
+          new AggregateError([], false).message,
+          new AggregateError([], true).message,
+          new AggregateError([], null).message,
+        ]
+      `),
+    ).toEqual(["42", "false", "true", "null"])
+  })
+})
+
+describe("Test262 Promise constructor", () => {
+  test("constructs a promise, handing the executor callable resolve/reject", async () => {
+    // Sources:
+    // test/built-ins/Promise/constructor.js
+    // test/built-ins/Promise/exec-args.js
+    expect(
+      await value(`
+        let observed
+        const promise = new Promise((resolve, reject) => {
+          observed = [typeof resolve, typeof reject]
+          resolve("done")
+        })
+        return [promise instanceof Promise, observed, await promise]
+      `),
+    ).toEqual([true, ["function", "function"], "done"])
+  })
+
+  test("a missing or non-callable executor is a TypeError", async () => {
+    // Source: test/built-ins/Promise/executor-not-callable.js
+    expect(
+      await value(`
+        const outcomes = []
+        for (const make of [() => new Promise(), () => new Promise(1), () => new Promise({})]) {
+          try {
+            make()
+            outcomes.push("constructed")
+          } catch (error) {
+            outcomes.push(error.name)
+          }
+        }
+        return outcomes
+      `),
+    ).toEqual(["TypeError", "TypeError", "TypeError"])
+  })
+
+  test("resolves immediately or later through an escaping resolver", async () => {
+    // Sources:
+    // test/built-ins/Promise/resolve-non-thenable-immed.js
+    // test/built-ins/Promise/resolve-non-thenable-deferred.js
+    // test/built-ins/Promise/create-resolving-functions-resolve.js
+    expect(
+      await value(`
+        let settle
+        const deferred = new Promise((resolve) => { settle = resolve })
+        const immediate = new Promise((resolve) => resolve("now"))
+        settle("later")
+        return [await immediate, await deferred]
+      `),
+    ).toEqual(["now", "later"])
+  })
+
+  test("rejects through reject and through an abrupt executor completion", async () => {
+    // Sources:
+    // test/built-ins/Promise/reject-via-fn-immed.js
+    // test/built-ins/Promise/reject-via-abrupt.js
+    expect(
+      await value(`
+        const observe = async (promise) => {
+          try { return ["fulfilled", await promise] } catch (reason) { return ["rejected", reason.message ?? reason] }
+        }
+        return [
+          await observe(new Promise((_, reject) => reject("nope"))),
+          await observe(new Promise(() => { throw new Error("boom") })),
+        ]
+      `),
+    ).toEqual([
+      ["rejected", "nope"],
+      ["rejected", "boom"],
+    ])
+  })
+
+  test("only the first settlement counts", async () => {
+    // Sources:
+    // test/built-ins/Promise/reject-ignored-via-fn-immed.js
+    // test/built-ins/Promise/resolve-ignored-via-fn-immed.js
+    expect(
+      await value(`
+        return [
+          await new Promise((resolve, reject) => { resolve("first"); reject("second"); resolve("third") }),
+          await new Promise((resolve) => { resolve(resolve("inner") === undefined ? "unreached" : "also unreached") }),
+        ]
+      `),
+    ).toEqual(["first", "inner"])
+  })
+
+  test("escaped resolvers keep first-settle-wins in both directions", async () => {
+    // Sources:
+    // test/built-ins/Promise/reject-ignored-via-fn-deferred.js
+    // test/built-ins/Promise/resolve-ignored-via-fn-deferred.js
+    expect(
+      await value(`
+        let resolveRejected, rejectRejected
+        const rejected = new Promise((resolve, reject) => { resolveRejected = resolve; rejectRejected = reject })
+        rejectRejected("first")
+        const lateResolve = resolveRejected("late")
+        let resolveFulfilled, rejectFulfilled
+        const fulfilled = new Promise((resolve, reject) => { resolveFulfilled = resolve; rejectFulfilled = reject })
+        resolveFulfilled()
+        const lateReject = rejectFulfilled(new Promise(() => {}))
+        try {
+          await rejected
+          return "fulfilled"
+        } catch (reason) {
+          return [reason, lateResolve === undefined, (await fulfilled) === undefined, lateReject === undefined]
+        }
+      `),
+    ).toEqual(["first", true, true, true])
+  })
+
+  test("a queued reaction chain observes a later rejection through a handler-less then", async () => {
+    // Sources:
+    // test/built-ins/Promise/reject-via-fn-immed-queue.js
+    // test/built-ins/Promise/reject-via-fn-deferred-queue.js
+    // test/built-ins/Promise/reject-via-abrupt-queue.js
+    expect(
+      await value(`
+        const observe = (promise) => promise.then(() => "wrong").then(() => "also wrong", (reason) => "caught:" + reason)
+        let reject
+        const deferred = new Promise((_, r) => { reject = r })
+        const chained = observe(deferred)
+        reject("boom")
+        return [
+          await observe(new Promise((_, r) => r("immed"))),
+          await chained,
+          await observe(new Promise(() => { throw "abrupt" })),
+        ]
+      `),
+    ).toEqual(["caught:immed", "caught:boom", "caught:abrupt"])
+  })
+
+  test("an exception after resolve is ignored", async () => {
+    // Source: test/built-ins/Promise/exception-after-resolve-in-executor.js
+    expect(await value(`return await new Promise((resolve) => { resolve("kept"); throw new Error("dropped") })`)).toBe(
+      "kept",
+    )
+  })
+
+  test("resolving with a promise adopts its settlement", async () => {
+    // Sources:
+    // test/built-ins/Promise/resolve-thenable-immed.js (promise-adoption portion)
+    // test/built-ins/Promise/all/S25.4.4.1_A2.3_T1.js (resolution adoption semantics)
+    expect(
+      await value(`
+        const adoptedValue = await new Promise((resolve) => resolve(Promise.resolve("adopted")))
+        try {
+          await new Promise((resolve) => resolve(Promise.reject("bad")))
+          return [adoptedValue, "fulfilled"]
+        } catch (reason) {
+          return [adoptedValue, reason]
+        }
+      `),
+    ).toEqual(["adopted", "bad"])
+  })
+
+  test("resolving with the promise itself rejects with TypeError", async () => {
+    // Source: test/built-ins/Promise/resolve-self.js
+    expect(
+      await value(`
+        let settle
+        const promise = new Promise((resolve) => { settle = resolve })
+        settle(promise)
+        try {
+          await promise
+          return "fulfilled"
+        } catch (error) {
+          return error.name
+        }
+      `),
+    ).toBe("TypeError")
+  })
+
+  test("executor runs synchronously before the constructor returns", async () => {
+    // Source: test/built-ins/Promise/executor-call-context-strict.js (synchronous Call(executor) step)
+    expect(
+      await value(`
+        const sequence = []
+        sequence.push("before")
+        new Promise((resolve) => { sequence.push("executor"); resolve() })
+        sequence.push("after")
+        return sequence
+      `),
+    ).toEqual(["before", "executor", "after"])
+  })
+
+  test.failing("calling Promise without new throws TypeError", async () => {
+    // Source: test/built-ins/Promise/undefined-newtarget.js
+    // The sandbox currently reports a generic Error ("Only tools are callable in CodeMode.").
+    expect(
+      await value(`
+        try {
+          Promise(() => {})
+          return "called"
+        } catch (error) {
+          return error.name
+        }
+      `),
+    ).toBe("TypeError")
   })
 })

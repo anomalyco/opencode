@@ -1,5 +1,5 @@
 import { parse } from "acorn"
-import { Cause, Effect, Exit, Fiber, Scope, Semaphore } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Scope, Semaphore } from "effect"
 import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageText, transpileModule } from "typescript"
 import {
   copyIn,
@@ -42,6 +42,7 @@ import {
   isRecord,
   type MemberReference,
   OptionalShortCircuit,
+  PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
   PromiseMethodReference,
   type PromiseMethodName,
@@ -94,6 +95,7 @@ import {
   coerceToNumber,
   coerceToString,
   compoundOperators,
+  createAggregateErrorValue,
   createErrorValue,
   errorBrandName,
   errorConstructors,
@@ -226,11 +228,22 @@ const settleAfterTurn = <A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A
 const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
 
-type ReactionHandler = CodeModeFunction | CoercionFunction | UriFunction
+// Short-circuit marker for Promise.any: the first fulfillment travels the error channel of
+// the flipped members so fail-fast Effect.all stops observing on it.
+class PromiseAnyFulfilled {
+  constructor(readonly value: unknown) {}
+}
+
+type ReactionHandler = CodeModeFunction | CoercionFunction | UriFunction | PromiseCapabilityFunction
 
 // Non-callables are ignored as in JS: `.then(undefined, f)` relies on the passthrough.
 const reactionHandler = (value: unknown, method: string, node: AstNode): ReactionHandler | undefined => {
-  if (value instanceof CodeModeFunction || value instanceof CoercionFunction || value instanceof UriFunction) {
+  if (
+    value instanceof CodeModeFunction ||
+    value instanceof CoercionFunction ||
+    value instanceof UriFunction ||
+    value instanceof PromiseCapabilityFunction
+  ) {
     return value
   }
   if (typeofValue(value) === "function") {
@@ -250,6 +263,21 @@ const caughtErrorValue = (thrown: unknown): unknown => {
   return createErrorValue(name, normalizeError(thrown).message)
 }
 
+// `new Error("msg")` and the no-new call form share this; AggregateError alone takes
+// (errors, message?) with a required errors collection, as in JS.
+const constructErrorValue = (name: string, args: Array<unknown>, node: AstNode): SafeObject => {
+  if (name !== "AggregateError") return createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
+  const errors = spreadItems(args[0])
+  if (errors === undefined) {
+    throw new InterpreterRuntimeError(
+      "new AggregateError(...) expects an array of errors (e.g. new AggregateError(errors, message?)).",
+      node,
+    ).as("TypeError")
+  }
+  // Copy: spreadItems returns array input itself, and the error value must not alias caller data.
+  return createAggregateErrorValue([...errors], args[1] === undefined ? "" : coerceToString(args[1]))
+}
+
 const isRuntimeReference = (value: unknown): boolean =>
   value instanceof CodeModeFunction ||
   value instanceof ToolReference ||
@@ -262,6 +290,7 @@ const isRuntimeReference = (value: unknown): boolean =>
   value instanceof SandboxPromise ||
   value instanceof CoercionFunction ||
   value instanceof UriFunction ||
+  value instanceof PromiseCapabilityFunction ||
   value instanceof ErrorConstructorReference ||
   isSandboxValue(value)
 
@@ -305,6 +334,7 @@ const typeofValue = (value: unknown): string => {
     value instanceof PromiseMethodReference ||
     value instanceof PromiseInstanceMethodReference ||
     value instanceof PromiseNamespace ||
+    value instanceof PromiseCapabilityFunction ||
     value instanceof ErrorConstructorReference
   )
     return "function"
@@ -1584,19 +1614,10 @@ class Interpreter<R> {
     const argNodes = getArray(node, "arguments")
     const self = this
     if (name === "Promise") {
-      throw new InterpreterRuntimeError(
-        "new Promise(...) is not supported in CodeMode; tool calls already return promises - call the tool and await the result.",
-        node,
-        "UnsupportedSyntax",
-        [supportedSyntaxMessage],
-      )
+      return Effect.flatMap(this.evaluateCallArguments(argNodes), (args) => self.constructPromise(args[0], node))
     }
     if (errorConstructors.has(name)) {
-      return Effect.gen(function* () {
-        const arg =
-          argNodes.length > 0 ? yield* self.evaluateExpression(asNode(argNodes[0], "arguments[0]")) : undefined
-        return createErrorValue(name, arg === undefined ? "" : coerceToString(arg))
-      })
+      return Effect.map(this.evaluateCallArguments(argNodes), (args) => constructErrorValue(name, args, node))
     }
     if (valueConstructors.has(name)) {
       return Effect.gen(function* () {
@@ -2066,7 +2087,11 @@ class Interpreter<R> {
       }
       // `Error("msg")` without `new` constructs an error exactly like `new Error("msg")`, as in JS.
       if (callable instanceof ErrorConstructorReference) {
-        return createErrorValue(callable.name, args[0] === undefined ? "" : coerceToString(args[0]))
+        return constructErrorValue(callable.name, args, node)
+      }
+      if (callable instanceof PromiseCapabilityFunction) {
+        callable.settle(args[0])
+        return undefined
       }
       throw new InterpreterRuntimeError("Only tools are callable in CodeMode.", callee)
     })
@@ -2255,8 +2280,8 @@ class Interpreter<R> {
       return this.createPromise(Effect.fail(new ProgramThrow(args[0])))
     }
 
-    const items = spreadItems(args[0])
-    if (items === undefined) {
+    const spread = spreadItems(args[0])
+    if (spread === undefined) {
       return this.createPromise(
         Effect.fail(
           new InterpreterRuntimeError(
@@ -2266,6 +2291,8 @@ class Interpreter<R> {
         ),
       )
     }
+    // Densify: JS combinator iteration reads sparse holes as undefined members; .map would skip them.
+    const items = Array.from(spread)
 
     // JS makes combinator members "handled" synchronously at the call - their rejections
     // belong to the aggregate from this moment, even ones settling before it runs.
@@ -2330,6 +2357,29 @@ class Interpreter<R> {
         // First settlement (fulfilled OR rejected) wins; losing work stays execution-owned
         // and is interrupted at normal completion (already observed) or by teardown.
         return this.createPromise(settleAfterTurn(Effect.flatten(Effect.raceAll(observations))))
+      }
+      case "any": {
+        // De Morgan dual of Promise.all: members are flipped so the first fulfillment
+        // short-circuits fail-fast Effect.all, and all-rejected completes with the reasons
+        // in input order for the AggregateError.
+        const flipped = items.map((item) =>
+          item instanceof SandboxPromise
+            ? Effect.flatMap(this.promises.await(item), (exit) => {
+                if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
+                if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
+                return Effect.succeed(caughtErrorValue(Cause.squash(exit.cause)))
+              })
+            : Effect.fail(new PromiseAnyFulfilled(item)),
+        )
+        const body = Effect.all(flipped, { concurrency: "unbounded" }).pipe(
+          Effect.flatMap((reasons) =>
+            Effect.fail(new ProgramThrow(createAggregateErrorValue(reasons, "All promises were rejected"))),
+          ),
+          Effect.catch((error) =>
+            error instanceof PromiseAnyFulfilled ? Effect.succeed(error.value) : Effect.fail(error),
+          ),
+        )
+        return this.createPromise(settleAfterTurn(body))
       }
     }
   }
@@ -2403,6 +2453,43 @@ class Interpreter<R> {
         return yield* exit
       }),
     )
+  }
+
+  // new Promise(executor): the promise's fiber awaits a Deferred that resolve/reject settle
+  // exactly once. The executor runs synchronously; its throw rejects the promise unless it
+  // already settled (JS swallows post-settlement executor throws).
+  private constructPromise(executor: unknown, node: AstNode): Effect.Effect<SandboxPromise, unknown, R> {
+    if (!(executor instanceof CodeModeFunction)) {
+      throw new InterpreterRuntimeError(
+        "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
+        node,
+      ).as("TypeError")
+    }
+    const self = this
+    return Effect.gen(function* () {
+      const deferred = Deferred.makeUnsafe<unknown, unknown>()
+      const box: { own?: SandboxPromise } = {}
+      const promise = yield* self.createPromise(
+        Effect.flatMap(Deferred.await(deferred), (value) => {
+          if (!(value instanceof SandboxPromise)) return Effect.succeed(value)
+          if (value === box.own) return Effect.fail(selfResolutionError(node))
+          return self.settlePromise(value)
+        }),
+      )
+      box.own = promise
+      const resolve = new PromiseCapabilityFunction((value) => {
+        Deferred.doneUnsafe(deferred, Exit.succeed(value))
+      })
+      const reject = new PromiseCapabilityFunction((value) => {
+        Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value)))
+      })
+      const executed = yield* Effect.exit(self.invokeFunction(executor, [resolve, reject]))
+      if (!Exit.isSuccess(executed)) {
+        if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
+        Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
+      }
+      return promise
+    })
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
@@ -2568,7 +2655,8 @@ class Interpreter<R> {
     if (
       !(callback instanceof CodeModeFunction) &&
       !(callback instanceof CoercionFunction) &&
-      !(callback instanceof UriFunction)
+      !(callback instanceof UriFunction) &&
+      !(callback instanceof PromiseCapabilityFunction)
     ) {
       throw new InterpreterRuntimeError(`${name} expects a function callback.`, node)
     }
@@ -2577,7 +2665,9 @@ class Interpreter<R> {
         ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
         : callback instanceof UriFunction
           ? Effect.succeed(invokeUriFunction(callback, callbackArgs, node))
-          : this.invokeFunction(callback, callbackArgs)
+          : callback instanceof PromiseCapabilityFunction
+            ? Effect.sync(() => callback.settle(callbackArgs[0]))
+            : this.invokeFunction(callback, callbackArgs)
   }
 
   private invokeMapMethod(
@@ -3185,7 +3275,7 @@ class Interpreter<R> {
           return new PromiseMethodReference(key as PromiseMethodName)
         }
         throw new InterpreterRuntimeError(
-          `Promise.${String(key)} is not available in CodeMode. Available: Promise.all, Promise.allSettled, Promise.race, Promise.resolve, and Promise.reject; consume promises with await.`,
+          `Promise.${String(key)} is not available in CodeMode. Available: Promise.all, Promise.allSettled, Promise.race, Promise.any, Promise.resolve, and Promise.reject; consume promises with await.`,
           propertyNode,
         )
       }

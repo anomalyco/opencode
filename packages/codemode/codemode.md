@@ -64,10 +64,13 @@ path lookup, namespace browsing, deterministic ranking, and pagination.
 ### Tool execution
 
 Every sandbox promise starts eagerly on a run-once fiber owned by the whole CodeMode execution, including tool calls,
-async functions, chained `.then`/`.catch`/`.finally` reactions, `Promise.all`, `Promise.allSettled`, `Promise.race`,
-`Promise.resolve`, and `Promise.reject`. Nested functions therefore cannot end the lifetime of work they started.
+async functions, chained `.then`/`.catch`/`.finally` reactions, `new Promise(executor)` constructions, and the
+`Promise.all`/`allSettled`/`race`/`any`/`resolve`/`reject` statics. Nested functions therefore cannot end the lifetime
+of work they started.
 Independent aggregate batches overlap, and rejection is observed at the eventual `await` or chained rejection handler.
-`Promise.race` uses native non-cancelling settlement semantics: its first result wins while losers continue running.
+`Promise.race` and `Promise.any` use native non-cancelling settlement semantics: the deciding member wins while losers
+continue running, and an all-rejected `Promise.any` rejects with an `AggregateError`. `new Promise(...)` hands the
+executor first-class resolve/reject callables that may escape and settle the promise later, exactly once.
 Reaction ordering matches what V8 makes observable - handlers and await continuations are deferred and run in attach
 order, and a combinator settles one reaction turn after its deciding member - without promising exact microtask-count
 parity beyond that. At normal completion CodeMode interrupts everything still running - race losers,
