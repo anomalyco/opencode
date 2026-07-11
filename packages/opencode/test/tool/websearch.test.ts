@@ -95,4 +95,27 @@ describe("websearch MCP response parser", () => {
       expect(result).toBe("search results")
     }),
   )
+
+  it.effect("skips JSON frames that are not the result (e.g. progress notifications)", () =>
+    Effect.gen(function* () {
+      const notification = JSON.stringify({ jsonrpc: "2.0", method: "notifications/progress", params: { progress: 1 } })
+      const result = yield* parseResponse(`data: ${notification}\ndata: ${payload}\n\n`)
+      expect(result).toBe("search results")
+    }),
+  )
+
+  it.effect("accepts SSE data fields without the optional space", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(`data:${payload}\n\n`)
+      expect(result).toBe("search results")
+    }),
+  )
+
+  it.effect("surfaces JSON-RPC error responses as meaningful failures", () =>
+    Effect.gen(function* () {
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32000, message: "rate limited" } })
+      const error = yield* Effect.flip(parseResponse(body))
+      expect(String(error)).toContain("rate limited")
+    }),
+  )
 })

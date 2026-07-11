@@ -17,14 +17,28 @@ const McpResult = Schema.Struct({
   }),
 })
 
-const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(McpResult))
+const McpError = Schema.Struct({
+  error: Schema.Struct({
+    message: Schema.String,
+  }),
+})
 
+const decodeResult = Schema.decodeUnknownEffect(Schema.fromJsonString(McpResult))
+const decodeError = Schema.decodeUnknownEffect(Schema.fromJsonString(McpError))
+
+// A payload can be the tools/call result, a JSON-RPC error, or an unrelated
+// event (progress/notification frames that MCP servers interleave on the same
+// stream). Only the first two are meaningful here; anything that fails to
+// decode is skipped so a stray frame cannot fail the whole search.
 const parsePayload = (payload: string) =>
   Effect.gen(function* () {
     const trimmed = payload.trim()
     if (!trimmed.startsWith("{")) return undefined
-    const data = yield* decode(trimmed)
-    return data.result.content.find((item) => item.text)?.text
+    const data = yield* decodeResult(trimmed).pipe(Effect.orElseSucceed(() => undefined))
+    if (data) return data.result.content.find((item) => item.text)?.text
+    const failure = yield* decodeError(trimmed).pipe(Effect.orElseSucceed(() => undefined))
+    if (failure) return yield* Effect.fail(new Error(`Web search failed: ${failure.error.message}`))
+    return undefined
   })
 
 export const parseResponse = Effect.fn("McpWebSearch.parseResponse")(function* (body: string) {
@@ -33,8 +47,10 @@ export const parseResponse = Effect.fn("McpWebSearch.parseResponse")(function* (
   if (direct) return direct
 
   for (const line of body.split("\n")) {
-    if (!line.startsWith("data: ")) continue
-    const data = yield* parsePayload(line.substring(6))
+    // Per the SSE spec the field name is "data:" and a single leading space in
+    // the value is optional — accept both forms.
+    if (!line.startsWith("data:")) continue
+    const data = yield* parsePayload(line.slice(5).replace(/^ /, ""))
     if (data) return data
   }
   return undefined

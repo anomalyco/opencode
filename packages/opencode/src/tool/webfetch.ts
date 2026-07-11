@@ -180,7 +180,8 @@ export const WebFetchTool = Tool.define(
             })
           }
 
-          const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
+          // Clamp to [1s, MAX_TIMEOUT] — a zero/negative timeout would otherwise fail every request instantly.
+          const timeout = Math.min(Math.max((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, 1000), MAX_TIMEOUT)
 
           // Build Accept header based on requested format with q parameters for fallbacks
           let acceptHeader = "*/*"
