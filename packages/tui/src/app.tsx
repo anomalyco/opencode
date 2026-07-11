@@ -152,6 +152,7 @@ export type TuiInput = {
   }
   args: Args
   config: TuiConfig.Resolved
+  releaseTerminal?: () => Promise<void>
   onSnapshot?: () => Promise<string[]>
   pluginHost: TuiPluginHost
   log?: LogSink
@@ -212,6 +213,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
+      if (input.releaseTerminal) {
+        yield* Effect.tryPromise({
+          try: () => input.releaseTerminal!(),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+      }
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise({
           try: async () => {

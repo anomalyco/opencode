@@ -1,11 +1,150 @@
 import { expect, mock, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createTestRenderer } from "@opentui/core/testing"
-import { Effect } from "effect"
+import { Cause, Effect, Exit, Fiber } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-sdk"
+
+test("releases terminal ownership after API preflight and before renderer creation", async () => {
+  const core = await import("@opentui/core")
+  const events: string[] = []
+  const rendererError = new Error("renderer reached")
+  await mock.module("@opentui/core", () => ({
+    ...core,
+    createCliRenderer: async () => {
+      events.push("renderer")
+      throw rendererError
+    },
+  }))
+  const release = Promise.withResolvers<void>()
+  const handoff = Promise.withResolvers<void>()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/fs/list") events.push("preflight")
+    return undefined
+  })
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromiseExit(
+      run({
+        server: { endpoint: { url: server.url.toString() } },
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        args: {},
+        releaseTerminal: async () => {
+          events.push("handoff")
+          handoff.resolve()
+          await release.promise
+          events.push("released")
+        },
+        pluginHost: {
+          async start() {},
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await handoff.promise
+    expect(events).toEqual(["preflight", "handoff"])
+    release.resolve()
+
+    const exit = await task
+    if (Exit.isSuccess(exit)) throw new Error("Expected renderer failure")
+    expect(Cause.pretty(exit.cause)).toContain(rendererError.message)
+    expect(events).toEqual(["preflight", "handoff", "released", "renderer"])
+  } finally {
+    release.resolve()
+    await server.stop()
+    mock.restore()
+  }
+})
+
+test("does not create a renderer after terminal handoff is interrupted", async () => {
+  const core = await import("@opentui/core")
+  let renders = 0
+  await mock.module("@opentui/core", () => ({
+    ...core,
+    createCliRenderer: async () => {
+      renders++
+      throw new Error("renderer should not start")
+    },
+  }))
+  const release = Promise.withResolvers<void>()
+  const handoff = Promise.withResolvers<void>()
+  const calls = createFetch()
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const fiber = Effect.runFork(
+      run({
+        server: { endpoint: { url: server.url.toString() } },
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        args: {},
+        releaseTerminal: async () => {
+          handoff.resolve()
+          await release.promise
+        },
+        pluginHost: {
+          async start() {},
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await handoff.promise
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    release.resolve()
+    await Promise.resolve()
+    expect(renders).toBe(0)
+  } finally {
+    release.resolve()
+    await server.stop()
+    mock.restore()
+  }
+})
+
+test("does not create a renderer when terminal handoff fails", async () => {
+  const core = await import("@opentui/core")
+  const handoffError = new Error("terminal handoff failed")
+  let renders = 0
+  await mock.module("@opentui/core", () => ({
+    ...core,
+    createCliRenderer: async () => {
+      renders++
+      throw new Error("renderer should not start")
+    },
+  }))
+  const calls = createFetch()
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const exit = await Effect.runPromiseExit(
+      run({
+        server: { endpoint: { url: server.url.toString() } },
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        args: {},
+        releaseTerminal: async () => {
+          throw handoffError
+        },
+        pluginHost: {
+          async start() {},
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    if (Exit.isSuccess(exit)) throw new Error("Expected terminal handoff failure")
+    expect(Cause.pretty(exit.cause)).toContain(handoffError.message)
+    expect(renders).toBe(0)
+  } finally {
+    await server.stop()
+    mock.restore()
+  }
+})
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })

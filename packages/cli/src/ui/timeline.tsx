@@ -106,7 +106,12 @@ async function shutdown(renderer: CliRenderer): Promise<void> {
   }
 }
 
-export async function createTimelineHost(): Promise<TimelineHost> {
+function abortReason(signal: AbortSignal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError")
+}
+
+export async function createTimelineHost(options: { readonly signal?: AbortSignal } = {}): Promise<TimelineHost> {
+  if (options.signal?.aborted) throw abortReason(options.signal)
   const stdout = process.stdout
   const controller = new AbortController()
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGHUP", "SIGQUIT"]
@@ -141,7 +146,7 @@ export async function createTimelineHost(): Promise<TimelineHost> {
       if (closeTask) return closeTask
       closed = true
       closeTask = (async () => {
-        await active?.catch(() => { })
+        await active?.catch(() => {})
         signals.forEach((signal) => process.off(signal, cancel))
       })()
       return closeTask
@@ -177,6 +182,12 @@ export async function createTimelineHost(): Promise<TimelineHost> {
       consoleMode: "disabled",
       clearOnShutdown: false,
     })
+    if (options.signal?.aborted) {
+      const activeRenderer = renderer
+      renderer = undefined
+      await shutdown(activeRenderer)
+      throw abortReason(options.signal)
+    }
     const activeRenderer = renderer
     const [pending, setPending] = createSignal<string>()
     const renderTask = render(() => <TimelineFooter pending={pending} cancel={cancel} />, activeRenderer)
@@ -211,10 +222,11 @@ export async function createTimelineHost(): Promise<TimelineHost> {
       if (closeTask) return closeTask
       closed = true
       closeTask = (async () => {
-        await active?.catch(() => { })
         try {
-          await shutdown(activeRenderer)
+          const teardown = shutdown(activeRenderer)
+          const [result] = await Promise.allSettled([teardown, bounded(active ?? Promise.resolve())])
           await bounded(renderTask)
+          if (result.status === "rejected") throw result.reason
         } finally {
           signals.forEach((signal) => process.off(signal, cancel))
         }
