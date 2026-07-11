@@ -8,6 +8,7 @@ import { Runtime } from "../../framework/runtime"
 import { Effect, Option } from "effect"
 import { Server } from "../../services/server"
 import { Updater } from "../../services/updater"
+import { UpdatePreflight } from "../../services/update-preflight"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
@@ -15,16 +16,24 @@ export default Runtime.handler(Commands, (input) =>
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const updater = yield* Updater.Service
     yield* updater.check().pipe(Effect.forkScoped)
+    const preflight = UpdatePreflight.make()
     const server = yield* Server.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
-      onStart: (reason) =>
+      onStart: (reason, existing) => {
+        if (reason === "version-mismatch" && preflight.begin(existing?.version)) return
         process.stderr.write(
           reason === "version-mismatch"
             ? "Restarting background server (version mismatch)...\n"
             : "Starting background server...\n",
-        ),
-    })
+        )
+      },
+    }).pipe(
+      Effect.tapError(() =>
+        Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")),
+      ),
+    )
+    yield* Effect.promise(() => preflight.finish())
     const config = TuiConfig.resolve({}, { terminalSuspend: false })
     let disposeSlots: (() => void) | undefined
     const runFork = Effect.runForkWith(yield* Effect.context())
