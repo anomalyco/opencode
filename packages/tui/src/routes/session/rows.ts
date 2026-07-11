@@ -88,7 +88,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
                   {
                     id: message.id,
                     created: message.time.created,
-                    input: message.status === "running",
                   },
                 ]
               : [],
@@ -183,7 +182,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
   }
   const subscriptions = [
     data.on("session.input.admitted", input),
-    data.on("session.compaction.started", message),
+    data.on("session.compaction.started", (event) => {
+      if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID ?? event.id.replace(/^evt_/, "msg_"))
+    }),
     data.on("session.instructions.updated", message),
     data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
@@ -192,9 +193,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.shell.started", message),
     data.on("session.agent.selected", message),
     data.on("session.model.selected", message),
-    data.on("session.compaction.ended", (event) => {
-      if (event.data.reason !== "manual") message(event)
-    }),
     data.on("session.text.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })

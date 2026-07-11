@@ -1325,23 +1325,18 @@ function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { typ
   )
 }
 
-function CompactionMessage(props: {
-  message?: Extract<SessionMessageInfo, { type: "compaction" }>
-  status?: "running"
-  text?: string
-}) {
+function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
   const ctx = use()
   const kv = useKV()
   const { theme, syntax } = useTheme()
-  const status = () => props.message?.status ?? props.status
-  const text = () =>
-    props.message?.status === "failed" ? props.message.error.message : (props.message?.summary ?? props.text ?? "")
-  const color = () => (status() === "failed" ? theme.error : status() === "completed" ? theme.success : theme.textMuted)
-  const border = color
+  const status = () => props.message.status
+  const text = () => (props.message.status === "failed" ? props.message.error.message : props.message.summary)
+  const content = createMemo(() => text().trim())
+  const color = () => (status() === "failed" ? theme.error : theme.textMuted)
   return (
     <box>
       <box flexDirection="row" alignItems="center">
-        <box border={["top"]} borderColor={border()} flexGrow={1} />
+        <box border={["top"]} borderColor={color()} flexGrow={1} />
         <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
           <Switch>
             <Match when={status() === "running"}>
@@ -1349,24 +1344,21 @@ function CompactionMessage(props: {
                 <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
               </Show>
             </Match>
-            <Match when={status() === "completed"}>
-              <text fg={color()}>✓</text>
-            </Match>
             <Match when={status() === "failed"}>
               <text fg={color()}>✗</text>
             </Match>
           </Switch>
           <text fg={color()}>Compaction</text>
         </box>
-        <box border={["top"]} borderColor={border()} flexGrow={1} />
+        <box border={["top"]} borderColor={color()} flexGrow={1} />
       </box>
-      <Show when={text().trim()}>
+      <Show when={content()}>
         <box paddingTop={1} paddingLeft={3}>
           <markdown
             syntaxStyle={syntax()}
-            streaming={status() === "running"}
+            streaming={true}
             internalBlockMode="top-level"
-            content={text().trim()}
+            content={content()}
             tableOptions={{ style: "grid" }}
             conceal={ctx.conceal()}
             fg={theme.markdownText}

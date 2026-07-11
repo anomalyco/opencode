@@ -1064,6 +1064,9 @@ test("tracks session status from active sessions and execution events", async ()
       const message = data.session.message.get("session-manual", "message-compaction")
       return message?.type === "compaction" && message.status === "running" && message.summary === "Streamed summary"
     })
+    const compactionRow = manualRows.find(
+      (row) => row.type === "message" && row.messageID === "message-compaction",
+    )
     emitEvent(events, {
       id: "evt_manual_compaction_ended",
       created: 3,
@@ -1078,6 +1081,9 @@ test("tracks session status from active sessions and execution events", async ()
     expect(manualRows.filter((row) => row.type === "message")).toEqual([
       { type: "message", messageID: "message-compaction" },
     ])
+    expect(manualRows.find((row) => row.type === "message" && row.messageID === "message-compaction")).toBe(
+      compactionRow,
+    )
 
     emitEvent(events, {
       id: "evt_compaction_started",
@@ -1102,6 +1108,9 @@ test("tracks session status from active sessions and execution events", async ()
       const message = data.session.message.get("session-live", "msg_compaction_started")
       return message?.type === "compaction" && message.status === "running" && message.summary === "Live summary"
     })
+    const autoCompactionRow = rows.find(
+      (row) => row.type === "message" && row.messageID === "msg_compaction_started",
+    )
 
     emitEvent(events, {
       id: "evt_compaction_ended",
@@ -1119,6 +1128,10 @@ test("tracks session status from active sessions and execution events", async ()
       status: "completed",
       summary: "Live summary",
     })
+    expect(rows.find((row) => row.type === "message" && row.messageID === "msg_compaction_started")).toBe(
+      autoCompactionRow,
+    )
+    expect(rows.some((row) => row.type === "message" && row.messageID === "msg_compaction_ended")).toBeFalse()
   } finally {
     app.renderer.destroy()
   }

@@ -669,16 +669,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
             if (current?.type === "compaction") {
-              draft[position] = {
-                id: current.id,
-                type: "compaction",
+              Object.assign(current, {
                 status: "completed",
                 reason: event.data.reason,
                 summary: event.data.text,
                 recent: event.data.recent,
-                metadata: current.metadata,
-                time: current.time,
-              }
+              })
               return
             }
             message.append(draft, index, {

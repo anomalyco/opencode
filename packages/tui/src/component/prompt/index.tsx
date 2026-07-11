@@ -57,7 +57,7 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
-import { lastAssistantWithUsage } from "../../util/session"
+import { contextUsage } from "../../util/session"
 
 registerOpencodeSpinner()
 
@@ -280,21 +280,20 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return
     const session = data.session.get(props.sessionID)
     if (!session) return
-    const last = lastAssistantWithUsage(data.session.message.list(props.sessionID), session.revert?.messageID)
-    if (!last) return
-
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (tokens <= 0) return
-
-    const model = data.location.model
-      .list(session.location)
-      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = data.session.cost(props.sessionID)
+    const formattedCost = cost > 0 ? money.format(cost) : undefined
+    const context = contextUsage(
+      data.session.message.list(props.sessionID),
+      data.location.model.list(session.location),
+      session.revert?.messageID,
+    )
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      context: context
+        ? context.percent === undefined
+          ? Locale.number(context.tokens)
+          : `${Locale.number(context.tokens)} (${context.percent}%)`
+        : undefined,
+      cost: formattedCost,
     }
   })
 
