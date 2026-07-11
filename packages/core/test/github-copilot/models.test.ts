@@ -63,7 +63,10 @@ test("defensively syncs advertised Copilot models", async () => {
     expect(model?.name).toBe("GPT-5 local")
     expect(model?.settings).toMatchObject({ baseURL: server.url.origin, endpoint: "responses" })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })
-    expect(model?.variants.map((variant) => variant.id)).toEqual(["low", "high"])
+    expect(model?.variants.map((variant) => variant.id)).toEqual([
+      ModelV2.VariantID.make("low"),
+      ModelV2.VariantID.make("high"),
+    ])
     expect(models.get(ModelV2.ID.make("utility"))?.enabled).toBe(false)
     expect(models.has(ModelV2.ID.make("stale"))).toBe(false)
     expect(models.has(ModelV2.ID.make("incomplete"))).toBe(false)
