@@ -16,6 +16,9 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "@/format"
 import { Git } from "@/git"
 import { Installation } from "@/installation"
+import { Issue } from "@/issue/issue"
+import { AutoProgress } from "@/issue/auto-progress"
+import { LinearBinding } from "@/issue/linear-binding"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
@@ -89,6 +92,7 @@ import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
+import { issueHandlers } from "./handlers/issue"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
@@ -157,6 +161,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     experimentalHandlers,
     fileHandlers,
     instanceHandlers,
+    issueHandlers,
     mcpHandlers,
     projectHandlers,
     projectCopyHandlers,
@@ -258,6 +263,9 @@ const app = LayerNode.group([
   Workspace.node,
   Worktree.node,
   Installation.node,
+  Issue.node,
+  AutoProgress.node,
+  LinearBinding.node,
   ShareNext.node,
   SessionShare.node,
   InstanceStore.node,

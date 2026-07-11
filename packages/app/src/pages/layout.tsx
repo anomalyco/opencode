@@ -82,6 +82,8 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SidebarTodo } from "./layout/sidebar-todo"
+import { SidebarLinear } from "./layout/sidebar-linear"
 
 export default function LegacyLayout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -2181,6 +2183,8 @@ export default function LegacyLayout(props: ParentProps) {
                   </>
                 </Show>
               </div>
+              <SidebarTodo directory={worktree} />
+              <SidebarLinear directory={worktree} />
             </>
           )}
         </Show>

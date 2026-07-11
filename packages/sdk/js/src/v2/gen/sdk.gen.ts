@@ -90,6 +90,40 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
+  IssueAutoProgressStartErrors,
+  IssueAutoProgressStartResponses,
+  IssueAutoProgressStatusErrors,
+  IssueAutoProgressStatusResponses,
+  IssueAutoProgressStopErrors,
+  IssueAutoProgressStopResponses,
+  IssueCreateErrors,
+  IssueCreateResponses,
+  IssueDeleteErrors,
+  IssueDeleteResponses,
+  IssueGetErrors,
+  IssueGetResponses,
+  IssueLinearBindingGetErrors,
+  IssueLinearBindingGetResponses,
+  IssueLinearBindingSetErrors,
+  IssueLinearBindingSetResponses,
+  IssueLinearProjectsErrors,
+  IssueLinearProjectsResponses,
+  IssueLinearStatusesErrors,
+  IssueLinearStatusesResponses,
+  IssueLinearTeamsErrors,
+  IssueLinearTeamsResponses,
+  IssueLinearUsersErrors,
+  IssueLinearUsersResponses,
+  IssueListErrors,
+  IssueListResponses,
+  IssueReorderErrors,
+  IssueReorderResponses,
+  IssueSyncPullErrors,
+  IssueSyncPullResponses,
+  IssueSyncPushErrors,
+  IssueSyncPushResponses,
+  IssueUpdateErrors,
+  IssueUpdateResponses,
   LocationRef,
   LspStatusErrors,
   LspStatusResponses,
@@ -1916,6 +1950,624 @@ export class File extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<FileStatusResponses, FileStatusErrors, ThrowOnError>({
       url: "/file/status",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Issue extends HeyApiClient {
+  /**
+   * List issues
+   *
+   * List all issues (workspace-scoped todos) for the current project directory.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueListResponses, IssueListErrors, ThrowOnError>({
+      url: "/issue",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create issue
+   *
+   * Create a new issue (todo) in the workspace.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      issue?: {
+        id?: string
+        parent_id?: string
+        level?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        title?: string
+        content?: string
+        description?: string
+        status?: string
+        priority?: "none" | "urgent" | "high" | "medium" | "low"
+        labels?: Array<string>
+        due_date?: string
+        assignee_id?: string
+        linear_issue_id?: string
+        linear_team_id?: string
+        linear_project_id?: string
+        position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        cloud_shadow?: {
+          [key: string]: unknown
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "issue" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueCreateResponses, IssueCreateErrors, ThrowOnError>({
+      url: "/issue",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete issue
+   *
+   * Delete an issue from the workspace.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<IssueDeleteResponses, IssueDeleteErrors, ThrowOnError>({
+      url: "/issue/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get issue
+   *
+   * Get a single issue by id in the workspace.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueGetResponses, IssueGetErrors, ThrowOnError>({
+      url: "/issue/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update issue
+   *
+   * Update fields on an existing issue.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      patch?: {
+        id?: string
+        parent_id?: string
+        level?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        title?: string
+        content?: string
+        description?: string
+        status?: string
+        priority?: "none" | "urgent" | "high" | "medium" | "low"
+        labels?: Array<string>
+        due_date?: string
+        assignee_id?: string
+        linear_issue_id?: string
+        linear_team_id?: string
+        linear_project_id?: string
+        position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        cloud_shadow?: {
+          [key: string]: unknown
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "patch" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<IssueUpdateResponses, IssueUpdateErrors, ThrowOnError>({
+      url: "/issue/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reorder issues
+   *
+   * Reorder issues by providing a list of issue IDs in the new order.
+   */
+  public reorder<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      ids?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "ids" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueReorderResponses, IssueReorderErrors, ThrowOnError>({
+      url: "/issue/reorder",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Start auto-progress
+   *
+   * Start the L1/L2 auto-progress engine for a workspace directory.
+   */
+  public autoProgressStart<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      IssueAutoProgressStartResponses,
+      IssueAutoProgressStartErrors,
+      ThrowOnError
+    >({
+      url: "/issue/auto-progress/start",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stop auto-progress
+   *
+   * Stop the L1/L2 auto-progress engine for a workspace directory.
+   */
+  public autoProgressStop<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      IssueAutoProgressStopResponses,
+      IssueAutoProgressStopErrors,
+      ThrowOnError
+    >({
+      url: "/issue/auto-progress/stop",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Auto-progress status
+   *
+   * Whether the L1/L2 auto-progress engine is currently running for a workspace directory.
+   */
+  public autoProgressStatus<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      IssueAutoProgressStatusResponses,
+      IssueAutoProgressStatusErrors,
+      ThrowOnError
+    >({
+      url: "/issue/auto-progress/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get Linear workspace binding
+   *
+   * Returns the workspace-scoped Linear team/project binding or null if not configured. Per ADR-0004, binding is stored in <workspace>/.opencode/linear-binding.json.
+   */
+  public linearBindingGet<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      IssueLinearBindingGetResponses,
+      IssueLinearBindingGetErrors,
+      ThrowOnError
+    >({
+      url: "/issue/linear/binding",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set Linear workspace binding
+   *
+   * Writes the workspace-scoped Linear team/project binding. Accepts { teamId, teamName, projectId } to set, or null to clear.
+   */
+  public linearBindingSet<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      teamId?: string
+      teamName?: string
+      projectId?: string
+      projectName?: string
+      projectUrl?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "teamId" },
+            { in: "body", key: "teamName" },
+            { in: "body", key: "projectId" },
+            { in: "body", key: "projectName" },
+            { in: "body", key: "projectUrl" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      IssueLinearBindingSetResponses,
+      IssueLinearBindingSetErrors,
+      ThrowOnError
+    >({
+      url: "/issue/linear/binding",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List Linear workspace teams
+   *
+   * List teams in the connected Linear workspace via the Linear MCP list_teams tool. Returns an empty array if the Linear MCP is not connected.
+   */
+  public linearTeams<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueLinearTeamsResponses, IssueLinearTeamsErrors, ThrowOnError>({
+      url: "/issue/linear/teams",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List Linear workspace projects
+   *
+   * List projects in the connected Linear workspace via the Linear MCP list_projects tool. Supports optional team query param to filter by team.
+   */
+  public linearProjects<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      team?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "team" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueLinearProjectsResponses, IssueLinearProjectsErrors, ThrowOnError>({
+      url: "/issue/linear/projects",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List Linear workspace users
+   *
+   * List users in the connected Linear workspace via the Linear MCP list_users tool. Returns an empty array if the Linear MCP is not connected.
+   */
+  public linearUsers<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueLinearUsersResponses, IssueLinearUsersErrors, ThrowOnError>({
+      url: "/issue/linear/users",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List Linear team issue statuses
+   *
+   * List the available Linear workflow states (statuses) for the configured team via the Linear MCP list_issue_statuses tool.
+   */
+  public linearStatuses<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueLinearStatusesResponses, IssueLinearStatusesErrors, ThrowOnError>({
+      url: "/issue/linear/statuses",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Pull issues from Linear
+   *
+   * Import Linear issues for the workspace into the local IssueTable. Uses the project's connected Linear MCP server.
+   */
+  public syncPull<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueSyncPullResponses, IssueSyncPullErrors, ThrowOnError>({
+      url: "/issue/sync/pull",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Push issues to Linear
+   *
+   * Push locally modified issues to Linear via the project's connected Linear MCP server.
+   */
+  public syncPush<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueSyncPushResponses, IssueSyncPushErrors, ThrowOnError>({
+      url: "/issue/sync/push",
       ...options,
       ...params,
     })
@@ -7130,6 +7782,11 @@ export class OpencodeClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
+  }
+
+  private _issue?: Issue
+  get issue(): Issue {
+    return (this._issue ??= new Issue({ client: this.client }))
   }
 
   private _instance?: Instance

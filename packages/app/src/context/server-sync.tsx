@@ -214,6 +214,19 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
   const session = createServerSession(serverSDK.client)
 
+  const refreshTodo = (directory: string) => {
+    const key = directoryKey(directory)
+    const sdk = sdkFor(directory)
+    void sdk.issue
+      .list({ directory })
+      .then((x) => {
+        const existing = children.children[key]
+        if (!existing) return
+        existing[1]("workspace_todo", reconcile(x.data ?? [], { key: "id" }))
+      })
+      .catch(() => {})
+  }
+
   const children = createChildStoreManager({
     owner,
     scope: serverSDK.scope,
@@ -427,6 +440,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         if (!children.active(key)) return
         void queryClient.fetchQuery(queryOptionsApi.references(key))
       },
+      refreshTodo: () => refreshTodo(directory),
     })
   })
 
@@ -498,6 +512,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     project: projectApi,
     session,
     homeSessions,
+    todo: {
+      refresh: (directory: string) => {
+        refreshTodo(directory)
+        return Promise.resolve()
+      },
+    },
     mcp: {
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)

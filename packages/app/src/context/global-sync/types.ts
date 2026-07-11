@@ -2,6 +2,7 @@ import type {
   Agent,
   Command,
   Config,
+  Issue,
   LspStatus,
   McpResource,
   McpStatus,
@@ -56,6 +57,7 @@ export type State = {
   todo: {
     [sessionID: string]: Todo[]
   }
+  workspace_todo: Issue[]
   permission: {
     [sessionID: string]: PermissionRequest[]
   }

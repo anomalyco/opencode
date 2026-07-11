@@ -2296,6 +2296,40 @@ export type File = {
   status: "added" | "deleted" | "modified"
 }
 
+export type Issue = {
+  id: string
+  directory: string
+  parent_id: string
+  level: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  title: string
+  content: string
+  description: string
+  status: string
+  priority: "none" | "urgent" | "high" | "medium" | "low"
+  labels: Array<string>
+  due_date?: string
+  assignee_id?: string
+  linear_issue_id?: string
+  linear_team_id?: string
+  linear_project_id?: string
+  position: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  cloud_shadow?: {
+    [key: string]: unknown
+  }
+  time_created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  time_updated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type LinearBinding = {
+  teamId: string
+  teamName: string
+  projectId: string
+  projectName?: string
+  projectUrl?: string
+}
+
 export type Path = {
   home: string
   state: string
@@ -8076,6 +8110,592 @@ export type FileStatusResponses = {
 }
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
+
+export type IssueListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue"
+}
+
+export type IssueListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type IssueListError = IssueListErrors[keyof IssueListErrors]
+
+export type IssueListResponses = {
+  /**
+   * Issue list
+   */
+  200: Array<Issue>
+}
+
+export type IssueListResponse = IssueListResponses[keyof IssueListResponses]
+
+export type IssueCreateData = {
+  body?: {
+    issue: {
+      id?: string
+      parent_id?: string
+      level?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      title?: string
+      content?: string
+      description?: string
+      status?: string
+      priority?: "none" | "urgent" | "high" | "medium" | "low"
+      labels?: Array<string>
+      due_date?: string
+      assignee_id?: string
+      linear_issue_id?: string
+      linear_team_id?: string
+      linear_project_id?: string
+      position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      cloud_shadow?: {
+        [key: string]: unknown
+      }
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue"
+}
+
+export type IssueCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueCreateError = IssueCreateErrors[keyof IssueCreateErrors]
+
+export type IssueCreateResponses = {
+  /**
+   * Created issue
+   */
+  200: Issue
+}
+
+export type IssueCreateResponse = IssueCreateResponses[keyof IssueCreateResponses]
+
+export type IssueDeleteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/{id}"
+}
+
+export type IssueDeleteErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssueDeleteError = IssueDeleteErrors[keyof IssueDeleteErrors]
+
+export type IssueDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: boolean
+}
+
+export type IssueDeleteResponse = IssueDeleteResponses[keyof IssueDeleteResponses]
+
+export type IssueGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/{id}"
+}
+
+export type IssueGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssueGetError = IssueGetErrors[keyof IssueGetErrors]
+
+export type IssueGetResponses = {
+  /**
+   * Issue
+   */
+  200: Issue
+}
+
+export type IssueGetResponse = IssueGetResponses[keyof IssueGetResponses]
+
+export type IssueUpdateData = {
+  body?: {
+    patch: {
+      id?: string
+      parent_id?: string
+      level?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      title?: string
+      content?: string
+      description?: string
+      status?: string
+      priority?: "none" | "urgent" | "high" | "medium" | "low"
+      labels?: Array<string>
+      due_date?: string
+      assignee_id?: string
+      linear_issue_id?: string
+      linear_team_id?: string
+      linear_project_id?: string
+      position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      cloud_shadow?: {
+        [key: string]: unknown
+      }
+    }
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/{id}"
+}
+
+export type IssueUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssueUpdateError = IssueUpdateErrors[keyof IssueUpdateErrors]
+
+export type IssueUpdateResponses = {
+  /**
+   * Updated issue
+   */
+  200: Issue
+}
+
+export type IssueUpdateResponse = IssueUpdateResponses[keyof IssueUpdateResponses]
+
+export type IssueReorderData = {
+  body?: {
+    ids: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/reorder"
+}
+
+export type IssueReorderErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueReorderError = IssueReorderErrors[keyof IssueReorderErrors]
+
+export type IssueReorderResponses = {
+  /**
+   * Reordered
+   */
+  200: boolean
+}
+
+export type IssueReorderResponse = IssueReorderResponses[keyof IssueReorderResponses]
+
+export type IssueAutoProgressStartData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/auto-progress/start"
+}
+
+export type IssueAutoProgressStartErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type IssueAutoProgressStartError = IssueAutoProgressStartErrors[keyof IssueAutoProgressStartErrors]
+
+export type IssueAutoProgressStartResponses = {
+  /**
+   * Started
+   */
+  200: boolean
+}
+
+export type IssueAutoProgressStartResponse = IssueAutoProgressStartResponses[keyof IssueAutoProgressStartResponses]
+
+export type IssueAutoProgressStopData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/auto-progress/stop"
+}
+
+export type IssueAutoProgressStopErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type IssueAutoProgressStopError = IssueAutoProgressStopErrors[keyof IssueAutoProgressStopErrors]
+
+export type IssueAutoProgressStopResponses = {
+  /**
+   * Stopped
+   */
+  200: boolean
+}
+
+export type IssueAutoProgressStopResponse = IssueAutoProgressStopResponses[keyof IssueAutoProgressStopResponses]
+
+export type IssueAutoProgressStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/auto-progress/status"
+}
+
+export type IssueAutoProgressStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type IssueAutoProgressStatusError = IssueAutoProgressStatusErrors[keyof IssueAutoProgressStatusErrors]
+
+export type IssueAutoProgressStatusResponses = {
+  /**
+   * Status
+   */
+  200: {
+    status: "idle" | "running"
+  }
+}
+
+export type IssueAutoProgressStatusResponse = IssueAutoProgressStatusResponses[keyof IssueAutoProgressStatusResponses]
+
+export type IssueLinearBindingGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/linear/binding"
+}
+
+export type IssueLinearBindingGetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueLinearBindingGetError = IssueLinearBindingGetErrors[keyof IssueLinearBindingGetErrors]
+
+export type IssueLinearBindingGetResponses = {
+  /**
+   * Linear binding or null
+   */
+  200: LinearBinding
+}
+
+export type IssueLinearBindingGetResponse = IssueLinearBindingGetResponses[keyof IssueLinearBindingGetResponses]
+
+export type IssueLinearBindingSetData = {
+  body?: {
+    teamId?: string
+    teamName?: string
+    projectId?: string
+    projectName?: string
+    projectUrl?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/linear/binding"
+}
+
+export type IssueLinearBindingSetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueLinearBindingSetError = IssueLinearBindingSetErrors[keyof IssueLinearBindingSetErrors]
+
+export type IssueLinearBindingSetResponses = {
+  /**
+   * The new binding (or null if cleared)
+   */
+  200: LinearBinding
+}
+
+export type IssueLinearBindingSetResponse = IssueLinearBindingSetResponses[keyof IssueLinearBindingSetResponses]
+
+export type IssueLinearTeamsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/linear/teams"
+}
+
+export type IssueLinearTeamsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueLinearTeamsError = IssueLinearTeamsErrors[keyof IssueLinearTeamsErrors]
+
+export type IssueLinearTeamsResponses = {
+  /**
+   * Linear teams
+   */
+  200: Array<{
+    id: string
+    name: string
+    key?: string
+  }>
+}
+
+export type IssueLinearTeamsResponse = IssueLinearTeamsResponses[keyof IssueLinearTeamsResponses]
+
+export type IssueLinearProjectsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    team?: string
+  }
+  url: "/issue/linear/projects"
+}
+
+export type IssueLinearProjectsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueLinearProjectsError = IssueLinearProjectsErrors[keyof IssueLinearProjectsErrors]
+
+export type IssueLinearProjectsResponses = {
+  /**
+   * Linear projects
+   */
+  200: Array<{
+    id: string
+    name: string
+    state?: string
+  }>
+}
+
+export type IssueLinearProjectsResponse = IssueLinearProjectsResponses[keyof IssueLinearProjectsResponses]
+
+export type IssueLinearUsersData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/linear/users"
+}
+
+export type IssueLinearUsersErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueLinearUsersError = IssueLinearUsersErrors[keyof IssueLinearUsersErrors]
+
+export type IssueLinearUsersResponses = {
+  /**
+   * Linear users
+   */
+  200: Array<{
+    id: string
+    name: string
+    email?: string
+    avatarUrl?: string
+  }>
+}
+
+export type IssueLinearUsersResponse = IssueLinearUsersResponses[keyof IssueLinearUsersResponses]
+
+export type IssueLinearStatusesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/linear/statuses"
+}
+
+export type IssueLinearStatusesErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueLinearStatusesError = IssueLinearStatusesErrors[keyof IssueLinearStatusesErrors]
+
+export type IssueLinearStatusesResponses = {
+  /**
+   * Linear issue statuses
+   */
+  200: Array<{
+    id: string
+    name: string
+    color?: string
+  }>
+}
+
+export type IssueLinearStatusesResponse = IssueLinearStatusesResponses[keyof IssueLinearStatusesResponses]
+
+export type IssueSyncPullData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/sync/pull"
+}
+
+export type IssueSyncPullErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueSyncPullError = IssueSyncPullErrors[keyof IssueSyncPullErrors]
+
+export type IssueSyncPullResponses = {
+  /**
+   * Pull result
+   */
+  200: {
+    pulled: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    skipped: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    ids: Array<string>
+    errors: Array<{
+      linearIssueId: string
+      error: string
+    }>
+  }
+}
+
+export type IssueSyncPullResponse = IssueSyncPullResponses[keyof IssueSyncPullResponses]
+
+export type IssueSyncPushData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/sync/push"
+}
+
+export type IssueSyncPushErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type IssueSyncPushError = IssueSyncPushErrors[keyof IssueSyncPushErrors]
+
+export type IssueSyncPushResponses = {
+  /**
+   * Push result
+   */
+  200: {
+    pushed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    failed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    ids: Array<string>
+    errors: Array<{
+      id: string
+      message: string
+    }>
+  }
+}
+
+export type IssueSyncPushResponse = IssueSyncPushResponses[keyof IssueSyncPushResponses]
 
 export type InstanceDisposeData = {
   body?: never

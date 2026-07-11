@@ -115,6 +115,7 @@ export function applyDirectoryEvent(input: {
   loadReferences?: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
+  refreshTodo?: () => void
   retainedLimit?: number
   sessionContent?: boolean
   permission?: State["permission"]
@@ -406,6 +407,13 @@ export function applyDirectoryEvent(input: {
     }
     case "reference.updated": {
       input.loadReferences?.()
+      break
+    }
+    case "issue.created":
+    case "issue.updated":
+    case "issue.deleted":
+    case "issue.progressed": {
+      input.refreshTodo?.()
       break
     }
   }

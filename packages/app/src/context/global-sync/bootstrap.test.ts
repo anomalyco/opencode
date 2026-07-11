@@ -31,6 +31,7 @@ function directoryState() {
     },
     session_diff: {},
     todo: {},
+    workspace_todo: [],
     permission: {},
     question: {},
     mcp_ready: true,
@@ -82,6 +83,7 @@ describe("bootstrapDirectory", () => {
           },
         },
         provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
+        issue: { list: async () => ({ data: [] }) },
       } as unknown as OpencodeClient,
       store,
       setStore,
@@ -116,6 +118,7 @@ describe("bootstrapDirectory", () => {
       v2: { reference: { list: async () => ({ data: { data: [] } }) } },
       mcp: { status: async () => ({ data: {} }) },
       provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
+      issue: { list: async () => ({ data: [] }) },
     } as unknown as OpencodeClient
     const session = createServerSession(client)
     const stale: Session = {

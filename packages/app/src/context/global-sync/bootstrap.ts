@@ -292,6 +292,15 @@ export async function bootstrapDirectory(input: {
       () => input.queryClient.fetchQuery(loadReferencesQuery(input.scope, input.directory, input.sdk)),
       () =>
         retry(() =>
+          input.sdk.issue
+            .list({ directory: input.directory })
+            .then((x) => input.setStore("workspace_todo", reconcile(x.data ?? [], { key: "id" })))
+            .catch(() => {
+              input.setStore("workspace_todo", [])
+            }),
+        ),
+      () =>
+        retry(() =>
           input.sdk.permission.list().then((x) => {
             const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
             const grouped = groupBySession(

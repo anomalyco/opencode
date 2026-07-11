@@ -1,0 +1,14 @@
+Control the workspace-scoped auto-progress engine for issues (todos).
+
+The auto-progress engine automatically advances issues through their lifecycle:
+- When an L1 issue is "In Progress" and all its L2 children are completed or canceled, the L1 is marked "Done".
+- When no L1 is "In Progress", the first "Todo" L1 is promoted to "In Progress" and its "Todo" L2 children are started in parallel.
+
+Issues in "Backlog" status are never auto-advanced — only "Todo" triggers the engine.
+
+Actions:
+- start: Begin auto-advancing issues for the current workspace directory.
+- stop: Halt the auto-progress engine.
+- status: Check whether the engine is currently running ("running") or idle ("idle").
+
+Use this tool when you want to let the system automatically manage issue progression as work completes, or to check/stop the engine.

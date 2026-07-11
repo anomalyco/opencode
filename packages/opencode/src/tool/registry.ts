@@ -29,6 +29,13 @@ import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { IssueAddTool } from "./issue_add"
+import { IssueUpdateTool } from "./issue_update"
+import { IssueDeleteTool } from "./issue_delete"
+import { IssueReorderTool } from "./issue_reorder"
+import { IssueAutoProgressTool } from "./issue_auto_progress"
+import { Issue } from "@/issue/issue"
+import { AutoProgress } from "@/issue/auto-progress"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -109,6 +116,11 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const issueAdd = yield* IssueAddTool
+    const issueUpdate = yield* IssueUpdateTool
+    const issueDelete = yield* IssueDeleteTool
+    const issueReorder = yield* IssueReorderTool
+    const issueAutoProgress = yield* IssueAutoProgressTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -214,6 +226,11 @@ const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          issueAdd: Tool.init(issueAdd),
+          issueUpdate: Tool.init(issueUpdate),
+          issueDelete: Tool.init(issueDelete),
+          issueReorder: Tool.init(issueReorder),
+          issueAutoProgress: Tool.init(issueAutoProgress),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -237,6 +254,11 @@ const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.issueAdd,
+            tool.issueUpdate,
+            tool.issueDelete,
+            tool.issueReorder,
+            tool.issueAutoProgress,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -444,6 +466,8 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    Issue.node,
+    AutoProgress.node,
   ],
 })
 
