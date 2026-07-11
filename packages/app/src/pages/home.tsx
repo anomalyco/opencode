@@ -35,7 +35,7 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useDirectoryPicker } from "@/components/directory-picker"
-import { useSettingsCommand } from "@/components/settings-dialog"
+import { useSettingsDialog } from "@/components/settings-dialog"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, serverName, useServer } from "@/context/server"
@@ -66,7 +66,9 @@ import { Persist, persisted } from "@/utils/persist"
 import { useMarked } from "@opencode-ai/ui/context/marked"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
+import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
+import { fileManagerApp } from "@/utils/file-manager"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -238,6 +240,20 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
   return { setViewport, setContentRef, setHeaderRef, update, titleOpacity }
 }
 
+// Cmd+click on macOS (Ctrl+click elsewhere) opens a session tab in the
+// background without navigating, matching browser conventions.
+function isBackgroundOpen(event: MouseEvent) {
+  return shouldOpenSessionInBackground({
+    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    meta: event.metaKey,
+    ctrl: event.ctrlKey,
+    shift: event.shiftKey,
+    alt: event.altKey,
+  })
+}
+
+type OpenSessionOptions = { background?: boolean }
+
 export function NewHome() {
   const sync = useServerSync()
   const layout = useLayout()
@@ -252,7 +268,7 @@ export function NewHome() {
   const command = useCommand()
   const notification = useNotification()
   const marked = useMarked()
-  const openSettings = useSettingsCommand()
+  const openSettings = useSettingsDialog()
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
@@ -377,9 +393,11 @@ export function NewHome() {
     setState("searchFocused", false)
   }
 
-  function selectSearchSession(session: Session) {
-    openSession(session)
-    closeSearch()
+  function selectSearchSession(session: Session, options?: OpenSessionOptions) {
+    openSession(session, options)
+    // Background opens keep the search visible so several results can be
+    // opened in a row.
+    if (!options?.background) closeSearch()
   }
 
   command.register("home", () => [
@@ -464,13 +482,17 @@ export function NewHome() {
       .forEach((directory) => state.project.markViewed(directory))
   }
 
-  function openSession(session: Session) {
+  function openSession(session: Session, options?: OpenSessionOptions) {
     const project = projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
+    if (options?.background) {
+      tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+      return
+    }
     ctx.projects.touch(directory)
     startTransition(() => {
       const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
@@ -1009,8 +1031,24 @@ function HomeProjectRow(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
+  const platform = usePlatform()
   const serverUnreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
   const [state, setState] = createStore({ menuOpen: false })
+  const canRevealInFileManager = () =>
+    platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(props.server)
+  const fileManagerActionLabel = () =>
+    props.language.t(
+      fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel,
+    )
+  const revealInFileManager = () => {
+    if (!platform.openPath) return
+    platform.openPath(props.project.worktree).catch((err: unknown) =>
+      showToast({
+        title: props.language.t("common.requestFailed"),
+        description: errorMessage(err, props.language.t("common.requestFailed")),
+      }),
+    )
+  }
   return (
     <div class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
@@ -1052,6 +1090,9 @@ function HomeProjectRow(props: {
               <MenuV2.Item onSelect={() => props.editProject(props.server, props.project)}>
                 {props.language.t("dialog.project.edit.title")}
               </MenuV2.Item>
+              <Show when={canRevealInFileManager()}>
+                <MenuV2.Item onSelect={revealInFileManager}>{fileManagerActionLabel()}</MenuV2.Item>
+              </Show>
               <MenuV2.Item
                 disabled={props.unseenCount === 0}
                 onSelect={() => props.clearNotifications(props.server, props.project)}
@@ -1130,7 +1171,7 @@ function HomeSessionSearch(props: {
   onInput: (value: string) => void
   onFocus: () => void
   onClose: () => void
-  onSelect: (session: Session) => void
+  onSelect: (session: Session, options?: OpenSessionOptions) => void
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({ active: "" })
@@ -1244,7 +1285,7 @@ function HomeSessionSearch(props: {
                                 server={props.server}
                                 selected={store.active === homeSessionSearchKey(record)}
                                 onHighlight={() => setStore("active", homeSessionSearchKey(record))}
-                                onSelect={(session) => props.onSelect(session)}
+                                onSelect={(session, options) => props.onSelect(session, options)}
                               />
                             )}
                           </For>
@@ -1257,7 +1298,7 @@ function HomeSessionSearch(props: {
             </div>
           </div>
         </Show>
-        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02">
+        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02">
           <IconV2 name="magnifying-glass" />
           <input
             ref={input}
@@ -1324,7 +1365,7 @@ function HomeSessionSearchResultRow(props: {
   server: ServerConnection.Key
   selected: boolean
   onHighlight: () => void
-  onSelect: (session: Session) => void
+  onSelect: (session: Session, options?: OpenSessionOptions) => void
 }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName && props.record.projectName
@@ -1345,7 +1386,7 @@ function HomeSessionSearchResultRow(props: {
         group: !!showProjectName(),
       }}
       onMouseEnter={() => props.onHighlight()}
-      onClick={() => props.onSelect(props.record.session)}
+      onClick={(event) => props.onSelect(props.record.session, { background: isBackgroundOpen(event) })}
     >
       <HomeSessionLeading
         project={props.record.project}
@@ -1389,7 +1430,7 @@ function HomeSessionRow(props: {
   record: HomeSessionRecord
   showProjectName: boolean
   server: ServerConnection.Key
-  openSession: (session: Session) => void
+  openSession: (session: Session, options?: OpenSessionOptions) => void
   archiveSession: (session: Session) => Promise<void>
 }) {
   const language = useLanguage()
@@ -1405,7 +1446,7 @@ function HomeSessionRow(props: {
         type="button"
         data-component="home-session-row"
         class={`${HOME_ROW} h-10 min-w-0 flex-1 gap-2 py-3 pl-3 pr-10`}
-        onClick={() => props.openSession(props.record.session)}
+        onClick={(event) => props.openSession(props.record.session, { background: isBackgroundOpen(event) })}
       >
         <HomeSessionLeading
           project={props.record.project}
