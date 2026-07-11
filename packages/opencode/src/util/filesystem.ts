@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
+import { chmod, lstat, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { realpathSync } from "fs"
 import { dirname, isAbsolute, join, resolve as pathResolve, win32 } from "path"
@@ -58,7 +58,21 @@ function isEnoent(e: unknown): e is { code: "ENOENT" } {
   return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
 }
 
+/** Refuse to write through an existing symlink (protects auth.json / credential stores). */
+async function assertNotSymlink(p: string): Promise<void> {
+  try {
+    const info = await lstat(p)
+    if (info.isSymbolicLink()) {
+      throw new Error(`Refusing to write through symlink: ${p}`)
+    }
+  } catch (e) {
+    if (isEnoent(e)) return
+    throw e
+  }
+}
+
 export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
+  await assertNotSymlink(p)
   try {
     if (mode) {
       await writeFile(p, content, { mode })

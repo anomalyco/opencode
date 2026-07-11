@@ -109,6 +109,28 @@ export namespace FSUtil {
 
       const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
         const content = JSON.stringify(data, null, 2)
+        // Refuse symlink targets so credential/state writers (auth, mcp) cannot be redirected.
+        const isLink = yield* Effect.tryPromise({
+          try: async () => {
+            try {
+              return (await NFS.lstat(path)).isSymbolicLink()
+            } catch (e) {
+              if (typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT") {
+                return false
+              }
+              throw e
+            }
+          },
+          catch: (cause) => new FileSystemError({ method: "writeJson", cause }),
+        })
+        if (isLink) {
+          return yield* Effect.fail(
+            new FileSystemError({
+              method: "writeJson",
+              cause: new Error(`Refusing to write through symlink: ${path}`),
+            }),
+          )
+        }
         yield* fs.writeFileString(path, content)
         if (mode) yield* fs.chmod(path, mode)
       })
