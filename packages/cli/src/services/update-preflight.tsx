@@ -7,7 +7,19 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
 import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
 import { go } from "@opencode-ai/tui/logo"
-import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+} from "solid-js"
 
 const stages = ["Keeping your session safe", "Starting the new background service", "Connecting to OpenCode"] as const
 const stageFloor = 480
@@ -25,7 +37,10 @@ export const make = (): Handle => {
   return {
     begin: (from) => {
       if (!process.stdout.isTTY || !process.stdin.isTTY) return false
-      session ??= open(from).catch(() => undefined)
+      session ??= open(from).catch(() => {
+        process.stderr.write("Restarting background server (version mismatch)...\n")
+        return undefined
+      })
       return true
     },
     finish: async () => {
@@ -85,7 +100,7 @@ async function open(from?: string): Promise<Session> {
   let shownAt = performance.now()
   const advance = async (stage: number) => {
     const remaining = stageFloor - (performance.now() - shownAt)
-    if (remaining > 0) await sleep(remaining)
+    if (remaining > 0) await Bun.sleep(remaining)
     if (outcome() !== "running") return
     setActive(stage)
     shownAt = performance.now()
@@ -94,20 +109,22 @@ async function open(from?: string): Promise<Session> {
   // transition is time-based. Finer lifecycle callbacks remain follow-up work.
   const auto = advance(1)
   const transitionTo = async (next: "success" | "failure", hold: number) => {
-    const settled = new Promise<void>((resolve) => {
-      resolveOutcome = resolve
-    })
+    const settled = Promise.withResolvers<void>()
+    resolveOutcome = settled.resolve
     setOutcome(next)
-    await settled
+    const completed = await Promise.race([
+      settled.promise.then(() => true),
+      Bun.sleep(transitionDuration + 500).then(() => false),
+    ])
     resolveOutcome = undefined
     setAnimating(false)
-    await sleep(hold)
+    if (completed) await Bun.sleep(hold)
   }
   const close = async () => {
     setAnimating(false)
     if (renderer.isDestroyed) return
     renderer.pause()
-    await renderer.idle()
+    await Promise.race([renderer.idle(), Bun.sleep(500)])
     renderer.destroy()
   }
   let settled: Promise<void> | undefined
@@ -117,7 +134,7 @@ async function open(from?: string): Promise<Session> {
       settle(async () => {
         await auto
         await advance(2)
-        await sleep(stageFloor)
+        await Bun.sleep(stageFloor)
         await transitionTo("success", completionHold)
         await close()
       }),
@@ -129,8 +146,6 @@ async function open(from?: string): Promise<Session> {
       }),
   }
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 const colors = {
   accent: RGBA.fromHex("#a6b8ff"),
@@ -208,24 +223,16 @@ function Monogram(props: { ink: () => RGBA }) {
   )
 }
 
-function createSweep() {
+type CellTransition = { from: Cell[]; to: Cell[]; done?: () => void }
+
+function createTransition(render: (transition: CellTransition, progress: number) => Cell[]) {
   const [state, setState] = createSignal<{ from: Cell[]; to: Cell[]; done?: () => void } | undefined>()
   const [progress, setProgress] = createSignal(0)
   let elapsed = 0
   const cells = createMemo(() => {
     const transition = state()
     if (!transition) return undefined
-    const length = Math.max(transition.from.length, transition.to.length)
-    const front = progress() * (length + 2 * sweepBlend) - sweepBlend
-    return Array.from({ length }, (_, index) => {
-      const passed = Math.max(0, Math.min(1, (front - index) / sweepBlend))
-      const brightness = smoothstep(Math.abs(passed * 2 - 1))
-      const cell = (passed >= 0.5 ? transition.to[index] : transition.from[index]) ?? {
-        char: " ",
-        color: colors.text,
-      }
-      return { ...cell, color: shade(rampFor(cell.color), brightness) }
-    })
+    return render(transition, progress())
   })
   return {
     start(from: Cell[], to: Cell[], done?: () => void) {
@@ -237,7 +244,7 @@ function createSweep() {
       const transition = state()
       if (!transition) return
       elapsed = Math.min(transitionDuration, elapsed + deltaTime)
-      setProgress(smoothstep(elapsed / transitionDuration))
+      setProgress(elapsed / transitionDuration)
       if (elapsed < transitionDuration) return
       setState(undefined)
       transition.done?.()
@@ -246,6 +253,31 @@ function createSweep() {
     progress,
   }
 }
+
+const createSweep = () =>
+  createTransition((transition, progress) => {
+    const length = Math.max(transition.from.length, transition.to.length)
+    const front = smoothstep(progress) * (length + 2 * sweepBlend) - sweepBlend
+    return Array.from({ length }, (_, index) => {
+      const passed = Math.max(0, Math.min(1, (front - index) / sweepBlend))
+      const brightness = smoothstep(Math.abs(passed * 2 - 1))
+      const cell = (passed >= 0.5 ? transition.to[index] : transition.from[index]) ?? {
+        char: " ",
+        color: colors.text,
+      }
+      return { ...cell, color: shade(rampFor(cell.color), brightness) }
+    })
+  })
+
+const createFade = () =>
+  createTransition((transition, progress) => {
+    const entering = progress >= 0.5
+    const brightness = smoothstep(entering ? progress * 2 - 1 : 1 - progress * 2)
+    return (entering ? transition.to : transition.from).map((cell) => ({
+      ...cell,
+      color: shade(rampFor(cell.color), brightness),
+    }))
+  })
 
 const smoothstep = (value: number) => value * value * (3 - 2 * value)
 const frameDone = Promise.resolve()
@@ -262,7 +294,7 @@ function UpdateFooter(props: {
   const term = useTerminalDimensions()
   const [position, setPosition] = createSignal(0)
   const [pulse, setPulse] = createSignal(0)
-  const headerSweep = createSweep()
+  const headerFade = createFade()
   const statusSweep = createSweep()
   const runningHeader = () =>
     phrase(
@@ -303,20 +335,15 @@ function UpdateFooter(props: {
       (outcome) => {
         if (outcome === "running") return
         const visibleStatus = untrack(statusSweep.cells) ?? styled(previousStage, colors.text)
-        let remaining = 2
-        const settled = () => {
-          remaining -= 1
-          if (remaining === 0) props.onOutcomeSettled()
-        }
-        headerSweep.start(runningHeader(), outcome === "success" ? completedHeader : pausedHeader, settled)
-        statusSweep.start([...styled("  ", colors.text), ...visibleStatus], outcomeStatus(), settled)
+        headerFade.start(runningHeader(), outcome === "success" ? completedHeader : pausedHeader)
+        statusSweep.start([...styled("  ", colors.text), ...visibleStatus], outcomeStatus(), props.onOutcomeSettled)
       },
       { defer: true },
     ),
   )
   const header = createMemo(
     () =>
-      headerSweep.cells() ??
+      headerFade.cells() ??
       (props.outcome() === "success"
         ? completedHeader
         : props.outcome() === "failure"
@@ -324,10 +351,11 @@ function UpdateFooter(props: {
           : runningHeader()),
   )
   const monogramInk = createMemo(() =>
-    props.outcome() === "success" ? shade(monogramRamp, headerSweep.progress()) : colors.muted,
+    props.outcome() === "success" ? shade(monogramRamp, smoothstep(headerFade.progress())) : colors.muted,
   )
   const rail = createMemo(() => {
     const width = Math.max(0, Math.min(30, term().width - 39))
+    if (width === 0) return []
     if (props.outcome() === "success") return Array.from({ length: width }, () => ({ char: "━", color: colors.accent }))
     const filled = Math.round(position() * width)
     const glowRadius = 6
@@ -352,10 +380,12 @@ function UpdateFooter(props: {
       const target = props.outcome() === "success" ? 1 : (props.active() + 1) / stages.length
       velocity += (stiffness * (target - value) - damping * velocity) * elapsed
       value += velocity * elapsed
-      setPosition(Math.max(0, Math.min(1, value)))
       phase = (phase + deltaTime / 900) % 1
-      setPulse(phase)
-      headerSweep.tick(deltaTime)
+      batch(() => {
+        setPosition(Math.max(0, Math.min(1, value)))
+        setPulse(phase)
+      })
+      headerFade.tick(deltaTime)
       statusSweep.tick(deltaTime)
       return frameDone
     }
