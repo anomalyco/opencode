@@ -16,6 +16,8 @@ let mutableVersion = "1"
 let mutableContent = "# Old"
 let mutableDownloadCount = 0
 let mutableFiles = ["SKILL.md"]
+let hostileSkills: unknown[] = []
+let hostileDownloads = 0
 
 const fixturePath = path.join(import.meta.dir, "../fixture/skills")
 const cacheDir = path.join(Global.Path.cache, "skills")
@@ -37,6 +39,14 @@ beforeAll(async () => {
         return new Response(mutableContent)
       }
       if (url.pathname === "/mutable/mutable/old.md") return new Response("old reference")
+
+      if (url.pathname === "/hostile/index.json") {
+        return Response.json({ skills: hostileSkills })
+      }
+      if (url.pathname.startsWith("/hostile/")) {
+        hostileDownloads++
+        return new Response("should-not-download")
+      }
 
       // route /.well-known/skills/* to the fixture directory
       if (url.pathname.startsWith("/.well-known/skills/")) {
@@ -181,6 +191,57 @@ describe("Discovery.pull", () => {
 
       yield* discovery.pull(url)
       expect(mutableDownloadCount).toBe(3)
+    }),
+  )
+
+  it.live("rejects skill name traversal without fetching files", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => rm(cacheDir, { recursive: true, force: true }))
+      hostileSkills = [{ name: "../outside", files: ["SKILL.md"] }]
+      hostileDownloads = 0
+      const discovery = yield* Discovery.Service
+      const dirs = yield* discovery.pull(`http://localhost:${server.port}/hostile/`)
+      expect(dirs).toEqual([])
+      expect(hostileDownloads).toBe(0)
+      expect(yield* Effect.promise(() => Bun.file(path.join(Global.Path.cache, "outside", "SKILL.md")).exists())).toBe(
+        false,
+      )
+    }),
+  )
+
+  it.live("rejects file traversal without fetching files", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => rm(cacheDir, { recursive: true, force: true }))
+      hostileSkills = [{ name: "deploy", files: ["SKILL.md", "../outside.md"] }]
+      hostileDownloads = 0
+      const discovery = yield* Discovery.Service
+      const dirs = yield* discovery.pull(`http://localhost:${server.port}/hostile/`)
+      expect(dirs).toEqual([])
+      expect(hostileDownloads).toBe(0)
+    }),
+  )
+
+  it.live("rejects absolute file paths without fetching files", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => rm(cacheDir, { recursive: true, force: true }))
+      hostileSkills = [{ name: "deploy", files: ["SKILL.md", "/tmp/outside.md"] }]
+      hostileDownloads = 0
+      const discovery = yield* Discovery.Service
+      const dirs = yield* discovery.pull(`http://localhost:${server.port}/hostile/`)
+      expect(dirs).toEqual([])
+      expect(hostileDownloads).toBe(0)
+    }),
+  )
+
+  it.live("rejects cross-origin file URLs without fetching files", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => rm(cacheDir, { recursive: true, force: true }))
+      hostileSkills = [{ name: "deploy", files: ["SKILL.md", "https://evil.example.test/outside.md"] }]
+      hostileDownloads = 0
+      const discovery = yield* Discovery.Service
+      const dirs = yield* discovery.pull(`http://localhost:${server.port}/hostile/`)
+      expect(dirs).toEqual([])
+      expect(hostileDownloads).toBe(0)
     }),
   )
 })

@@ -1,14 +1,58 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient, path } from "@opencode-ai/core/effect/app-node-platform"
-import { NodePath } from "@effect/platform-node"
 import { Effect, Layer, Path, Schema, Context } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
+import nodePath from "path"
 
 const skillConcurrency = 4
 const fileConcurrency = 8
+
+// ---------------------------------------------------------------------------
+// 远程 index 字段校验：防止 skill.name / files 路径穿越写出缓存目录
+// ---------------------------------------------------------------------------
+
+function isSafeSegment(value: string) {
+  return (
+    value.length > 0 &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !value.includes("\0")
+  )
+}
+
+function isSafeRelativePath(value: string) {
+  const segments = value.split("/")
+  return (
+    value.length > 0 &&
+    !value.includes("\\") &&
+    !value.includes("\0") &&
+    !value.includes("?") &&
+    !value.includes("#") &&
+    !URL.canParse(value) &&
+    !nodePath.posix.isAbsolute(value) &&
+    !nodePath.win32.isAbsolute(value) &&
+    segments.every((segment) => {
+      try {
+        const decoded = decodeURIComponent(segment)
+        return (
+          decoded.length > 0 &&
+          decoded !== "." &&
+          decoded !== ".." &&
+          !decoded.includes("/") &&
+          !decoded.includes("\\") &&
+          !decoded.includes("\0")
+        )
+      } catch {
+        return false
+      }
+    })
+  )
+}
 
 class IndexSkill extends Schema.Class<IndexSkill>("IndexSkill")({
   name: Schema.String,
@@ -48,8 +92,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient
 
     const pull = Effect.fn("Discovery.pull")(function* (url: string) {
       const base = url.endsWith("/") ? url : `${url}/`
-      const index = new URL("index.json", base).href
-      const host = base.slice(0, -1)
+      const source = new URL(base)
+      const index = new URL("index.json", source).href
 
       yield* Effect.logInfo("fetching index", { url: index })
 
@@ -64,19 +108,63 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient
 
       if (!data) return []
 
-      const missing = data.skills.filter((skill) => !skill.files.includes("SKILL.md"))
+      const entries = data.skills.flatMap((skill) => {
+        if (!isSafeSegment(skill.name)) {
+          return []
+        }
+        if (!skill.files.includes("SKILL.md")) {
+          return []
+        }
+
+        const root = nodePath.resolve(cache, skill.name)
+        if (!FSUtil.contains(cache, root) || root === cache) {
+          return []
+        }
+
+        const skillUrl = new URL(`${encodeURIComponent(skill.name)}/`, source)
+        const files = skill.files.map((file) => {
+          if (!isSafeRelativePath(file)) return undefined
+          let resource: URL
+          try {
+            resource = new URL(file, skillUrl)
+          } catch {
+            return undefined
+          }
+          if (resource.origin !== source.origin) return undefined
+
+          const destination = nodePath.resolve(root, file)
+          if (!FSUtil.contains(root, destination) || destination === root) return undefined
+          return {
+            url: resource.href,
+            destination,
+            file,
+          }
+        })
+        if (files.some((item) => item === undefined)) {
+          return []
+        }
+        return [
+          {
+            skill,
+            root,
+            files: files as { url: string; destination: string; file: string }[],
+          },
+        ]
+      })
+
+      const missing = data.skills.filter(
+        (skill) => isSafeSegment(skill.name) && !skill.files.includes("SKILL.md"),
+      )
       yield* Effect.forEach(
         missing,
         (skill) => Effect.logWarning("skill entry missing SKILL.md", { url: index, skill: skill.name }),
         { discard: true },
       )
-      const list = data.skills.filter((skill) => skill.files.includes("SKILL.md"))
 
       const dirs = yield* Effect.forEach(
-        list,
-        (skill) =>
+        entries,
+        ({ skill, root, files }) =>
           Effect.gen(function* () {
-            const root = path.join(cache, skill.name)
             const versionFile = path.join(root, ".opencode-version")
             const version = skill.version
             const current =
@@ -85,19 +173,18 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient
                 : yield* fs.readFileStringSafe(versionFile).pipe(Effect.catch(() => Effect.succeed(undefined)))
 
             if (version === undefined || current === version) {
-              yield* Effect.forEach(
-                skill.files,
-                (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file)),
-                { concurrency: fileConcurrency, discard: true },
-              )
+              yield* Effect.forEach(files, (file) => download(file.url, file.destination), {
+                concurrency: fileConcurrency,
+                discard: true,
+              })
             } else {
               const token = crypto.randomUUID()
               const staging = `${root}.tmp-${token}`
               const backup = `${root}.old-${token}`
               yield* Effect.gen(function* () {
                 const downloaded = yield* Effect.forEach(
-                  skill.files,
-                  (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(staging, file)),
+                  files,
+                  (file) => download(file.url, nodePath.resolve(staging, file.file)),
                   { concurrency: fileConcurrency },
                 )
                 if (!downloaded.every(Boolean)) return
