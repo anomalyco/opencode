@@ -1,8 +1,10 @@
-import { Show, createEffect, createMemo, createResource, untrack } from "solid-js"
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useSearchParams } from "@solidjs/router"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { NewSessionDesignView } from "@/components/session"
 import { PromptInput } from "@/components/prompt-input"
 import { StatusPopoverV2 } from "@/components/status-popover"
@@ -24,8 +26,17 @@ import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import { useTitlebarRightMount } from "@/components/titlebar"
+import { useCommand } from "@/context/command"
+import { useProviders } from "@/hooks/use-providers"
+import { useSettingsDialog } from "@/components/settings-dialog"
+import { Persist, persisted } from "@/utils/persist"
+import createPresence from "solid-presence"
+import { useLocal } from "@/context/local"
+import { createPromptModelSelection } from "@/pages/session/composer/prompt-model-selection"
 
 const workspaceBarEnabled = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
+const providerTipExitDuration = 250
 
 /**
  * The `/new-session` draft page. Unlike `session.tsx`, this only renders the prompt
@@ -40,10 +51,15 @@ export default function NewSessionPage() {
   const comments = useComments()
   const language = useLanguage()
   const settings = useSettings()
+  const command = useCommand()
+  const providers = useProviders(() => sdk().directory)
+  const openProviderSettings = useSettingsDialog("providers")
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
+  const local = useLocal()
+  const model = createPromptModelSelection({ agent: local.agent.current })
 
-  useComposerCommands()
+  useComposerCommands({ model })
 
   let inputRef: HTMLDivElement | undefined
 
@@ -51,12 +67,23 @@ export default function NewSessionPage() {
     sessionKey: route.sessionKey,
     sessionID: () => route.params.id,
     queryOptions: serverSync().queryOptions,
+    model,
   })
   const projectControls = createPromptProjectControls()
   const projectController = createPromptProjectController({
     controls: projectControls,
     onDone: () => inputRef?.focus(),
   })
+
+  command.register("new-session", () => [
+    {
+      id: "input.focus",
+      title: language.t("command.input.focus"),
+      category: language.t("command.category.view"),
+      keybind: "ctrl+l",
+      onSelect: () => inputRef?.focus(),
+    },
+  ])
 
   const [store, setStore] = createStore<{ worktree?: string }>({})
   const rightMount = useTitlebarRightMount()
@@ -174,9 +201,81 @@ export default function NewSessionPage() {
                 </Show>
               </div>
             </NewSessionDesignView>
+            <ProviderTip
+              ready={() => serverSync().child(sdk().directory)[0].provider_ready}
+              connected={() => providers.paid().length > 0}
+              openProviders={openProviderSettings}
+            />
           </div>
         </div>
       </div>
     </div>
+  )
+}
+
+function ProviderTip(props: { ready: () => boolean; connected: () => boolean; openProviders: () => void }) {
+  const language = useLanguage()
+  const [persistedState, setPersistedState, , persistedReady] = persisted(
+    Persist.global("new-session.provider-tip"),
+    createStore({ dismissedAt: 0 }),
+  )
+  const visible = createMemo(
+    () =>
+      props.ready() &&
+      persistedReady() &&
+      !props.connected() &&
+      Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,
+  )
+
+  function dismiss() {
+    setPersistedState("dismissedAt", Date.now())
+  }
+
+  const [ref, setRef] = createSignal<HTMLDivElement>()
+  const presence = createPresence({
+    show: () => visible(),
+    element: () => ref() ?? null,
+  })
+
+  return (
+    <Show when={presence.present()}>
+      <div class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-10">
+        <div
+          ref={setRef}
+          data-component="provider-tip"
+          data-visible={visible()}
+          class="group/provider-tip pointer-events-auto relative flex h-6 max-w-full items-center transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none"
+          classList={{
+            "data-[visible=false]:animate-out fade-out slide-out-to-bottom-4": true,
+          }}
+        >
+          <button
+            type="button"
+            class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+            onClick={props.openProviders}
+          >
+            <span class="truncate">{language.t("home.providerTip")}</span>
+            <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
+              <IconV2 name="chevron-down" size="small" class="-rotate-90" />
+            </span>
+          </button>
+          <TooltipV2
+            class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/provider-tip:delay-[250ms] group-hover/provider-tip:duration-150 group-hover/provider-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
+            placement="top"
+            openDelay={1000}
+            value={language.t("common.dismiss")}
+          >
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded-[4px] text-v2-icon-icon-muted transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none"
+              aria-label={language.t("common.dismiss")}
+              onClick={dismiss}
+            >
+              <IconV2 name="xmark-small" />
+            </button>
+          </TooltipV2>
+        </div>
+      </div>
+    </Show>
   )
 }
