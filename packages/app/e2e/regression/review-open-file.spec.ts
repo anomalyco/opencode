@@ -75,6 +75,10 @@ test("opens and searches project files inline", async ({ page }) => {
         JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
       )
       localStorage.setItem(
+        "opencode.global.dat:review-panel-v2",
+        JSON.stringify({ sidebarOpened: false, sidebarWidth: 240, expandMode: "collapse" }),
+      )
+      localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
       )
@@ -86,13 +90,16 @@ test("opens and searches project files inline", async ({ page }) => {
   await expectSessionTitle(page, title)
 
   const panel = page.locator("#review-panel")
+  const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
   const contextButton = page.getByRole("button", { name: "View context usage" })
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context" })).toHaveAttribute("data-selected", "")
   await panel.getByRole("button", { name: "Open file" }).click()
   await expect(panel.getByRole("tab", { name: "Open file" })).toHaveAttribute("data-selected", "")
+  await expect(sidebar).toBeVisible()
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context" })).toHaveAttribute("data-selected", "")
+  await expect(sidebar).toHaveCount(0)
   await panel.getByRole("button", { name: "Open file" }).click()
   const filter = panel.getByRole("combobox", { name: "Filter files" })
   await expect(filter).toBeFocused()
@@ -102,9 +109,11 @@ test("opens and searches project files inline", async ({ page }) => {
   await panel.getByRole("button", { name: "README.md" }).click()
   await expect(panel.getByRole("tab", { name: "README.md" })).toHaveAttribute("data-selected", "")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
+  await expect(sidebar).toHaveCount(0)
 
   await panel.getByRole("button", { name: "Open file" }).click()
   await expect(panel.getByRole("tab", { name: "README.md" })).toHaveCount(0)
+  await expect(sidebar).toBeVisible()
   await filter.fill("nested")
   const result = panel.getByRole("option", { name: /nested\.ts/ })
   await expect(result).toBeVisible()

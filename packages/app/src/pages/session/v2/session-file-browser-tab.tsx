@@ -46,6 +46,7 @@ export function SessionFileBrowserTab(props: {
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [filter, setFilter] = createSignal("")
   const [explicitHighlight, setExplicitHighlight] = createSignal<string>()
+  const sidebarOpened = () => props.placeholder || props.state.sidebarOpened()
   const query = createMemo(() => filter().trim())
   const search = createQuery(() => {
     const value = query()
@@ -98,15 +99,15 @@ export function SessionFileBrowserTab(props: {
         toolbar
         toolbarStart={
           <>
-            <SessionReviewV2SidebarToggle opened={props.state.sidebarOpened()} onToggle={props.state.toggleSidebar} />
-            <Show when={!props.state.sidebarOpened()}>
+            <SessionReviewV2SidebarToggle opened={sidebarOpened()} onToggle={props.state.toggleSidebar} />
+            <Show when={!sidebarOpened()}>
               <SessionFilePanelV2Title>{title()}</SessionFilePanelV2Title>
             </Show>
           </>
         }
         sidebar={
           <SessionReviewV2Sidebar
-            open={props.state.sidebarOpened()}
+            open={sidebarOpened()}
             title={<span class="truncate">{title()}</span>}
             filter={filter()}
             onFilterChange={setFilter}

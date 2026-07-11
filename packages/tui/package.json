@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/tui",
-  "version": "1.17.16",
+  "version": "1.17.18",
   "private": true,
   "type": "module",
   "license": "MIT",
