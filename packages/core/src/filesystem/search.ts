@@ -230,6 +230,13 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-const layer = Layer.unwrap(Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)))
+const layer = Layer.unwrap(
+  Effect.gen(function* () {
+    if (Flag.OPENCODE_DISABLE_FFF || !Fff.available()) return ripgrepLayer
+    const location = yield* Location.Service
+    // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
+    return location.vcs ? fffLayer : ripgrepLayer
+  }),
+)
 
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Location.node, Ripgrep.node] })
