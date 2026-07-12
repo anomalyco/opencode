@@ -29,6 +29,7 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 
 | Document                                                          | Status                     | Job                                                                          |
 | ----------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------- |
+| [Event stream](./event-stream-architecture.md)                    | Accepted and implemented   | Record why public events use one encoded feed with independent queues.       |
 | [Managed restart continuation](./session-restart-continuation.md) | Accepted and implemented   | Record why graceful managed-service restart uses private Session suspension. |
 | [Instruction sync](./instruction-sync-proposal.md)                | Accepted and implemented   | Record why instruction state is value deltas plus derived rendering.         |
 | [Provider policy](./provider-policy.md)                           | Proposed and unimplemented | Explore provider authorization independently from provider configuration.    |

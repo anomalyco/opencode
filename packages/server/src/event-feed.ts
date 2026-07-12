@@ -3,7 +3,6 @@ export * as EventFeed from "./event-feed"
 import { EventV2 } from "@opencode-ai/core/event"
 import { isOpenCodeEvent, OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
-import { Sse } from "effect/unstable/encoding"
 
 export const SubscriberCapacity = 4_096
 
@@ -29,12 +28,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/se
 const encode = Schema.encodeUnknownSync(OpenCodeEvent)
 
 export function frame(event: OpenCodeEvent) {
-  return Sse.encoder.write({
-    _tag: "Event",
-    event: "message",
-    id: undefined,
-    data: JSON.stringify(encode(event)),
-  })
+  return `data: ${JSON.stringify(encode(event))}\n\n`
 }
 
 export const make = Effect.fn("EventFeed.make")(function* (
@@ -42,6 +36,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
   options?: { readonly capacity?: number; readonly encode?: (event: OpenCodeEvent) => string },
 ) {
   const capacity = options?.capacity ?? SubscriberCapacity
+  const render = options?.encode ?? frame
   const subscribers = new Set<Queue.Queue<string, Error>>()
 
   const fail = (error: Error) =>
@@ -55,7 +50,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
     if (!isOpenCodeEvent(event)) return
     if (subscribers.size === 0) return
     const encoded = yield* Effect.try({
-      try: () => (options?.encode ?? frame)(event),
+      try: () => render(event),
       catch: (cause) => new EncodingError({ eventID: event.id, eventType: event.type, cause }),
     }).pipe(
       Effect.catch((error) =>

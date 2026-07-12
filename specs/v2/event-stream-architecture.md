@@ -225,15 +225,3 @@ Behavioral tests cover:
 - continued delivery to later subscribers after an encoding failure.
 
 Package typechecks and the existing Core event/event-logger suites protect the Core interface migration.
-
-## Future Measurements
-
-Before further transport work, measure the complete HTTP path with real generated clients:
-
-- 1, 10, and 50 connected clients;
-- dense session bursts;
-- small and large event payloads;
-- one stalled socket reader;
-- CPU, allocation rate, heap/RSS, publisher latency, observer time, queue occupancy, and reconnect timing.
-
-Only those measurements should motivate shared PubSub storage, shared UTF-8 bytes, byte budgets, drain timeouts, or a different capacity.
