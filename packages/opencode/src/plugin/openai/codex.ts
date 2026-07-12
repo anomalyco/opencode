@@ -6,14 +6,23 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
+import { isRecord } from "@/util/record"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const CODEX_COMPATIBILITY_VERSION = "0.144.0"
+const RESPONSES_LITE_MODELS = new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 const DISALLOWED_MODELS = new Set(["gpt-5.5-pro"])
+
+type ResponsesLiteRequest = Record<string, unknown> & {
+  input: unknown[]
+  tools?: unknown[]
+  instructions?: string
+}
 
 interface PkceCodes {
   verifier: string
@@ -263,6 +272,7 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPluginOptions = {}): Promise<Hooks> {
   const issuer = options.issuer ?? ISSUER
   const codexApiEndpoint = options.codexApiEndpoint ?? CODEX_API_ENDPOINT
+  const codexSessionIDs = new Map<string, string>()
   let websocketFetchInstalled = false
   const websocketFetches: Array<ReturnType<typeof OpenAIWebSocketPool.createWebSocketFetch>> = []
 
@@ -273,7 +283,13 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     async event(input) {
       if (input.event.type !== "session.deleted") return
-      for (const websocketFetch of websocketFetches) websocketFetch.remove(input.event.properties.info.id)
+      const sessionID = input.event.properties.info.id
+      const codexSessionID = codexSessionIDs.get(sessionID)
+      for (const websocketFetch of websocketFetches) {
+        websocketFetch.remove(sessionID)
+        if (codexSessionID) websocketFetch.remove(codexSessionID)
+      }
+      codexSessionIDs.delete(sessionID)
     },
     provider: {
       id: "openai",
@@ -410,6 +426,9 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
             const requestInit = {
               ...init,
+              body: parsed.pathname.endsWith("/responses")
+                ? prepareResponsesLiteRequest(init?.body, headers, codexSessionIDs)
+                : init?.body,
               headers,
             }
             if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)
@@ -553,4 +572,78 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       output.maxOutputTokens = undefined
     },
   }
+}
+
+function prepareResponsesLiteRequest(
+  body: BodyInit | null | undefined,
+  headers: Headers,
+  sessionIDs: Map<string, string>,
+) {
+  if (typeof body !== "string") return body
+  const request = parseResponsesLiteRequest(body)
+  if (!request) return body
+  const sourceSessionID = requireSessionID(headers)
+  const sessionID = sessionIDs.get(sourceSessionID) ?? Bun.randomUUIDv7()
+  sessionIDs.set(sourceSessionID, sessionID)
+
+  stripImageDetail(request.input)
+  request.input = [
+    { type: "additional_tools", role: "developer", tools: request.tools ?? [] },
+    ...(request.instructions
+      ? [
+          {
+            type: "message",
+            role: "developer",
+            content: [{ type: "input_text", text: request.instructions }],
+          },
+        ]
+      : []),
+    ...request.input,
+  ]
+  delete request.tools
+  delete request.instructions
+  request.tool_choice = "auto"
+  request.parallel_tool_calls = false
+  request.prompt_cache_key = sessionID
+  request.reasoning = {
+    ...(isRecord(request.reasoning) ? request.reasoning : {}),
+    context: "all_turns",
+  }
+
+  headers.set("session-id", sessionID)
+  headers.set("x-session-affinity", sessionID)
+  headers.set("version", CODEX_COMPATIBILITY_VERSION)
+  headers.set(OpenAIWebSocketPool.RESPONSES_LITE_HEADER, "true")
+  headers.delete("content-length")
+  return JSON.stringify(request)
+}
+
+function parseResponsesLiteRequest(body: string): ResponsesLiteRequest | undefined {
+  const request: unknown = JSON.parse(body)
+  if (!isRecord(request)) return
+  if (typeof request.model !== "string" || !RESPONSES_LITE_MODELS.has(request.model)) return
+  if (!Array.isArray(request.input)) throw new Error("Responses Lite requires an input array")
+  if (request.tools !== undefined && !Array.isArray(request.tools)) {
+    throw new Error("Responses Lite requires a tools array")
+  }
+  if (request.instructions !== undefined && typeof request.instructions !== "string") {
+    throw new Error("Responses Lite requires string instructions")
+  }
+  return request as ResponsesLiteRequest
+}
+
+function requireSessionID(headers: Headers) {
+  const sessionID = headers.get("session-id")
+  if (!sessionID) throw new Error("Responses Lite requires a session-id header")
+  return sessionID
+}
+
+function stripImageDetail(value: unknown) {
+  if (Array.isArray(value)) {
+    value.forEach(stripImageDetail)
+    return
+  }
+  if (!isRecord(value)) return
+  if (value.type === "input_image") delete value.detail
+  Object.values(value).forEach(stripImageDetail)
 }
