@@ -178,7 +178,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     ? (yield* InstanceState.context).project.id
     : undefined
 
-  return {
+  const request = {
     system,
     messages,
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
@@ -202,6 +202,34 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       ...input.model.headers,
       ...headers,
     },
+  }
+
+  const transformed = yield* input.plugin.trigger(
+    "model.request.before",
+    {
+      sessionID: input.sessionID,
+      agent: input.agent.name,
+      model: input.model,
+      provider: input.provider,
+      message: input.user,
+    },
+    {
+      system: request.system,
+      messages: request.messages,
+      tools: request.tools,
+      params: request.params,
+      headers: request.headers,
+    },
+  )
+
+  return {
+    ...request,
+    system: transformed.system,
+    messages: transformed.messages as Prepared["messages"],
+    tools: transformed.tools as Prepared["tools"],
+    params: transformed.params,
+    messageTransformOptions: transformed.params.options,
+    headers: transformed.headers,
   }
 })
 

@@ -335,6 +335,25 @@ Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://openco
 
 ---
 
+### Model request
+
+Use `model.request.before` to modify the provider-bound request after OpenCode resolves messages, tools, parameters, and headers.
+Use `tool.execute.before` and `tool.execute.after` for tool arguments and tool results.
+
+```ts title=".opencode/plugins/redact.ts"
+export const RedactPlugin = async () => ({
+  "model.request.before": async (_input, output) => {
+    output.messages = output.messages.map((message) => {
+      if (typeof message !== "object" || !message || !("content" in message)) return message
+      if (typeof message.content !== "string") return message
+      return { ...message, content: message.content.replaceAll("secret@example.com", "[redacted]") }
+    })
+  },
+})
+```
+
+---
+
 ### Compaction hooks
 
 Customize the context included when a session is compacted:
