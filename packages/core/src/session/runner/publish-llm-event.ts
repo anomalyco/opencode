@@ -36,6 +36,8 @@ const tokens = (usage: Usage | undefined) => {
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
+const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
 const message = (value: unknown) => {
   if (typeof value === "string") return value
   try {
@@ -53,7 +55,25 @@ const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): 
   if (result.type === "error") return { error: { type: "tool.execution", message: message(result.value) } }
   const settled = value ?? ToolOutput.fromResultValue(result)
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
-  return { structured: record(settled.structured), content: settled.content }
+  const structured = record(settled.structured)
+  const encoded = structured.content
+  const mime = structured.mime
+  const duplicate =
+    structured.encoding === "base64" &&
+    typeof encoded === "string" &&
+    encoded.length > 0 &&
+    typeof mime === "string" &&
+    imageMimes.has(mime) &&
+    Buffer.from(encoded, "base64").toString("base64") === encoded &&
+    settled.content.some(
+      (item) => item.type === "file" && item.mime === mime && item.uri === `data:${mime};base64,${encoded}`,
+    )
+  return {
+    structured: duplicate
+      ? Object.fromEntries(Object.entries(structured).filter((entry) => entry[0] !== "content"))
+      : structured,
+    content: settled.content,
+  }
 }
 
 /** Persist one step without executing tools or starting a continuation step. */

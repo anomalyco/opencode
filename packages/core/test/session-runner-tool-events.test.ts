@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLMEvent } from "@opencode-ai/ai"
+import { LLMEvent, type ToolOutput, type ToolResultValue } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import { EventV2 } from "@opencode-ai/core/event"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -43,51 +43,186 @@ const capture = (providerMetadataKey = "anthropic") => {
   }
 }
 
-const call = LLMEvent.toolCall({ id: "call-image", name: "read", input: { path: "pixel.png" } })
-const result = LLMEvent.toolResult({
-  id: "call-image",
-  name: "read",
-  result: {
-    type: "content",
-    value: [
-      { type: "text", text: "Image read successfully" },
-      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
-    ],
-  },
-  output: {
-    structured: { type: "media", mime: "image/png" },
+const imageOutput = () =>
+  ({
+    structured: {
+      uri: "file:///pixel.png",
+      name: "pixel.png",
+      content: base64,
+      encoding: "base64",
+      mime: "image/png",
+    },
     content: [
       { type: "text", text: "Image read successfully" },
       { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
     ],
-  },
-})
+  }) satisfies ToolOutput
 
-test("local tool success serializes media base64 once and reconstructs from structured content", async () => {
+const fileOutput = (structured: Record<string, unknown>, mime: string, uri: string) =>
+  ({ structured, content: [{ type: "file", mime, uri }] }) satisfies ToolOutput
+
+const call = LLMEvent.toolCall({ id: "call-image", name: "read", input: { path: "pixel.png" } })
+
+const publishSuccess = async (input: {
+  readonly output: ToolOutput
+  readonly result?: ToolResultValue
+  readonly providerExecuted?: boolean
+}) => {
   const { published, publisher } = capture()
-  await Effect.runPromise(publisher.publish(call))
-  await Effect.runPromise(publisher.publish(result))
-
+  await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: input.providerExecuted })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.toolResult({
+        id: call.id,
+        name: call.name,
+        result: input.result ?? { type: "content", value: input.output.content },
+        output: input.output,
+        providerExecuted: input.providerExecuted,
+      }),
+    ),
+  )
   const success = published.find((event) => event.type === "session.tool.success.1")
-  expect(success).toBeDefined()
+  if (!success) throw new Error("Expected session.tool.success.1")
+  return success
+}
+
+test("local tool success serializes supported image base64 once", async () => {
+  const output = imageOutput()
+  const source = structuredClone(output)
+  const success = await publishSuccess({ output })
   const serialized = JSON.stringify(success)
   expect(serialized.split(base64)).toHaveLength(2)
-  expect(success?.data).not.toHaveProperty("result")
+  expect(success.data).not.toHaveProperty("result")
+  expect(success.data).toMatchObject({
+    structured: {
+      uri: "file:///pixel.png",
+      name: "pixel.png",
+      encoding: "base64",
+      mime: "image/png",
+    },
+    content: output.content,
+  })
+  expect(success.data).not.toHaveProperty("structured.content")
+  expect(output).toEqual(source)
+})
 
-  expect(success?.data).toMatchObject({
+test("supported image projection preserves multiple model-visible files", async () => {
+  const output = imageOutput()
+  const multiple = {
+    structured: output.structured,
     content: [
-      { type: "text", text: "Image read successfully" },
-      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" },
+      { type: "text" as const, text: "Image read successfully" },
+      {
+        type: "file" as const,
+        uri: "data:image/jpeg;base64,ZGlmZmVyZW50",
+        mime: "image/jpeg",
+        name: "other.jpg",
+      },
+      { type: "file" as const, uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
     ],
+  } satisfies ToolOutput
+  const source = structuredClone(multiple)
+  const success = await publishSuccess({ output: multiple })
+
+  expect(JSON.stringify(success).split(base64)).toHaveLength(2)
+  expect(success.data).toMatchObject({ content: source.content })
+  expect(success.data).not.toHaveProperty("structured.content")
+  expect(multiple).toEqual(source)
+})
+
+const preserved = [
+  {
+    name: "MIME mismatch",
+    output: fileOutput(
+      { encoding: "base64", mime: "image/png", content: base64 },
+      "image/jpeg",
+      `data:image/png;base64,${base64}`,
+    ),
+  },
+  {
+    name: "application/json",
+    output: fileOutput(
+      { encoding: "base64", mime: "application/json", content: base64 },
+      "application/json",
+      `data:application/json;base64,${base64}`,
+    ),
+  },
+  {
+    name: "non-media output",
+    output: fileOutput(
+      { kind: "report", mime: "image/png", content: base64 },
+      "image/png",
+      `data:image/png;base64,${base64}`,
+    ),
+  },
+  {
+    name: "empty base64",
+    output: fileOutput({ encoding: "base64", mime: "image/png", content: "" }, "image/png", "data:image/png;base64,"),
+  },
+  {
+    name: "invalid base64",
+    output: fileOutput(
+      { encoding: "base64", mime: "image/png", content: "%%%%" },
+      "image/png",
+      "data:image/png;base64,%%%%",
+    ),
+  },
+  {
+    name: "non-canonical base64",
+    output: fileOutput(
+      { encoding: "base64", mime: "image/png", content: "Zh==" },
+      "image/png",
+      "data:image/png;base64,Zh==",
+    ),
+  },
+  {
+    name: "differing URI",
+    output: fileOutput(
+      { encoding: "base64", mime: "image/png", content: base64 },
+      "image/png",
+      "data:image/png;base64,ZGlmZmVyZW50",
+    ),
+  },
+  {
+    name: "unsupported image media",
+    output: fileOutput(
+      { encoding: "base64", mime: "image/svg+xml", content: base64 },
+      "image/svg+xml",
+      `data:image/svg+xml;base64,${base64}`,
+    ),
+  },
+] as const
+
+preserved.forEach((item) => {
+  test(`local tool success preserves ${item.name}`, async () => {
+    const source = structuredClone(item.output)
+    const success = await publishSuccess({ output: item.output })
+
+    expect(success.data).toMatchObject(source)
+    expect(item.output).toEqual(source)
   })
 })
 
-test("provider-executed success retains its raw provider result", async () => {
-  const { published, publisher } = capture()
-  await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
-  await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
-  const success = published.find((event) => event.type === "session.tool.success.1")
-  expect(success?.data).toHaveProperty("result")
+test("provider-executed success retains raw result and both compatibility occurrences", async () => {
+  const output = imageOutput()
+  const source = structuredClone(output)
+  const result = { type: "content" as const, value: output.content }
+  const success = await publishSuccess({ output, result, providerExecuted: true })
+
+  expect(JSON.stringify(success).split(base64)).toHaveLength(3)
+  expect(success.data).toMatchObject({
+    structured: {
+      uri: "file:///pixel.png",
+      name: "pixel.png",
+      encoding: "base64",
+      mime: "image/png",
+    },
+    content: output.content,
+    result,
+    executed: true,
+  })
+  expect(success.data).not.toHaveProperty("structured.content")
+  expect(output).toEqual(source)
 })
 
 test("provider metadata is flattened using the route key", async () => {
