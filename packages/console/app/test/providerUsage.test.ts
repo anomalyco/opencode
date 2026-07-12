@@ -65,4 +65,20 @@ describe("provider usage extraction", () => {
       output_tokens: 7,
     })
   })
+
+  test("parses OpenAI stream cache write usage", () => {
+    const usageParser = providers.openai.createUsageParser()
+    usageParser.parse(
+      'event: response.completed\ndata: {"response":{"usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":4,"cache_write_tokens":3},"output_tokens":2}}}',
+    )
+
+    expect(providers.openai.normalizeUsage(usageParser.retrieve())).toEqual({
+      inputTokens: 6,
+      outputTokens: 2,
+      reasoningTokens: undefined,
+      cacheReadTokens: 4,
+      cacheWrite5mTokens: 3,
+      cacheWrite1hTokens: undefined,
+    })
+  })
 })

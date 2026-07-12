@@ -255,8 +255,10 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 flex overflow-hidden bg-background-base"
+        class="relative min-w-0 flex overflow-hidden"
         classList={{
+          "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
+          "bg-background-base": !settings.general.newLayoutDesigns(),
           "h-full shrink-0": !props.stacked,
           "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
@@ -275,8 +277,20 @@ export function SessionSidePanel(props: {
             }}
           >
             <Show when={reviewOpen()}>
-              <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-background-base">
-                <div class="size-full min-w-0 h-full bg-background-base">
+              <div
+                class="relative min-w-0 h-full flex-1 overflow-hidden"
+                classList={{
+                  "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
+                  "bg-background-base": !settings.general.newLayoutDesigns(),
+                }}
+              >
+                <div
+                  class="size-full min-w-0 h-full"
+                  classList={{
+                    "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
+                    "bg-background-base": !settings.general.newLayoutDesigns(),
+                  }}
+                >
                   <DragDropProvider
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
@@ -379,7 +393,13 @@ export function SessionSidePanel(props: {
                               )}
                             </For>
                           </SortableProvider>
-                          <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
+                          <div
+                            class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3"
+                            classList={{
+                              "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
+                              "bg-background-stronger": !settings.general.newLayoutDesigns(),
+                            }}
+                          >
                             <TooltipKeybind
                               title={language.t("command.file.open")}
                               keybind={command.keybind("file.open")}
