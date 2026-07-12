@@ -10,7 +10,7 @@ import type {
   TuiAttentionSoundPack,
   TuiAttentionSoundPackInfo,
 } from "@opencode-ai/plugin/tui"
-import { AttentionSoundName, type TuiConfig } from "./config"
+import { AttentionSoundName, type TuiConfig } from "./config/v1"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"

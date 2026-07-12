@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent } from "@opencode-ai/client"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { EventV2 } from "@opencode-ai/core/event"
 import { onMount } from "solid-js"
@@ -111,7 +111,7 @@ test("refreshes resources into reactive getters", async () => {
     await data.location.agent.refresh()
 
     expect(data.session.get("ses_test")?.title).toBe("Test session")
-    expect(data.session.message.ids("ses_test")).toEqual(["msg_first", "msg_second"])
+    expect(data.session.message.list("ses_test").map((message) => message.id)).toEqual(["msg_first", "msg_second"])
     expect(data.session.message.get("ses_test", "msg_second")?.id).toBe("msg_second")
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("msg_second")
@@ -330,9 +330,9 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       durable: durable(sessionID, 6),
       data: { sessionID, to: "msg_revert_later" },
     })
-    await wait(() => data.session.message.ids(sessionID).length === 1)
+    await wait(() => data.session.message.list(sessionID).length === 1)
     expect(data.session.get(sessionID)?.cost).toBe(0.75)
-    expect(data.session.message.ids(sessionID)).toEqual(["msg_revert_boundary"])
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_revert_boundary"])
     expect(data.session.get(sessionID)?.revert).toBeUndefined()
     expect(data.session.get(sessionID)?.tokens).toEqual(tokens)
   } finally {
@@ -688,7 +688,7 @@ test("removes committed revert messages from local state", async () => {
         data: { sessionID, inputID, input: { type: "user", data: { text: inputID }, delivery: "steer" } },
       })
     }
-    await wait(() => data.session.message.ids(sessionID).length === 3)
+    await wait(() => data.session.message.list(sessionID).length === 3)
 
     emitEvent(events, {
       id: EventV2.ID.create(),
@@ -698,8 +698,8 @@ test("removes committed revert messages from local state", async () => {
       data: { sessionID, to: "msg_002" },
     })
 
-    await wait(() => data.session.message.ids(sessionID).length === 1)
-    expect(data.session.message.ids(sessionID)).toEqual(["msg_001"])
+    await wait(() => data.session.message.list(sessionID).length === 1)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
     expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
     expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
   } finally {
@@ -1048,6 +1048,14 @@ test("tracks session status from active sessions and execution events", async ()
     expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
 
     emitEvent(events, {
+      id: "evt_manual_compaction_admitted",
+      created: 0,
+      type: "session.compaction.admitted",
+      durable: durable("session-manual", 1),
+      data: { sessionID: "session-manual", inputID: "message-compaction" },
+    })
+    await wait(() => data.session.compaction.list("session-manual").includes("message-compaction"))
+    emitEvent(events, {
       id: "evt_manual_compaction_started",
       created: 1,
       type: "session.compaction.started",
@@ -1064,6 +1072,10 @@ test("tracks session status from active sessions and execution events", async ()
       const message = data.session.message.get("session-manual", "message-compaction")
       return message?.type === "compaction" && message.status === "running" && message.summary === "Streamed summary"
     })
+    expect(data.session.compaction.list("session-manual")).toEqual([])
+    const compactionRow = manualRows.find(
+      (row) => row.type === "message" && row.messageID === "message-compaction",
+    )
     emitEvent(events, {
       id: "evt_manual_compaction_ended",
       created: 3,
@@ -1078,6 +1090,9 @@ test("tracks session status from active sessions and execution events", async ()
     expect(manualRows.filter((row) => row.type === "message")).toEqual([
       { type: "message", messageID: "message-compaction" },
     ])
+    expect(manualRows.find((row) => row.type === "message" && row.messageID === "message-compaction")).toBe(
+      compactionRow,
+    )
 
     emitEvent(events, {
       id: "evt_compaction_started",
@@ -1102,6 +1117,9 @@ test("tracks session status from active sessions and execution events", async ()
       const message = data.session.message.get("session-live", "msg_compaction_started")
       return message?.type === "compaction" && message.status === "running" && message.summary === "Live summary"
     })
+    const autoCompactionRow = rows.find(
+      (row) => row.type === "message" && row.messageID === "msg_compaction_started",
+    )
 
     emitEvent(events, {
       id: "evt_compaction_ended",
@@ -1119,6 +1137,102 @@ test("tracks session status from active sessions and execution events", async ()
       status: "completed",
       summary: "Live summary",
     })
+    expect(rows.find((row) => row.type === "message" && row.messageID === "msg_compaction_started")).toBe(
+      autoCompactionRow,
+    )
+    expect(rows.some((row) => row.type === "message" && row.messageID === "msg_compaction_ended")).toBeFalse()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("restores queued compaction from durable pending input", async () => {
+  const events = createEventStream()
+  const sessionID = "session-compaction-queued"
+  let pending = [
+    {
+      admittedSeq: 3,
+      id: "message-compaction-queued",
+      sessionID,
+      timeCreated: 1,
+      type: "compaction" as const,
+    },
+    {
+      admittedSeq: 4,
+      id: "message-compaction-later",
+      sessionID,
+      timeCreated: 2,
+      type: "compaction" as const,
+    },
+  ]
+  const calls = createFetch((url) => {
+    if (url.pathname !== `/api/session/${sessionID}/pending`) return
+    return json({ data: pending })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let rows!: ReturnType<typeof createSessionRows>
+
+  function Probe() {
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.session.compaction.list(sessionID).length === 2)
+    expect(data.session.compaction.list(sessionID)).toEqual([
+      "message-compaction-queued",
+      "message-compaction-later",
+    ])
+    await wait(() => rows.filter((row) => row.type === "compaction-queued").length === 2)
+    expect(rows.filter((row) => row.type === "compaction-queued")).toEqual([
+      { type: "compaction-queued", inputID: "message-compaction-queued" },
+      { type: "compaction-queued", inputID: "message-compaction-later" },
+    ])
+
+    emitEvent(events, {
+      id: "evt_compaction_started",
+      created: 2,
+      type: "session.compaction.started",
+      durable: durable(sessionID, 4),
+      data: {
+        sessionID,
+        reason: "manual",
+        recent: "",
+        inputID: "message-compaction-queued",
+      },
+    })
+    await wait(() => data.session.compaction.list(sessionID).length === 1)
+    expect(data.session.compaction.list(sessionID)).toEqual(["message-compaction-later"])
+
+    emitEvent(events, {
+      id: "evt_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      durable: durable(sessionID, 5),
+      data: { sessionID, reason: "manual", text: "Summary", recent: "" },
+    })
+    expect(data.session.compaction.list(sessionID)).toEqual(["message-compaction-later"])
+
+    pending = []
+    emitEvent(events, {
+      id: "evt_reconnected",
+      type: "server.connected",
+      data: {},
+    })
+    await wait(() => data.session.compaction.list(sessionID).length === 0)
   } finally {
     app.renderer.destroy()
   }
@@ -1186,6 +1300,70 @@ test("refreshes integrations after integration updates", async () => {
     await wait(() => data.location.integration.list()?.length === 1)
     await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("refreshes MCP resources after catalog updates", async () => {
+  const events = createEventStream()
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/mcp/resource") return
+    requests++
+    return json({
+      location: { directory, project: { id: "proj_test", directory } },
+      data: {
+        resources:
+          requests === 1
+            ? []
+            : [{ server: "docs", name: "API reference", uri: "https://example.com/api", description: "API docs" }],
+        templates: [],
+      },
+    })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    data = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider client={createClient(calls.fetch)} api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await wait(() => data.location.mcp.resource.list() !== undefined)
+    expect(data.location.mcp.resource.list()).toEqual([])
+
+    emitEvent(events, {
+      id: "evt_mcp_resources",
+      created: 0,
+      type: "mcp.resources.changed",
+      data: { server: "docs" },
+    })
+    await wait(() => data.location.mcp.resource.list()?.length === 1)
+    expect(data.location.mcp.resource.list()?.[0]).toEqual({
+      server: "docs",
+      name: "API reference",
+      uri: "https://example.com/api",
+      description: "API docs",
+    })
   } finally {
     app.renderer.destroy()
   }
@@ -2061,6 +2239,17 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     const admitted = sync.session.message.list(sessionID)?.[0]
     expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello" })
     expect(admitted?.metadata).toBeUndefined()
+    expect(sync.session.pending.list(sessionID)).toEqual([
+      {
+        id: messageID,
+        sessionID,
+        admittedSeq: 0,
+        timeCreated: 0,
+        type: "user",
+        data: { text: "hello" },
+        delivery: "steer",
+      },
+    ])
     expect(sync.session.input.list(sessionID)).toEqual([messageID])
 
     await sync.session.message.refresh(sessionID)
@@ -2085,9 +2274,10 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     if (message?.type !== "user") return
     expect(message).toMatchObject({ id: messageID, text: "hello" })
     expect(message.metadata).toBeUndefined()
+    expect(sync.session.pending.list(sessionID)).toEqual([])
     expect(sync.session.input.list(sessionID)).toEqual([])
-    expect(sync.session.message.ids(sessionID)).toEqual([messageID])
-    expect(sync.session.message.ids("missing")).toEqual([])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+    expect(sync.session.message.list("missing")).toEqual([])
     expect(sync.session.message.get(sessionID, messageID)).toBe(message)
     expect(sync.session.message.get(sessionID, "missing")).toBeUndefined()
     expect(received).toHaveLength(3)

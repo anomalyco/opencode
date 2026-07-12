@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
-import type { Resolved } from "@opencode-ai/tui/config"
+import type { Resolved } from "@opencode-ai/tui/config/v1"
 import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@opencode-ai/cli/mini/runtime.boot"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 

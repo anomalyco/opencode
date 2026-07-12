@@ -14,8 +14,8 @@ import {
 } from "@opentui/keymap/extras"
 import { KeymapProvider, useKeymap, useKeymapSelector, useBindings } from "@opentui/keymap/solid"
 import { createMemo, type Accessor } from "solid-js"
-import { useTuiConfig } from "./config"
-import { TuiKeybind } from "./config/keybind"
+import { useTuiConfig } from "./config/v1"
+import { TuiKeybind } from "./config/v1/keybind"
 
 export const LEADER_TOKEN = "leader"
 export const OPENCODE_BASE_MODE = "base"

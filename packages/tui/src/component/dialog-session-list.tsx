@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import path from "path"
-import type { SessionInfo } from "@opencode-ai/sdk/v2"
+import type { SessionInfo } from "@opencode-ai/client"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"

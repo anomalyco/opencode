@@ -9,20 +9,11 @@ export type ExportFormat = "markdown" | "json"
 
 export type DialogExportOptionsProps = {
   defaultThinking: boolean
-  defaultToolDetails: boolean
-  defaultAssistantMetadata: boolean
-  onConfirm?: (options: {
-    action: "copy" | "export"
-    format: ExportFormat
-    debug: boolean
-    thinking: boolean
-    toolDetails: boolean
-    assistantMetadata: boolean
-  }) => void
+  onConfirm?: (options: { action: "copy" | "export"; format: ExportFormat; debug: boolean; thinking: boolean }) => void
   onCancel?: () => void
 }
 
-type Active = ExportFormat | "debug" | "thinking" | "toolDetails" | "assistantMetadata" | "copy" | "export"
+type Active = ExportFormat | "debug" | "thinking" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
@@ -31,8 +22,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     format: "markdown" as ExportFormat,
     debug: false,
     thinking: props.defaultThinking,
-    toolDetails: props.defaultToolDetails,
-    assistantMetadata: props.defaultAssistantMetadata,
     active: "markdown" as Active,
   })
 
@@ -42,8 +31,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       format: store.format,
       debug: store.debug,
       thinking: store.thinking,
-      toolDetails: store.toolDetails,
-      assistantMetadata: store.assistantMetadata,
     })
 
   const activate = () => {
@@ -53,8 +40,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     }
     if (store.active === "debug") setStore("debug", !store.debug)
     if (store.active === "thinking") setStore("thinking", !store.thinking)
-    if (store.active === "toolDetails") setStore("toolDetails", !store.toolDetails)
-    if (store.active === "assistantMetadata") setStore("assistantMetadata", !store.assistantMetadata)
     if (store.active === "copy" || store.active === "export") confirm(store.active)
   }
 
@@ -67,7 +52,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         cmd: () => {
           const order: Active[] =
             store.format === "markdown"
-              ? ["markdown", "json", "thinking", "toolDetails", "assistantMetadata", "copy", "export"]
+              ? ["markdown", "json", "thinking", "copy", "export"]
               : ["markdown", "json", "debug", "copy", "export"]
           setStore("active", order[(order.indexOf(store.active) + 1) % order.length])
         },
@@ -84,11 +69,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   const selectFormat = (format: ExportFormat) => {
     setStore("format", format)
     setStore("active", format)
-  }
-
-  const toggle = (option: "thinking" | "toolDetails" | "assistantMetadata") => {
-    setStore("active", option)
-    setStore(option, !store[option])
   }
 
   return (
@@ -121,30 +101,19 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         </box>
       </box>
       <Show when={store.format === "markdown"}>
-        <box flexDirection="column">
-          <For
-            each={
-              [
-                ["thinking", "Include thinking"],
-                ["toolDetails", "Include tool details"],
-                ["assistantMetadata", "Include assistant metadata"],
-              ] as const
-            }
-          >
-            {(item) => (
-              <box
-                flexDirection="row"
-                gap={1}
-                backgroundColor={store.active === item[0] ? theme.backgroundElement : undefined}
-                onMouseUp={() => toggle(item[0])}
-              >
-                <text fg={store.active === item[0] ? theme.primary : theme.textMuted}>
-                  {store[item[0]] ? "[x]" : "[ ]"}
-                </text>
-                <text fg={store.active === item[0] ? theme.primary : theme.text}>{item[1]}</text>
-              </box>
-            )}
-          </For>
+        <box
+          flexDirection="row"
+          gap={1}
+          backgroundColor={store.active === "thinking" ? theme.backgroundElement : undefined}
+          onMouseUp={() => {
+            setStore("active", "thinking")
+            setStore("thinking", !store.thinking)
+          }}
+        >
+          <text fg={store.active === "thinking" ? theme.primary : theme.textMuted}>
+            {store.thinking ? "[x]" : "[ ]"}
+          </text>
+          <text fg={store.active === "thinking" ? theme.primary : theme.text}>Include thinking</text>
         </box>
       </Show>
       <Show when={store.format === "json"}>
@@ -170,12 +139,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         >
           <text fg={theme.text}>Copy</text>
         </box>
-        <box
-          paddingLeft={4}
-          paddingRight={4}
-          backgroundColor={theme.primary}
-          onMouseUp={() => confirm("export")}
-        >
+        <box paddingLeft={4} paddingRight={4} backgroundColor={theme.primary} onMouseUp={() => confirm("export")}>
           <text fg={theme.selectedListItemText}>Export</text>
         </box>
       </box>
@@ -183,26 +147,17 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   )
 }
 
-DialogExportOptions.show = (
-  dialog: DialogContext,
-  defaultThinking: boolean,
-  defaultToolDetails: boolean,
-  defaultAssistantMetadata: boolean,
-) => {
+DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => {
   return new Promise<{
     action: "copy" | "export"
     format: ExportFormat
     debug: boolean
     thinking: boolean
-    toolDetails: boolean
-    assistantMetadata: boolean
   } | null>((resolve) => {
     dialog.replace(
       () => (
         <DialogExportOptions
           defaultThinking={defaultThinking}
-          defaultToolDetails={defaultToolDetails}
-          defaultAssistantMetadata={defaultAssistantMetadata}
           onConfirm={(options) => resolve(options)}
           onCancel={() => resolve(null)}
         />

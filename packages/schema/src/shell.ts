@@ -23,8 +23,8 @@ export const Status = Schema.Literals(["running", "exited", "timeout", "killed"]
 export type Status = typeof Status.Type
 
 export const Time = Schema.Struct({
-  started: Schema.Number,
-  completed: optional(Schema.Number),
+  started: Schema.Finite,
+  completed: optional(Schema.Finite),
 })
 export interface Time extends Schema.Schema.Type<typeof Time> {}
 
@@ -42,15 +42,15 @@ export const Info = Schema.Struct({
   // Absolute path of the file capturing combined stdout/stderr. Page through it via `output`.
   file: Schema.String,
   pid: optional(NonNegativeInt),
-  exit: optional(Schema.Number),
+  exit: optional(Schema.Finite),
   // Always present; defaults to an empty object when the creator supplies no metadata.
   metadata: Metadata,
   time: Time,
-}).annotate({ identifier: "Shell" })
+}).annotate({ identifier: "Shell.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 const Created = ephemeral({ type: "shell.created", schema: { info: Info } })
-const Exited = ephemeral({ type: "shell.exited", schema: { id: ID, exit: optional(Schema.Number), status: Status } })
+const Exited = ephemeral({ type: "shell.exited", schema: { id: ID, exit: optional(Schema.Finite), status: Status } })
 const Deleted = ephemeral({ type: "shell.deleted", schema: { id: ID } })
 export const Event = { Created, Exited, Deleted, Definitions: inventory(Created, Exited, Deleted) }
 

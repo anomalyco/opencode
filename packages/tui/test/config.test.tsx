@@ -11,7 +11,7 @@ import {
   TuiConfigProvider,
   type Info as TuiConfigInfo,
   useTuiConfig,
-} from "../src/config"
+} from "../src/config/v1"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 const decodePlugin = Schema.decodeUnknownSync(PluginSpec)

@@ -5,7 +5,7 @@ import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
 import { useData } from "../context/data"
-import type { LocationRef } from "@opencode-ai/sdk/v2"
+import type { LocationRef } from "@opencode-ai/client"
 
 export type DialogSkillProps = {
   location?: LocationRef

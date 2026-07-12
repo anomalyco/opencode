@@ -1,4 +1,4 @@
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent } from "@opencode-ai/client"
 import { useSDK } from "./sdk"
 
 type EventMetadata = {

@@ -476,18 +476,16 @@ export interface IntegrationApi<E = never> {
 type Endpoint11_0Request = Parameters<RawClient["server.mcp"]["mcp.list"]>[0]
 export type Endpoint11_0Input = { readonly location?: Endpoint11_0Request["query"]["location"] }
 export type Endpoint11_0Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.list"]>>
-export type ServerMcpListOperation<E = never> = (input?: Endpoint11_0Input) => Effect.Effect<Endpoint11_0Output, E>
+export type McpListOperation<E = never> = (input?: Endpoint11_0Input) => Effect.Effect<Endpoint11_0Output, E>
 
 type Endpoint11_1Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
 export type Endpoint11_1Input = { readonly location?: Endpoint11_1Request["query"]["location"] }
 export type Endpoint11_1Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.resource.catalog"]>>
-export type ServerMcpResourceCatalogOperation<E = never> = (
-  input?: Endpoint11_1Input,
-) => Effect.Effect<Endpoint11_1Output, E>
+export type McpResourceCatalogOperation<E = never> = (input?: Endpoint11_1Input) => Effect.Effect<Endpoint11_1Output, E>
 
-export interface ServerMcpApi<E = never> {
-  readonly list: ServerMcpListOperation<E>
-  readonly resource: { readonly catalog: ServerMcpResourceCatalogOperation<E> }
+export interface McpApi<E = never> {
+  readonly list: McpListOperation<E>
+  readonly resource: { readonly catalog: McpResourceCatalogOperation<E> }
 }
 
 type Endpoint12_0Request = Parameters<RawClient["server.credential"]["credential.update"]>[0]
@@ -955,7 +953,7 @@ export interface AppApi<E = never> {
   readonly generate: GenerateApi<E>
   readonly provider: ProviderApi<E>
   readonly integration: IntegrationApi<E>
-  readonly "server.mcp": ServerMcpApi<E>
+  readonly mcp: McpApi<E>
   readonly credential: CredentialApi<E>
   readonly project: ProjectApi<E>
   readonly form: FormApi<E>

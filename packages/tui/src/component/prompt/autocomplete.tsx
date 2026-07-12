@@ -8,11 +8,10 @@ import { createStore } from "solid-js/store"
 import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
-import { useSync } from "../../context/sync"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
-import { useTuiConfig } from "../../config"
+import { useTuiConfig } from "../../config/v1"
 import { useLocation } from "../../context/location"
 import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -22,7 +21,7 @@ import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
-import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import type { FileSystemEntry } from "@opencode-ai/client"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -86,7 +85,6 @@ export function Autocomplete(props: {
 }) {
   const editor = useEditorContext()
   const sdk = useSDK()
-  const sync = useSync()
   const data = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
@@ -285,7 +283,7 @@ export function Autocomplete(props: {
   })
 
   function normalizeMentionPath(filePath: string) {
-    const baseDir = location()?.directory || sync.path.directory || paths.cwd
+    const baseDir = location()?.directory || project.instance.directory() || paths.cwd
     const absolute = path.resolve(filePath)
     const relative = path.relative(baseDir, absolute)
 
@@ -363,7 +361,7 @@ export function Autocomplete(props: {
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
 
-    for (const res of Object.values(sync.data.mcp_resource)) {
+    for (const res of data.location.mcp.resource.list(location()) ?? []) {
       options.push({
         display: Locale.truncateMiddle(res.name, width),
         // Match the name only; matching the URI caused unrelated fuzzy hits.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { IntegrationInfo } from "@opencode-ai/sdk/v2"
+import type { IntegrationInfo } from "@opencode-ai/client"
 import {
   connectionSummary,
   connectMethods,

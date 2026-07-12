@@ -1,6 +1,6 @@
 // Legacy `api.command` bridge for v1 plugins; remove in v2.
 import type { TuiCommand, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { TuiKeybind } from "../config/keybind"
+import { TuiKeybind } from "../config/v1/keybind"
 import type { DialogContext } from "../ui/dialog"
 
 const COMMAND_PALETTE_SHOW = "command.palette.show"

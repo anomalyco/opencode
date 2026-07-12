@@ -3,7 +3,7 @@ import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
 import { Service } from "@opencode-ai/client/effect"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -12,7 +12,14 @@ import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import {
+  CliRenderEvents,
+  createCliRenderer,
+  MouseButton,
+  type CliRenderer,
+  type CliRendererConfig,
+  type ThemeMode,
+} from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -53,8 +60,6 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogWorkspaceList } from "./component/dialog-workspace-list"
-import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
@@ -70,7 +75,7 @@ import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
-import { TuiConfigProvider, useTuiConfig, type TuiConfig } from "./config"
+import { TuiConfigProvider, useTuiConfig, type TuiConfig } from "./config/v1"
 import { createTuiApiAdapters } from "./plugin/adapters"
 import { createTuiApi } from "./plugin/api"
 import { createPluginRuntime, PluginRuntimeProvider, usePluginRuntime, type TuiPluginHost } from "./plugin/runtime"
@@ -121,7 +126,6 @@ const appBindingCommands = [
   "variant.cycle",
   "variant.list",
   "provider.connect",
-  "console.org.switch",
   "opencode.status",
   "server.pair",
   "opencode.debug",
@@ -131,7 +135,6 @@ const appBindingCommands = [
   "help.show",
   "docs.open",
   "diff.open",
-  "workspace.list",
   "app.debug",
   "app.console",
   "app.heap_snapshot",
@@ -154,6 +157,14 @@ export type TuiInput = {
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
   pluginHost: TuiPluginHost
+  terminalHandoff?: () => Promise<
+    | {
+        readonly renderer: CliRenderer
+        readonly mode: ThemeMode | null
+        readonly complete: () => void
+      }
+    | undefined
+  >
   log?: LogSink
 }
 
@@ -198,6 +209,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.map((response) => response.location.directory),
     Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
   )
+  const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const reconnectEndpoint = input.server.reconnect
   const reconnect = reconnectEndpoint
     ? async (attempt: number) => {
@@ -228,6 +240,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
             } satisfies CliRendererConfig
+
+            if (handoff) {
+              handoff.renderer.useMouse = options.useMouse
+              return handoff.renderer
+            }
 
             if (process.env.OPENCODE_DRIVE) {
               const { Drive } = await import("@opencode-ai/simulation/frontend")
@@ -271,7 +288,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
+        const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
 
         await render(() => {
@@ -396,6 +413,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             </LogProvider>
           )
         }, renderer)
+        if (handoff) {
+          renderer.once(CliRenderEvents.FRAME, handoff.complete)
+          renderer.requestRender()
+        }
       })
       yield* Deferred.await(shutdown)
       return { epilogue: exit.epilogue, reason: exit.reason }
@@ -422,10 +443,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const keymap = useOpencodeKeymap()
   const event = useEvent()
   const sdk = useSDK()
+  const sync = useSync()
   const toast = useToast()
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
-  const sync = useSync()
   const data = useData()
   const project = useProject()
   const exit = useExit()
@@ -439,7 +460,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   // the same problem on every refresh while still re-alerting if the state changes.
   const mcpAlerted: Record<string, string> = {}
   createEffect(() => {
-    for (const server of data.location.mcp.list() ?? []) {
+    for (const server of data.location.mcp.server.list() ?? []) {
       const status = server.status
       if (status.status !== "failed" && status.status !== "needs_auth") {
         delete mcpAlerted[server.name]
@@ -524,7 +545,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
-    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
+    kv.get("paste_summary_enabled", true),
   )
 
   // Update terminal window title based on current route and session
@@ -578,7 +599,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
   let continued = false
   createEffect(() => {
-    if (continued || sync.status === "loading" || !args.continue) return
+    if (continued || !args.continue) return
     continued = true
     const location = data.location.default()
     void sdk.api.session
@@ -604,12 +625,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       .catch(toast.error)
   })
 
-  // Handle --session with --fork: wait for sync to be fully complete before forking
-  // (session list loads in non-blocking phase for --session, so we must wait for "complete"
-  // to avoid a race where reconcile overwrites the newly forked session)
+  // Handle --session with --fork once.
   let forked = false
   createEffect(() => {
-    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
+    if (forked || !args.sessionID || !args.fork) return
     forked = true
     void sdk.api.session
       .fork({ sessionID: args.sessionID })
@@ -618,13 +637,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const connected = useConnected()
-  const currentWorktreeWorkspace = createMemo(() => {
-    const workspaceID = project.workspace.current()
-    if (!workspaceID) return
-    const workspace = project.workspace.get(workspaceID)
-    if (workspace?.type !== "worktree" || !workspace.directory) return
-    return workspace
-  })
   const appCommands = createMemo(() =>
     [
       {
@@ -659,31 +671,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
-        },
-      },
-      {
-        name: "workspace.copy_path",
-        title: "Copy worktree path",
-        category: "Workspace",
-        enabled: () => currentWorktreeWorkspace() !== undefined,
-        run: async () => {
-          const workspace = currentWorktreeWorkspace()
-          if (!workspace?.directory) return
-          await clipboard
-            .write?.(workspace.directory)
-            .then(() => toast.show({ message: "Copied worktree path", variant: "info" }))
-            .catch(toast.error)
-          dialog.clear()
-        },
-      },
-      {
-        name: "workspace.list",
-        title: "Manage workspaces",
-        category: "Workspace",
-        hidden: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
-        slashName: "workspaces",
-        run: () => {
-          dialog.replace(() => <DialogWorkspaceList />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -754,7 +741,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "mcp.list",
-        title: "Toggle MCPs",
+        title: "MCP Servers",
         category: "Agent",
         slashName: "mcps",
         run: () => {
@@ -818,21 +805,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "Integration",
       },
-      ...(sync.data.console_state.switchableOrgCount > 1
-        ? [
-            {
-              name: "console.org.switch",
-              title: "Switch org",
-              suggested: Boolean(sync.data.console_state.activeOrgName),
-              slashName: "org",
-              slashAliases: ["orgs", "switch-org"],
-              run: () => {
-                dialog.replace(() => <DialogConsoleOrg />)
-              },
-              category: "Provider",
-            },
-          ]
-        : []),
       {
         name: "opencode.status",
         title: "View status",
@@ -1040,7 +1012,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "System",
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
-          await sync.session.refresh()
           dialog.clear()
         },
       },

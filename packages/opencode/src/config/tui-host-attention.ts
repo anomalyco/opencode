@@ -1,4 +1,4 @@
-import { TuiConfig } from "@opencode-ai/tui/config"
+import { TuiConfig } from "@opencode-ai/tui/config/v1"
 import { isRecord } from "@opencode-ai/tui/util/record"
 import { Filesystem } from "@/util/filesystem"
 import { Schema } from "effect"

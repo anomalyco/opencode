@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
-import { useTuiConfig } from "../config"
+import { useTuiConfig } from "../config/v1"
 import { useBindings, useCommandShortcut } from "../keymap"
 
 export type DialogPromptProps = {

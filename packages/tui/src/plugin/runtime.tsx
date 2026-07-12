@@ -4,7 +4,7 @@ import type {
   TuiPluginInstallResult,
   TuiPluginStatus,
 } from "@opencode-ai/plugin/tui"
-import type { TuiConfig } from "../config"
+import type { TuiConfig } from "../config/v1"
 import { createContext, createSignal, useContext, type JSX, type ParentProps } from "solid-js"
 import { createPluginRoutes } from "./api"
 import { createSlots, type HostSlots } from "./slots"

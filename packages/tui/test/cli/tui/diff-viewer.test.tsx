@@ -7,22 +7,28 @@ import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition }
 import type { Session } from "@opencode-ai/sdk/v2"
 import { KVProvider } from "../../../src/context/kv"
 import { ThemeProvider } from "../../../src/context/theme"
-import { TuiConfigProvider } from "../../../src/config"
-import { TuiKeybind } from "../../../src/config/keybind"
+import { TuiConfigProvider } from "../../../src/config/v1"
+import { SDKProvider } from "../../../src/context/sdk"
+import { TuiKeybind } from "../../../src/config/v1/keybind"
 import { OpencodeKeymapProvider } from "../../../src/keymap"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TestTuiContexts } from "../../fixture/tui-environment"
+import { createApi, createClient, createEventStream, createFetch, json } from "../../fixture/tui-sdk"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
   try {
     expect(viewer.current()).toEqual({
       name: "diff",
-      params: { mode: "git", sessionID: "session-1", returnRoute: startRoute },
+      params: { mode: "working", sessionID: "session-1", returnRoute: startRoute },
     })
-    expect(viewer.vcsDiffInput()).toEqual({ directory: "/repo/session", mode: "git", context: 12 })
+    expect(viewer.vcsDiffInput()).toEqual({
+      location: { directory: "/repo/session" },
+      mode: "working",
+      context: "12",
+    })
 
     expect(viewer.commands.has("diff.close")).toBe(true)
     viewer.commands.get("diff.close")!.run?.({} as never)
@@ -108,6 +114,18 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   let vcsDiffInput: unknown
   let sessionDiffInput: unknown
   const config = createTuiResolvedConfig()
+  const transport = createFetch((url) => {
+    if (url.pathname !== "/api/vcs/diff") return
+    vcsDiffInput = {
+      location: { directory: url.searchParams.get("location[directory]") },
+      mode: url.searchParams.get("mode"),
+      context: url.searchParams.get("context"),
+    }
+    return json({
+      location: { directory: "/repo/session", project: { id: "project-1", directory: "/repo/session" } },
+      data: vcsDiff,
+    })
+  }, createEventStream())
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
@@ -119,12 +137,6 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     const base = createTuiPluginApi({
       keymap,
       client: {
-        vcs: {
-          diff: async (input: unknown) => {
-            vcsDiffInput = input
-            return { data: vcsDiff }
-          },
-        },
         session: {
           diff: async (input: unknown) => {
             sessionDiffInput = input
@@ -159,15 +171,17 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
 
     return (
       <TestTuiContexts>
-        <OpencodeKeymapProvider keymap={keymap}>
-          <TuiConfigProvider config={config}>
-            <KVProvider>
-              <ThemeProvider mode="dark">
-                {renderDiff?.({ params: "params" in current ? current.params : undefined })}
-              </ThemeProvider>
-            </KVProvider>
-          </TuiConfigProvider>
-        </OpencodeKeymapProvider>
+        <SDKProvider client={createClient(transport.fetch)} api={createApi(transport.fetch)}>
+          <OpencodeKeymapProvider keymap={keymap}>
+            <TuiConfigProvider config={config}>
+              <KVProvider>
+                <ThemeProvider mode="dark">
+                  {renderDiff?.({ params: "params" in current ? current.params : undefined })}
+                </ThemeProvider>
+              </KVProvider>
+            </TuiConfigProvider>
+          </OpencodeKeymapProvider>
+        </SDKProvider>
       </TestTuiContexts>
     )
   }
@@ -218,7 +232,11 @@ test("branch diff source requests branch VCS diff", async () => {
       name: "diff",
       params: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
     })
-    expect(viewer.vcsDiffInput()).toEqual({ directory: "/repo/session", mode: "branch", context: 12 })
+    expect(viewer.vcsDiffInput()).toEqual({
+      location: { directory: "/repo/session" },
+      mode: "branch",
+      context: "12",
+    })
     expect(viewer.sessionDiffInput()).toBeUndefined()
   } finally {
     viewer.app.renderer.destroy()

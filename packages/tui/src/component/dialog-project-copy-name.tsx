@@ -1,7 +1,7 @@
 import { InputRenderable, TextAttributes } from "@opentui/core"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { createSignal, onMount } from "solid-js"
-import { useTuiConfig } from "../config"
+import { useTuiConfig } from "../config/v1"
 import { useTheme } from "../context/theme"
 import { useBindings, useCommandShortcut } from "../keymap"
 import { useDialog, type DialogContext } from "../ui/dialog"

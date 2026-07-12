@@ -377,7 +377,7 @@ describe("OpenAPI.fromSpec", () => {
       runtime
         .execute(
           `
-        return await tools.$codemode.search({ query: "global health", namespace: "opencode", limit: 1 })
+        return search({ query: "global health", namespace: "opencode", limit: 1 })
       `,
         )
         .pipe(Effect.provide(layer)),

@@ -1,5 +1,5 @@
 import type { TuiDialogSelectOption, TuiPluginApi, TuiSlotProps } from "@opencode-ai/plugin/tui"
-import type { TuiConfig } from "../config"
+import type { TuiConfig } from "../config/v1"
 import type { useEvent } from "../context/event"
 import type { useRoute } from "../context/route"
 import type { useSDK } from "../context/sdk"
@@ -100,7 +100,7 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
 function stateApi(sync: ReturnType<typeof useSync>, data: ReturnType<typeof useData>): TuiPluginApi["state"] {
   return {
     get ready() {
-      return sync.ready
+      return true
     },
     get config() {
       return sync.data.config
@@ -120,7 +120,7 @@ function stateApi(sync: ReturnType<typeof useSync>, data: ReturnType<typeof useD
     },
     session: {
       count() {
-        return sync.data.session.length
+        return data.session.list().length
       },
       get(sessionID) {
         return sync.session.get(sessionID)
@@ -150,13 +150,19 @@ function stateApi(sync: ReturnType<typeof useSync>, data: ReturnType<typeof useD
       return sync.data.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
     },
     mcp() {
-      return Object.entries(sync.data.mcp)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, item]) => ({
-          name,
-          status: item.status,
-          error: item.status === "failed" ? item.error : undefined,
-        }))
+      return (data.location.mcp.server.list() ?? [])
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+        .flatMap((item) =>
+          item.status.status === "pending"
+            ? []
+            : [
+                {
+                  name: item.name,
+                  status: item.status.status,
+                  error: item.status.status === "failed" ? item.status.error : undefined,
+                },
+              ],
+        )
     },
   }
 }

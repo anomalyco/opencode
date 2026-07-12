@@ -49,6 +49,7 @@ import {
   PromiseNamespace,
   ProgramThrow,
   type ProgramNode,
+  SearchFunction,
   type StatementResult,
   sourceLocation,
   supportedSyntaxMessage,
@@ -290,6 +291,7 @@ const isRuntimeReference = (value: unknown): boolean =>
   value instanceof SandboxPromise ||
   value instanceof CoercionFunction ||
   value instanceof UriFunction ||
+  value instanceof SearchFunction ||
   value instanceof PromiseCapabilityFunction ||
   value instanceof ErrorConstructorReference ||
   isSandboxValue(value)
@@ -338,7 +340,7 @@ const typeofValue = (value: unknown): string => {
     value instanceof ErrorConstructorReference
   )
     return "function"
-  if (value instanceof UriFunction) return "function"
+  if (value instanceof UriFunction || value instanceof SearchFunction) return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   if (value instanceof GlobalNamespace) {
     return value.name === "Math" || value.name === "JSON" || value.name === "console" ? "object" : "function"
@@ -738,6 +740,8 @@ class PromiseRuntime<R> {
 class Interpreter<R> {
   private scopes: Array<Map<string, Binding>>
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+  // The built-in `search` global, threaded from ToolRuntime.make like invokeTool.
+  private readonly invokeSearch: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   // Enumerable namespace/tool names at a node of the host tool tree, threaded from
   // ToolRuntime.make like invokeTool: the interpreter never holds the tree itself.
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
@@ -748,6 +752,7 @@ class Interpreter<R> {
 
   constructor(
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
+    invokeSearch: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
     promises: PromiseRuntime<R>,
     logs: Array<string> = [],
@@ -756,11 +761,13 @@ class Interpreter<R> {
     const globalScope = new Map<string, Binding>()
     this.scopes = [globalScope]
     this.invokeTool = invokeTool
+    this.invokeSearch = invokeSearch
     this.toolKeys = toolKeys
     this.logs = logs
     this.callPermits = callPermits
     this.promises = promises
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
+    globalScope.set("search", { mutable: false, value: new SearchFunction() })
     globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
     globalScope.set("undefined", { mutable: false, value: undefined })
     globalScope.set("Object", { mutable: false, value: new GlobalNamespace("Object") })
@@ -2085,6 +2092,11 @@ class Interpreter<R> {
       if (callable instanceof UriFunction) {
         return invokeUriFunction(callable, args, node)
       }
+      if (callable instanceof SearchFunction) {
+        // The built-in search is synchronous in-memory matching: the call returns its
+        // result directly (await still works, as with any plain value).
+        return yield* self.invokeSearch(args)
+      }
       // `Error("msg")` without `new` constructs an error exactly like `new Error("msg")`, as in JS.
       if (callable instanceof ErrorConstructorReference) {
         return constructErrorValue(callable.name, args, node)
@@ -2106,7 +2118,7 @@ class Interpreter<R> {
       return boundedData(this.enumerableKeys(ref)!, "Object.keys result")
     }
     throw new InterpreterRuntimeError(
-      `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or tools.$codemode.search({ query }) for signatures.`,
+      `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
       node,
       "InvalidDataValue",
     )
@@ -2493,7 +2505,14 @@ class Interpreter<R> {
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
-    const invocation = new Interpreter(this.invokeTool, this.toolKeys, this.promises, this.logs, this.callPermits)
+    const invocation = new Interpreter(
+      this.invokeTool,
+      this.invokeSearch,
+      this.toolKeys,
+      this.promises,
+      this.logs,
+      this.callPermits,
+    )
     invocation.scopes = [...fn.capturedScopes, new Map<string, Binding>()]
     const run = Effect.gen(function* () {
       // Seed every parameter name into the scope as a TDZ slot first, so a default that
@@ -3666,7 +3685,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
         Effect.gen(function* () {
           const program = parseProgram(options.code)
           const promises = new PromiseRuntime<Services<Tools>>(scope)
-          const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, promises, logs)
+          const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.search, tools.keys, promises, logs)
           const value = yield* interpreter.run(program)
           // Validate the result first so an invalid value is a fatal completion that closes
           // the promise scope directly instead of taking the normal-completion path.

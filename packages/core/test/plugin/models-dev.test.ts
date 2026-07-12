@@ -214,7 +214,7 @@ describe("ModelsDevPlugin", () => {
             }),
           )
           expect(yield* integrations.list()).toEqual([
-            new Integration.Info({
+            Integration.Info.make({
               id: Integration.ID.make("acme"),
               name: "Acme",
               methods: [

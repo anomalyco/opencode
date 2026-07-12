@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
@@ -89,11 +89,6 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   }
 }
 
-export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
-  "EventV2.SubscriberOverflow",
-  { capacity: Schema.Int },
-) {}
-
 export const versionedType = Event.versionedType
 export const durable = Event.durable
 export const ephemeral = Event.ephemeral
@@ -166,27 +161,6 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
-
-export const liveBounded = (
-  events: Interface,
-  options: { readonly capacity: number; readonly accept?: (event: Payload) => boolean },
-) =>
-  Effect.gen(function* () {
-    const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(options.capacity)
-    const unsubscribe = yield* events.listen((event) =>
-      options.accept && !options.accept(event)
-        ? Effect.void
-        : Queue.offer(queue, event).pipe(
-            Effect.flatMap((accepted) =>
-              accepted
-                ? Effect.void
-                : Queue.fail(queue, new SubscriberOverflowError({ capacity: options.capacity })).pipe(Effect.asVoid),
-            ),
-          ),
-    )
-    yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
-    return Stream.fromQueue(queue)
-  })
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>

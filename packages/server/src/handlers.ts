@@ -26,6 +26,7 @@ import { CredentialHandler } from "./handlers/credential"
 import { ProjectHandler } from "./handlers/project"
 import { ProjectCopyHandler } from "./handlers/project-copy"
 import { VcsHandler } from "./handlers/vcs"
+import { EventFeed } from "./event-feed"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
@@ -48,7 +49,7 @@ export const handlers = Layer.mergeAll(
   FileSystemHandler,
   CommandHandler,
   SkillHandler,
-  EventHandler,
+  EventHandler.pipe(Layer.provide(EventFeed.layer)),
   PtyHandler,
   ShellHandler,
   QuestionHandler,

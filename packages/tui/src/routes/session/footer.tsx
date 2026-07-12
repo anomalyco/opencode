@@ -1,6 +1,5 @@
 import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "../../context/theme"
-import { useSync } from "../../context/sync"
 import { useData } from "../../context/data"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
@@ -9,15 +8,17 @@ import { useRoute } from "../../context/route"
 
 export function Footer() {
   const { theme } = useTheme()
-  const sync = useSync()
   const data = useData()
   const route = useRoute()
-  const mcp = createMemo(() => (data.location.mcp.list() ?? []).filter((x) => x.status.status === "connected").length)
-  const mcpError = createMemo(() => (data.location.mcp.list() ?? []).some((x) => x.status.status === "failed"))
-  const lsp = createMemo(() => Object.keys(sync.data.lsp))
+  const mcp = createMemo(
+    () => (data.location.mcp.server.list() ?? []).filter((x) => x.status.status === "connected").length,
+  )
+  const mcpError = createMemo(() =>
+    (data.location.mcp.server.list() ?? []).some((x) => x.status.status === "failed"),
+  )
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []
-    return sync.data.permission[route.data.sessionID] ?? []
+    return data.session.permission.list(route.data.sessionID) ?? []
   })
   const directory = useDirectory()
   const connected = useConnected()
@@ -68,9 +69,6 @@ export function Footer() {
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
-            <text fg={theme.text}>
-              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
-            </text>
             <Show when={mcp()}>
               <text fg={theme.text}>
                 <Switch>

@@ -5,11 +5,11 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useTheme, type Theme } from "../context/theme"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
-import type { McpServer } from "@opencode-ai/sdk/v2"
+import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { useTuiConfig } from "../config"
+import { useTuiConfig } from "../config/v1"
 import { getScrollAcceleration } from "../util/scroll"
 import { useBindings } from "../keymap"
 
@@ -45,7 +45,7 @@ export function DialogMcp() {
 
   const servers = createMemo(() =>
     pipe(
-      data.location.mcp.list() ?? [],
+      data.location.mcp.server.list() ?? [],
       sortBy(
         (server) => statusMeta(server.status, theme).rank,
         (server) => server.name,

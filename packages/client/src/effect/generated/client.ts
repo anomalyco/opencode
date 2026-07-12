@@ -1134,7 +1134,7 @@ const adaptClient = (raw: RawClient) => ({
   generate: adaptGroup8(raw["server.generate"]),
   provider: adaptGroup9(raw["server.provider"]),
   integration: adaptGroup10(raw["server.integration"]),
-  "server.mcp": adaptGroup11(raw["server.mcp"]),
+  mcp: adaptGroup11(raw["server.mcp"]),
   credential: adaptGroup12(raw["server.credential"]),
   project: adaptGroup13(raw["server.project"]),
   form: adaptGroup14(raw["server.form"]),

@@ -130,9 +130,9 @@ export type SessionMessageCompactionCompleted = {
 
 export type InstructionEntryKey = string
 
-export type SessionPendingSyntheticData1 = { text: string; description?: string; metadata?: { [x: string]: unknown } }
+export type SessionPendingSyntheticData1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
-export type Shell = {
+export type ShellInfo = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
   command: string
@@ -141,19 +141,19 @@ export type Shell = {
   file: string
   pid?: number
   exit?: number
-  metadata: { [x: string]: unknown }
+  metadata: { [x: string]: any }
   time: { started: number; completed?: number }
 }
 
-export type SessionMessageProviderState3 = { [x: string]: unknown }
+export type SessionMessageProviderState3 = { [x: string]: any }
 
-export type SessionMessageProviderState4 = { [x: string]: unknown }
+export type SessionMessageProviderState4 = { [x: string]: any }
 
-export type SessionMessageProviderState5 = { [x: string]: unknown }
+export type SessionMessageProviderState5 = { [x: string]: any }
 
-export type SessionMessageProviderState6 = { [x: string]: unknown }
+export type SessionMessageProviderState6 = { [x: string]: any }
 
-export type SessionMessageProviderState7 = { [x: string]: unknown }
+export type SessionMessageProviderState7 = { [x: string]: any }
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
 
@@ -445,7 +445,7 @@ export type QuestionV2Tool = { messageID: string; callID: string }
 
 export type QuestionV2Answer = Array<string>
 
-export type FormMetadata1 = { [x: string]: unknown }
+export type FormMetadata1 = { [x: string]: any }
 
 export type FormWhen1 = { key: string; op: "eq" | "neq"; value: string | number | boolean }
 
@@ -466,7 +466,7 @@ export type QuestionTool = { messageID: string; callID: string }
 
 export type QuestionAnswer = Array<string>
 
-export type Shell1 = {
+export type ShellInfo1 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
   command: string
@@ -474,9 +474,9 @@ export type Shell1 = {
   shell: string
   file: string
   pid?: number
-  exit?: number | "Infinity" | "-Infinity" | "NaN"
+  exit?: number
   metadata: { [x: string]: JsonValue }
-  time: { started: number | "Infinity" | "-Infinity" | "NaN"; completed?: number | "Infinity" | "-Infinity" | "NaN" }
+  time: { started: number; completed?: number }
 }
 
 export type ReferenceLocalSource = { type: "local"; path: string; description?: string; hidden?: boolean }
@@ -527,7 +527,7 @@ export type PermissionV2Rule = { action: string; resource: string; effect: Permi
 export type SessionAgentSelected = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.agent.selected"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -537,7 +537,7 @@ export type SessionAgentSelected = {
 export type SessionModelSelected = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.model.selected"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -547,7 +547,7 @@ export type SessionModelSelected = {
 export type SessionMoved = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.moved"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -557,7 +557,7 @@ export type SessionMoved = {
 export type SessionRenamed = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.renamed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -567,7 +567,7 @@ export type SessionRenamed = {
 export type SessionDeleted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.deleted"
   durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
@@ -577,7 +577,7 @@ export type SessionDeleted = {
 export type SessionForked = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.forked"
   durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
@@ -587,7 +587,7 @@ export type SessionForked = {
 export type SessionInputPromoted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.input.promoted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -597,7 +597,7 @@ export type SessionInputPromoted = {
 export type SessionExecutionStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.execution.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -607,7 +607,7 @@ export type SessionExecutionStarted = {
 export type SessionExecutionSucceeded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.execution.succeeded"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -617,7 +617,7 @@ export type SessionExecutionSucceeded = {
 export type SessionExecutionInterrupted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.execution.interrupted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -627,7 +627,7 @@ export type SessionExecutionInterrupted = {
 export type SessionInstructionsUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.instructions.updated"
   durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
@@ -637,17 +637,17 @@ export type SessionInstructionsUpdated = {
 export type SessionSynthetic = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.synthetic"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; text: string; description?: string; metadata?: { [x: string]: unknown } }
+  data: { sessionID: string; text: string; description?: string; metadata?: { [x: string]: any } }
 }
 
 export type SessionSkillActivated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.skill.activated"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -657,7 +657,7 @@ export type SessionSkillActivated = {
 export type SessionStepStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.step.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -667,7 +667,7 @@ export type SessionStepStarted = {
 export type SessionStepEnded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.step.ended"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -685,7 +685,7 @@ export type SessionStepEnded = {
 export type SessionTextStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.text.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -695,7 +695,7 @@ export type SessionTextStarted = {
 export type SessionTextEnded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.text.ended"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -705,7 +705,7 @@ export type SessionTextEnded = {
 export type SessionToolInputStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.input.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -715,7 +715,7 @@ export type SessionToolInputStarted = {
 export type SessionToolInputEnded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.input.ended"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -725,7 +725,7 @@ export type SessionToolInputEnded = {
 export type SessionCompactionAdmitted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.compaction.admitted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -735,7 +735,7 @@ export type SessionCompactionAdmitted = {
 export type SessionCompactionStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.compaction.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -745,7 +745,7 @@ export type SessionCompactionStarted = {
 export type SessionCompactionEnded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.compaction.ended"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -755,7 +755,7 @@ export type SessionCompactionEnded = {
 export type SessionRevertCleared = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.revert.cleared"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -765,7 +765,7 @@ export type SessionRevertCleared = {
 export type SessionRevertCommitted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.revert.committed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -775,7 +775,7 @@ export type SessionRevertCommitted = {
 export type ModelsDevRefreshed = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "models-dev.refreshed"
   location?: LocationRef
   data: {}
@@ -784,7 +784,7 @@ export type ModelsDevRefreshed = {
 export type IntegrationUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "integration.updated"
   location?: LocationRef
   data: {}
@@ -793,7 +793,7 @@ export type IntegrationUpdated = {
 export type IntegrationConnectionUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "integration.connection.updated"
   location?: LocationRef
   data: { integrationID: string }
@@ -802,7 +802,7 @@ export type IntegrationConnectionUpdated = {
 export type CatalogUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "catalog.updated"
   location?: LocationRef
   data: {}
@@ -811,7 +811,7 @@ export type CatalogUpdated = {
 export type AgentUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "agent.updated"
   location?: LocationRef
   data: {}
@@ -820,7 +820,7 @@ export type AgentUpdated = {
 export type MessageRemoved = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "message.removed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -830,7 +830,7 @@ export type MessageRemoved = {
 export type MessagePartRemoved = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "message.part.removed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -840,7 +840,7 @@ export type MessagePartRemoved = {
 export type SessionUsageUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.usage.updated"
   location?: LocationRef
   data: { sessionID: string; cost: MoneyUSD; tokens: TokenUsageInfo }
@@ -849,7 +849,7 @@ export type SessionUsageUpdated = {
 export type SessionTextDelta = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.text.delta"
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; ordinal: number; delta: string }
@@ -858,7 +858,7 @@ export type SessionTextDelta = {
 export type SessionReasoningDelta = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.reasoning.delta"
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; ordinal: number; delta: string }
@@ -867,7 +867,7 @@ export type SessionReasoningDelta = {
 export type SessionToolInputDelta = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.input.delta"
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; callID: string; delta: string }
@@ -876,7 +876,7 @@ export type SessionToolInputDelta = {
 export type SessionCompactionDelta = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.compaction.delta"
   location?: LocationRef
   data: { sessionID: string; text: string }
@@ -885,7 +885,7 @@ export type SessionCompactionDelta = {
 export type FilesystemChanged = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "filesystem.changed"
   location?: LocationRef
   data: { file: string; event: "add" | "change" | "unlink" }
@@ -894,7 +894,7 @@ export type FilesystemChanged = {
 export type ReferenceUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "reference.updated"
   location?: LocationRef
   data: {}
@@ -903,7 +903,7 @@ export type ReferenceUpdated = {
 export type PluginAdded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "plugin.added"
   location?: LocationRef
   data: { id: string }
@@ -912,7 +912,7 @@ export type PluginAdded = {
 export type PluginUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "plugin.updated"
   location?: LocationRef
   data: {}
@@ -921,7 +921,7 @@ export type PluginUpdated = {
 export type ProjectDirectoriesUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "project.directories.updated"
   location?: LocationRef
   data: { projectID: string }
@@ -930,7 +930,7 @@ export type ProjectDirectoriesUpdated = {
 export type CommandUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "command.updated"
   location?: LocationRef
   data: {}
@@ -939,7 +939,7 @@ export type CommandUpdated = {
 export type ConfigUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "config.updated"
   location?: LocationRef
   data: {}
@@ -948,7 +948,7 @@ export type ConfigUpdated = {
 export type SkillUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "skill.updated"
   location?: LocationRef
   data: {}
@@ -957,7 +957,7 @@ export type SkillUpdated = {
 export type PtyExited = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "pty.exited"
   location?: LocationRef
   data: { id: string; exitCode: number }
@@ -966,7 +966,7 @@ export type PtyExited = {
 export type PtyDeleted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "pty.deleted"
   location?: LocationRef
   data: { id: string }
@@ -975,7 +975,7 @@ export type PtyDeleted = {
 export type ShellExited = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "shell.exited"
   location?: LocationRef
   data: { id: string; exit?: number; status: "running" | "exited" | "timeout" | "killed" }
@@ -984,7 +984,7 @@ export type ShellExited = {
 export type ShellDeleted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "shell.deleted"
   location?: LocationRef
   data: { id: string }
@@ -993,7 +993,7 @@ export type ShellDeleted = {
 export type QuestionV2Rejected = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "question.v2.rejected"
   location?: LocationRef
   data: { sessionID: string; requestID: string }
@@ -1002,7 +1002,7 @@ export type QuestionV2Rejected = {
 export type FormCancelled = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "form.cancelled"
   location?: LocationRef
   data: { id: string; sessionID: string }
@@ -1011,7 +1011,7 @@ export type FormCancelled = {
 export type SessionIdle = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.idle"
   location?: LocationRef
   data: { sessionID: string }
@@ -1020,7 +1020,7 @@ export type SessionIdle = {
 export type TuiPromptAppend = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "tui.prompt.append"
   location?: LocationRef
   data: { text: string }
@@ -1029,7 +1029,7 @@ export type TuiPromptAppend = {
 export type TuiCommandExecute = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "tui.command.execute"
   location?: LocationRef
   data: {
@@ -1058,7 +1058,7 @@ export type TuiCommandExecute = {
 export type TuiToastShow = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "tui.toast.show"
   location?: LocationRef
   data: {
@@ -1072,7 +1072,7 @@ export type TuiToastShow = {
 export type TuiSessionSelect = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "tui.session.select"
   location?: LocationRef
   data: { sessionID: string }
@@ -1081,7 +1081,7 @@ export type TuiSessionSelect = {
 export type InstallationUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "installation.updated"
   location?: LocationRef
   data: { version: string }
@@ -1090,7 +1090,7 @@ export type InstallationUpdated = {
 export type InstallationUpdateAvailable = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "installation.update-available"
   location?: LocationRef
   data: { version: string }
@@ -1099,7 +1099,7 @@ export type InstallationUpdateAvailable = {
 export type VcsBranchUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "vcs.branch.updated"
   location?: LocationRef
   data: { branch?: string }
@@ -1108,7 +1108,7 @@ export type VcsBranchUpdated = {
 export type McpStatusChanged = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "mcp.status.changed"
   location?: LocationRef
   data: { server: string }
@@ -1117,7 +1117,7 @@ export type McpStatusChanged = {
 export type McpResourcesChanged = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "mcp.resources.changed"
   location?: LocationRef
   data: { server: string }
@@ -1126,7 +1126,7 @@ export type McpResourcesChanged = {
 export type PermissionAsked = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "permission.asked"
   location?: LocationRef
   data: {
@@ -1134,7 +1134,7 @@ export type PermissionAsked = {
     sessionID: string
     permission: string
     patterns: Array<string>
-    metadata: { [x: string]: unknown }
+    metadata: { [x: string]: any }
     always: Array<string>
     tool?: { messageID: string; callID: string } | undefined
   }
@@ -1143,7 +1143,7 @@ export type PermissionAsked = {
 export type PermissionReplied = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "permission.replied"
   location?: LocationRef
   data: { sessionID: string; requestID: string; reply: "once" | "always" | "reject" }
@@ -1152,7 +1152,7 @@ export type PermissionReplied = {
 export type QuestionRejected = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "question.rejected"
   location?: LocationRef
   data: { sessionID: string; requestID: string }
@@ -1160,7 +1160,7 @@ export type QuestionRejected = {
 
 export type V2EventServerConnected = {
   id: string
-  metadata?: { [x: string]: unknown } | undefined
+  metadata?: { [x: string]: any } | undefined
   location?: LocationRef | undefined
   type: "server.connected"
   data: {}
@@ -1213,7 +1213,7 @@ export type SessionMessageCompactionFailed = {
 export type SessionExecutionFailed = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.execution.failed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1223,7 +1223,7 @@ export type SessionExecutionFailed = {
 export type SessionStepFailed = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.step.failed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1239,7 +1239,7 @@ export type SessionStepFailed = {
 export type SessionRetryScheduled = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.retry.scheduled"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1249,7 +1249,7 @@ export type SessionRetryScheduled = {
 export type SessionCompactionFailed = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.compaction.failed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1267,23 +1267,23 @@ export type SessionPendingSyntheticMessage = {
 export type SessionShellStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.shell.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; shell: Shell }
+  data: { sessionID: string; shell: ShellInfo }
 }
 
 export type SessionShellEnded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.shell.ended"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: {
     sessionID: string
-    shell: Shell
+    shell: ShellInfo
     output: { output: string; cursor: number; size: number; truncated: boolean }
   }
 }
@@ -1291,16 +1291,16 @@ export type SessionShellEnded = {
 export type ShellCreated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "shell.created"
   location?: LocationRef
-  data: { info: Shell }
+  data: { info: ShellInfo }
 }
 
 export type SessionReasoningStarted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.reasoning.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1310,7 +1310,7 @@ export type SessionReasoningStarted = {
 export type SessionReasoningEnded = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.reasoning.ended"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1326,7 +1326,7 @@ export type SessionReasoningEnded = {
 export type SessionToolCalled = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.called"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1334,7 +1334,7 @@ export type SessionToolCalled = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    input: { [x: string]: unknown }
+    input: { [x: string]: any }
     executed: boolean
     state?: SessionMessageProviderState5
   }
@@ -1343,7 +1343,7 @@ export type SessionToolCalled = {
 export type SessionToolFailed = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.failed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1352,7 +1352,7 @@ export type SessionToolFailed = {
     assistantMessageID: string
     callID: string
     error: SessionStructuredError
-    result?: unknown
+    result?: any
     executed: boolean
     resultState?: SessionMessageProviderState7
   }
@@ -1490,7 +1490,7 @@ export type PermissionV2Request = {
 export type PermissionV2Asked = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "permission.v2.asked"
   location?: LocationRef
   data: {
@@ -1499,7 +1499,7 @@ export type PermissionV2Asked = {
     action: string
     resources: Array<string>
     save?: Array<string>
-    metadata?: { [x: string]: unknown }
+    metadata?: { [x: string]: any }
     source?: PermissionV2Source
   }
 }
@@ -1558,7 +1558,7 @@ export type RetryPart = {
 export type SessionError = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.error"
   location?: LocationRef
   data: {
@@ -1592,7 +1592,7 @@ export type SymbolSource = {
 export type PermissionV2Replied = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "permission.v2.replied"
   location?: LocationRef
   data: { sessionID: string; requestID: string; reply: PermissionV2Reply }
@@ -1601,7 +1601,7 @@ export type PermissionV2Replied = {
 export type PtyCreated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "pty.created"
   location?: LocationRef
   data: { info: Pty }
@@ -1610,7 +1610,7 @@ export type PtyCreated = {
 export type PtyUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "pty.updated"
   location?: LocationRef
   data: { info: Pty }
@@ -1627,7 +1627,7 @@ export type QuestionV2Info = {
 export type QuestionV2Replied = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "question.v2.replied"
   location?: LocationRef
   data: { sessionID: string; requestID: string; answers: Array<QuestionV2Answer> }
@@ -1701,7 +1701,7 @@ export type FormMultiselectField1 = {
 export type SessionStatus2 = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.status"
   location?: LocationRef
   data: { sessionID: string; status: SessionStatus }
@@ -1718,7 +1718,7 @@ export type QuestionInfo = {
 export type QuestionReplied = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "question.replied"
   location?: LocationRef
   data: { sessionID: string; requestID: string; answers: Array<QuestionAnswer> }
@@ -1747,7 +1747,7 @@ export type SessionInfo = {
 export type SessionRevertStaged = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.revert.staged"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1775,7 +1775,7 @@ export type SessionPendingUserData1 = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
 }
 
 export type SessionMessageToolStateRunning = {
@@ -1805,7 +1805,7 @@ export type SessionMessageToolStateError = {
 export type SessionToolProgress = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.progress"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1813,7 +1813,7 @@ export type SessionToolProgress = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    structured: { [x: string]: unknown }
+    structured: { [x: string]: any }
     content: Array<LLMToolContent>
   }
 }
@@ -1821,7 +1821,7 @@ export type SessionToolProgress = {
 export type SessionToolSuccess = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.tool.success"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -1829,9 +1829,9 @@ export type SessionToolSuccess = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    structured: { [x: string]: unknown }
+    structured: { [x: string]: any }
     content: Array<LLMToolContent>
-    result?: unknown
+    result?: any
     executed: boolean
     resultState?: SessionMessageProviderState6
   }
@@ -1881,7 +1881,7 @@ export type FormState = { status: "pending" } | { status: "answered"; answer: Fo
 export type FormReplied = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "form.replied"
   location?: LocationRef
   data: { id: string; sessionID: string; answer: FormAnswer }
@@ -1907,7 +1907,7 @@ export type FilePartSource = FileSource | SymbolSource | ResourceSource
 export type QuestionV2Asked = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "question.v2.asked"
   location?: LocationRef
   data: { id: string; sessionID: string; questions: Array<QuestionV2Info>; tool?: QuestionV2Tool }
@@ -1931,10 +1931,18 @@ export type FormField1 =
 export type QuestionAsked = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "question.asked"
   location?: LocationRef
   data: { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool | undefined }
+}
+
+export type ReferenceInfo = {
+  name: string
+  path: string
+  description?: string
+  hidden?: boolean
+  source: ReferenceSource
 }
 
 export type AgentInfo = {
@@ -2041,12 +2049,19 @@ export type SessionMessageAssistant = {
   retry?: SessionMessageAssistantRetry
 }
 
+export type IntegrationInfo = {
+  id: string
+  name: string
+  methods: Array<IntegrationMethod>
+  connections: Array<ConnectionInfo>
+}
+
 export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
 export type SessionCreated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.created"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -2056,7 +2071,7 @@ export type SessionCreated = {
 export type SessionUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.updated"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -2066,7 +2081,7 @@ export type SessionUpdated = {
 export type SessionDeleted1 = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.deleted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -2076,7 +2091,7 @@ export type SessionDeleted1 = {
 export type MessageUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "message.updated"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -2098,7 +2113,7 @@ export type FormInfo1 = { id: string; sessionID: string; title: string; metadata
 export type SessionInputAdmitted = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "session.input.admitted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -2121,7 +2136,7 @@ export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted
 export type FormCreated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "form.created"
   location?: LocationRef
   data: { form: FormInfo1 }
@@ -2202,7 +2217,7 @@ export type Part =
 export type MessagePartUpdated = {
   id: string
   created: number
-  metadata?: { [x: string]: unknown }
+  metadata?: { [x: string]: any }
   type: "message.part.updated"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
@@ -3241,7 +3256,7 @@ export type IntegrationListInput = {
 
 export type IntegrationListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<{ id: string; name: string; methods: Array<IntegrationMethod>; connections: Array<ConnectionInfo> }>
+  data: Array<IntegrationInfo>
 }
 
 export type IntegrationGetInput = {
@@ -3253,7 +3268,7 @@ export type IntegrationGetInput = {
 
 export type IntegrationGetOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: { id: string; name: string; methods: Array<IntegrationMethod>; connections: Array<ConnectionInfo> } | null
+  data: IntegrationInfo | null
 }
 
 export type IntegrationConnectKeyInput = {
@@ -3331,24 +3346,24 @@ export type IntegrationAttemptCancelInput = {
 
 export type IntegrationAttemptCancelOutput = void
 
-export type ServerMcpListInput = {
+export type McpListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ServerMcpListOutput = {
+export type McpListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<McpServer>
 }
 
-export type ServerMcpResourceCatalogInput = {
+export type McpResourceCatalogInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type ServerMcpResourceCatalogOutput = {
+export type McpResourceCatalogOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: McpResourceCatalog
 }
@@ -4539,7 +4554,7 @@ export type ShellListInput = {
 
 export type ShellListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<Shell1>
+  data: Array<ShellInfo1>
 }
 
 export type ShellCreateInput = {
@@ -4574,7 +4589,7 @@ export type ShellCreateInput = {
 
 export type ShellCreateOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Shell1
+  data: ShellInfo1
 }
 
 export type ShellGetInput = {
@@ -4586,7 +4601,7 @@ export type ShellGetInput = {
 
 export type ShellGetOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Shell1
+  data: ShellInfo1
 }
 
 export type ShellTimeoutInput = {
@@ -4599,7 +4614,7 @@ export type ShellTimeoutInput = {
 
 export type ShellTimeoutOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Shell1
+  data: ShellInfo1
 }
 
 export type ShellOutputInput = {
@@ -4673,7 +4688,7 @@ export type ReferenceListInput = {
 
 export type ReferenceListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<{ name: string; path: string; description?: string; hidden?: boolean; source: ReferenceSource }>
+  data: Array<ReferenceInfo>
 }
 
 export type ProjectCopyCreateInput = {

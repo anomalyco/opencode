@@ -13,7 +13,7 @@
 //         → OpenTUI split-footer renderer writes to terminal
 import type { OpenCodeClient, ReferenceListOutput } from "@opencode-ai/client/promise"
 import type { FilePart, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import type { TuiConfig } from "@opencode-ai/tui/config"
+import type { TuiConfig } from "@opencode-ai/tui/config/v1"
 
 export type RunFilePart = {
   type: "file"

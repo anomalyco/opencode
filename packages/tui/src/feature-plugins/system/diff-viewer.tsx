@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
-import type { FileDiffInfo, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo, FileDiffLegacyInfo } from "@opencode-ai/client"
 import {
   TextAttributes,
   type BorderSides,
@@ -11,6 +11,7 @@ import {
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { useTheme } from "../../context/theme"
+import { useSDK } from "../../context/sdk"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
@@ -43,7 +44,7 @@ const VCS_DIFF_CONTEXT_LINES = 12
 const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
 const KV_SINGLE_PATCH = "diff_viewer_single_patch"
 const KV_VIEW = "diff_viewer_view"
-type DiffMode = "git" | "branch" | "last-turn"
+type DiffMode = "working" | "branch" | "last-turn"
 type DiffViewerFocus = "patches" | "files"
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
@@ -56,7 +57,7 @@ type DiffFile = {
   readonly status: "added" | "deleted" | "modified"
 }
 
-const normalizeDiffs = (diffs: readonly (VcsFileDiff | FileDiffInfo | SnapshotFileDiff)[]): DiffFile[] =>
+const normalizeDiffs = (diffs: readonly (FileDiffInfo | FileDiffLegacyInfo)[]): DiffFile[] =>
   diffs.flatMap((item) =>
     item.file
       ? [
@@ -90,6 +91,7 @@ function diffSourceLabel(mode: DiffMode) {
 
 function DiffViewer(props: { api: TuiPluginApi }) {
   const dimensions = useTerminalDimensions()
+  const sdk = useSDK()
   const themeState = useTheme()
   const theme = () => props.api.theme.current
   const params = () =>
@@ -101,7 +103,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
           returnRoute?: TuiRouteCurrent
         }
       | undefined
-  const mode = () => params()?.mode ?? "git"
+  const mode = () => params()?.mode ?? "working"
   const diffInput = createMemo(() => {
     const sessionID = params()?.sessionID
     return {
@@ -122,9 +124,12 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       return normalizeDiffs(result.data ?? [])
     }
 
-    const result = await props.api.client.vcs.diff(
-      { directory: input.directory, mode: input.mode, context: VCS_DIFF_CONTEXT_LINES },
-      { throwOnError: true },
+    const result = await sdk.api.vcs.diff(
+      {
+        location: input.directory ? { directory: input.directory } : undefined,
+        mode: input.mode,
+        context: VCS_DIFF_CONTEXT_LINES,
+      },
     )
     return normalizeDiffs(result.data ?? [])
   })
@@ -686,7 +691,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     return [
       {
         title: "Working tree",
-        value: "git" as const,
+        value: "working" as const,
         description: "Show current git changes",
       },
       ...(vcs?.branch && vcs.default_branch && vcs.branch !== vcs.default_branch
@@ -1060,7 +1065,7 @@ const tui: TuiPlugin = async (api) => {
         namespace: "palette",
         run() {
           api.route.navigate(ROUTE, {
-            mode: "git",
+            mode: "working",
             sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,
             returnRoute: api.route.current,
           })

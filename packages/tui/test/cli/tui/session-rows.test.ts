@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/sdk/v2"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { reduceSessionRows } from "../../../src/routes/session/rows"
 
 test("groups exploration parts across assistant messages until a delimiter", () => {

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeClient, OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { onMount } from "solid-js"
@@ -9,7 +9,7 @@ import { SDKProvider, useSDK } from "../../../src/context/sdk"
 import { useEvent } from "../../../src/context/event"
 import { createApi, createClient, createEventStream, createFetch } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
-import type { LogSink } from "../../../src/context/log"
+import type { LogLevel, LogSink } from "../../../src/context/log"
 
 const projectID = "proj_test"
 
@@ -113,9 +113,9 @@ function Probe(props: {
 
 describe("useEvent", () => {
   test("logs only durable events", async () => {
-    const logs: Array<{ message: string; tags: Readonly<Record<string, unknown>> }> = []
-    const { app, emit, seen } = await mount(undefined, (_level, message, tags) => {
-      if (message === "event") logs.push({ message, tags })
+    const logs: Array<{ level: LogLevel; message: string; tags: Readonly<Record<string, unknown>> }> = []
+    const { app, emit, seen } = await mount(undefined, (level, message, tags) => {
+      if (message === "event") logs.push({ level, message, tags })
     })
     const durable = event(
       {
@@ -135,6 +135,7 @@ describe("useEvent", () => {
 
       expect(logs).toEqual([
         {
+          level: "debug",
           message: "event",
           tags: { component: "sdk", type: "session.renamed", aggregateID: "ses_test", seq: 1 },
         },

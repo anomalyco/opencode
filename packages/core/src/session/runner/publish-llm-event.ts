@@ -220,8 +220,31 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     yield* flushFragments()
   })
 
+  const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
+    let failed = false
+    for (const [callID, tool] of tools) {
+      if (
+        tool.settled ||
+        (mode === "hosted" && !tool.providerExecuted) ||
+        (mode === "uncalled" && tool.called)
+      )
+        continue
+      tool.settled = true
+      failed = true
+      yield* events.publish(SessionEvent.Tool.Failed, {
+        sessionID: input.sessionID,
+        assistantMessageID: tool.assistantMessageID,
+        callID,
+        error,
+        executed: tool.providerExecuted,
+      })
+    }
+    return failed
+  })
+
   const failAssistant = Effect.fnUntraced(function* (error: SessionError.Error, replace = false) {
     yield* flush()
+    yield* failTools(error, "uncalled")
     yield* startAssistant()
     if (replace || stepFailure === undefined) stepFailure = error
   })
@@ -245,20 +268,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     error: SessionError.Error,
     hostedOnly = false,
   ) {
-    let failed = false
-    for (const [callID, tool] of tools) {
-      if (tool.settled || (hostedOnly && !tool.providerExecuted)) continue
-      tool.settled = true
-      failed = true
-      yield* events.publish(SessionEvent.Tool.Failed, {
-        sessionID: input.sessionID,
-        assistantMessageID: tool.assistantMessageID,
-        callID,
-        error,
-        executed: tool.providerExecuted,
-      })
-    }
-    return failed
+    return yield* failTools(error, hostedOnly ? "hosted" : "all")
   })
 
   const assistantMessageIDForTool = (callID: string) => {

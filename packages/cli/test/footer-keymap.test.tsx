@@ -2,7 +2,7 @@
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { testRender, useRenderer } from "@opentui/solid"
 import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
-import { resolve } from "@opencode-ai/tui/config"
+import { resolve } from "@opencode-ai/tui/config/v1"
 import { expect, test } from "bun:test"
 import { createComponent, createSignal } from "solid-js"
 import { RunFooterView } from "../src/mini/footer.view"

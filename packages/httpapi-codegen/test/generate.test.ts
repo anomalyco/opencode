@@ -1097,6 +1097,27 @@ describe("HttpApiCodegen.generate", () => {
     expect(output.operations[0]?.success).toBe("stream")
   })
 
+  test("emits opaque Promise SSE fields as any", () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("subscribe", "/event", {
+            success: HttpApiSchema.StreamSse({
+              data: Schema.Struct({
+                metadata: Schema.Record(Schema.String, Schema.Unknown),
+                label: Schema.Literal("unknown"),
+              }),
+            }),
+          }),
+        ),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('readonly "metadata": { readonly [x: string]: any }')
+    expect(types).toContain('readonly "label": "unknown"')
+  })
+
   test("preserves annotated stream response statuses", () => {
     const output = compile(
       api(

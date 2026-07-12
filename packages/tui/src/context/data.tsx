@@ -9,6 +9,7 @@ import type {
   FormInfo,
   IntegrationInfo,
   LocationRef,
+  McpResource,
   McpServer,
   ModelInfo,
   PermissionSavedInfo,
@@ -21,10 +22,12 @@ import type {
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionInfo,
-  Shell,
+  SessionPendingInfo,
+  ShellInfo,
   SkillInfo,
-} from "@opencode-ai/sdk/v2"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+  OpenCodeEvent,
+} from "@opencode-ai/client"
+import type { Data } from "@opencode-ai/plugin/v2/tui/context"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
@@ -43,17 +46,20 @@ type LocationData = {
   agent?: AgentInfo[]
   command?: CommandInfo[]
   integration?: IntegrationInfo[]
-  mcp?: McpServer[]
+  mcp?: {
+    server?: McpServer[]
+    resource?: McpResource[]
+  }
   model?: ModelInfo[]
   provider?: ProviderV2Info[]
   reference?: ReferenceInfo[]
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
-  shell?: Record<string, Shell>
+  shell?: Record<string, ShellInfo>
   skill?: SkillInfo[]
 }
 
-type Data = {
+type Store = {
   session: {
     info: Record<string, SessionInfo>
     // Family index keyed by a family's root (or furthest-known-ancestor when the
@@ -62,7 +68,9 @@ type Data = {
     family: Record<string, string[]>
     status: Record<string, DataSessionStatus>
     message: Record<string, SessionMessageInfo[]>
+    pending: Record<string, SessionPendingInfo[]>
     input: Record<string, string[]>
+    compaction: Record<string, string[]>
     permission: Record<string, PermissionV2Request[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -84,13 +92,15 @@ function locationQuery(ref?: LocationRef) {
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: () => {
-    const [store, setStore] = createStore<Data>({
+    const [store, setStore] = createStore<Store>({
       session: {
         info: {},
         family: {},
         status: {},
         message: {},
+        pending: {},
         input: {},
+        compaction: {},
         permission: {},
         form: {},
       },
@@ -110,6 +120,36 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function setSessionStatus(sessionID: string, status: DataSessionStatus) {
       setStore("session", "status", sessionID, status)
+    }
+
+    function addCompaction(sessionID: string, inputID: string) {
+      if (store.session.compaction[sessionID]?.includes(inputID)) return
+      setStore("session", "compaction", sessionID, [...(store.session.compaction[sessionID] ?? []), inputID])
+    }
+
+    function addPending(item: SessionPendingInfo) {
+      if (store.session.pending[item.sessionID]?.some((pending) => pending.id === item.id)) return
+      setStore("session", "pending", item.sessionID, [...(store.session.pending[item.sessionID] ?? []), item])
+    }
+
+    function removePending(sessionID: string, inputID?: string) {
+      if (!inputID) return
+      setStore(
+        "session",
+        "pending",
+        sessionID,
+        (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+      )
+    }
+
+    function removeCompaction(sessionID: string, inputID?: string) {
+      if (!inputID || !store.session.compaction[sessionID]?.includes(inputID)) return
+      setStore(
+        "session",
+        "compaction",
+        sessionID,
+        store.session.compaction[sessionID].filter((id) => id !== inputID),
+      )
     }
 
     const message = {
@@ -220,7 +260,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           delete draft.info[sessionID]
           delete draft.status[sessionID]
           delete draft.message[sessionID]
+          delete draft.pending[sessionID]
           delete draft.input[sessionID]
+          delete draft.compaction[sessionID]
           delete draft.permission[sessionID]
           delete draft.form[sessionID]
           for (const [rootID, family] of Object.entries(draft.family)) {
@@ -308,6 +350,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           }
           break
         case "session.input.promoted": {
+          removePending(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
             if (position === undefined) return
@@ -328,6 +371,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         }
         case "session.input.admitted":
+          addPending({
+            id: event.data.inputID,
+            sessionID: event.data.sessionID,
+            admittedSeq: event.durable.seq,
+            timeCreated: event.created,
+            ...event.data.input,
+          })
           if (!store.session.input[event.data.sessionID]?.includes(event.data.inputID))
             setStore("session", "input", event.data.sessionID, [
               ...(store.session.input[event.data.sessionID] ?? []),
@@ -611,8 +661,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           setSessionStatus(event.data.sessionID, "running")
           break
         case "session.compaction.admitted":
+          addPending({
+            id: event.data.inputID,
+            sessionID: event.data.sessionID,
+            admittedSeq: event.durable.seq,
+            timeCreated: event.created,
+            type: "compaction",
+          })
+          addCompaction(event.data.sessionID, event.data.inputID)
           break
         case "session.compaction.started":
+          removePending(event.data.sessionID, event.data.inputID)
+          removeCompaction(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: event.data.inputID ?? messageIDFromEvent(event.id),
@@ -669,16 +729,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
             if (current?.type === "compaction") {
-              draft[position] = {
-                id: current.id,
-                type: "compaction",
+              Object.assign(current, {
                 status: "completed",
                 reason: event.data.reason,
                 summary: event.data.text,
                 recent: event.data.recent,
-                metadata: current.metadata,
-                time: current.time,
-              }
+              })
               return
             }
             message.append(draft, index, {
@@ -693,6 +749,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.failed":
+          removePending(event.data.sessionID, event.data.inputID)
+          removeCompaction(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
@@ -784,7 +842,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         // so the mcp list refreshes here rather than off integration.updated.
         case "mcp.status.changed":
           if (bootstrapping) break
-          void result.location.mcp.refresh(event.location)
+          void result.location.mcp.server.refresh(event.location)
+          break
+        case "mcp.resources.changed":
+          void result.location.mcp.resource.refresh(event.location)
           break
       }
     }
@@ -825,14 +886,40 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.input[sessionID]?.includes(inputID) ?? false
           },
         },
+        compaction: {
+          list(sessionID: string) {
+            return store.session.compaction[sessionID] ?? []
+          },
+          async refresh(sessionID: string) {
+            await result.session.pending.refresh(sessionID)
+          },
+        },
+        pending: {
+          list(sessionID: string) {
+            return store.session.pending[sessionID] ?? []
+          },
+          async refresh(sessionID: string) {
+            const pending = await sdk.api.session.pending.list({ sessionID })
+            setStore("session", "pending", sessionID, reconcile(pending))
+            setStore(
+              "session",
+              "input",
+              sessionID,
+              reconcile(pending.filter((item) => item.type !== "compaction").map((item) => item.id)),
+            )
+            setStore(
+              "session",
+              "compaction",
+              sessionID,
+              reconcile(pending.filter((item) => item.type === "compaction").map((item) => item.id)),
+            )
+          },
+        },
         async refresh(sessionID: string) {
           setStore("session", "info", sessionID, await sdk.api.session.get({ sessionID }))
           registerSession(sessionID)
         },
         message: {
-          ids(sessionID: string) {
-            return (store.session.message[sessionID] ?? []).map((message) => message.id)
-          },
           list(sessionID: string) {
             return store.session.message[sessionID] ?? []
           },
@@ -952,13 +1039,31 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
         },
         mcp: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp
+          server: {
+            list(location?: LocationRef) {
+              return store.location[locationKey(location ?? defaultLocation())]?.mcp?.server
+            },
+            async refresh(ref?: LocationRef) {
+              const result = await sdk.api.mcp.list({ location: locationQuery(ref) })
+              const key = locationKey(result.location)
+              setStore("location", key, {
+                ...store.location[key],
+                mcp: { ...store.location[key]?.mcp, server: result.data },
+              })
+            },
           },
-          async refresh(ref?: LocationRef) {
-            const result = await sdk.api["server.mcp"].list({ location: locationQuery(ref) })
-            const key = locationKey(result.location)
-            setStore("location", key, { ...store.location[key], mcp: result.data })
+          resource: {
+            list(location?: LocationRef) {
+              return store.location[locationKey(location ?? defaultLocation())]?.mcp?.resource
+            },
+            async refresh(ref?: LocationRef) {
+              const result = await sdk.api.mcp.resource.catalog({ location: locationQuery(ref) })
+              const key = locationKey(result.location)
+              setStore("location", key, {
+                ...store.location[key],
+                mcp: { ...store.location[key]?.mcp, resource: result.data.resources },
+              })
+            },
           },
         },
         model: {
@@ -1003,6 +1108,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
       },
     }
+    result satisfies Data
 
     async function bootstrap() {
       if (bootstrapping) return bootstrapping
@@ -1054,7 +1160,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         result.location.refresh(),
         result.location.agent.refresh(),
         result.location.integration.refresh(),
-        result.location.mcp.refresh(),
+        result.location.mcp.server.refresh(),
+        result.location.mcp.resource.refresh(),
         result.location.model.refresh(),
         result.location.provider.refresh(),
         result.location.reference.refresh(),
@@ -1102,9 +1209,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       sdk.event.listen(({ details }) => {
         if (details.type === "server.connected") {
           const messages = connected ? Object.keys(store.session.message) : []
+          const compactions = connected ? Object.keys(store.session.compaction) : []
           connected = true
           refreshActive()
-          void Promise.allSettled([bootstrap(), ...messages.map(result.session.message.refresh)])
+          void Promise.allSettled([
+            bootstrap(),
+            ...messages.map(result.session.message.refresh),
+            ...compactions.map(result.session.compaction.refresh),
+          ])
           return
         }
         handleEvent(details)

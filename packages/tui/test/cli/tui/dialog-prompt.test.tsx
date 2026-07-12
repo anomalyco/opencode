@@ -8,7 +8,7 @@ import path from "node:path"
 import { onCleanup } from "solid-js"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import type { TuiKeybind } from "../../../src/config/keybind"
+import type { TuiKeybind } from "../../../src/config/v1/keybind"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
 async function wait(fn: () => boolean, timeout = 2000) {
@@ -41,7 +41,7 @@ async function mountPrompt(input: {
     import("../../../src/ui/dialog-prompt"),
     import("../../../src/context/kv"),
     import("../../../src/context/theme"),
-    import("../../../src/config"),
+    import("../../../src/config/v1"),
     import("../../../src/ui/toast"),
     import("../../../src/keymap"),
   ])

@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/sdk/v2"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useData } from "../../context/data"
@@ -10,6 +10,7 @@ export type PartRef = {
 
 export type SessionRow =
   | { type: "message"; messageID: string }
+  | { type: "compaction-queued"; inputID: string }
   | { type: "part"; ref: PartRef }
   | {
       type: "group"
@@ -31,6 +32,14 @@ export function createSessionRows(sessionID: Accessor<string>) {
     const boundary = revertBoundary()
     const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages, inputs)
     partitionPending(rows, pendingPermissions())
+    const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
+    rows.splice(
+      position === -1 ? rows.length : position,
+      0,
+      ...data.session.compaction
+        .list(sessionID())
+        .map((inputID): SessionRow => ({ type: "compaction-queued", inputID })),
+    )
     return rows
   }
 
@@ -54,6 +63,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(sessionID, (id) => {
       setRows(reconcile(reduce()))
+      void data.session.compaction.refresh(id).catch(() => undefined)
       void data.session.message.refresh(id).then(
         () => {
           if (sessionID() !== id) return
@@ -73,6 +83,13 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   createEffect(
     on(
+      () => data.session.compaction.list(sessionID()).map((inputID) => inputID),
+      () => setRows(reconcile(reduce())),
+    ),
+  )
+
+  createEffect(
+    on(
       () =>
         data.session.message.list(sessionID()).flatMap((message) =>
           message.type === "user" || message.type === "synthetic"
@@ -88,7 +105,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
                   {
                     id: message.id,
                     created: message.time.created,
-                    input: message.status === "running",
                   },
                 ]
               : [],
@@ -183,7 +199,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
   }
   const subscriptions = [
     data.on("session.input.admitted", input),
-    data.on("session.compaction.started", message),
+    data.on("session.compaction.started", (event) => {
+      if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID ?? event.id.replace(/^evt_/, "msg_"))
+    }),
     data.on("session.instructions.updated", message),
     data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
@@ -192,9 +210,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.shell.started", message),
     data.on("session.agent.selected", message),
     data.on("session.model.selected", message),
-    data.on("session.compaction.ended", (event) => {
-      if (event.data.reason !== "manual") message(event)
-    }),
     data.on("session.text.delta", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })

@@ -64,7 +64,7 @@ const layer = Layer.effect(
             if (source.type === "local") {
               materialized.set(
                 name,
-                new Info({
+                Info.make({
                   name,
                   path: source.path,
                   ...(source.description === undefined ? {} : { description: source.description }),
@@ -88,7 +88,7 @@ const layer = Layer.effect(
             seen.set(target, source.branch)
             materialized.set(
               name,
-              new Info({
+              Info.make({
                 name,
                 path: AbsolutePath.make(target),
                 ...(source.description === undefined ? {} : { description: source.description }),

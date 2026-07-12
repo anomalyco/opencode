@@ -92,12 +92,13 @@ export const Ref = Schema.Struct({
   name: Schema.String,
 }).annotate({ identifier: "Integration.Ref" })
 
-export class Info extends Schema.Class<Info>("Integration.Info")({
+export const Info = Schema.Struct({
   id: ID,
   name: Schema.String,
   methods: Schema.Array(Method),
   connections: Schema.Array(Connection.Info),
-}) {}
+}).annotate({ identifier: "Integration.Info" })
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const AttemptID = Schema.String.pipe(
   Schema.brand("Integration.AttemptID"),

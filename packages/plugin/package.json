@@ -15,6 +15,7 @@
     "./tui": "./src/tui.ts",
     "./v2/effect": "./src/v2/effect/index.ts",
     "./v2/effect/*": "./src/v2/effect/*.ts",
+    "./v2/tui/*": "./src/v2/tui/*.ts",
     "./v2": "./src/v2/promise/index.ts",
     "./v2/*": "./src/v2/promise/*.ts"
   },

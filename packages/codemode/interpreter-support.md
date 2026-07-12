@@ -22,6 +22,8 @@ ultimate source of truth.
 - [x] JSON-like host boundaries with `undefined` and non-finite numbers normalized to `null`.
 - [x] Live Date, RegExp, Map, Set, URL, and URLSearchParams values inside the sandbox.
 - [x] Tool calls through the host-provided `tools` tree only.
+- [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
+      shadowable by program declarations like other globals.
 - [x] Cooperative timeout, tool-call accounting, output bounding, and a maximum of eight concurrent tool calls.
 - [ ] Full JavaScript or TypeScript compatibility. CodeMode is a bounded orchestration language.
 

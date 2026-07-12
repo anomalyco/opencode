@@ -1,7 +1,6 @@
 import { createMemo, onMount } from "solid-js"
-import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
-import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
@@ -10,7 +9,7 @@ export function DialogTimeline(props: {
   sessionID: string
   onMove: (messageID: string) => void
 }) {
-  const sync = useSync()
+  const data = useData()
   const dialog = useDialog()
 
   onMount(() => {
@@ -18,16 +17,12 @@ export function DialogTimeline(props: {
   })
 
   const options = createMemo((): DialogSelectOption<string>[] => {
-    const messages = sync.data.message[props.sessionID] ?? []
+    const messages = data.session.message.list(props.sessionID)
     const result = [] as DialogSelectOption<string>[]
     for (const message of messages) {
-      if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
-        (x) => x.type === "text" && !x.synthetic && !x.ignored,
-      ) as TextPart
-      if (!part) continue
+      if (message.type !== "user") continue
       result.push({
-        title: part.text.replace(/\n/g, " "),
+        title: message.text.replace(/\n/g, " "),
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: (dialog) => {

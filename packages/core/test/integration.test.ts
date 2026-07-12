@@ -40,7 +40,7 @@ describe("Integration", () => {
         .transform((editor) => editor.update(openai, (integration) => (integration.name = "OpenAI")))
         .pipe(Scope.provide(scope))
       expect(yield* integrations.get(openai)).toEqual(
-        new Integration.Info({ id: openai, name: "OpenAI", methods: [], connections: [] }),
+        Integration.Info.make({ id: openai, name: "OpenAI", methods: [], connections: [] }),
       )
 
       yield* Scope.close(scope, Exit.void)

@@ -114,6 +114,10 @@ export class UriFunction {
   constructor(readonly name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent") {}
 }
 
+// The global `search` built-in: synchronous tool discovery that shares the tool admission
+// pipeline (budget, audit, hooks) without living in the `tools` tree.
+export class SearchFunction {}
+
 export class ProgramThrow {
   constructor(readonly value: unknown) {}
 }

@@ -82,7 +82,6 @@ export type ToolDescription = {
 
 export type SafeObject = Record<string, unknown>
 
-const reservedNamespace = "$codemode"
 const defaultCatalogBudget = 2_000
 const defaultSearchLimit = 10
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
@@ -452,7 +451,12 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Definition => 
     }),
 })
 
-const searchDescription = describeDefinition(`${reservedNamespace}.search`, makeSearchTool([]))
+// The built-in `search` is a synchronous global function, not a tool-tree entry, so its
+// advertised signature is rendered by hand instead of through `describeDefinition`.
+const searchSignature = (() => {
+  const definition = makeSearchTool([])
+  return `search(input: ${inputTypeScript(definition, true)}): ${outputTypeScript(definition, true)}`
+})()
 
 const catalogLine = (tool: ToolDescription) => {
   // Keep the tool description concise; the full schema documentation remains in the signature.
@@ -478,12 +482,6 @@ const toSearchEntry = <R>(path: string, definition: Definition<R>, description: 
 /** The runtime search index over every described tool. Search is always registered. */
 export const searchIndex = <R>(tools: HostTools<R>): ReadonlyArray<SearchEntry> =>
   visibleDefinitions(tools).map(({ path, definition, description }) => toSearchEntry(path, definition, description))
-
-export const assertValidTools = <R>(tools: HostTools<R>): void => {
-  if (Object.hasOwn(tools, reservedNamespace)) {
-    throw new Error(`Tool namespace '${reservedNamespace}' is reserved for CodeMode discovery tools.`)
-  }
-}
 
 /**
  * Budgeted catalog: every namespace is always listed with its tool count; full call
@@ -557,8 +555,8 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
     empty
       ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime."
       : complete
-        ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed below and internal runtime tools; surrounding agent tools are not available."
-        : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed or searchable below and internal runtime tools; surrounding agent tools are not available.",
+        ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed below; surrounding agent tools are not available."
+        : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed or searchable below; surrounding agent tools are not available.",
     ...(empty
       ? []
       : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
@@ -579,7 +577,7 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
               "3. Return only the fields you need from structured results; narrow unknown results before reading fields, and avoid returning large raw payloads.",
             ]
           : [
-              '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+              '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
               "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
             ]),
       ]
@@ -591,8 +589,8 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
         "## Rules",
         "",
         complete
-          ? "- Only Code Mode tools listed here and internal runtime tools are available; surrounding agent tools are not implicitly exposed."
-          : "- Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools are available; surrounding agent tools are not implicitly exposed.",
+          ? "- Only Code Mode tools listed here are available; surrounding agent tools are not implicitly exposed."
+          : "- Only Code Mode tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
         "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
@@ -601,7 +599,7 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
         ...(complete
           ? []
           : [
-              '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
+              '- Browse one namespace: `search({ query: "", namespace: "<name>" })`.',
               "- If search returns `next`, repeat the same search with `offset: next.offset`.",
             ]),
       ]
@@ -623,7 +621,7 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
     toolSection.push(
       complete
         ? "## Available tools (COMPLETE list - every tool is shown below with its full call signature)"
-        : `## Available tools (PARTIAL - ${totalShown} of ${described.length} shown; find the rest with tools.$codemode.search)`,
+        : `## Available tools (PARTIAL - ${totalShown} of ${described.length} shown; find the rest with search(...))`,
       "",
     )
     for (const [namespace, group] of ordered) {
@@ -641,7 +639,7 @@ export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBu
       for (const tool of group) if (picked.has(tool)) toolSection.push(catalogLine(tool))
     }
     if (!complete) {
-      toolSection.push("", "Search returns complete callable signatures:", `- ${searchDescription.signature}`)
+      toolSection.push("", "Search returns complete callable signatures:", `- ${searchSignature}`)
     }
   }
 
@@ -670,7 +668,7 @@ const namespaceKeys = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): Rea
       !Object.hasOwn(value, segment)
     ) {
       throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${path.join(".")}'.`, [
-        "Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools.",
+        "Object.keys(tools) lists the available namespaces; search({ query }) finds described tools.",
       ])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
@@ -690,7 +688,7 @@ const resolve = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): HostTool<
       !Object.hasOwn(value, segment)
     ) {
       throw new ToolRuntimeError("UnknownTool", `Unknown tool '${path.join(".")}'.`, [
-        "Use tools.$codemode.search({ query }) to find available described tools.",
+        "Use search({ query }) to find available described tools.",
       ])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
@@ -707,6 +705,11 @@ export type ToolRuntime<R = never> = {
   readonly root: ToolReference
   readonly calls: Array<ToolCall>
   readonly invoke: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+  /**
+   * The built-in `search` global: a synchronous discovery call that shares the tool
+   * admission pipeline (budget, audit, hooks) without living in the `tools` tree.
+   */
+  readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   /** Enumerable namespace/tool names at one node of the callable tool tree; see `namespaceKeys`. */
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
@@ -719,10 +722,7 @@ export const make = <R>(
   hooks?: ToolCallHooks<R>,
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
-  const callableTools = {
-    ...tools,
-    [reservedNamespace]: { search: makeSearchTool(searchIndex) },
-  }
+  const searchTool = makeSearchTool(searchIndex)
 
   // Wraps the settling portion of a tool call so onToolCallEnd observes success and failure
   // symmetrically. Interruption (e.g. the execution timeout) fires neither outcome.
@@ -758,52 +758,59 @@ export const make = <R>(
     calls.push(call)
   }
 
+  const recordAndObserve = (name: string, input: unknown) =>
+    Effect.sync(() => {
+      recordCall({ name })
+      return calls.length - 1
+    }).pipe(Effect.tap((index) => hooks?.onToolCallStart?.({ index, name, input }) ?? Effect.void))
+
+  const invokeDefinition = (name: string, tool: Definition<R>, externalArgs: Array<unknown>) =>
+    Effect.gen(function* () {
+      if (externalArgs.length !== 1)
+        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
+      const input = yield* Effect.try({
+        try: () => decodeToolInput(tool, externalArgs[0]),
+        catch: (cause) =>
+          new ToolRuntimeError("InvalidToolInput", `Invalid input for tool '${name}': ${String(cause)}`),
+      })
+      const index = yield* recordAndObserve(name, input)
+      return yield* observeEnd(
+        Effect.gen(function* () {
+          const raw = yield* runHost(Effect.suspend(() => tool.run(input)))
+          const result = yield* Effect.try({
+            try: () => decodeToolOutput(tool, raw),
+            catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
+          })
+          return yield* decodeOutput(result, name)
+        }),
+        { index, name, input },
+      )
+    })
+
   return {
     root: new ToolReference([]),
     calls,
-    keys: (path) => namespaceKeys(callableTools, path),
+    keys: (path) => namespaceKeys(tools, path),
+    search: (args) =>
+      Effect.suspend(() =>
+        invokeDefinition(
+          "search",
+          searchTool,
+          args.map((arg) => copyOut(copyIn(arg, "Arguments for tool 'search'"))),
+        ),
+      ),
     invoke: (path, args) =>
       Effect.gen(function* () {
         const name = path.join(".")
         const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`)))
-        const call = { name }
-        const recordAndObserve = (input: unknown) =>
-          Effect.sync(() => {
-            recordCall(call)
-            return calls.length - 1
-          }).pipe(Effect.tap((index) => hooks?.onToolCallStart?.({ index, name, input }) ?? Effect.void))
-        const tool = resolve(callableTools, path)
-        let describedInput: unknown
-        if (isDefinition(tool)) {
-          if (externalArgs.length !== 1)
-            throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
-          describedInput = yield* Effect.try({
-            try: () => decodeToolInput(tool, externalArgs[0]),
-            catch: (cause) =>
-              new ToolRuntimeError("InvalidToolInput", `Invalid input for tool '${name}': ${String(cause)}`),
-          })
-        }
-        const input = isDefinition(tool) ? describedInput : externalArgs
-        const index = yield* recordAndObserve(input)
-        const currentCall = { index, name, input }
-        if (isDefinition(tool)) {
-          return yield* observeEnd(
-            Effect.gen(function* () {
-              const raw = yield* runHost(Effect.suspend(() => tool.run(describedInput)))
-              const result = yield* Effect.try({
-                try: () => decodeToolOutput(tool, raw),
-                catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
-              })
-              return yield* decodeOutput(result, name)
-            }),
-            currentCall,
-          )
-        }
+        const tool = resolve(tools, path)
+        if (isDefinition(tool)) return yield* invokeDefinition(name, tool, externalArgs)
+        const index = yield* recordAndObserve(name, externalArgs)
         return yield* observeEnd(
           Effect.gen(function* () {
             return yield* decodeOutput(yield* runHost(Effect.suspend(() => tool(...externalArgs))), name)
           }),
-          currentCall,
+          { index, name, input: externalArgs },
         )
       }),
   }

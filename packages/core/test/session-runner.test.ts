@@ -6,6 +6,7 @@ import {
   Model,
   ToolFailure,
   TransportReason,
+  InvalidProviderOutputReason,
   InvalidRequestReason,
   RateLimitReason,
   type LLMClientShape,
@@ -716,7 +717,18 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
         type: "assistant",
         finish: "error",
         error: { type: "provider.transport", message: "Provider unavailable" },
-        content: [fixture.expectedContent],
+        content: [
+          kind === "tool input"
+            ? {
+                type: "tool",
+                id: fragmentID(kind, "partial"),
+                state: {
+                  status: "error",
+                  error: { type: "provider.transport", message: "Provider unavailable" },
+                },
+              }
+            : fixture.expectedContent,
+        ],
       },
     ])
     expect(requests).toHaveLength(1)
@@ -3873,6 +3885,45 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
       expect(requests).toHaveLength(1)
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+    }),
+  )
+
+  it.effect("settles malformed streamed tool input before the provider failure", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Call a malformed tool")
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new InvalidProviderOutputReason({ message: "Invalid JSON input for tool call echo" }),
+      })
+      responseStream = Stream.fromIterable([
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-malformed", name: "echo" }),
+        LLMEvent.toolInputDelta({ id: "call-malformed", name: "echo", text: '{"text":"partial' }),
+      ]).pipe(Stream.concat(Stream.fail(failure)))
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      const assistant = requireAssistant(yield* session.context(sessionID))
+
+      response = reply.stop()
+      yield* admit(session, "Continue")
+      yield* session.resume(sessionID)
+
+      expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
+        { type: "session.step.started.1" },
+        {
+          type: "session.tool.failed.1",
+          data: {
+            callID: "call-malformed",
+            error: { type: "provider.invalid-output", message: "Invalid JSON input for tool call echo" },
+          },
+        },
+        {
+          type: "session.step.failed.1",
+          data: { error: { type: "provider.invalid-output", message: "Invalid JSON input for tool call echo" } },
+        },
+      ])
     }),
   )
 

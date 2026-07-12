@@ -26,7 +26,7 @@ describe("ReferenceGuidance", () => {
           Layer.mock(Reference.Service, {
             list: () =>
               Effect.succeed([
-                new Reference.Info({
+                Reference.Info.make({
                   name: "docs",
                   path: AbsolutePath.make("/docs"),
                   description: "Use for product documentation",
@@ -62,7 +62,7 @@ describe("ReferenceGuidance", () => {
           Layer.mock(Reference.Service, {
             list: () =>
               Effect.succeed([
-                new Reference.Info({
+                Reference.Info.make({
                   name: "docs",
                   path: AbsolutePath.make("/docs"),
                   source: Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") }),
@@ -76,7 +76,7 @@ describe("ReferenceGuidance", () => {
 
   it.effect("announces added and removed references as deltas", () => {
     const reference = (name: string, description: string) =>
-      new Reference.Info({
+      Reference.Info.make({
         name,
         path: AbsolutePath.make(`/${name}`),
         description,

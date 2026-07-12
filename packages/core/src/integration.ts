@@ -303,7 +303,7 @@ const layer = Layer.effect(
     }
 
     const project = (entry: Entry, connections: IntegrationConnection.Info[]) =>
-      new Info({
+      Info.make({
         id: entry.ref.id,
         name: entry.ref.name,
         methods: entry.methods,
