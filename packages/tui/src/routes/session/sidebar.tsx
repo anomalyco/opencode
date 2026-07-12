@@ -1,3 +1,17 @@
+/**
+ * Pure helper: should the sidebar be visible given the current mode and screen width?
+ *
+ * - `"auto"` + wide screen → visible
+ * - `"auto"` + narrow screen → hidden
+ * - `"hide"` → always hidden
+ *
+ * This is exported separately so unit tests can verify the logic directly
+ * without needing SolidJS reactive primitives.
+ */
+export function sidebarVisibleForMode(mode: "auto" | "hide", wide: boolean): boolean {
+  return mode === "auto" && wide
+}
+
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { createMemo, Show } from "solid-js"
