@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   collectSearchUnits,
+  estimateRenderedLine,
   findSearchHits,
   highlightSegments,
   initialSearchIndex,
   moveSearchIndex,
-  searchPreview,
+  searchHighlights,
 } from "../../src/util/session-search"
 
 describe("collectSearchUnits", () => {
@@ -152,28 +153,37 @@ describe("highlightSegments", () => {
   })
 })
 
-describe("searchPreview", () => {
-  const unit = {
-    anchorID: "prt_1",
-    messageID: "msg_1",
-    role: "assistant" as const,
-    kind: "text" as const,
-    text: "start\nthe quick brown fox jumps over the lazy dog\nend",
-  }
-
-  test("extracts the matched line around the hit", () => {
-    const hit = findSearchHits([unit], "fox")[0]
-    const preview = searchPreview(hit, 80)
-    expect(preview).toEqual({ before: "the quick brown ", match: "fox", after: " jumps over the lazy dog" })
+describe("searchHighlights", () => {
+  test("returns opentui highlight tuples for every occurrence", () => {
+    expect(searchHighlights("one two one", "one")).toEqual([
+      [0, 3, "search.match"],
+      [8, 11, "search.match"],
+    ])
   })
 
-  test("clips long lines with ellipses while keeping the match", () => {
-    const hit = findSearchHits([unit], "fox")[0]
-    const preview = searchPreview(hit, 16)
-    expect(preview.match).toBe("fox")
-    expect(preview.before.startsWith("…")).toBe(true)
-    expect(preview.after.endsWith("…")).toBe(true)
-    const width = preview.before.length + preview.match.length + preview.after.length
-    expect(width).toBeLessThanOrEqual(16)
+  test("blank query yields nothing", () => {
+    expect(searchHighlights("anything", "")).toEqual([])
+  })
+
+  test("marks the occurrence at the active offset with the active scope", () => {
+    expect(searchHighlights("one two one", "one", 8)).toEqual([
+      [0, 3, "search.match"],
+      [8, 11, "search.match.active"],
+    ])
+  })
+})
+
+describe("estimateRenderedLine", () => {
+  test("counts one row per short line", () => {
+    expect(estimateRenderedLine("a\nb\nc", 2, 80)).toBe(2)
+  })
+
+  test("adds rows for lines that soft-wrap", () => {
+    const text = `${"x".repeat(25)}\nshort\ntarget`
+    expect(estimateRenderedLine(text, 2, 10)).toBe(4)
+  })
+
+  test("line zero renders at row zero", () => {
+    expect(estimateRenderedLine("anything", 0, 10)).toBe(0)
   })
 })

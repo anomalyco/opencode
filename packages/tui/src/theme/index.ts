@@ -620,6 +620,21 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
+      scope: ["search.match"],
+      style: {
+        foreground: selectedForeground(theme, theme.warning),
+        background: theme.warning,
+      },
+    },
+    {
+      scope: ["search.match.active"],
+      style: {
+        foreground: selectedForeground(theme, theme.secondary),
+        background: theme.secondary,
+        bold: true,
+      },
+    },
+    {
       scope: ["comment"],
       style: {
         foreground: theme.syntaxComment,

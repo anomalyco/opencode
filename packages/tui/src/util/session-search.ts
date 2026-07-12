@@ -137,6 +137,25 @@ export function initialSearchIndex(
   return (below ?? positioned[0]).index
 }
 
+/** Structurally matches opentui's SimpleHighlight: [start, end, syntax style group]. */
+export type SearchHighlight = [number, number, string]
+
+export function searchHighlights(content: string, query: string, activeOffset?: number): SearchHighlight[] {
+  const pattern = searchPattern(query)
+  if (!pattern) return []
+  const highlights: SearchHighlight[] = []
+  let match = pattern.exec(content)
+  while (match && highlights.length < MAX_HITS) {
+    highlights.push([
+      match.index,
+      match.index + match[0].length,
+      match.index === activeOffset ? "search.match.active" : "search.match",
+    ])
+    match = pattern.exec(content)
+  }
+  return highlights
+}
+
 export type HighlightSegment = {
   text: string
   start: number
@@ -161,29 +180,20 @@ export function highlightSegments(text: string, query: string): HighlightSegment
   return segments
 }
 
-export type SearchPreview = {
-  before: string
-  match: string
-  after: string
-}
-
-export function searchPreview(hit: SearchHit, width: number): SearchPreview {
-  const lineStart = hit.text.lastIndexOf("\n", hit.start - 1) + 1
-  const lineEndIndex = hit.text.indexOf("\n", hit.start)
-  const lineEnd = lineEndIndex === -1 ? hit.text.length : lineEndIndex
-  const match = hit.text.slice(hit.start, Math.min(hit.end, lineEnd))
-  const before = hit.text.slice(lineStart, hit.start)
-  const after = hit.text.slice(Math.min(hit.end, lineEnd), lineEnd)
-
-  const budget = Math.max(8, width) - match.length
-  if (budget <= 0) return { before: "", match: match.slice(0, Math.max(8, width)), after: "" }
-  if (before.length + after.length <= budget) return { before, match, after }
-
-  const beforeBudget = Math.min(before.length, Math.max(Math.floor(budget * 0.4), budget - after.length))
-  const afterBudget = budget - beforeBudget
-  return {
-    before: before.length > beforeBudget ? "…" + before.slice(before.length - beforeBudget + 1) : before,
-    match,
-    after: after.length > afterBudget ? after.slice(0, Math.max(0, afterBudget - 1)) + "…" : after,
+/**
+ * Estimates the rendered row of a source line, accounting for soft wrapping:
+ * each source line before it contributes at least one row plus one per wrap.
+ */
+export function estimateRenderedLine(text: string, line: number, width: number) {
+  if (line <= 0) return 0
+  const columns = Math.max(1, width)
+  let row = 0
+  let start = 0
+  for (let index = 0; index < line; index++) {
+    const end = text.indexOf("\n", start)
+    if (end === -1) break
+    row += Math.max(1, Math.ceil((end - start) / columns))
+    start = end + 1
   }
+  return row
 }
