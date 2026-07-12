@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { executeWithLimits } from "./interpreter/runtime.js"
+import { executeWithLimits } from "./interpreter/execute.js"
 import { type HostTools, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Definition } from "./tool.js"
 

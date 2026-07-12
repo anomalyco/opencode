@@ -1,26 +1,5 @@
-import { parse } from "acorn"
-import { Cause, Deferred, Effect, Exit, Fiber, Scope, Semaphore } from "effect"
-import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageText, transpileModule } from "typescript"
-import {
-  copyIn,
-  copyOut,
-  isBlockedMember,
-  ToolReference,
-  ToolRuntime,
-  ToolRuntimeError,
-  type HostTools,
-  type SafeObject,
-  type Services,
-} from "../tool-runtime.js"
-import { ToolError } from "../tool-error.js"
-import type {
-  DataValue,
-  Diagnostic,
-  DiagnosticKind,
-  ExecuteOptions,
-  ResolvedExecutionLimits,
-  Result,
-} from "../codemode.js"
+import { Cause, Effect, Semaphore } from "effect"
+import { isBlockedMember, ToolReference, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
 import {
   type AstNode,
   asNode,
@@ -31,7 +10,6 @@ import {
   ErrorConstructorReference,
   GlobalMethodReference,
   GlobalNamespace,
-  formatLocation,
   getArray,
   getBoolean,
   getNode,
@@ -51,43 +29,36 @@ import {
   type ProgramNode,
   SearchFunction,
   type StatementResult,
-  sourceLocation,
   supportedSyntaxMessage,
   unsupportedSyntax,
   UriFunction,
 } from "./model.js"
+import { caughtErrorValue, constructErrorValue, publicErrorMessage } from "./errors.js"
+import { type CallbackRunner, invokeGlobalMethod, invokeIntrinsic } from "./methods.js"
+import {
+  constructPromise,
+  invokePromiseInstanceMethod,
+  invokePromiseMethod,
+  PromiseRuntime,
+  selfResolutionError,
+} from "./promises.js"
+import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
+import { ScopeStack } from "./scope.js"
 import { arrayMethods, mapMethods, setMethods, spreadItems } from "../stdlib/collections.js"
-import { consoleMethods, MAX_CONSOLE_DEPTH } from "../stdlib/console.js"
-import { dateMethods, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
-import { invokeJsonMethod } from "../stdlib/json.js"
-import { invokeMathMethod, mathConstants } from "../stdlib/math.js"
-import {
-  invokeNumberMethod,
-  invokeNumberStatic,
-  numberConstants,
-  numberMethods,
-  numberStatics,
-} from "../stdlib/number.js"
-import { invokeObjectMethod, objectMethodsPreservingIdentity } from "../stdlib/object.js"
+import { consoleMethods, formatConsoleMessage } from "../stdlib/console.js"
+import { dateMethods } from "../stdlib/date.js"
+import { mathConstants } from "../stdlib/math.js"
+import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
+import { objectMethodsPreservingIdentity } from "../stdlib/object.js"
 import { promiseStatics, TOOL_CALL_CONCURRENCY } from "../stdlib/promise.js"
-import {
-  escapeRegexHint,
-  invokeRegExpMethod,
-  matchToValue,
-  regexpMethods,
-  regexpProperties,
-  regexFailureReason,
-  toHostRegex,
-} from "../stdlib/regexp.js"
-import { invokeStringStatic, stringMethods, stringStatics } from "../stdlib/string.js"
+import { escapeRegexHint, regexpMethods, regexpProperties, regexFailureReason } from "../stdlib/regexp.js"
+import { stringMethods, stringStatics } from "../stdlib/string.js"
 import {
   urlMethods,
   urlProperties,
   urlSearchParamsMethods,
   urlWritableProperties,
   invokeUriFunction,
-  invokeURLMethod,
-  invokeURLStatic,
   uriArgument,
   urlArgument,
 } from "../stdlib/url.js"
@@ -96,8 +67,6 @@ import {
   coerceToNumber,
   coerceToString,
   compoundOperators,
-  createAggregateErrorValue,
-  createErrorValue,
   errorBrandName,
   errorConstructors,
   invokeCoercion,
@@ -113,240 +82,6 @@ import {
   SandboxURL,
   SandboxURLSearchParams,
 } from "../values.js"
-
-const parseProgram = (code: string): ProgramNode => {
-  const transpiled = transpileModule(`async function __codemode__() {\n${code}\n}`, {
-    reportDiagnostics: true,
-    compilerOptions: {
-      target: ScriptTarget.ESNext,
-      module: ModuleKind.ESNext,
-    },
-  })
-  const diagnostic = transpiled.diagnostics?.find((item) => item.category === DiagnosticCategory.Error)
-
-  if (diagnostic) {
-    throw new InterpreterRuntimeError(
-      `Failed to parse TypeScript: ${flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
-      undefined,
-      "ParseError",
-    )
-  }
-
-  const bodyStart = transpiled.outputText.indexOf("{") + 1
-  const bodyEnd = transpiled.outputText.lastIndexOf("}")
-  const executableCode = transpiled.outputText.slice(bodyStart, bodyEnd)
-  const parsed = parse(executableCode, {
-    ecmaVersion: "latest",
-    sourceType: "script",
-    allowReturnOutsideFunction: true,
-    allowAwaitOutsideFunction: true,
-    locations: true,
-  }) as unknown
-
-  if (!isRecord(parsed) || parsed.type !== "Program" || !Array.isArray(parsed.body)) {
-    throw new InterpreterRuntimeError("Failed to parse script as a Program node.")
-  }
-
-  return parsed as ProgramNode
-}
-
-const publicErrorMessage = (message: string): string =>
-  message.replace(/\/(?:Users|home|private|tmp|var\/folders)\/[^\s"'`]+/g, "<redacted-path>")
-
-const normalizeError = (error: unknown): Diagnostic => {
-  if (error instanceof InterpreterRuntimeError) {
-    return {
-      kind: error.kind,
-      message: `${error.message}${formatLocation(error.node)}`,
-      ...(error.node?.loc ? { location: sourceLocation(error.node) } : {}),
-      ...(error.suggestions ? { suggestions: error.suggestions } : {}),
-    }
-  }
-
-  if (error instanceof ToolRuntimeError) {
-    return {
-      kind: error.kind,
-      message: error.message,
-      ...(error.suggestions.length > 0 ? { suggestions: error.suggestions } : {}),
-    }
-  }
-
-  if (error instanceof ToolError) {
-    return { kind: "ToolFailure", message: publicErrorMessage(error.message) }
-  }
-
-  if (error instanceof ProgramThrow) {
-    const value = error.value
-    let message: string
-    if (containsRuntimeReference(value)) {
-      // A thrown tool/function reference must not leak its internal structure.
-      message = "a non-data value"
-    } else if (typeof value === "string") {
-      message = value
-    } else if (
-      value !== null &&
-      typeof value === "object" &&
-      typeof (value as { message?: unknown }).message === "string"
-    ) {
-      message = (value as { message: string }).message
-    } else {
-      try {
-        message = JSON.stringify(copyOut(value)) ?? String(value)
-      } catch {
-        message = String(value)
-      }
-    }
-    return { kind: "ExecutionFailure", message: `Uncaught: ${message}` }
-  }
-
-  if (error instanceof RangeError && /call stack|recursion/i.test(error.message)) {
-    return {
-      kind: "ExecutionFailure",
-      message: "Execution exceeded the maximum nesting depth.",
-    }
-  }
-
-  if (error instanceof Error) {
-    return {
-      kind: error.name === "SyntaxError" ? "ParseError" : "ExecutionFailure",
-      message: publicErrorMessage(error.message),
-    }
-  }
-
-  // A non-Error thrown by a host tool (raw string / number / Symbol) still routes through
-  // path redaction so filesystem paths can never leak through the catch-all branch.
-  return {
-    kind: "ExecutionFailure",
-    message: publicErrorMessage(String(error)),
-  }
-}
-
-// V8 parity: a combinator settles one reaction turn after the deciding member, never
-// before reactions already attached to it.
-const settleAfterTurn = <A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.exit(body), (exit) => Effect.andThen(Effect.yieldNow, exit))
-
-const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
-  new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
-
-// Short-circuit marker for Promise.any: the first fulfillment travels the error channel of
-// the flipped members so fail-fast Effect.all stops observing on it.
-class PromiseAnyFulfilled {
-  constructor(readonly value: unknown) {}
-}
-
-type ReactionHandler = CodeModeFunction | CoercionFunction | UriFunction | PromiseCapabilityFunction
-
-// Non-callables are ignored as in JS: `.then(undefined, f)` relies on the passthrough.
-const reactionHandler = (value: unknown, method: string, node: AstNode): ReactionHandler | undefined => {
-  if (
-    value instanceof CodeModeFunction ||
-    value instanceof CoercionFunction ||
-    value instanceof UriFunction ||
-    value instanceof PromiseCapabilityFunction
-  ) {
-    return value
-  }
-  if (typeofValue(value) === "function") {
-    throw new InterpreterRuntimeError(
-      `${method} handlers must be plain functions; wrap other callables in an arrow function, e.g. (value) => tools.ns.tool(value).`,
-      node,
-    )
-  }
-  return undefined
-}
-
-// Shared by catch bindings and Promise.allSettled rejection reasons.
-const caughtErrorValue = (thrown: unknown): unknown => {
-  if (thrown instanceof ProgramThrow) return thrown.value
-  if (thrown instanceof InterpreterRuntimeError) return createErrorValue(thrown.errorName, thrown.message)
-  const name = thrown instanceof Error && errorConstructors.has(thrown.name) ? thrown.name : "Error"
-  return createErrorValue(name, normalizeError(thrown).message)
-}
-
-// `new Error("msg")` and the no-new call form share this; AggregateError alone takes
-// (errors, message?) with a required errors collection, as in JS.
-const constructErrorValue = (name: string, args: Array<unknown>, node: AstNode): SafeObject => {
-  if (name !== "AggregateError") return createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
-  const errors = spreadItems(args[0])
-  if (errors === undefined) {
-    throw new InterpreterRuntimeError(
-      "new AggregateError(...) expects an array of errors (e.g. new AggregateError(errors, message?)).",
-      node,
-    ).as("TypeError")
-  }
-  // Copy: spreadItems returns array input itself, and the error value must not alias caller data.
-  return createAggregateErrorValue([...errors], args[1] === undefined ? "" : coerceToString(args[1]))
-}
-
-const isRuntimeReference = (value: unknown): boolean =>
-  value instanceof CodeModeFunction ||
-  value instanceof ToolReference ||
-  value instanceof IntrinsicReference ||
-  value instanceof GlobalNamespace ||
-  value instanceof GlobalMethodReference ||
-  value instanceof PromiseNamespace ||
-  value instanceof PromiseMethodReference ||
-  value instanceof PromiseInstanceMethodReference ||
-  value instanceof SandboxPromise ||
-  value instanceof CoercionFunction ||
-  value instanceof UriFunction ||
-  value instanceof SearchFunction ||
-  value instanceof PromiseCapabilityFunction ||
-  value instanceof ErrorConstructorReference ||
-  isSandboxValue(value)
-
-const containsRuntimeReference = (value: unknown, seen = new Set<object>()): boolean => {
-  if (isRuntimeReference(value)) return true
-  if (value === null || typeof value !== "object") return false
-  if (seen.has(value)) return false
-  seen.add(value)
-  const contains = Array.isArray(value)
-    ? value.some((item) => containsRuntimeReference(item, seen))
-    : Object.values(value).some((item) => containsRuntimeReference(item, seen))
-  seen.delete(value)
-  return contains
-}
-
-// Like containsRuntimeReference, but sandbox standard-library values count as data:
-// operators and switch treat them as ordinary object operands (identity equality, ToPrimitive
-// coercion) rather than rejecting them as opaque interpreter machinery.
-const containsOpaqueReference = (value: unknown, seen = new Set<object>()): boolean => {
-  if (isSandboxValue(value)) return false
-  if (isRuntimeReference(value)) return true
-  if (value === null || typeof value !== "object") return false
-  if (seen.has(value)) return false
-  seen.add(value)
-  const contains = Array.isArray(value)
-    ? value.some((item) => containsOpaqueReference(item, seen))
-    : Object.values(value).some((item) => containsOpaqueReference(item, seen))
-  seen.delete(value)
-  return contains
-}
-
-// `typeof` never throws in JS; map every interpreter value to its JS-visible category.
-// A SandboxPromise falls through to the final `typeof value` and reports "object", exactly
-// like a real JS promise.
-const typeofValue = (value: unknown): string => {
-  if (
-    value instanceof CodeModeFunction ||
-    value instanceof CoercionFunction ||
-    value instanceof IntrinsicReference ||
-    value instanceof GlobalMethodReference ||
-    value instanceof PromiseMethodReference ||
-    value instanceof PromiseInstanceMethodReference ||
-    value instanceof PromiseNamespace ||
-    value instanceof PromiseCapabilityFunction ||
-    value instanceof ErrorConstructorReference
-  )
-    return "function"
-  if (value instanceof UriFunction || value instanceof SearchFunction) return "function"
-  if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
-  if (value instanceof GlobalNamespace) {
-    return value.name === "Math" || value.name === "JSON" || value.name === "console" ? "object" : "function"
-  }
-  return typeof value
-}
 
 // `x instanceof C` against the constructors CodeMode knows. Like `typeof`, it observes any
 // left-hand value (opaque references included) without coercing it. Error checks use the
@@ -389,253 +124,6 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   )
 }
 
-const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode): unknown => {
-  const str = (index: number): string => {
-    const arg = args[index]
-    if (typeof arg !== "string")
-      throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a string.`, node)
-    return arg
-  }
-  const num = (index: number): number => {
-    const arg = args[index]
-    if (typeof arg !== "number")
-      throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a number.`, node)
-    return arg
-  }
-  const optNum = (index: number): number | undefined => (args[index] === undefined ? undefined : num(index))
-  const optStr = (index: number): string | undefined => (args[index] === undefined ? undefined : str(index))
-
-  let result: unknown
-  switch (name) {
-    case "toLowerCase":
-      result = value.toLowerCase()
-      break
-    case "toUpperCase":
-      result = value.toUpperCase()
-      break
-    case "trim":
-      result = value.trim()
-      break
-    // trimLeft/trimRight are the legacy aliases of trimStart/trimEnd, kept because models write them.
-    case "trimStart":
-    case "trimLeft":
-      result = value.trimStart()
-      break
-    case "trimEnd":
-    case "trimRight":
-      result = value.trimEnd()
-      break
-    // Locale/options arguments are ignored: comparison runs with the host default locale, and
-    // the common use is a sort comparator where any consistent order works.
-    case "localeCompare":
-      result = value.localeCompare(str(0))
-      break
-    case "normalize": {
-      const form = optStr(0)
-      try {
-        result = value.normalize(form)
-      } catch {
-        throw new InterpreterRuntimeError(
-          `String.normalize expects the form "NFC", "NFD", "NFKC", or "NFKD" (got ${JSON.stringify(form)}).`,
-          node,
-        ).as("RangeError")
-      }
-      break
-    }
-    case "split": {
-      if (args.length === 0) {
-        result = [value]
-        break
-      }
-      if (args[0] instanceof SandboxRegExp) {
-        result = value.split(args[0].regex, optNum(1))
-        break
-      }
-      const requestedLimit = optNum(1)
-      result = value.split(str(0), requestedLimit === undefined ? undefined : requestedLimit >>> 0)
-      break
-    }
-    case "slice":
-      result = value.slice(optNum(0), optNum(1))
-      break
-    case "includes":
-      result = value.includes(str(0), optNum(1))
-      break
-    case "startsWith":
-      result = value.startsWith(str(0), optNum(1))
-      break
-    case "endsWith":
-      result = value.endsWith(str(0), optNum(1))
-      break
-    case "indexOf":
-      result = value.indexOf(str(0), optNum(1))
-      break
-    case "lastIndexOf":
-      result = value.lastIndexOf(str(0), optNum(1))
-      break
-    case "replace":
-    case "replaceAll": {
-      if (args[0] instanceof SandboxRegExp) {
-        const pattern = args[0].regex
-        const replacement = str(1)
-        if (name === "replaceAll" && !pattern.global) {
-          throw new InterpreterRuntimeError(
-            `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.replace to replace only the first match.`,
-            node,
-          )
-        }
-        result = name === "replace" ? value.replace(pattern, replacement) : value.replaceAll(pattern, replacement)
-        break
-      }
-      if (name === "replace") {
-        result = value.replace(str(0), str(1))
-        break
-      }
-      result = value.replaceAll(str(0), str(1))
-      break
-    }
-    case "match": {
-      const pattern = toHostRegex(args[0], name, node)
-      const matched = value.match(pattern)
-      if (matched === null) return null
-      // A global match is a plain array of matched strings; a non-global match carries
-      // index/groups own properties, so bypass the copying data checkpoint to keep them.
-      if (pattern.global) return boundedData(matched, "String.match result")
-      return matchToValue(matched)
-    }
-    case "matchAll": {
-      const pattern = toHostRegex(args[0], name, node, "g")
-      if (!pattern.global) {
-        throw new InterpreterRuntimeError(
-          `String.matchAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.match for a single match.`,
-          node,
-        )
-      }
-      // Materialized as an array (not an iterator); each entry is a match array with
-      // index/groups own properties. Match count is bounded by the subject length.
-      return Array.from(value.matchAll(pattern), matchToValue)
-    }
-    case "search": {
-      result = value.search(toHostRegex(args[0], name, node))
-      break
-    }
-    case "repeat": {
-      const count = num(0)
-      if (!Number.isFinite(count) || count < 0)
-        throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node)
-      result = value.repeat(count)
-      break
-    }
-    case "padStart":
-      result = value.padStart(num(0), optStr(1))
-      break
-    case "padEnd":
-      result = value.padEnd(num(0), optStr(1))
-      break
-    case "charAt":
-      result = value.charAt(optNum(0) ?? 0)
-      break
-    case "at":
-      result = value.at(optNum(0) ?? 0)
-      break
-    case "substring":
-      result = value.substring(optNum(0) ?? 0, optNum(1))
-      break
-    case "substr":
-      result = value.substr(optNum(0) ?? 0, optNum(1))
-      break
-    // JS charCodeAt returns NaN out of range; NaN flows as an ordinary in-sandbox value
-    // (normalized to null only at the data boundary - see copyOut), so return it as-is.
-    case "charCodeAt":
-      result = value.charCodeAt(optNum(0) ?? 0)
-      break
-    case "codePointAt":
-      result = value.codePointAt(optNum(0) ?? 0)
-      break
-    case "toString":
-      result = value
-      break
-    case "concat": {
-      result = value.concat(...args.map((_, index) => str(index)))
-      break
-    }
-    default:
-      throw new InterpreterRuntimeError(`String method '${name}' is not available in CodeMode.`, node)
-  }
-  return boundedData(result, `String.${name} result`)
-}
-
-const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  switch (name) {
-    case "isArray":
-      return Array.isArray(args[0])
-    case "of":
-      return [...args]
-    case "from": {
-      if (args.length > 1) {
-        throw new InterpreterRuntimeError(
-          "Array.from(...) does not support a map function in CodeMode; call .map() on the result instead.",
-          node,
-          "UnsupportedSyntax",
-          [supportedSyntaxMessage],
-        )
-      }
-      // Map/Set materialize directly (the data checkpoint would serialize them to {}).
-      if (args[0] instanceof SandboxMap) return Array.from(args[0].map.entries(), ([key, item]) => [key, item])
-      if (args[0] instanceof SandboxSet) return Array.from(args[0].set.values())
-      if (args[0] instanceof SandboxURLSearchParams) {
-        return Array.from(args[0].params.entries(), ([key, value]) => [key, value])
-      }
-      const source = args[0]
-      if (source instanceof SandboxPromise) {
-        throw new InterpreterRuntimeError(
-          "Array.from received an un-awaited Promise; await it before creating the array.",
-          node,
-          "InvalidDataValue",
-        )
-      }
-      if (typeof source === "string") return Array.from(source)
-      if (Array.isArray(source)) return [...source]
-      if (
-        source !== null &&
-        typeof source === "object" &&
-        (Object.getPrototypeOf(source) === Object.prototype || Object.getPrototypeOf(source) === null) &&
-        typeof (source as { length?: unknown }).length === "number"
-      ) {
-        return Array.from(source as ArrayLike<unknown>)
-      }
-      throw new InterpreterRuntimeError(
-        "Array.from expects an array, string, Map, Set, or array-like value.",
-        node,
-        "InvalidDataValue",
-      )
-    }
-    default:
-      throw new InterpreterRuntimeError(`Array.${name} is not available in CodeMode.`, node)
-  }
-}
-
-const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
-  if (ref.namespace === "console")
-    throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
-  if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node)
-  if (ref.namespace === "Math") return invokeMathMethod(ref.name, args, node)
-  if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
-  if (ref.namespace === "Number") return invokeNumberStatic(ref.name, args, node)
-  if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
-  if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
-  if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
-  if (
-    ref.namespace === "RegExp" ||
-    ref.namespace === "Map" ||
-    ref.namespace === "Set" ||
-    ref.namespace === "URLSearchParams"
-  ) {
-    throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
-  }
-  return invokeJsonMethod(ref.name, args, node)
-}
-
 // Every identifier a parameter pattern binds, used to seed TDZ slots before defaults run.
 const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<string> => {
   switch (pattern.type) {
@@ -663,82 +151,8 @@ const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<s
   return out
 }
 
-// Promise work lives until the program returns, while observation only controls whether a
-// settled rejection is reported. Neither extends execution: completion interrupts all work.
-class PromiseRuntime<R> {
-  private readonly active = new Set<SandboxPromise>()
-  private readonly ids = new WeakMap<SandboxPromise, number>()
-  private readonly observed = new WeakSet<SandboxPromise>()
-  private readonly failures = new Map<number, Diagnostic>()
-  private nextID = 0
-
-  constructor(private readonly scope: Scope.Scope) {}
-
-  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
-    return Effect.suspend(() => {
-      // Allocated at execution time (not construction) so re-run effects cannot share an id,
-      // and before the fork so diagnostics order by creation: a forked body that immediately
-      // creates promises of its own must sequence after its creator.
-      const id = this.nextID++
-      return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
-        const promise = new SandboxPromise(fiber)
-        this.active.add(promise)
-        this.ids.set(promise, id)
-        fiber.addObserver((exit) => {
-          this.active.delete(promise)
-          if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause) || this.observed.has(promise)) {
-            this.ids.delete(promise)
-            return
-          }
-          const failure = normalizeError(Cause.squash(exit.cause))
-          this.failures.set(id, {
-            ...failure,
-            message: `Unhandled rejection from an un-awaited promise: ${failure.message}`,
-          })
-        })
-        return promise
-      })
-    })
-  }
-
-  // Synchronous on purpose: JS makes a promise "handled" the moment a construct takes
-  // responsibility for it (await, or membership in a combinator call), not when the
-  // consuming fiber later runs. Call sites must invoke this at that moment.
-  markObserved(promise: SandboxPromise): void {
-    this.observed.add(promise)
-    const id = this.ids.get(promise)
-    this.ids.delete(promise)
-    if (id !== undefined) this.failures.delete(id)
-  }
-
-  // Pure settlement subscription: never re-runs work and never affects rejection reporting.
-  await(promise: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
-    return Fiber.await(promise.fiber)
-  }
-
-  // Unobserved rejections that already settled, in creation order.
-  diagnostics(): Array<Diagnostic> {
-    return [...this.failures].sort(([left], [right]) => left - right).map(([, failure]) => failure)
-  }
-
-  // Normal-completion lifecycle: interrupts everything still running and reports the
-  // rejections that already settled un-awaited. interruptAll signals every fiber
-  // synchronously before awaiting termination, so no straggler can spawn new work between
-  // interrupts; the loop re-checks as a backstop because a straggler can create promises
-  // before its interrupt lands.
-  interrupt(): Effect.Effect<Array<Diagnostic>> {
-    const self = this
-    return Effect.gen(function* () {
-      while (self.active.size > 0) {
-        yield* Fiber.interruptAll([...self.active].map((promise) => promise.fiber))
-      }
-      return self.diagnostics()
-    })
-  }
-}
-
-class Interpreter<R> {
-  private scopes: Array<Map<string, Binding>>
+export class Interpreter<R> {
+  private scopes: ScopeStack
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   // The built-in `search` global, threaded from ToolRuntime.make like invokeTool.
   private readonly invokeSearch: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -749,6 +163,10 @@ class Interpreter<R> {
   // Caps how many eagerly forked tool calls run at once (the parallel-call concurrency cap).
   private readonly callPermits: Semaphore.Semaphore
   private readonly promises: PromiseRuntime<R>
+  private readonly runner: CallbackRunner<R> = {
+    invokeFunction: (fn, args) => this.invokeFunction(fn, args),
+    settlePromise: (promise) => this.settlePromise(promise),
+  }
 
   constructor(
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
@@ -759,7 +177,7 @@ class Interpreter<R> {
     callPermits: Semaphore.Semaphore = Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY),
   ) {
     const globalScope = new Map<string, Binding>()
-    this.scopes = [globalScope]
+    this.scopes = new ScopeStack([globalScope])
     this.invokeTool = invokeTool
     this.invokeSearch = invokeSearch
     this.toolKeys = toolKeys
@@ -806,7 +224,7 @@ class Interpreter<R> {
     // Run the program body in its own module scope on top of the builtin global scope, so
     // top-level declarations (`let undefined = 5`, `const Object = ...`) shadow builtins like
     // JS module scope, instead of colliding with the seeded globals.
-    this.pushScope()
+    this.scopes.push()
     return Effect.gen(function* () {
       self.hoistFunctions(program.body)
       let value: unknown = undefined
@@ -832,13 +250,11 @@ class Interpreter<R> {
       // without an explicit await, exactly as in JS.
       if (value instanceof SandboxPromise) value = yield* self.settlePromise(value)
       return value
-    }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
+    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
-  // Eagerly starts a tool call in the execution's promise scope (so timeout and teardown
-  // interrupt it) gated by the concurrency semaphore, and wraps the fiber in a
-  // first-class promise value. `startImmediately` makes the runtime admit the call - charging
-  // the tool-call budget and firing onToolCallStart - at the call site, before any await.
+  // Eagerly forked at the call site (before any await), so the runtime admits the call -
+  // charging the tool-call budget and firing onToolCallStart - when the program makes it.
   private createToolCallPromise(
     path: ReadonlyArray<string>,
     args: Array<unknown>,
@@ -907,7 +323,7 @@ class Interpreter<R> {
   }
 
   private evaluateBlock(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
-    this.pushScope()
+    this.scopes.push()
     const self = this
     return Effect.gen(function* () {
       const body = getArray(node, "body")
@@ -923,7 +339,7 @@ class Interpreter<R> {
       }
 
       return { kind: "none" } satisfies StatementResult
-    }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
+    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
   private createFunction(node: AstNode): CodeModeFunction {
@@ -938,7 +354,7 @@ class Interpreter<R> {
     return new CodeModeFunction(
       getArray(node, "params").map((parameter, index) => asNode(parameter, `params[${index}]`)),
       getNode(node, "body"),
-      this.scopes.slice(),
+      this.scopes.capture(),
       node.async === true,
     )
   }
@@ -949,7 +365,7 @@ class Interpreter<R> {
     for (const statementValue of statements) {
       if (!isRecord(statementValue) || statementValue.type !== "FunctionDeclaration") continue
       const node = statementValue as AstNode
-      this.declare(getString(getNode(node, "id"), "name"), this.createFunction(node), true, node)
+      this.scopes.declare(getString(getNode(node, "id"), "name"), this.createFunction(node), true, node)
     }
   }
 
@@ -969,7 +385,7 @@ class Interpreter<R> {
 
   private evaluateSwitchStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     const self = this
-    this.pushScope()
+    this.scopes.push()
     return Effect.gen(function* () {
       const discriminant = yield* self.evaluateExpression(getNode(node, "discriminant"))
       if (containsOpaqueReference(discriminant)) {
@@ -1011,7 +427,7 @@ class Interpreter<R> {
         }
       }
       return { kind: "none" } satisfies StatementResult
-    }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
+    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
   private evaluateWhileStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
@@ -1067,7 +483,7 @@ class Interpreter<R> {
   }
 
   private evaluateForStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
-    this.pushScope()
+    this.scopes.push()
     const self = this
     return Effect.gen(function* () {
       const initNode = getOptionalNode(node, "init")
@@ -1085,21 +501,21 @@ class Interpreter<R> {
 
       const perIterationBindings =
         initNode?.type === "VariableDeclaration" && getString(initNode, "kind") !== "var"
-          ? Array.from(self.currentScope().keys())
+          ? Array.from(self.scopes.current().keys())
           : []
 
       while (testNode ? yield* self.evaluateExpression(testNode) : true) {
         const iterationScope =
           perIterationBindings.length > 0
             ? new Map(
-                perIterationBindings.map((name): [string, Binding] => [name, { ...self.currentScope().get(name)! }]),
+                perIterationBindings.map((name): [string, Binding] => [name, { ...self.scopes.current().get(name)! }]),
               )
             : undefined
         if (iterationScope) self.scopes.push(iterationScope)
         const result = yield* self.evaluateStatement(bodyNode).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (iterationScope) self.popScope()
+              if (iterationScope) self.scopes.pop()
             }),
           ),
         )
@@ -1113,7 +529,7 @@ class Interpreter<R> {
         }
 
         if (iterationScope) {
-          const loopScope = self.currentScope()
+          const loopScope = self.scopes.current()
           for (const name of perIterationBindings) {
             loopScope.set(name, { ...iterationScope.get(name)! })
           }
@@ -1129,7 +545,7 @@ class Interpreter<R> {
       }
 
       return { kind: "none" } satisfies StatementResult
-    }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
+    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
   private evaluateForOfStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
@@ -1174,7 +590,7 @@ class Interpreter<R> {
 
       for (const value of iterable) {
         if (declaration) {
-          self.pushScope()
+          self.scopes.push()
           yield* self.declarePattern(declaration.pattern, value, declaration.mutable, left)
         } else if (assignment) {
           yield* self.assignPattern(assignment, value, left)
@@ -1183,7 +599,7 @@ class Interpreter<R> {
         const result = yield* self.evaluateStatement(body).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (declaration) self.popScope()
+              if (declaration) self.scopes.pop()
             }),
           ),
         )
@@ -1263,16 +679,16 @@ class Interpreter<R> {
 
       for (const key of keys) {
         if (declaration) {
-          self.pushScope()
+          self.scopes.push()
           yield* self.declarePattern(declaration.pattern, key, declaration.mutable, left)
         } else if (assignmentName) {
-          self.setIdentifierValue(assignmentName, key, left)
+          self.scopes.set(assignmentName, key, left)
         }
 
         const result = yield* self.evaluateStatement(body).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (declaration) self.popScope()
+              if (declaration) self.scopes.pop()
             }),
           ),
         )
@@ -1335,11 +751,11 @@ class Interpreter<R> {
         // caughtErrorValue, shared with Promise.allSettled rejection reasons.
         const caught = caughtErrorValue(Cause.squash(cause))
         const parameter = getOptionalNode(handler, "param")
-        self.pushScope()
+        self.scopes.push()
         return Effect.gen(function* () {
           if (parameter) yield* self.declarePattern(parameter, caught, true, handler)
           return yield* self.evaluateStatement(getNode(handler, "body"))
-        }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
+        }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
       },
       onSuccess: Effect.succeed,
     })
@@ -1391,7 +807,7 @@ class Interpreter<R> {
     const self = this
     return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
-        self.declare(getString(pattern, "name"), value, mutable, node)
+        self.scopes.declare(getString(pattern, "name"), value, mutable, node)
         return
       }
 
@@ -1470,7 +886,7 @@ class Interpreter<R> {
     const self = this
     return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
-        self.setIdentifierValue(getString(pattern, "name"), value, pattern)
+        self.scopes.set(getString(pattern, "name"), value, pattern)
         return
       }
 
@@ -1558,7 +974,7 @@ class Interpreter<R> {
         return Effect.sync(() => boundedData(node.value, "Literal"))
       }
       case "Identifier":
-        return Effect.sync(() => this.getIdentifierValue(getString(node, "name"), node))
+        return Effect.sync(() => this.scopes.get(getString(node, "name"), node))
       case "BinaryExpression":
         return this.evaluateBinaryExpression(node)
       case "LogicalExpression":
@@ -1621,7 +1037,9 @@ class Interpreter<R> {
     const argNodes = getArray(node, "arguments")
     const self = this
     if (name === "Promise") {
-      return Effect.flatMap(this.evaluateCallArguments(argNodes), (args) => self.constructPromise(args[0], node))
+      return Effect.flatMap(this.evaluateCallArguments(argNodes), (args) =>
+        constructPromise(self.runner, self.promises, args[0], node),
+      )
     }
     if (errorConstructors.has(name)) {
       return Effect.map(this.evaluateCallArguments(argNodes), (args) => constructErrorValue(name, args, node))
@@ -1899,7 +1317,7 @@ class Interpreter<R> {
     // `typeof undeclaredIdentifier` is `"undefined"` in JS (never a ReferenceError), so
     // feature-detection guards like `typeof x !== "undefined"` don't crash. Short-circuit before
     // evaluating the argument; a declared-but-TDZ binding still falls through to the normal throw.
-    if (operator === "typeof" && argument.type === "Identifier" && !this.resolveBinding(getString(argument, "name"))) {
+    if (operator === "typeof" && argument.type === "Identifier" && !this.scopes.resolve(getString(argument, "name"))) {
       return Effect.succeed("undefined")
     }
     return Effect.map(this.evaluateExpression(argument), (value) => {
@@ -1953,16 +1371,16 @@ class Interpreter<R> {
       if (left.type === "Identifier") {
         const name = getString(left, "name")
         if (operator !== "=") {
-          const current = self.getIdentifierValue(name, left)
+          const current = self.scopes.get(name, left)
           const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
           const next = boundedData(
             self.applyCompoundAssignment(operator, current, rightValue, node),
             "Assignment result",
           )
-          return self.setIdentifierValue(name, next, left)
+          return self.scopes.set(name, next, left)
         }
         const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
-        return self.setIdentifierValue(name, rightValue, left)
+        return self.scopes.set(name, rightValue, left)
       }
       if (left.type === "MemberExpression") {
         return yield* self.modifyMember(left, (current) =>
@@ -1991,10 +1409,10 @@ class Interpreter<R> {
     if (left.type === "Identifier") {
       const name = getString(left, "name")
       return Effect.gen(function* () {
-        const current = self.getIdentifierValue(name, left)
+        const current = self.scopes.get(name, left)
         if (!shouldAssign(current)) return current
         const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
-        return self.setIdentifierValue(name, rightValue, left)
+        return self.scopes.set(name, rightValue, left)
       })
     }
     if (left.type === "MemberExpression") {
@@ -2026,9 +1444,9 @@ class Interpreter<R> {
     if (argument.type === "Identifier") {
       return Effect.sync(() => {
         const name = getString(argument, "name")
-        const current = Number(this.getIdentifierValue(name, argument))
+        const current = Number(this.scopes.get(name, argument))
         const next = current + increment
-        this.setIdentifierValue(name, next, argument)
+        this.scopes.set(name, next, argument)
         return prefix ? next : current
       })
     }
@@ -2062,16 +1480,16 @@ class Interpreter<R> {
         return yield* self.createToolCallPromise(callable.path, args)
       }
       if (callable instanceof PromiseMethodReference) {
-        return yield* self.invokePromiseMethod(callable, args, node)
+        return yield* invokePromiseMethod(self.runner, self.promises, callable, args, node)
       }
       if (callable instanceof PromiseInstanceMethodReference) {
-        return yield* self.invokePromiseInstanceMethod(callable, args, node)
+        return yield* invokePromiseInstanceMethod(self.runner, self.promises, callable, args, node)
       }
       if (callable instanceof CodeModeFunction) {
         return yield* self.invokeFunction(callable, args)
       }
       if (callable instanceof IntrinsicReference) {
-        return yield* self.invokeIntrinsic(callable, args, node)
+        return yield* invokeIntrinsic(self.runner, callable, args, node)
       }
       if (callable instanceof GlobalMethodReference) {
         if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
@@ -2127,124 +1545,8 @@ class Interpreter<R> {
   private invokeConsole(name: string, args: Array<unknown>, node: AstNode): undefined {
     if (!consoleMethods.has(name))
       throw new InterpreterRuntimeError(`console.${name} is not available in CodeMode.`, node)
-    this.logs.push(publicErrorMessage(this.formatConsoleMessage(name, args, node)))
+    this.logs.push(publicErrorMessage(formatConsoleMessage(name, args)))
     return undefined
-  }
-
-  private formatConsoleMessage(name: string, args: Array<unknown>, node: AstNode): string {
-    if (name === "dir") return args.length === 0 ? "undefined" : this.formatConsoleArgument(args[0])
-    if (name === "table") return this.formatConsoleTable(args[0], args[1], node)
-    const prefix = name === "warn" ? "[warn] " : name === "error" ? "[error] " : name === "debug" ? "[debug] " : ""
-    return `${prefix}${args.map((arg) => this.formatConsoleArgument(arg)).join(" ")}`
-  }
-
-  // Console arguments format deeply and totally: values render as a debugger would show them
-  // rather than as boundary JSON - numbers keep NaN/Infinity (JSON would say null), sandbox
-  // values keep their friendly forms at ANY depth (ISO date, /regex/flags, Map(n) [...],
-  // Set(n) [...]), opaque runtime references become "[CodeMode reference]" markers in place,
-  // and plain objects/arrays render JSON-style. Formatting never fails the program: cycles
-  // render "[Circular]" and extreme depth degrades to "...".
-  private formatConsoleArgument(value: unknown): string {
-    if (value === undefined) return "undefined"
-    // A top-level string prints bare; nested strings are JSON-quoted (see formatConsoleValue).
-    if (typeof value === "string") return value
-    return this.formatConsoleValue(value, new Set(), 0)
-  }
-
-  private formatConsoleValue(value: unknown, seen: Set<object>, depth: number): string {
-    // Nested undefined renders as null, matching what JSON boundary output would show.
-    if (value === null || value === undefined) return "null"
-    if (typeof value === "string") return JSON.stringify(value)
-    // String(value) keeps NaN/Infinity/-Infinity readable; finite numbers match their JSON form.
-    if (typeof value === "number" || typeof value === "boolean") return String(value)
-    if (typeof value !== "object") return String(value)
-    if (value instanceof SandboxPromise) return "[Promise (await it to get its value)]"
-    if (value instanceof SandboxDate) return coerceToString(value)
-    if (value instanceof SandboxRegExp) return coerceToString(value)
-    if (value instanceof SandboxURL) return coerceToString(value)
-    if (value instanceof SandboxURLSearchParams) return coerceToString(value)
-    if (depth > MAX_CONSOLE_DEPTH) return "..."
-    if (seen.has(value)) return "[Circular]"
-    if (value instanceof SandboxMap) {
-      seen.add(value)
-      try {
-        const entries = Array.from(value.map.entries(), ([key, item]): Array<unknown> => [key, item])
-        return `Map(${value.map.size}) ${this.formatConsoleValue(entries, seen, depth + 1)}`
-      } finally {
-        seen.delete(value)
-      }
-    }
-    if (value instanceof SandboxSet) {
-      seen.add(value)
-      try {
-        return `Set(${value.set.size}) ${this.formatConsoleValue(Array.from(value.set.values()), seen, depth + 1)}`
-      } finally {
-        seen.delete(value)
-      }
-    }
-    if (isRuntimeReference(value)) return "[CodeMode reference]"
-    seen.add(value)
-    try {
-      if (Array.isArray(value)) {
-        return `[${value.map((item) => this.formatConsoleValue(item, seen, depth + 1)).join(",")}]`
-      }
-      return `{${Object.entries(value)
-        .map(([key, item]) => `${JSON.stringify(key)}:${this.formatConsoleValue(item, seen, depth + 1)}`)
-        .join(",")}}`
-    } finally {
-      seen.delete(value)
-    }
-  }
-
-  private formatConsoleTable(value: unknown, columnsArgument: unknown, node: AstNode): string {
-    if (value === undefined) return "undefined"
-    // Sandbox values are legitimate table data (cells render their friendly forms); only
-    // truly opaque references (functions, tools, promises) collapse to the marker.
-    if (containsOpaqueReference(value)) return "[CodeMode reference]"
-    const data = boundedData(value, "console.table argument")
-    const columns = this.consoleTableColumns(columnsArgument, node)
-    const rows = this.consoleTableRows(data, columns)
-    const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
-    const header = ["(index)", ...keys].join("\t")
-    return [
-      header,
-      ...rows.map((row) => [row.index, ...keys.map((key) => this.formatConsoleTableCell(row.values[key]))].join("\t")),
-    ].join("\n")
-  }
-
-  private consoleTableColumns(value: unknown, node: AstNode): ReadonlyArray<string> | undefined {
-    if (value === undefined) return undefined
-    if (containsRuntimeReference(value)) return undefined
-    const columns = copyOut(copyIn(value, "console.table columns"), true)
-    return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
-  }
-
-  private consoleTableRows(
-    data: unknown,
-    columns: ReadonlyArray<string> | undefined,
-  ): Array<{ readonly index: string; readonly values: Record<string, unknown> }> {
-    if (Array.isArray(data)) {
-      return data.map((item, index) => ({ index: String(index), values: this.consoleTableValues(item, columns) }))
-    }
-    if (data !== null && typeof data === "object" && !isSandboxValue(data)) {
-      return Object.entries(data).map(([index, item]) => ({ index, values: this.consoleTableValues(item, columns) }))
-    }
-    return [{ index: "0", values: { Value: data } }]
-  }
-
-  private consoleTableValues(value: unknown, columns: ReadonlyArray<string> | undefined): Record<string, unknown> {
-    if (value !== null && typeof value === "object" && !Array.isArray(value) && !isSandboxValue(value)) {
-      const source = value as Record<string, unknown>
-      if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, source[column]]))
-      return Object.fromEntries(Object.entries(source))
-    }
-    return { Value: value }
-  }
-
-  private formatConsoleTableCell(value: unknown): string {
-    if (value === undefined) return ""
-    if (typeof value === "string") return value
-    return this.formatConsoleValue(value, new Set(), 0)
   }
 
   private evaluateCallArguments(argNodes: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> {
@@ -2270,240 +1572,6 @@ class Interpreter<R> {
     })
   }
 
-  // Promise.* over ordinary runtime values. Combinators accept ANY array (or spreadable
-  // collection) mixing promise values and plain data - built inline, beforehand, via spread,
-  // whatever - because tool calls already run eagerly on their own fibers. Each combinator
-  // returns a real promise whose join runs on its own scope-owned fiber, observing member
-  // settlements; the concurrency cap stays where the work is: the fork semaphore.
-  private invokePromiseMethod(
-    ref: PromiseMethodReference,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    if (ref.name === "resolve") {
-      // Promise.resolve of a promise is that promise (JS flattens); anything else is a
-      // promise already fulfilled with the value. Pre-settled values still fork a scope-owned
-      // fiber so every promise shares one lifecycle (an abandoned reject is reported, teardown
-      // is uniform).
-      const value = args[0]
-      return value instanceof SandboxPromise ? Effect.succeed(value) : this.createPromise(Effect.succeed(value))
-    }
-    if (ref.name === "reject") {
-      return this.createPromise(Effect.fail(new ProgramThrow(args[0])))
-    }
-
-    const spread = spreadItems(args[0])
-    if (spread === undefined) {
-      return this.createPromise(
-        Effect.fail(
-          new InterpreterRuntimeError(
-            `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
-            node,
-          ).as("TypeError"),
-        ),
-      )
-    }
-    // Densify: JS combinator iteration reads sparse holes as undefined members; .map would skip them.
-    const items = Array.from(spread)
-
-    // JS makes combinator members "handled" synchronously at the call - their rejections
-    // belong to the aggregate from this moment, even ones settling before it runs.
-    for (const item of items) {
-      if (item instanceof SandboxPromise) this.promises.markObserved(item)
-    }
-
-    switch (ref.name) {
-      case "all": {
-        // Rejects on the first failure; sibling fibers stay execution-owned and keep running, as in JS.
-        const observations = items.map((item) =>
-          item instanceof SandboxPromise ? Effect.flatten(this.promises.await(item)) : Effect.succeed(item),
-        )
-        return this.createPromise(settleAfterTurn(Effect.all(observations, { concurrency: "unbounded" })))
-      }
-      case "allSettled": {
-        const observations = items.map((item) =>
-          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item)),
-        )
-        return this.createPromise(
-          settleAfterTurn(
-            Effect.gen(function* () {
-              const outcomes: Array<unknown> = []
-              for (const observation of observations) {
-                const exit = yield* observation
-                if (Exit.isSuccess(exit)) {
-                  outcomes.push(
-                    Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
-                  )
-                  continue
-                }
-                if (Cause.hasInterruptsOnly(exit.cause)) {
-                  // Execution teardown (timeout/host interruption), not a program-level rejection.
-                  return yield* Effect.failCause(exit.cause)
-                }
-                outcomes.push(
-                  Object.assign(Object.create(null) as SafeObject, {
-                    status: "rejected",
-                    reason: caughtErrorValue(Cause.squash(exit.cause)),
-                  }),
-                )
-              }
-              return outcomes
-            }),
-          ),
-        )
-      }
-      case "race": {
-        if (items.length === 0) {
-          return this.createPromise(
-            Effect.fail(
-              new InterpreterRuntimeError(
-                "Promise.race([]) would never settle; provide at least one promise or value.",
-                node,
-              ),
-            ),
-          )
-        }
-        const observations = items.map((item) =>
-          item instanceof SandboxPromise ? this.promises.await(item) : Effect.succeed(Exit.succeed(item)),
-        )
-        // First settlement (fulfilled OR rejected) wins; losing work stays execution-owned
-        // and is interrupted at normal completion (already observed) or by teardown.
-        return this.createPromise(settleAfterTurn(Effect.flatten(Effect.raceAll(observations))))
-      }
-      case "any": {
-        // De Morgan dual of Promise.all: members are flipped so the first fulfillment
-        // short-circuits fail-fast Effect.all, and all-rejected completes with the reasons
-        // in input order for the AggregateError.
-        const flipped = items.map((item) =>
-          item instanceof SandboxPromise
-            ? Effect.flatMap(this.promises.await(item), (exit) => {
-                if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
-                if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
-                return Effect.succeed(caughtErrorValue(Cause.squash(exit.cause)))
-              })
-            : Effect.fail(new PromiseAnyFulfilled(item)),
-        )
-        const body = Effect.all(flipped, { concurrency: "unbounded" }).pipe(
-          Effect.flatMap((reasons) =>
-            Effect.fail(new ProgramThrow(createAggregateErrorValue(reasons, "All promises were rejected"))),
-          ),
-          Effect.catch((error) =>
-            error instanceof PromiseAnyFulfilled ? Effect.succeed(error.value) : Effect.fail(error),
-          ),
-        )
-        return this.createPromise(settleAfterTurn(body))
-      }
-    }
-  }
-
-  // Teardown interruption propagates without running handlers; a real settlement defers
-  // one reaction turn so handlers never run inline.
-  private reactionExit(source: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>, unknown, R> {
-    const promises = this.promises
-    return Effect.gen(function* () {
-      const exit = yield* promises.await(source)
-      if (!Exit.isSuccess(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-      yield* Effect.yieldNow
-      return exit
-    })
-  }
-
-  private invokePromiseInstanceMethod(
-    ref: PromiseInstanceMethodReference,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<SandboxPromise, never, R> {
-    const method = `Promise.prototype.${ref.name}`
-    this.promises.markObserved(ref.promise)
-    if (ref.name === "finally") {
-      return this.chainFinally(ref.promise, reactionHandler(args[0], method, node), method, node)
-    }
-    const onFulfilled = ref.name === "then" ? reactionHandler(args[0], method, node) : undefined
-    const onRejected = reactionHandler(ref.name === "then" ? args[1] : args[0], method, node)
-    return this.chainReaction(ref.promise, onFulfilled, onRejected, method, node)
-  }
-
-  private chainReaction(
-    source: SandboxPromise,
-    onFulfilled: ReactionHandler | undefined,
-    onRejected: ReactionHandler | undefined,
-    method: string,
-    node: AstNode,
-  ): Effect.Effect<SandboxPromise, never, R> {
-    const self = this
-    const box: { derived?: SandboxPromise } = {}
-    const body = Effect.gen(function* () {
-      const exit = yield* self.reactionExit(source)
-      const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
-      if (handler === undefined) return yield* exit
-      const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
-      const result = yield* self.applyCollectionCallback(handler, method, node)([input])
-      if (result === box.derived) return yield* Effect.fail(selfResolutionError(node))
-      if (result instanceof SandboxPromise) return yield* self.settlePromise(result)
-      return result
-    })
-    return Effect.map(this.createPromise(body), (derived) => {
-      box.derived = derived
-      return derived
-    })
-  }
-
-  private chainFinally(
-    source: SandboxPromise,
-    cleanup: ReactionHandler | undefined,
-    method: string,
-    node: AstNode,
-  ): Effect.Effect<SandboxPromise, never, R> {
-    const self = this
-    return this.createPromise(
-      Effect.gen(function* () {
-        const exit = yield* self.reactionExit(source)
-        if (cleanup !== undefined) {
-          const result = yield* self.applyCollectionCallback(cleanup, method, node)([])
-          if (result instanceof SandboxPromise) yield* self.settlePromise(result)
-        }
-        return yield* exit
-      }),
-    )
-  }
-
-  // new Promise(executor): the promise's fiber awaits a Deferred that resolve/reject settle
-  // exactly once. The executor runs synchronously; its throw rejects the promise unless it
-  // already settled (JS swallows post-settlement executor throws).
-  private constructPromise(executor: unknown, node: AstNode): Effect.Effect<SandboxPromise, unknown, R> {
-    if (!(executor instanceof CodeModeFunction)) {
-      throw new InterpreterRuntimeError(
-        "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
-        node,
-      ).as("TypeError")
-    }
-    const self = this
-    return Effect.gen(function* () {
-      const deferred = Deferred.makeUnsafe<unknown, unknown>()
-      const box: { own?: SandboxPromise } = {}
-      const promise = yield* self.createPromise(
-        Effect.flatMap(Deferred.await(deferred), (value) => {
-          if (!(value instanceof SandboxPromise)) return Effect.succeed(value)
-          if (value === box.own) return Effect.fail(selfResolutionError(node))
-          return self.settlePromise(value)
-        }),
-      )
-      box.own = promise
-      const resolve = new PromiseCapabilityFunction((value) => {
-        Deferred.doneUnsafe(deferred, Exit.succeed(value))
-      })
-      const reject = new PromiseCapabilityFunction((value) => {
-        Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value)))
-      })
-      const executed = yield* Effect.exit(self.invokeFunction(executor, [resolve, reject]))
-      if (!Exit.isSuccess(executed)) {
-        if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
-        Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
-      }
-      return promise
-    })
-  }
-
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
     const invocation = new Interpreter(
       this.invokeTool,
@@ -2513,12 +1581,12 @@ class Interpreter<R> {
       this.logs,
       this.callPermits,
     )
-    invocation.scopes = [...fn.capturedScopes, new Map<string, Binding>()]
+    invocation.scopes = new ScopeStack([...fn.capturedScopes, new Map()])
     const run = Effect.gen(function* () {
       // Seed every parameter name into the scope as a TDZ slot first, so a default that
       // references another parameter resolves to that (uninitialized) param rather than
       // silently falling through to an outer binding of the same name - matching JS.
-      const paramScope = invocation.currentScope()
+      const paramScope = invocation.scopes.current()
       for (const parameter of fn.parameters) {
         for (const name of collectPatternNames(parameter)) {
           paramScope.set(name, { mutable: true, value: undefined, initialized: false })
@@ -2555,561 +1623,6 @@ class Interpreter<R> {
         return promise
       },
     )
-  }
-
-  private invokeIntrinsic(
-    ref: IntrinsicReference,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    if (typeof ref.receiver === "string") {
-      if (
-        (ref.name === "replace" || ref.name === "replaceAll") &&
-        (args[1] instanceof CodeModeFunction || args[1] instanceof CoercionFunction || args[1] instanceof UriFunction)
-      ) {
-        return this.invokeStringReplacer(ref.receiver, ref.name, args, node)
-      }
-      return Effect.succeed(invokeStringMethod(ref.receiver, ref.name, args, node))
-    }
-    if (typeof ref.receiver === "number") {
-      return Effect.succeed(invokeNumberMethod(ref.receiver, ref.name, args, node))
-    }
-    if (Array.isArray(ref.receiver)) {
-      return this.invokeArrayMethod(ref.receiver, ref.name, args, node)
-    }
-    if (ref.receiver instanceof SandboxDate) {
-      return Effect.succeed(invokeDateMethod(ref.receiver, ref.name, node))
-    }
-    if (ref.receiver instanceof SandboxRegExp) {
-      return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node))
-    }
-    if (ref.receiver instanceof SandboxMap) {
-      return this.invokeMapMethod(ref.receiver, ref.name, args, node)
-    }
-    if (ref.receiver instanceof SandboxSet) {
-      return this.invokeSetMethod(ref.receiver, ref.name, args, node)
-    }
-    if (ref.receiver instanceof SandboxURL) {
-      return Effect.succeed(invokeURLMethod(ref.receiver, ref.name, node))
-    }
-    if (ref.receiver instanceof SandboxURLSearchParams) {
-      return this.invokeURLSearchParamsMethod(ref.receiver, ref.name, args, node)
-    }
-    throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
-  }
-
-  private invokeStringReplacer(
-    value: string,
-    name: "replace" | "replaceAll",
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    const apply = this.applyCollectionCallback(args[1], `String.${name}`, node)
-    const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<unknown> }> = []
-    const collect = (...callbackArgs: Array<unknown>): string => {
-      const match = callbackArgs[0]
-      const groups = callbackArgs[callbackArgs.length - 1]
-      const hasGroups = groups !== null && typeof groups === "object"
-      const offset = callbackArgs[callbackArgs.length - (hasGroups ? 3 : 2)]
-      if (typeof match !== "string" || typeof offset !== "number") {
-        throw new InterpreterRuntimeError(`String.${name} produced an invalid replacement match.`, node)
-      }
-      if (hasGroups) {
-        const safeGroups: SafeObject = Object.create(null) as SafeObject
-        for (const [key, group] of Object.entries(groups)) {
-          if (!isBlockedMember(key)) safeGroups[key] = group
-        }
-        callbackArgs[callbackArgs.length - 1] = safeGroups
-      }
-      matches.push({ match, offset, args: callbackArgs })
-      return match
-    }
-
-    const pattern = args[0]
-    if (pattern instanceof SandboxRegExp) {
-      if (name === "replaceAll" && !pattern.regex.global) {
-        throw new InterpreterRuntimeError(
-          `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.regex.source}/${pattern.regex.flags}g, or use String.replace to replace only the first match.`,
-          node,
-        )
-      }
-      if (name === "replace") value.replace(pattern.regex, collect)
-      else value.replaceAll(pattern.regex, collect)
-    } else {
-      if (typeof pattern !== "string") {
-        throw new InterpreterRuntimeError(`String.${name} expects argument 1 to be a string.`, node)
-      }
-      if (name === "replace") value.replace(pattern, collect)
-      else value.replaceAll(pattern, collect)
-    }
-
-    const self = this
-    return Effect.gen(function* () {
-      const output: Array<string> = []
-      let end = 0
-      for (const match of matches) {
-        const replacement = yield* apply(match.args)
-        const resolved =
-          args[1] instanceof CodeModeFunction && args[1].async && replacement instanceof SandboxPromise
-            ? yield* self.settlePromise(replacement)
-            : replacement
-        output.push(
-          value.slice(end, match.offset),
-          coerceToString(boundedData(resolved, `String.${name} replacer result`)),
-        )
-        end = match.offset + match.match.length
-      }
-      output.push(value.slice(end))
-      return boundedData(output.join(""), `String.${name} result`)
-    })
-  }
-
-  // Accepts a user function or supported builtin callable, so idioms such as
-  // `filter(Boolean)`, `map(String)`, and `map(encodeURIComponent)` work as in JS.
-  private applyCollectionCallback(
-    callback: unknown,
-    name: string,
-    node: AstNode,
-  ): (args: Array<unknown>) => Effect.Effect<unknown, unknown, R> {
-    if (
-      !(callback instanceof CodeModeFunction) &&
-      !(callback instanceof CoercionFunction) &&
-      !(callback instanceof UriFunction) &&
-      !(callback instanceof PromiseCapabilityFunction)
-    ) {
-      throw new InterpreterRuntimeError(`${name} expects a function callback.`, node)
-    }
-    return (callbackArgs) =>
-      callback instanceof CoercionFunction
-        ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
-        : callback instanceof UriFunction
-          ? Effect.succeed(invokeUriFunction(callback, callbackArgs, node))
-          : callback instanceof PromiseCapabilityFunction
-            ? Effect.sync(() => callback.settle(callbackArgs[0]))
-            : this.invokeFunction(callback, callbackArgs)
-  }
-
-  private invokeMapMethod(
-    target: SandboxMap,
-    name: string,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    switch (name) {
-      case "get":
-        return Effect.succeed(target.map.get(args[0]))
-      case "has":
-        return Effect.succeed(target.map.has(args[0]))
-      case "set":
-        return Effect.sync(() => {
-          target.map.set(args[0], args[1])
-          return target
-        })
-      case "delete":
-        return Effect.sync(() => target.map.delete(args[0]))
-      case "clear":
-        return Effect.sync(() => {
-          target.map.clear()
-          return undefined
-        })
-      case "keys":
-        return Effect.sync(() => Array.from(target.map.keys()))
-      case "values":
-        return Effect.sync(() => Array.from(target.map.values()))
-      case "entries":
-        return Effect.sync(() => Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]))
-      case "forEach": {
-        const apply = this.applyCollectionCallback(args[0], "Map.forEach", node)
-        return Effect.gen(function* () {
-          // Snapshot iteration, matching the array-method callback contract.
-          for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
-          return undefined
-        })
-      }
-      default:
-        throw new InterpreterRuntimeError(`Map method '${name}' is not available in CodeMode.`, node)
-    }
-  }
-
-  private invokeSetMethod(
-    target: SandboxSet,
-    name: string,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    switch (name) {
-      case "has":
-        return Effect.succeed(target.set.has(args[0]))
-      case "add":
-        return Effect.sync(() => {
-          target.set.add(args[0])
-          return target
-        })
-      case "delete":
-        return Effect.sync(() => target.set.delete(args[0]))
-      case "clear":
-        return Effect.sync(() => {
-          target.set.clear()
-          return undefined
-        })
-      case "keys":
-      case "values":
-        return Effect.sync(() => Array.from(target.set.values()))
-      case "entries":
-        return Effect.sync(() => Array.from(target.set.values(), (item): Array<unknown> => [item, item]))
-      case "forEach": {
-        const apply = this.applyCollectionCallback(args[0], "Set.forEach", node)
-        return Effect.gen(function* () {
-          for (const item of Array.from(target.set.values())) yield* apply([item, item, target])
-          return undefined
-        })
-      }
-      default:
-        throw new InterpreterRuntimeError(`Set method '${name}' is not available in CodeMode.`, node)
-    }
-  }
-
-  private invokeURLSearchParamsMethod(
-    target: SandboxURLSearchParams,
-    name: string,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    const arg = (index: number): string => uriArgument(args[index], `URLSearchParams.${name} argument ${index + 1}`)
-    const requireArgs = (count: number): void => {
-      if (args.length < count) {
-        throw new InterpreterRuntimeError(
-          `URLSearchParams.${name} requires ${count} argument${count === 1 ? "" : "s"}.`,
-          node,
-        ).as("TypeError")
-      }
-    }
-    switch (name) {
-      case "append": {
-        requireArgs(2)
-        return Effect.sync(() => {
-          target.params.append(arg(0), arg(1))
-          return undefined
-        })
-      }
-      case "delete": {
-        requireArgs(1)
-        return Effect.sync(() => {
-          if (args[1] !== undefined) target.params.delete(arg(0), arg(1))
-          else target.params.delete(arg(0))
-          return undefined
-        })
-      }
-      case "get":
-        requireArgs(1)
-        return Effect.sync(() => target.params.get(arg(0)))
-      case "getAll":
-        requireArgs(1)
-        return Effect.sync(() => target.params.getAll(arg(0)))
-      case "has":
-        requireArgs(1)
-        return Effect.sync(() =>
-          args[1] !== undefined ? target.params.has(arg(0), arg(1)) : target.params.has(arg(0)),
-        )
-      case "set": {
-        requireArgs(2)
-        return Effect.sync(() => {
-          target.params.set(arg(0), arg(1))
-          return undefined
-        })
-      }
-      case "sort":
-        return Effect.sync(() => {
-          target.params.sort()
-          return undefined
-        })
-      case "keys":
-        return Effect.sync(() => Array.from(target.params.keys()))
-      case "values":
-        return Effect.sync(() => Array.from(target.params.values()))
-      case "entries":
-        return Effect.sync(() => Array.from(target.params.entries(), ([key, value]): Array<unknown> => [key, value]))
-      case "toString":
-        return Effect.sync(() => target.params.toString())
-      case "forEach": {
-        requireArgs(1)
-        const apply = this.applyCollectionCallback(args[0], "URLSearchParams.forEach", node)
-        return Effect.gen(function* () {
-          for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target])
-          return undefined
-        })
-      }
-      default:
-        throw new InterpreterRuntimeError(`URLSearchParams method '${name}' is not available in CodeMode.`, node)
-    }
-  }
-
-  private invokeArrayMethod(
-    target: Array<unknown>,
-    name: string,
-    args: Array<unknown>,
-    node: AstNode,
-  ): Effect.Effect<unknown, unknown, R> {
-    const optNumber = (value: unknown, label: string): number | undefined => {
-      if (value === undefined) return undefined
-      if (typeof value !== "number")
-        throw new InterpreterRuntimeError(`Array.${name} expects ${label} to be a number.`, node)
-      return value
-    }
-    switch (name) {
-      case "join": {
-        if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
-          throw new InterpreterRuntimeError("Array.join expects zero arguments or one string separator.", node)
-        }
-        const input = boundedData(target, "Array.join input") as Array<unknown>
-        return Effect.succeed(
-          input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string)),
-        )
-      }
-      case "includes":
-        if (args.length === 0 || args.length > 2)
-          throw new InterpreterRuntimeError("Array.includes expects a value and optional start index.", node)
-        return Effect.succeed(target.includes(args[0], optNumber(args[1], "start index")))
-      case "indexOf":
-        return Effect.succeed(target.indexOf(args[0], optNumber(args[1], "start index")))
-      case "lastIndexOf":
-        return Effect.succeed(
-          args[1] === undefined
-            ? target.lastIndexOf(args[0])
-            : target.lastIndexOf(args[0], optNumber(args[1], "start index")),
-        )
-      case "at":
-        return Effect.succeed(target.at(optNumber(args[0], "index") ?? 0))
-      case "slice":
-        return Effect.succeed(target.slice(optNumber(args[0], "start"), optNumber(args[1], "end")))
-      case "concat":
-        return Effect.succeed(target.concat(...args))
-      case "flat":
-        return Effect.succeed(target.flat(optNumber(args[0], "depth") ?? 1))
-      case "reverse":
-        return Effect.succeed(target.reverse())
-      case "sort":
-        return Effect.map(this.sortArray(target, args[0], node), (sorted) => {
-          target.splice(0, target.length, ...sorted)
-          return target
-        })
-      case "toSorted":
-        return this.sortArray(target, args[0], node)
-      case "toReversed":
-        return Effect.succeed([...target].reverse())
-      case "with": {
-        const index = optNumber(args[0], "index") ?? 0
-        const resolved = index < 0 ? target.length + index : index
-        if (resolved < 0 || resolved >= target.length) {
-          throw new InterpreterRuntimeError("Array.with index is out of range.", node)
-        }
-        const copied = [...target]
-        copied[resolved] = args[1]
-        return Effect.succeed(copied)
-      }
-      case "push": {
-        // Validate before mutating (so no rollback is needed): inserting a container into
-        // itself would create a cycle no later walk could survive.
-        for (const item of args) this.rejectCircularInsertion(target, item, "Array.push result", node)
-        target.push(...args)
-        return Effect.succeed(target.length)
-      }
-      case "unshift": {
-        for (const item of args) this.rejectCircularInsertion(target, item, "Array.unshift result", node)
-        target.unshift(...args)
-        return Effect.succeed(target.length)
-      }
-      case "pop":
-        return Effect.succeed(target.pop())
-      case "shift":
-        return Effect.succeed(target.shift())
-      case "splice": {
-        // Mutates in place and returns the removed elements, exactly like JS: one argument
-        // removes to the end, an undefined delete count removes nothing.
-        if (args.length === 0) return Effect.succeed(target.splice(0, 0))
-        const start = optNumber(args[0], "start") ?? 0
-        if (args.length === 1) return Effect.succeed(target.splice(start))
-        const deleteCount = optNumber(args[1], "delete count") ?? 0
-        const inserted = args.slice(2)
-        for (const item of inserted) this.rejectCircularInsertion(target, item, "Array.splice result", node)
-        return Effect.succeed(target.splice(start, deleteCount, ...inserted))
-      }
-      case "fill": {
-        this.rejectCircularInsertion(target, args[0], "Array.fill result", node)
-        return Effect.succeed(target.fill(args[0], optNumber(args[1], "start"), optNumber(args[2], "end")))
-      }
-      case "copyWithin":
-        return Effect.succeed(
-          target.copyWithin(
-            optNumber(args[0], "target index") ?? 0,
-            optNumber(args[1], "start") ?? 0,
-            optNumber(args[2], "end"),
-          ),
-        )
-      // keys/values/entries return arrays (not iterators), matching the Map/Set convention;
-      // they work with for...of and spread either way.
-      case "keys":
-        return Effect.succeed(Array.from(target.keys()))
-      case "values":
-        return Effect.succeed([...target])
-      case "entries":
-        return Effect.succeed(Array.from(target.entries(), ([index, item]): Array<unknown> => [index, item]))
-    }
-
-    const apply = this.applyCollectionCallback(args[0], `Array.${name}`, node)
-    return Effect.gen(function* () {
-      // Capture the initial length, but read the receiver live so callbacks observe mutations
-      // without visiting elements appended after iteration begins.
-      const length = target.length
-      switch (name) {
-        case "map": {
-          const values: Array<unknown> = []
-          values.length = length
-          for (let index = 0; index < length; index += 1) {
-            if (!(index in target)) continue
-            values[index] = yield* apply([target[index], index, target])
-          }
-          return values
-        }
-        case "flatMap": {
-          const values: Array<unknown> = []
-          for (let index = 0; index < length; index += 1) {
-            if (!(index in target)) continue
-            const mapped = yield* apply([target[index], index, target])
-            if (Array.isArray(mapped)) values.push(...mapped)
-            else values.push(mapped)
-          }
-          return values
-        }
-        case "filter": {
-          const values: Array<unknown> = []
-          for (let index = 0; index < length; index += 1) {
-            if (!(index in target)) continue
-            const item = target[index]
-            if (yield* apply([item, index, target])) values.push(item)
-          }
-          return values
-        }
-        case "find":
-          for (let index = 0; index < length; index += 1) {
-            const item = target[index]
-            if (yield* apply([item, index, target])) return item
-          }
-          return undefined
-        case "findIndex":
-          for (let index = 0; index < length; index += 1) {
-            if (yield* apply([target[index], index, target])) return index
-          }
-          return -1
-        case "some":
-          for (let index = 0; index < length; index += 1) {
-            if (!(index in target)) continue
-            if (yield* apply([target[index], index, target])) return true
-          }
-          return false
-        case "every":
-          for (let index = 0; index < length; index += 1) {
-            if (!(index in target)) continue
-            if (!(yield* apply([target[index], index, target]))) return false
-          }
-          return true
-        case "forEach":
-          for (let index = 0; index < length; index += 1) {
-            if (index in target) yield* apply([target[index], index, target])
-          }
-          return undefined
-        case "reduce": {
-          let accumulator: unknown
-          let start: number
-          if (args.length >= 2) {
-            accumulator = args[1]
-            start = 0
-          } else {
-            if (length === 0)
-              throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
-            accumulator = target[0]
-            start = 1
-          }
-          for (let index = start; index < length; index += 1) {
-            if (!(index in target)) continue
-            accumulator = yield* apply([accumulator, target[index], index, target])
-          }
-          return accumulator
-        }
-        case "reduceRight": {
-          let accumulator: unknown
-          let start: number
-          if (args.length >= 2) {
-            accumulator = args[1]
-            start = length - 1
-          } else {
-            if (length === 0)
-              throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
-            accumulator = target[length - 1]
-            start = length - 2
-          }
-          for (let index = start; index >= 0; index -= 1) {
-            if (!(index in target)) continue
-            accumulator = yield* apply([accumulator, target[index], index, target])
-          }
-          return accumulator
-        }
-        case "findLast":
-          for (let index = length - 1; index >= 0; index -= 1) {
-            if (yield* apply([target[index], index, target])) return target[index]
-          }
-          return undefined
-        case "findLastIndex":
-          for (let index = length - 1; index >= 0; index -= 1) {
-            if (yield* apply([target[index], index, target])) return index
-          }
-          return -1
-      }
-      throw new InterpreterRuntimeError(`Array method '${name}' is not available in CodeMode.`, node)
-    })
-  }
-
-  private sortArray(
-    target: Array<unknown>,
-    comparator: unknown,
-    node: AstNode,
-  ): Effect.Effect<Array<unknown>, unknown, R> {
-    if (comparator !== undefined && !(comparator instanceof CodeModeFunction)) {
-      throw new InterpreterRuntimeError("Array.sort expects an arrow function comparator.", node)
-    }
-    if (!(comparator instanceof CodeModeFunction)) {
-      return Effect.sync(() =>
-        [...target].sort((a, b) => {
-          const left = coerceToString(a)
-          const right = coerceToString(b)
-          return left < right ? -1 : left > right ? 1 : 0
-        }),
-      )
-    }
-    const self = this
-    const mergeSort = (items: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> => {
-      if (items.length <= 1) return Effect.succeed(items)
-      const midpoint = Math.floor(items.length / 2)
-      return Effect.gen(function* () {
-        const left = yield* mergeSort(items.slice(0, midpoint))
-        const right = yield* mergeSort(items.slice(midpoint))
-        const merged: Array<unknown> = []
-        let leftIndex = 0
-        let rightIndex = 0
-        while (leftIndex < left.length && rightIndex < right.length) {
-          // Coerce the comparator's result like JS ToNumber (data objects -> NaN, never a host
-          // crash) and treat NaN as 0 - the spec's "no consistent order" -> keep the left element.
-          const order = coerceToNumber(yield* self.invokeFunction(comparator, [left[leftIndex], right[rightIndex]]))
-          if (Number.isNaN(order) || order <= 0) merged.push(left[leftIndex++])
-          else merged.push(right[rightIndex++])
-        }
-        return [...merged, ...left.slice(leftIndex), ...right.slice(rightIndex)]
-      })
-    }
-    // Per spec, undefined elements sort to the end and the comparator is never called on them.
-    const defined = target.filter((item) => item !== undefined)
-    const undefinedCount = target.length - defined.length
-    return Effect.map(mergeSort(defined), (items) => [...items, ...Array(undefinedCount).fill(undefined)])
   }
 
   private evaluateObjectExpression(node: AstNode): Effect.Effect<Record<string, unknown>, unknown, R> {
@@ -3499,24 +2012,6 @@ class Interpreter<R> {
     })
   }
 
-  // Rejects inserting a value that (transitively) contains the container it is being inserted
-  // into - the mutation that would create a circular structure no later walk could survive.
-  private rejectCircularInsertion(
-    container: object,
-    value: unknown,
-    label: string,
-    node: AstNode,
-    seen = new Set<object>(),
-  ): void {
-    if (value === container)
-      throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
-    if (value === null || typeof value !== "object" || isRuntimeReference(value) || seen.has(value)) return
-    seen.add(value)
-    const items = Array.isArray(value) ? value : Object.values(value)
-    for (const item of items) this.rejectCircularInsertion(container, item, label, node, seen)
-    seen.delete(value)
-  }
-
   private assignToReference(reference: MemberReference, key: number | string, next: unknown, node: AstNode): void {
     if (Array.isArray(reference.target)) {
       const target = reference.target
@@ -3528,7 +2023,7 @@ class Interpreter<R> {
           "InvalidDataValue",
         )
       }
-      this.rejectCircularInsertion(target, next, "Array assignment result", node)
+      rejectCircularInsertion(target, next, "Array assignment result", node)
       target[index] = next
       return
     }
@@ -3548,7 +2043,7 @@ class Interpreter<R> {
     }
     const target = reference.target as SafeObject
     const objectKey = key as string
-    this.rejectCircularInsertion(target, next, "Object assignment result", node)
+    rejectCircularInsertion(target, next, "Object assignment result", node)
     target[objectKey] = next
   }
 
@@ -3559,282 +2054,4 @@ class Interpreter<R> {
 
     throw new InterpreterRuntimeError("Property key must be a string or number.", node)
   }
-
-  private declare(name: string, value: unknown, mutable: boolean, node: AstNode): void {
-    const scope = this.currentScope()
-
-    // A pre-seeded parameter slot (initialized === false) is being bound for the first time;
-    // anything else already present is a genuine duplicate declaration.
-    const existing = scope.get(name)
-    if (existing && existing.initialized !== false) {
-      throw new InterpreterRuntimeError(`Identifier '${name}' has already been declared.`, node)
-    }
-
-    scope.set(name, { mutable, value, initialized: true })
-  }
-
-  private getIdentifierValue(name: string, node: AstNode): unknown {
-    const binding = this.resolveBinding(name)
-
-    if (!binding) {
-      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
-    }
-
-    // A parameter default that forward-references a later (not-yet-bound) parameter - JS TDZ.
-    if (binding.initialized === false) {
-      throw new InterpreterRuntimeError(`Cannot access '${name}' before initialization.`, node).as("ReferenceError")
-    }
-
-    return binding.value
-  }
-
-  private setIdentifierValue(name: string, value: unknown, node: AstNode): unknown {
-    const binding = this.resolveBinding(name)
-
-    if (!binding) {
-      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
-    }
-
-    if (!binding.mutable) {
-      throw new InterpreterRuntimeError(`Cannot assign to constant '${name}'.`, node).as("TypeError")
-    }
-
-    binding.value = value
-    return value
-  }
-
-  private resolveBinding(name: string): Binding | undefined {
-    for (let index = this.scopes.length - 1; index >= 0; index -= 1) {
-      const scope = this.scopes[index]
-      const binding = scope?.get(name)
-
-      if (binding) {
-        return binding
-      }
-    }
-
-    return undefined
-  }
-
-  private currentScope(): Map<string, Binding> {
-    const scope = this.scopes[this.scopes.length - 1]
-
-    if (!scope) {
-      throw new InterpreterRuntimeError("Interpreter scope stack is empty.")
-    }
-
-    return scope
-  }
-
-  private pushScope(): void {
-    this.scopes.push(new Map())
-  }
-
-  private popScope(): void {
-    this.scopes.pop()
-  }
-}
-
-/**
- * Executes one Effect-native CodeMode program without constructing a reusable runtime.
- *
- * @example
- * ```ts
- * const result = yield* CodeMode.execute({
- *   tools: { lookup },
- *   code: `return await tools.lookup({ id: "order_42" })`,
- * })
- * ```
- */
-export const executeWithLimits = <const Tools extends Record<string, unknown>>(
-  options: ExecuteOptions<Tools>,
-  limits: ResolvedExecutionLimits,
-  searchIndex: ToolRuntime.DiscoveryPlan["searchIndex"],
-): Effect.Effect<Result, never, Services<Tools>> => {
-  if (options.code.trim().length === 0) {
-    return Effect.succeed({
-      ok: false,
-      error: { kind: "ParseError", message: "Code cannot be empty." },
-      toolCalls: [],
-    })
-  }
-
-  // Suspended so all per-execution state - tool-call admission budget and audit list, logs,
-  // and the timeout path's completed value - binds at run time: a reused Effect must start
-  // from a clean slate instead of observing a previous run's state.
-  return Effect.suspend(() => {
-    const tools = ToolRuntime.make(
-      (options.tools ?? {}) as HostTools<Services<Tools>>,
-      limits.maxToolCalls,
-      searchIndex,
-      {
-        onToolCallStart: options.onToolCallStart,
-        onToolCallEnd: options.onToolCallEnd,
-      },
-    )
-    const logs: Array<string> = []
-    const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
-    // Set once the program body returned and its value crossed the data boundary, so a timeout
-    // firing during leftover interruption reports "completed with interrupted background work"
-    // instead of discarding the computed value as a plain timeout.
-    let returned: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
-
-    const base = Effect.acquireUseRelease(
-      Scope.make("parallel"),
-      (scope) =>
-        Effect.gen(function* () {
-          const program = parseProgram(options.code)
-          const promises = new PromiseRuntime<Services<Tools>>(scope)
-          const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.search, tools.keys, promises, logs)
-          const value = yield* interpreter.run(program)
-          // Validate the result first so an invalid value is a fatal completion that closes
-          // the promise scope directly instead of taking the normal-completion path.
-          const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
-          returned = { value: result, promises }
-          const warnings = yield* promises.interrupt()
-          return {
-            ok: true,
-            value: result,
-            ...(warnings.length > 0 ? { warnings } : {}),
-            ...logged(),
-            toolCalls: tools.calls,
-          } satisfies Result
-        }),
-      (scope, exit) => Scope.close(scope, exit),
-    )
-    const timeoutMs = limits.timeoutMs
-    const operation =
-      timeoutMs === undefined
-        ? base
-        : base.pipe(
-            Effect.timeoutOrElse({
-              duration: timeoutMs,
-              orElse: () =>
-                Effect.sync(() => {
-                  if (returned === undefined) {
-                    return {
-                      ok: false,
-                      error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
-                      ...logged(),
-                      toolCalls: tools.calls,
-                    } satisfies Result
-                  }
-                  // The timeout warning leads so byte-budget truncation cuts it last.
-                  return {
-                    ok: true,
-                    value: returned.value,
-                    warnings: [
-                      {
-                        kind: "TimeoutExceeded",
-                        message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await all started promises.`,
-                      },
-                      ...returned.promises.diagnostics(),
-                    ],
-                    ...logged(),
-                    toolCalls: tools.calls,
-                  } satisfies Result
-                }),
-            }),
-          )
-
-    return operation.pipe(
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.interrupt
-          : Effect.succeed({
-              ok: false,
-              error: normalizeError(Cause.squash(cause)),
-              ...logged(),
-              toolCalls: tools.calls,
-            } satisfies Result),
-      ),
-      Effect.map((result) =>
-        limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes),
-      ),
-    )
-  })
-}
-
-const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength
-
-// Truncates to a UTF-8 byte budget without splitting a code point (a split multi-byte
-// sequence decodes to a replacement character, which is dropped).
-const utf8Truncate = (value: string, maxBytes: number): string => {
-  const bytes = new TextEncoder().encode(value)
-  if (bytes.byteLength <= maxBytes) return value
-  const text = new TextDecoder("utf-8").decode(bytes.slice(0, Math.max(0, maxBytes)))
-  return text.endsWith("\uFFFD") ? text.slice(0, -1) : text
-}
-
-/**
- * Bounds retained program payload bytes (serialized result value and logs) to `maxOutputBytes`.
- * Warning diagnostics are bounded by a separate budget of the same size so a large value can
- * never starve runtime-authored diagnostics. Fixed truncation notices are added outside those
- * budgets, as is any framing added when a host renders the structured result. Truncation never
- * fails the execution; `truncated: true` marks affected results. Only runs when the host set
- * `maxOutputBytes` - with the limit absent, output passes through unbounded.
- */
-const boundOutput = (result: Result, maxOutputBytes: number): Result => {
-  let truncated = false
-
-  let value: DataValue = null
-  let valueBytes = 0
-  if (result.ok) {
-    const serialized = JSON.stringify(result.value) ?? "null"
-    const bytes = utf8ByteLength(serialized)
-    if (bytes > maxOutputBytes) {
-      truncated = true
-      value = `${utf8Truncate(serialized, maxOutputBytes)} [result truncated: ${bytes} bytes exceeds the ${maxOutputBytes}-byte output limit; return a smaller value]`
-      valueBytes = maxOutputBytes
-    } else {
-      value = result.value
-      valueBytes = bytes
-    }
-  }
-
-  const warnings = result.ok ? (result.warnings ?? []) : []
-  const keptWarnings: Array<Diagnostic> = []
-  let warningBytes = 0
-  for (const warning of warnings) {
-    const bytes = utf8ByteLength(JSON.stringify(warning)) + 1
-    if (warningBytes + bytes > maxOutputBytes) break
-    warningBytes += bytes
-    keptWarnings.push(warning)
-  }
-  if (keptWarnings.length < warnings.length) {
-    truncated = true
-    keptWarnings.push({
-      kind: "Truncated",
-      message: `${warnings.length - keptWarnings.length} additional warnings omitted by the output limit.`,
-    })
-  }
-
-  const logs = result.logs ?? []
-  const kept: Array<string> = []
-  const logBudget = Math.max(0, maxOutputBytes - valueBytes)
-  let logBytes = 0
-  for (const line of logs) {
-    const lineBytes = utf8ByteLength(line) + 1
-    if (logBytes + lineBytes > logBudget) break
-    logBytes += lineBytes
-    kept.push(line)
-  }
-  if (kept.length < logs.length) {
-    truncated = true
-    kept.push(`[logs truncated: showing ${kept.length} of ${logs.length} lines]`)
-  }
-
-  if (!truncated) return result
-  const warningsPart = keptWarnings.length > 0 ? { warnings: keptWarnings } : {}
-  const logsPart = kept.length > 0 ? { logs: kept } : {}
-  return result.ok
-    ? {
-        ok: true,
-        value,
-        ...warningsPart,
-        ...logsPart,
-        truncated: true,
-        toolCalls: result.toolCalls,
-      }
-    : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
 }
