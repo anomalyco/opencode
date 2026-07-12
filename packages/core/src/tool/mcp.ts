@@ -107,7 +107,7 @@ export const layer = Layer.effectDiscard(
         const next = yield* Scope.fork(scope)
         yield* Effect.forEach(
           groups,
-          ([group, record]) => tools.register(record, { group, deferred: Flag.CODEMODE_ENABLED }),
+          ([group, record]) => tools.register(record, { group, codemode: Flag.CODEMODE_ENABLED }),
           {
             discard: true,
           },

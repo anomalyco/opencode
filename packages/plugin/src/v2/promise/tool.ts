@@ -69,7 +69,8 @@ export interface ToolExecuteAfterEvent {
 
 export interface RegisterOptions {
   readonly group?: string
-  readonly deferred?: boolean
+  /** Defaults to true. False exposes the tool directly to the provider. */
+  readonly codemode?: boolean
 }
 
 export interface ToolDraft {

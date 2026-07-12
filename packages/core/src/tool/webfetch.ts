@@ -174,6 +174,7 @@ export const Plugin = {
                 }
               }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
           }),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)

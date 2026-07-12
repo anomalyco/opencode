@@ -208,6 +208,7 @@ export const Plugin = {
                 return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
               }),
           }),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)

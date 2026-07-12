@@ -97,6 +97,7 @@ export const Plugin = {
                 }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
               }),
           }),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)

@@ -260,6 +260,7 @@ describe("PluginV2", () => {
                   output: Schema.Struct({ ok: Schema.Boolean }),
                   execute: () => Effect.succeed({ ok: true }),
                 }),
+                { codemode: false },
               ),
             )
             .pipe(Effect.orDie),
@@ -273,7 +274,7 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("groups tool names and defers registrations from direct exposure", () =>
+  it.effect("groups tool names and routes codemode registrations through execute", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
@@ -289,9 +290,9 @@ describe("PluginV2", () => {
         effect: (ctx) =>
           ctx.tool
             .transform((draft) => {
-              draft.add("plain", tool("Plain"))
-              draft.add("look/up", tool("Lookup"), { group: "context 7" })
-              draft.add("search", tool("Search"), { group: "context 7", deferred: true })
+              draft.add("plain", tool("Plain"), { codemode: false })
+              draft.add("look/up", tool("Lookup"), { group: "context 7", codemode: false })
+              draft.add("search", tool("Search"), { group: "context 7" })
             })
             .pipe(Effect.orDie),
       })
@@ -330,6 +331,7 @@ describe("PluginV2", () => {
                     output: Schema.Struct({ text: Schema.String }),
                     execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
                   }),
+                  { codemode: false },
                 ),
               )
               .pipe(Effect.orDie)

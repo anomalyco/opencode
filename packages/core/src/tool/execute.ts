@@ -58,16 +58,16 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
       })
       if (registration.group === undefined) {
         const path = registration.name
-        if (Object.hasOwn(tools, path)) throw new TypeError(`Deferred tool namespace conflict: ${path}`)
+        if (Object.hasOwn(tools, path)) throw new TypeError(`CodeMode tool namespace conflict: ${path}`)
         tools[path] = value
         continue
       }
       const path = registration.name
       const namespace = registration.group
       const group = tools[namespace]
-      if (group && Tool.isDefinition(group)) throw new TypeError(`Deferred tool namespace conflict: ${namespace}`)
+      if (group && Tool.isDefinition(group)) throw new TypeError(`CodeMode tool namespace conflict: ${namespace}`)
       if (group) {
-        if (Object.hasOwn(group, path)) throw new TypeError(`Deferred tool namespace conflict: ${namespace}.${path}`)
+        if (Object.hasOwn(group, path)) throw new TypeError(`CodeMode tool namespace conflict: ${namespace}.${path}`)
         group[path] = value
         continue
       }

@@ -261,7 +261,7 @@ const echo = Layer.effectDiscard(
         output: Schema.Any,
         execute: () => Effect.succeed({ big: 1n }),
       }),
-    }),
+    }, { codemode: false }),
   ),
 )
 const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [ToolRegistry.node] })
@@ -782,7 +782,7 @@ describe("SessionRunnerLLM", () => {
               return { answer: query.toUpperCase() }
             }),
         }),
-      })
+      }, { codemode: false })
       yield* admit(session, "Use application context")
       responses = [reply.tool("call-location", "location_context", { query: "hello" }), []]
 
@@ -827,7 +827,7 @@ describe("SessionRunnerLLM", () => {
             output: Schema.Struct({ value: Schema.String }),
             execute: () => Effect.sync(() => executions.push("advertised")).pipe(Effect.as({ value: "advertised" })),
           }),
-        })
+        }, { codemode: false })
         .pipe(Scope.provide(scope))
       yield* admit(session, "Use the reloaded tool")
       responses = [
@@ -852,7 +852,7 @@ describe("SessionRunnerLLM", () => {
           output: Schema.Struct({ value: Schema.String }),
           execute: () => Effect.sync(() => executions.push("replacement")).pipe(Effect.as({ value: "replacement" })),
         }),
-      })
+      }, { codemode: false })
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(run)
 
@@ -3189,7 +3189,7 @@ describe("SessionRunnerLLM", () => {
               Effect.mapError(() => new Tool.Failure({ message: "Permission blocked" })),
             ),
         }),
-      })
+      }, { codemode: false })
       yield* admit(session, "Call blocked")
 
       responses = [reply.tool("call-blocked", "blocked", {}), reply.stop()]
@@ -3221,7 +3221,7 @@ describe("SessionRunnerLLM", () => {
           output: Schema.Struct({}),
           execute: () => Effect.die(new PermissionV2.DeclinedError()),
         }),
-      })
+      }, { codemode: false })
       yield* admit(session, "Call declined")
 
       response = reply.tool("call-declined", "declined", {})
@@ -3261,7 +3261,7 @@ describe("SessionRunnerLLM", () => {
               Effect.mapError(() => new Tool.Failure({ message: "Use another tool" })),
             ),
         }),
-      })
+      }, { codemode: false })
       yield* admit(session, "Call corrected")
 
       responses = [reply.tool("call-corrected", "corrected", {}), reply.stop()]
@@ -3321,7 +3321,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const registry = yield* ToolRegistry.Service
-      yield* registry.register({ permissionfail: permissionFail })
+      yield* registry.register({ permissionfail: permissionFail }, { codemode: false })
       yield* admit(session, "Reject permission")
       responses = [
         reply.tool("call-permission", "permissionfail", {}),
@@ -3366,7 +3366,7 @@ describe("SessionRunnerLLM", () => {
           output: Schema.Struct({}),
           execute: () => Effect.die(new QuestionTool.CancelledError()),
         }),
-      })
+      }, { codemode: false })
       yield* admit(session, "Ask then stop")
 
       responses = [reply.tool("call-question", "question", {}), []]

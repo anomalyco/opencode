@@ -107,11 +107,11 @@ attach them to the outer result, but the program receives only the structured to
 CodeMode is integrated into V2 through `packages/core/src/tool/registry.ts` and
 `packages/core/src/tool/execute.ts`:
 
-- Core has one canonical `Tool` representation. Location-scoped producers register direct or deferred tools through
-  `Tools.Service`.
-- Each model step snapshots effective registrations, applies catalog visibility filtering, and exposes direct tools
+- Core has one canonical `Tool` representation. Location-scoped producers register tools through `Tools.Service`. Tools
+  default into CodeMode (`codemode` defaults true); `codemode: false` keeps a tool on the provider's native tool list.
+- Each model step snapshots effective registrations, applies catalog visibility filtering, and exposes native tools
   normally.
-- When visible deferred tools exist, Core reserves and materializes one `execute` tool. Grouped deferred tools become
+- When visible CodeMode tools exist, Core reserves and materializes one `execute` tool. Grouped CodeMode tools become
   CodeMode namespaces instead of flattened model-facing names.
 - Nested calls execute the registered `Tool` values captured for the model request; later registrations affect later
   requests.
@@ -125,9 +125,9 @@ CodeMode is integrated into V2 through `packages/core/src/tool/registry.ts` and
 - Core supplies no CodeMode timeout or tool-call limit. User cancellation interrupts the outer invocation and its
   supervised children; the outer settlement applies Core's normal output-retention policy.
 
-MCP tools use this canonical path: they register as grouped tools and are deferred while CodeMode is enabled. Existing
-output schemas are preserved in generated signatures. Direct Core tools remain direct and are not ambient globals
-inside CodeMode.
+MCP tools use this canonical path: they register as grouped CodeMode tools while CodeMode is enabled. Existing output
+schemas are preserved in generated signatures. Native Core tools remain native and are not ambient globals inside
+CodeMode.
 
 ## Intentionally Unsupported
 

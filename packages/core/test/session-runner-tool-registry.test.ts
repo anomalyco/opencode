@@ -70,7 +70,7 @@ describe("ToolRegistry", () => {
         bash: make(),
         edit: make("edit"),
         write: make("edit"),
-      })
+      }, { codemode: false })
       const names = (permissions: PermissionV2.Ruleset) =>
         toolDefinitions(service, permissions).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
 
@@ -95,8 +95,8 @@ describe("ToolRegistry", () => {
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const shared = make()
-      yield* service.register({ first: shared })
-      yield* service.register({ second: Tool.withPermission(shared, "edit") })
+      yield* service.register({ first: shared }, { codemode: false })
+      yield* service.register({ second: Tool.withPermission(shared, "edit") }, { codemode: false })
       Tool.withPermission(shared, "question")
 
       expect(
@@ -110,7 +110,7 @@ describe("ToolRegistry", () => {
   it.effect("reuses model definitions across requests", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({ echo: make() })
+      yield* service.register({ echo: make() }, { codemode: false })
       const first = yield* toolDefinitions(service)
       const second = yield* toolDefinitions(service)
 
@@ -122,7 +122,7 @@ describe("ToolRegistry", () => {
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
-      yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
+      yield* service.register({ echo: make() }, { codemode: false }).pipe(Scope.provide(scope))
       expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
       yield* Scope.close(scope, Exit.void)
       expect(yield* toolDefinitions(service)).toEqual([])
@@ -135,7 +135,7 @@ describe("ToolRegistry", () => {
       const scope = yield* Scope.make()
       const registered = yield* Deferred.make<void>()
       const fiber = yield* service
-        .register({ echo: make() })
+        .register({ echo: make() }, { codemode: false })
         .pipe(
           Effect.andThen(Deferred.succeed(registered, undefined)),
           Effect.andThen(Effect.never),
@@ -161,7 +161,7 @@ describe("ToolRegistry", () => {
           output: Schema.Struct({ ok: Schema.Boolean }),
           execute: () => Effect.fail(new Tool.Failure({ message: "Denied" })),
         }),
-      })
+      }, { codemode: false })
       expect(
         yield* executeTool(service, {
           sessionID,
@@ -184,7 +184,7 @@ describe("ToolRegistry", () => {
           output: Schema.Struct({}),
           execute: () => Effect.die("unexpected executor defect"),
         }),
-      })
+      }, { codemode: false })
       expect(
         yield* service.materialize().pipe(
           Effect.flatMap((materialized) =>
@@ -203,7 +203,7 @@ describe("ToolRegistry", () => {
   it.effect("propagates retention failures through settlement", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({ echo: make() })
+      yield* service.register({ echo: make() }, { codemode: false })
       const materialized = yield* service.materialize()
       const exit = yield* materialized.settle(call("echo", "call-retention-failure")).pipe(Effect.exit)
 
@@ -234,7 +234,7 @@ describe("ToolRegistry", () => {
           output: Schema.Struct({ ok: Schema.Boolean }),
           execute: (_, context) => Effect.sync(() => contexts.push(context)).pipe(Effect.as({ ok: true })),
         }),
-      })
+      }, { codemode: false })
       yield* executeTool(service, {
         sessionID,
         ...identity,
@@ -248,7 +248,7 @@ describe("ToolRegistry", () => {
     Effect.gen(function* () {
       bounds.length = 0
       const service = yield* ToolRegistry.Service
-      yield* service.register({ bounded: make() })
+      yield* service.register({ bounded: make() }, { codemode: false })
       expect(
         yield* settleTool(service, {
           sessionID,
@@ -282,7 +282,7 @@ describe("ToolRegistry", () => {
           execute: ({ value }) => Effect.sync(() => executed.push(value)).pipe(Effect.as({ value })),
           toModelOutput: ({ output }) => [{ type: "text", text: String(output.value) }],
         }),
-      })
+      }, { codemode: false })
 
       expect(
         yield* executeTool(service, {
@@ -319,7 +319,7 @@ describe("ToolRegistry", () => {
           }),
           execute: () => Effect.succeed({ value: "invalid" }),
         }),
-      })
+      }, { codemode: false })
       expect(
         yield* executeTool(service, {
           sessionID,
@@ -334,10 +334,10 @@ describe("ToolRegistry", () => {
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
-      yield* service.register({ echo: constant("advertised") }).pipe(Scope.provide(scope))
+      yield* service.register({ echo: constant("advertised") }, { codemode: false }).pipe(Scope.provide(scope))
       const request = yield* service.materialize()
       yield* Scope.close(scope, Exit.void)
-      yield* service.register({ echo: constant("replacement") })
+      yield* service.register({ echo: constant("replacement") }, { codemode: false })
 
       expect((yield* request.settle(call("echo"))).result).toEqual({ type: "text", value: "advertised" })
       expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "replacement" })
@@ -347,9 +347,9 @@ describe("ToolRegistry", () => {
   it.effect("reveals the previous registration after an overlay closes", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({ echo: constant("base") })
+      yield* service.register({ echo: constant("base") }, { codemode: false })
       const overlay = yield* Scope.make()
-      yield* service.register({ echo: constant("overlay") }).pipe(Scope.provide(overlay))
+      yield* service.register({ echo: constant("overlay") }, { codemode: false }).pipe(Scope.provide(overlay))
 
       expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "overlay" })
       yield* Scope.close(overlay, Exit.void)
@@ -357,37 +357,31 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("executes deferred tools advertised in a model request", () =>
+  it.effect("executes codemode tools advertised in a model request", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const executed: string[] = []
       const scope = yield* Scope.make()
       yield* service
-        .register(
-          {
-            echo: Tool.make({
-              description: "Echo text",
-              input: Schema.Struct({ text: Schema.String }),
-              output: Schema.Struct({ text: Schema.String }),
-              execute: ({ text }) => Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ text })),
-            }),
-          },
-          { deferred: true },
-        )
-        .pipe(Scope.provide(scope))
-      const materialized = yield* service.materialize()
-      yield* Scope.close(scope, Exit.void)
-      yield* service.register(
-        {
+        .register({
           echo: Tool.make({
             description: "Echo text",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ text })),
+            execute: ({ text }) => Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ text })),
           }),
-        },
-        { deferred: true },
-      )
+        })
+        .pipe(Scope.provide(scope))
+      const materialized = yield* service.materialize()
+      yield* Scope.close(scope, Exit.void)
+      yield* service.register({
+        echo: Tool.make({
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ text })),
+        }),
+      })
 
       const settlement = yield* materialized.settle({
         ...call("execute"),

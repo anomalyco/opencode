@@ -212,6 +212,7 @@ export const Plugin = {
             }),
             "edit",
           ),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)

@@ -315,11 +315,12 @@ export default Plugin.define({
 Unsupported characters in tool and group names are normalized to underscores.
 The resulting exposed key must begin with a letter and contain at most 64
 letters, digits, underscores, or hyphens. Set `options` on the declaration to
-configure registration with `{ group, deferred }`:
+configure registration with `{ group, codemode }`:
 
 - `group` prefixes and groups the exposed tool name.
-- `deferred: true` makes the tool available through the deferred `execute`
-  tool instead of exposing it directly.
+- `codemode` defaults to `true` and makes the tool available through the
+  `execute` CodeMode tool. Set `codemode: false` to expose it directly to the
+  provider.
 
 The executor receives a second context argument containing `sessionID`,
 `agent`, `assistantMessageID`, and `toolCallID`.
