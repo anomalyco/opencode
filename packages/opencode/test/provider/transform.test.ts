@@ -3056,6 +3056,37 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
+  test("catalog gateway aliases use the routed API ID", () => {
+    const anthropic = createMockModel({
+      id: "my-claude",
+      providerID: "gateway",
+      api: {
+        id: "anthropic/claude-sonnet-4-6",
+        url: "https://gateway.ai",
+        npm: "@ai-sdk/gateway",
+      },
+      reasoning_options: [{ type: "effort", values: ["high"] }],
+    })
+    const google = createMockModel({
+      id: "my-gemini",
+      providerID: "gateway",
+      api: {
+        id: "google/gemini-2.5-pro",
+        url: "https://gateway.ai",
+        npm: "@ai-sdk/gateway",
+      },
+      reasoning_options: [{ type: "budget_tokens", min: 128, max: 32_768 }],
+    })
+
+    expect(ProviderTransform.variants(anthropic)).toEqual({
+      high: { thinking: { type: "adaptive" }, effort: "high" },
+    })
+    expect(ProviderTransform.variants(google)).toEqual({
+      high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
+      max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } },
+    })
+  })
+
   test("deepseek returns empty object", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
@@ -3397,6 +3428,23 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
+    test("configured aliases use the routed API ID", () => {
+      const model = createMockModel({
+        id: "my-claude",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4-6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+
+      expect(ProviderTransform.variants(model).high).toEqual({
+        thinking: { type: "adaptive" },
+        effort: "high",
+      })
+    })
+
     test("anthropic sonnet 4.6 models return adaptive thinking options", () => {
       const model = createMockModel({
         id: "anthropic/claude-sonnet-4-6",

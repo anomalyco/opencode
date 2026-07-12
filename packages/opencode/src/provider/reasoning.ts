@@ -48,8 +48,8 @@ function effortVariant(model: Provider.Model, effort: string): Variant | undefin
       }
     }
     case "@ai-sdk/gateway":
-      if (model.id.includes("anthropic")) return anthropicEffort(model.api.id, effort)
-      if (model.id.includes("google")) return { includeThoughts: true, thinkingLevel: effort }
+      if (model.api.id.includes("anthropic")) return anthropicEffort(model.api.id, effort)
+      if (model.api.id.includes("google")) return { includeThoughts: true, thinkingLevel: effort }
       return { reasoningEffort: effort }
     case "@jerome-benoit/sap-ai-provider-v2":
       if (model.api.id.includes("anthropic")) {
@@ -101,8 +101,8 @@ function budgetVariant(model: Provider.Model, budget: number): Variant | undefin
       if (model.api.id.includes("anthropic")) return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
       return
     case "@ai-sdk/gateway":
-      if (model.id.includes("anthropic")) return { thinking: { type: "enabled", budgetTokens: budget } }
-      if (model.id.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+      if (model.api.id.includes("anthropic")) return { thinking: { type: "enabled", budgetTokens: budget } }
+      if (model.api.id.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
       return
     case "@jerome-benoit/sap-ai-provider-v2":
       if (model.api.id.includes("anthropic")) {
