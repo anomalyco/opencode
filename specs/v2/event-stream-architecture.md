@@ -5,7 +5,7 @@
 The public HTTP event stream uses one Server-scoped encoded feed with one independently bounded queue per connection.
 
 ```text
-Core EventV2.subscribe()
+Core EventV2.listen()
           |
           | one global subscription
           v
@@ -165,10 +165,6 @@ If one accepted public event cannot be encoded:
 
 Keeping current clients connected would create a silent gap. Permanently terminating the feed would poison future connections.
 
-### Source termination
-
-Unexpected Core source termination logs the cause and closes current subscribers. Normal Server-scope interruption is not logged as an error.
-
 ## HTTP And Code Generation
 
 Protocol remains unchanged:
@@ -196,23 +192,13 @@ Because method, path, schema, and wire representation do not change:
 
 ## Core Cleanup
 
-The Server no longer uses `EventV2.liveBounded`, so Core removes that helper and its transport-specific overflow error.
-
-`EventLogger` moves from callback `listen` to a scoped `events.subscribe()` consumer.
-
-The deprecated `listen` interface remains temporarily for V1 compatibility and tests. Removing the callback fan-out completely requires migrating those callers separately and must not be conflated with this Server transport optimization.
+The Server no longer uses `EventV2.liveBounded`, so Core removes that dead helper and its transport-specific overflow error. The feed registers one observer through the existing `listen` interface; other listeners are unchanged.
 
 Transactional projector registration is unrelated and remains unchanged.
 
 ## Benchmark
 
-The disposable benchmark reproduces the current per-connection schema/JSON/SSE encoding path with a representative 8 KiB public event. It uses one warmup and nine measured runs; median is the primary metric and median absolute deviation is reported.
-
-Command from `packages/server`:
-
-```sh
-bun run script/bench-event-feed.ts <clients> 1000 <current|shared>
-```
+The disposable benchmark reproduced the previous per-connection schema/JSON/SSE encoding path with a representative 8 KiB public event. It used one warmup and nine measured runs; median was the primary metric and median absolute deviation was reported. The benchmark was intentionally not committed because it isolated the removed encoding boundary rather than exercising the complete HTTP stack.
 
 Results on Apple Silicon with Bun 1.3.14:
 

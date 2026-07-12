@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { EventV2 } from "@opencode-ai/core/event"
+import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { DateTime, Deferred, Effect, Exit, Fiber, Option, Schema, Stream } from "effect"
 import { EventFeed } from "../src/event-feed"
 
@@ -35,6 +36,13 @@ function makeSource() {
 }
 
 describe("EventFeed", () => {
+  test("preserves the public SSE frame encoding", () => {
+    const payload = event("wire")
+    expect(EventFeed.frame(payload)).toBe(
+      `data: ${JSON.stringify(Schema.encodeUnknownSync(OpenCodeEvent)(payload))}\n\n`,
+    )
+  })
+
   test("encodes once and delivers the same frame to every subscriber", async () => {
     let encodes = 0
     const result = await Effect.runPromise(
