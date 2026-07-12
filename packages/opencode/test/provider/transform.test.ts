@@ -2821,6 +2821,92 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
   })
 })
 
+describe("ProviderTransform.message - bedrock cachePoint after reasoning (#36517)", () => {
+  const bedrockModel = {
+    id: "amazon-bedrock/anthropic.claude-sonnet-4-20250514-v1:0",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "anthropic.claude-sonnet-4-20250514-v1:0",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude Sonnet 4",
+    capabilities: {},
+    options: {},
+    headers: {},
+  } as any
+
+  test("anchors cachePoint on last non-reasoning part when assistant ends with reasoning", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Visible reply" },
+          {
+            type: "reasoning",
+            text: "internal thoughts",
+            providerOptions: { bedrock: { signature: "sig" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+    const assistant = result.find((msg) => msg.role === "assistant")
+    expect(assistant?.providerOptions?.bedrock?.cachePoint).toBeUndefined()
+    expect(assistant?.content[0].providerOptions?.bedrock).toEqual({
+      cachePoint: { type: "default" },
+    })
+    expect(assistant?.content[1].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("skips cachePoint when assistant content is reasoning-only", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "only thinking",
+            providerOptions: { bedrock: { signature: "sig" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+    const assistant = result.find((msg) => msg.role === "assistant")
+    expect(assistant?.providerOptions?.bedrock?.cachePoint).toBeUndefined()
+    expect(assistant?.content[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("keeps message-level cachePoint when assistant does not end with reasoning", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "internal thoughts",
+            providerOptions: { bedrock: { signature: "sig" } },
+          },
+          { type: "text", text: "Visible reply" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+    const assistant = result.find((msg) => msg.role === "assistant")
+    expect(assistant?.providerOptions?.bedrock).toEqual({
+      cachePoint: { type: "default" },
+    })
+    expect(assistant?.content[1].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.message - cache control on gateway", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({

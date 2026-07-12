@@ -320,6 +320,33 @@ function normalizeMessages(
   return msgs
 }
 
+function isBedrockModel(model: Provider.Model) {
+  return model.providerID.includes("bedrock") || model.api.npm === "@ai-sdk/amazon-bedrock"
+}
+
+// Bedrock rejects cachePoint immediately after a reasoning block. The AI SDK
+// emits message-level bedrock.cachePoint after every content part, so when an
+// assistant message ends in reasoning we must anchor the breakpoint on the
+// last non-reasoning part instead (or skip if the message is reasoning-only).
+function applyBedrockCacheOptions(msg: ModelMessage, providerOptions: Record<string, unknown>): "applied" | "skipped" {
+  if (msg.role !== "assistant" || !Array.isArray(msg.content) || msg.content.length === 0) return "skipped"
+  const last = msg.content[msg.content.length - 1]
+  if (!last || typeof last !== "object" || last.type !== "reasoning") return "skipped"
+
+  for (let i = msg.content.length - 1; i >= 0; i--) {
+    const part = msg.content[i]
+    if (!part || typeof part !== "object" || part.type === "reasoning") continue
+    // Same shape as the content-level path below; cast keeps mergeDeep assignable
+    // to SharedV3ProviderOptions without widening the whole message transform.
+    ;(part as { providerOptions?: Record<string, unknown> }).providerOptions = mergeDeep(
+      (part as { providerOptions?: Record<string, unknown> }).providerOptions ?? {},
+      providerOptions,
+    )
+    return "applied"
+  }
+  return "applied"
+}
+
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -364,6 +391,8 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
         continue
       }
     }
+
+    if (isBedrockModel(model) && applyBedrockCacheOptions(msg, providerOptions) === "applied") continue
 
     msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
   }

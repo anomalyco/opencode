@@ -251,6 +251,55 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("'latest-assistant' anchors on text before trailing reasoning, not the reasoning block", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: bedrockModel,
+          messages: [
+            Message.user("u1"),
+            Message.assistant([
+              { type: "text", text: "visible" },
+              { type: "reasoning", text: "hidden", encrypted: "sig" },
+            ]),
+          ],
+          cache: { messages: "latest-assistant" },
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ role: string; content: Array<Record<string, unknown>> }> }
+      const assistant = body.messages.find((message) => message.role === "assistant")
+      expect(assistant?.content).toEqual([
+        { text: "visible" },
+        { cachePoint: { type: "default" } },
+        {
+          reasoningContent: {
+            reasoningText: { text: "hidden", signature: "sig" },
+          },
+        },
+      ])
+      expect(assistant?.content.at(-1)).not.toHaveProperty("cachePoint")
+    }),
+  )
+
+  it.effect("skips cache markers for reasoning-only assistant messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: bedrockModel,
+          messages: [
+            Message.user("u1"),
+            Message.assistant([{ type: "reasoning", text: "only thinking", encrypted: "sig" }]),
+          ],
+          cache: { messages: "latest-assistant" },
+        }),
+      )
+
+      const flat = JSON.stringify(prepared.body)
+      expect(flat).not.toContain("cachePoint")
+    }),
+  )
+
   test("returns the same request reference when policy is a no-op (pure function)", () => {
     const request = LLM.request({
       model: anthropicModel,
