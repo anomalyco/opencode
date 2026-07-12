@@ -76,8 +76,6 @@ export class PromiseInstanceMethodReference {
   ) {}
 }
 
-// The resolve/reject callables handed to a `new Promise(executor)` executor. `settle` closes
-// over the promise's deferred and is first-settlement-wins; later calls are no-ops, as in JS.
 export class PromiseCapabilityFunction {
   constructor(readonly settle: (value: unknown) => void) {}
 }
@@ -114,8 +112,6 @@ export class UriFunction {
   constructor(readonly name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent") {}
 }
 
-// The global `search` built-in: synchronous tool discovery that shares the tool admission
-// pipeline (budget, audit, hooks) without living in the `tools` tree.
 export class SearchFunction {}
 
 export class ProgramThrow {

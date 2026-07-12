@@ -302,9 +302,12 @@ describe("CodeMode-specific string behavior", () => {
     expect(await value(`try { "x".normalize("nope"); return "no" } catch (e) { return e.message }`)).toContain('"NFC"')
   })
 
-  test("trimLeft/trimRight alias trimStart/trimEnd", async () => {
-    expect(await value(`return "  x ".trimLeft()`)).toBe("x ")
-    expect(await value(`return "  x ".trimRight()`)).toBe("  x")
+  test("does not expose obsolete string aliases", async () => {
+    expect(await value(`return [typeof "x".trimLeft, typeof "x".trimRight, typeof "x".substr]`)).toEqual([
+      "undefined",
+      "undefined",
+      "undefined",
+    ])
   })
 })
 

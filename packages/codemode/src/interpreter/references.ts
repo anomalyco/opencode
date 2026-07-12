@@ -46,9 +46,7 @@ export const containsRuntimeReference = (value: unknown, seen = new Set<object>(
   return contains
 }
 
-// Like containsRuntimeReference, but sandbox standard-library values count as data:
-// operators and switch treat them as ordinary object operands (identity equality, ToPrimitive
-// coercion) rather than rejecting them as opaque interpreter machinery.
+// Sandbox values are data here, not opaque interpreter references.
 export const containsOpaqueReference = (value: unknown, seen = new Set<object>()): boolean => {
   if (isSandboxValue(value)) return false
   if (isRuntimeReference(value)) return true
@@ -62,8 +60,7 @@ export const containsOpaqueReference = (value: unknown, seen = new Set<object>()
   return contains
 }
 
-// Rejects inserting a value that (transitively) contains the container it is being inserted
-// into - the mutation that would create a circular structure no later walk could survive.
+// Reject cycles before mutation so later boundary walks remain safe.
 export const rejectCircularInsertion = (
   container: object,
   value: unknown,
@@ -80,9 +77,6 @@ export const rejectCircularInsertion = (
   seen.delete(value)
 }
 
-// `typeof` never throws in JS; map every interpreter value to its JS-visible category.
-// A SandboxPromise falls through to the final `typeof value` and reports "object", exactly
-// like a real JS promise.
 export const typeofValue = (value: unknown): string => {
   if (
     value instanceof CodeModeFunction ||

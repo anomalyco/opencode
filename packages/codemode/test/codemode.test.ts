@@ -26,6 +26,22 @@ describe("CodeMode host failure boundary", () => {
     })
   })
 
+  test("does not rewrite explicit safe tool failures", async () => {
+    const result = await run(
+      Tool.make({
+        description: "Fail safely",
+        input: Schema.Struct({}),
+        output: Schema.String,
+        run: () => Effect.fail(toolError("File not found: /tmp/report.json")),
+      }),
+    )
+
+    expect(result.ok ? undefined : result.error).toStrictEqual({
+      kind: "ToolFailure",
+      message: "File not found: /tmp/report.json",
+    })
+  })
+
   test("sanitizes unknown host failures and defects", async () => {
     for (const failure of [
       Effect.fail(new UnsafeHostError({ reason: "Authorization: Bearer typed-secret" })),

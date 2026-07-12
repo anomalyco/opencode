@@ -9,15 +9,15 @@ export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescr
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
   /**
-   * Wall-clock milliseconds before execution is interrupted; result delivery additionally
-   * waits for tool interruption cleanup. No default: absent means no timeout.
+   * Wall-clock milliseconds before interruption. Result delivery waits for tool cleanup.
+   * No default: absent means no timeout.
    */
   readonly timeoutMs?: number
   /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
   /**
-   * Maximum UTF-8 bytes retained from the result value and logs; warnings have a separate
-   * budget of the same size. Fixed truncation notices and host formatting are additional.
+   * Maximum UTF-8 bytes retained from the result and logs. Warnings have a separate equal budget;
+   * truncation notices and host formatting are additional.
    */
   readonly maxOutputBytes?: number
 }
@@ -94,7 +94,6 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
-  // Runtime-authored non-fatal diagnostics; program console output stays in `logs`.
   warnings: Schema.optionalKey(Schema.Array(Diagnostic)),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),

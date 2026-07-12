@@ -31,10 +31,8 @@ export type {
 } from "./types.js"
 
 /**
- * Builds a CodeMode tool subtree from an OpenAPI 3.x document, one tool per
- * operation. Auth is resolved host-side via `auth.resolve` and never
- * model-visible. Tools require `HttpClient.HttpClient`; unrepresentable
- * operations land in `skipped`.
+ * Builds one CodeMode tool per representable OpenAPI 3.x operation. Auth remains host-side,
+ * tools require `HttpClient.HttpClient`, and unrepresentable operations land in `skipped`.
  */
 export const fromSpec = (options: Options): Result => {
   const document = options.spec

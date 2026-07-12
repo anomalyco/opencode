@@ -1,11 +1,8 @@
 import { Effect, Schema } from "effect"
 
 /**
- * JSON Schema subset accepted for render-only tool schemas.
- *
- * A JSON-Schema-described side of a tool is used to generate the model-visible TypeScript
- * signature only - CodeMode performs no validation against it. This is the natural shape for
- * adapter-provided tools (e.g. MCP definitions) whose schemas arrive as JSON Schema documents.
+ * JSON Schema subset for model-visible signatures. CodeMode does not validate values against
+ * these schemas.
  */
 export type JsonSchema = {
   readonly type?: string | ReadonlyArray<string>
@@ -41,10 +38,8 @@ export type Definition<R = never> = {
   readonly run: (input: unknown) => Effect.Effect<unknown, unknown, R>
 }
 
-/** The value `run` receives: the decoded type for Effect Schemas, `unknown` for JSON Schemas. */
 type InputType<S> = S extends Schema.Decoder<unknown> ? S["Type"] : unknown
 
-/** The value `run` returns: the encoded type for Effect Schemas, `unknown` otherwise. */
 type ResultType<S> = S extends Schema.Decoder<unknown> ? S["Encoded"] : unknown
 
 /** Options for defining one CodeMode tool. */
@@ -61,29 +56,9 @@ export const isDefinition = <R = never>(value: unknown): value is Definition<R> 
 /**
  * Defines one schema-described tool available to a CodeMode program through `tools.*`.
  *
- * `input` and `output` each accept a validating Effect Schema or a render-only JSON Schema
- * document. Effect Schema input is decoded before `run` is invoked, and `run` returns the
- * encoded representation of an Effect Schema `output`, which CodeMode decodes before returning
- * it to the program. JSON Schemas only shape the model-visible signature; values pass through
- * unvalidated. `output` is optional - without it the signature advertises `unknown` and the
- * host result is exposed as-is. The host tool remains responsible for authorization and
- * durable side-effect handling.
- *
- * @example
- * ```ts
- * const lookup = Tool.make({
- *   description: "Look up an order",
- *   input: Schema.Struct({ id: Schema.String }),
- *   output: Schema.Struct({ status: Schema.String }),
- *   run: ({ id }) => Effect.succeed({ status: "open" }),
- * })
- *
- * const fromJsonSchema = Tool.make({
- *   description: "Call an adapter-described tool",
- *   input: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
- *   run: (input) => callHost(input),
- * })
- * ```
+ * Effect Schemas validate values; JSON Schemas only shape the model-visible signature.
+ * Without `output`, results are exposed as `unknown`. Hosts remain responsible for authorization
+ * and durable side effects.
  */
 export const make = <I extends SchemaType, const O extends SchemaType | undefined = undefined, R = never>(
   options: Options<I, O, R>,

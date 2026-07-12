@@ -56,7 +56,7 @@ const buildRequest = (
   input: Readonly<Record<string, unknown>>,
 ): Effect.Effect<HttpClientRequest.HttpClientRequest, ToolError> =>
   Effect.gen(function* () {
-    // Validate every model-controlled value before auth resolution, which may refresh tokens.
+    // Validate model input before auth resolution can refresh credentials.
     const url = buildUrl(plan, input)
     if (url instanceof ToolError) return yield* Effect.fail(url)
     const missing = plan.fields.find(
@@ -77,7 +77,6 @@ const buildRequest = (
       request = serialized
     }
 
-    // Host headers first, then declared header parameters.
     request = HttpClientRequest.setHeaders(request, plan.headers)
     for (const field of plan.fields) {
       if (field.location !== "header") continue
@@ -169,7 +168,7 @@ const applyCredentials = (
       continue
     }
     if (credential.type === "basic") {
-      // Buffer instead of btoa: btoa throws on non-Latin-1 credentials.
+      // Basic auth credentials are UTF-8; btoa rejects non-Latin-1 input.
       const duplicate = add(
         "header",
         "authorization",
@@ -183,7 +182,6 @@ const applyCredentials = (
       if (duplicate !== undefined) return duplicate
       continue
     }
-    // apiKey: the carrier comes from the scheme declaration.
     if (definition.type !== "apiKey") {
       return toolError(
         `Security scheme '${name}' is not an apiKey scheme; resolve a bearer, basic, or header credential for it.`,
@@ -212,8 +210,7 @@ const buildUrl = (plan: Plan, input: Readonly<Record<string, unknown>>): string 
       ),
     )
     if (fieldValue instanceof ToolError) return fieldValue
-    // '.'/'..' survive encoding and URL normalization collapses them, letting a
-    // model-supplied value retarget the request to a different endpoint.
+    // URL normalization collapses encoded `.` and `..`, which could retarget the request.
     if (fieldValue === "" || fieldValue === "." || fieldValue === "..") {
       return toolError(`Invalid path parameter '${field.inputName}'.`)
     }

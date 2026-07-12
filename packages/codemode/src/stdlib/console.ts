@@ -14,7 +14,6 @@ import { boundedData, coerceToString } from "./value.js"
 
 export const consoleMethods = new Set(["log", "info", "debug", "warn", "error", "dir", "table"])
 
-// Formatting recursion ceiling; deeper values render as "...".
 const MAX_CONSOLE_DEPTH = 32
 
 export const formatConsoleMessage = (name: string, args: Array<unknown>): string => {
@@ -24,21 +23,15 @@ export const formatConsoleMessage = (name: string, args: Array<unknown>): string
   return `${prefix}${args.map((arg) => formatConsoleArgument(arg)).join(" ")}`
 }
 
-// Values render debugger-style, not as boundary JSON: NaN/Infinity survive, sandbox values
-// keep friendly forms at any depth, opaque references become "[CodeMode reference]".
-// Formatting never fails the program: cycles render "[Circular]", extreme depth "...".
 const formatConsoleArgument = (value: unknown): string => {
   if (value === undefined) return "undefined"
-  // A top-level string prints bare; nested strings are JSON-quoted (see formatConsoleValue).
   if (typeof value === "string") return value
   return formatConsoleValue(value, new Set(), 0)
 }
 
 const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): string => {
-  // Nested undefined renders as null, matching what JSON boundary output would show.
   if (value === null || value === undefined) return "null"
   if (typeof value === "string") return JSON.stringify(value)
-  // String(value) keeps NaN/Infinity/-Infinity readable; finite numbers match their JSON form.
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   if (typeof value !== "object") return String(value)
   if (value instanceof SandboxPromise) return "[Promise (await it to get its value)]"
@@ -81,8 +74,6 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
 
 const formatConsoleTable = (value: unknown, columnsArgument: unknown): string => {
   if (value === undefined) return "undefined"
-  // Sandbox values are legitimate table data (cells render their friendly forms); only
-  // truly opaque references (functions, tools, promises) collapse to the marker.
   if (containsOpaqueReference(value)) return "[CodeMode reference]"
   const data = boundedData(value, "console.table argument")
   const columns = consoleTableColumns(columnsArgument)

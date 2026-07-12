@@ -21,9 +21,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
     })
   }
 
-  // Suspended so all per-execution state - tool-call admission budget and audit list, logs,
-  // and the timeout path's completed value - binds at run time: a reused Effect must start
-  // from a clean slate instead of observing a previous run's state.
+  // Allocate execution state inside suspension so reused Effects never share it.
   return Effect.suspend(() => {
     const tools = ToolRuntime.make(
       (options.tools ?? {}) as HostTools<Services<Tools>>,
@@ -36,9 +34,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
     )
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
-    // Set once the program body returned and its value crossed the data boundary, so a timeout
-    // firing during leftover interruption reports "completed with interrupted background work"
-    // instead of discarding the computed value as a plain timeout.
+    // Set only after copy-out so timeouts cannot report invalid values as completed.
     let returned: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
 
     const base = Effect.acquireUseRelease(
@@ -49,8 +45,6 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
           const promises = new PromiseRuntime<Services<Tools>>(scope)
           const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.search, tools.keys, promises, logs)
           const value = yield* interpreter.run(program)
-          // Validate the result first so an invalid value is a fatal completion that closes
-          // the promise scope directly instead of taking the normal-completion path.
           const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()
@@ -81,7 +75,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
                       toolCalls: tools.calls,
                     } satisfies Result
                   }
-                  // The timeout warning leads so byte-budget truncation cuts it last.
+                  // Keep the timeout warning first so truncation preserves it.
                   return {
                     ok: true,
                     value: returned.value,
@@ -155,8 +149,7 @@ const parseProgram = (code: string): ProgramNode => {
 
 const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength
 
-// Truncates to a UTF-8 byte budget without splitting a code point (a split multi-byte
-// sequence decodes to a replacement character, which is dropped).
+// Drop a replacement character produced by truncating inside a UTF-8 sequence.
 const utf8Truncate = (value: string, maxBytes: number): string => {
   const bytes = new TextEncoder().encode(value)
   if (bytes.byteLength <= maxBytes) return value
@@ -164,9 +157,7 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
   return text.endsWith("\uFFFD") ? text.slice(0, -1) : text
 }
 
-// Bounds the serialized result value and logs to maxOutputBytes; warnings get a separate
-// budget of the same size so a large value cannot starve runtime-authored diagnostics.
-// Truncation never fails the execution; `truncated: true` marks affected results.
+// Warnings have a separate budget so result data cannot starve diagnostics.
 const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   let truncated = false
 

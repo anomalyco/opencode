@@ -6,9 +6,6 @@ import { containsRuntimeReference } from "./references.js"
 import { spreadItems } from "../stdlib/collections.js"
 import { coerceToString, createAggregateErrorValue, createErrorValue, errorConstructors } from "../stdlib/value.js"
 
-export const publicErrorMessage = (message: string): string =>
-  message.replace(/\/(?:Users|home|private|tmp|var\/folders)\/[^\s"'`]+/g, "<redacted-path>")
-
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof InterpreterRuntimeError) {
     return {
@@ -28,14 +25,14 @@ export const normalizeError = (error: unknown): Diagnostic => {
   }
 
   if (error instanceof ToolError) {
-    return { kind: "ToolFailure", message: publicErrorMessage(error.message) }
+    return { kind: "ToolFailure", message: error.message }
   }
 
   if (error instanceof ProgramThrow) {
     const value = error.value
     let message: string
     if (containsRuntimeReference(value)) {
-      // A thrown tool/function reference must not leak its internal structure.
+      // Never expose runtime reference internals through thrown values.
       message = "a non-data value"
     } else if (typeof value === "string") {
       message = value
@@ -65,19 +62,16 @@ export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof Error) {
     return {
       kind: error.name === "SyntaxError" ? "ParseError" : "ExecutionFailure",
-      message: publicErrorMessage(error.message),
+      message: error.message,
     }
   }
 
-  // A non-Error thrown by a host tool (raw string / number / Symbol) still routes through
-  // path redaction so filesystem paths can never leak through the catch-all branch.
   return {
     kind: "ExecutionFailure",
-    message: publicErrorMessage(String(error)),
+    message: String(error),
   }
 }
 
-// Shared by catch bindings and Promise.allSettled rejection reasons.
 export const caughtErrorValue = (thrown: unknown): unknown => {
   if (thrown instanceof ProgramThrow) return thrown.value
   if (thrown instanceof InterpreterRuntimeError) return createErrorValue(thrown.errorName, thrown.message)
@@ -85,8 +79,6 @@ export const caughtErrorValue = (thrown: unknown): unknown => {
   return createErrorValue(name, normalizeError(thrown).message)
 }
 
-// `new Error("msg")` and the no-new call form share this; AggregateError alone takes
-// (errors, message?) with a required errors collection, as in JS.
 export const constructErrorValue = (name: string, args: Array<unknown>, node: AstNode): SafeObject => {
   if (name !== "AggregateError") return createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
   const errors = spreadItems(args[0])
@@ -96,6 +88,6 @@ export const constructErrorValue = (name: string, args: Array<unknown>, node: As
       node,
     ).as("TypeError")
   }
-  // Copy: spreadItems returns array input itself, and the error value must not alias caller data.
+  // Error values must not alias caller-owned arrays.
   return createAggregateErrorValue([...errors], args[1] === undefined ? "" : coerceToString(args[1]))
 }

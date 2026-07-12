@@ -31,7 +31,6 @@ import { invokeStringStatic } from "../stdlib/string.js"
 import { invokeUriFunction, invokeURLMethod, invokeURLStatic, uriArgument } from "../stdlib/url.js"
 import { boundedData, coerceToNumber, coerceToString, invokeCoercion } from "../stdlib/value.js"
 
-// The two interpreter capabilities value-method dispatch needs.
 export type CallbackRunner<R> = {
   readonly invokeFunction: (fn: CodeModeFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly settlePromise: (promise: SandboxPromise) => Effect.Effect<unknown, unknown, never>
@@ -127,17 +126,13 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "trim":
       result = value.trim()
       break
-    // trimLeft/trimRight are the legacy aliases of trimStart/trimEnd, kept because models write them.
     case "trimStart":
-    case "trimLeft":
       result = value.trimStart()
       break
     case "trimEnd":
-    case "trimRight":
       result = value.trimEnd()
       break
-    // Locale/options arguments are ignored: comparison runs with the host default locale, and
-    // the common use is a sort comparator where any consistent order works.
+    // Locale/options are deliberately unsupported; comparison uses the host default locale.
     case "localeCompare":
       result = value.localeCompare(str(0))
       break
@@ -209,8 +204,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       const pattern = toHostRegex(args[0], name, node)
       const matched = value.match(pattern)
       if (matched === null) return null
-      // A global match is a plain array of matched strings; a non-global match carries
-      // index/groups own properties, so bypass the copying data checkpoint to keep them.
+      // Preserve the own `index` and `groups` properties on non-global matches.
       if (pattern.global) return boundedData(matched, "String.match result")
       return matchToValue(matched)
     }
@@ -222,8 +216,6 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
           node,
         )
       }
-      // Materialized as an array (not an iterator); each entry is a match array with
-      // index/groups own properties. Match count is bounded by the subject length.
       return Array.from(value.matchAll(pattern), matchToValue)
     }
     case "search": {
@@ -252,11 +244,6 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "substring":
       result = value.substring(optNum(0) ?? 0, optNum(1))
       break
-    case "substr":
-      result = value.substr(optNum(0) ?? 0, optNum(1))
-      break
-    // JS charCodeAt returns NaN out of range; NaN flows as an ordinary in-sandbox value
-    // (normalized to null only at the data boundary - see copyOut), so return it as-is.
     case "charCodeAt":
       result = value.charCodeAt(optNum(0) ?? 0)
       break
@@ -291,7 +278,6 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
           [supportedSyntaxMessage],
         )
       }
-      // Map/Set materialize directly (the data checkpoint would serialize them to {}).
       if (args[0] instanceof SandboxMap) return Array.from(args[0].map.entries(), ([key, item]) => [key, item])
       if (args[0] instanceof SandboxSet) return Array.from(args[0].set.values())
       if (args[0] instanceof SandboxURLSearchParams) {
@@ -392,8 +378,6 @@ const invokeStringReplacer = <R>(
   })
 }
 
-// Accepts a user function or supported builtin callable, so idioms such as
-// `filter(Boolean)`, `map(String)`, and `map(encodeURIComponent)` work as in JS.
 export const applyCollectionCallback = <R>(
   runner: CallbackRunner<R>,
   callback: unknown,
@@ -451,7 +435,6 @@ const invokeMapMethod = <R>(
     case "forEach": {
       const apply = applyCollectionCallback(runner, args[0], "Map.forEach", node)
       return Effect.gen(function* () {
-        // Snapshot iteration, matching the array-method callback contract.
         for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
         return undefined
       })
@@ -639,8 +622,7 @@ const invokeArrayMethod = <R>(
       return Effect.succeed(copied)
     }
     case "push": {
-      // Validate before mutating (so no rollback is needed): inserting a container into
-      // itself would create a cycle no later walk could survive.
+      // Validate all insertions before mutating to avoid partial cyclic updates.
       for (const item of args) rejectCircularInsertion(target, item, "Array.push result", node)
       target.push(...args)
       return Effect.succeed(target.length)
@@ -655,8 +637,6 @@ const invokeArrayMethod = <R>(
     case "shift":
       return Effect.succeed(target.shift())
     case "splice": {
-      // Mutates in place and returns the removed elements, exactly like JS: one argument
-      // removes to the end, an undefined delete count removes nothing.
       if (args.length === 0) return Effect.succeed(target.splice(0, 0))
       const start = optNumber(args[0], "start") ?? 0
       if (args.length === 1) return Effect.succeed(target.splice(start))
@@ -677,8 +657,6 @@ const invokeArrayMethod = <R>(
           optNumber(args[2], "end"),
         ),
       )
-    // keys/values/entries return arrays (not iterators), matching the Map/Set convention;
-    // they work with for...of and spread either way.
     case "keys":
       return Effect.succeed(Array.from(target.keys()))
     case "values":
@@ -689,8 +667,7 @@ const invokeArrayMethod = <R>(
 
   const apply = applyCollectionCallback(runner, args[0], `Array.${name}`, node)
   return Effect.gen(function* () {
-    // Capture the initial length, but read the receiver live so callbacks observe mutations
-    // without visiting elements appended after iteration begins.
+    // Fix iteration length while reading existing elements live.
     const length = target.length
     switch (name) {
       case "map": {
@@ -828,8 +805,7 @@ const sortArray = <R>(
       let leftIndex = 0
       let rightIndex = 0
       while (leftIndex < left.length && rightIndex < right.length) {
-        // Coerce the comparator's result like JS ToNumber (data objects -> NaN, never a host
-        // crash) and treat NaN as 0 - the spec's "no consistent order" -> keep the left element.
+        // Treat a NaN comparator result as equal to preserve stable ordering.
         const order = coerceToNumber(yield* runner.invokeFunction(comparator, [left[leftIndex], right[rightIndex]]))
         if (Number.isNaN(order) || order <= 0) merged.push(left[leftIndex++])
         else merged.push(right[rightIndex++])
@@ -837,7 +813,6 @@ const sortArray = <R>(
       return [...merged, ...left.slice(leftIndex), ...right.slice(rightIndex)]
     })
   }
-  // Per spec, undefined elements sort to the end and the comparator is never called on them.
   const defined = target.filter((item) => item !== undefined)
   const undefinedCount = target.length - defined.length
   return Effect.map(mergeSort(defined), (items) => [...items, ...Array(undefinedCount).fill(undefined)])

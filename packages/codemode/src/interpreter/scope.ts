@@ -1,7 +1,5 @@
 import { type AstNode, type Binding, InterpreterRuntimeError } from "./model.js"
 
-// Binding maps searched innermost-first; closures capture() the stack and function
-// invocation rebuilds one from the captured scopes.
 export class ScopeStack {
   private readonly scopes: Array<Map<string, Binding>>
 
@@ -12,8 +10,6 @@ export class ScopeStack {
   declare(name: string, value: unknown, mutable: boolean, node: AstNode): void {
     const scope = this.current()
 
-    // A pre-seeded parameter slot (initialized === false) is being bound for the first time;
-    // anything else already present is a genuine duplicate declaration.
     const existing = scope.get(name)
     if (existing && existing.initialized !== false) {
       throw new InterpreterRuntimeError(`Identifier '${name}' has already been declared.`, node)
@@ -29,7 +25,6 @@ export class ScopeStack {
       throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
     }
 
-    // A parameter default that forward-references a later (not-yet-bound) parameter - JS TDZ.
     if (binding.initialized === false) {
       throw new InterpreterRuntimeError(`Cannot access '${name}' before initialization.`, node).as("ReferenceError")
     }

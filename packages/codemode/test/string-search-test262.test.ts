@@ -49,12 +49,6 @@
  * - test/built-ins/String/prototype/substring/S15.5.4.15_A2_T8.js
  * - test/built-ins/String/prototype/substring/S15.5.4.15_A2_T9.js
  * - test/built-ins/String/prototype/substring/S15.5.4.15_A2_T10.js
- * - test/annexB/built-ins/String/prototype/substr/start-negative.js
- * - test/annexB/built-ins/String/prototype/substr/length-negative.js
- * - test/annexB/built-ins/String/prototype/substr/length-positive.js
- * - test/annexB/built-ins/String/prototype/substr/length-falsey.js
- * - test/annexB/built-ins/String/prototype/substr/length-undef.js
- * - test/annexB/built-ins/String/prototype/substr/surrogate-pairs.js
  * - test/built-ins/String/prototype/includes/String.prototype.includes_FailMissingLetter.js
  * - test/built-ins/String/prototype/includes/String.prototype.includes_SuccessNoLocation.js
  * - test/built-ins/String/prototype/includes/String.prototype.includes_FailBadLocation.js
@@ -459,67 +453,6 @@ const cases = [
     code: `return ["this_is_a_string object".substring(0, 8)]`,
     expected: ["this_is_"],
     labels: ['#1: __string.substring(0,8) === "this_is_"'],
-  },
-  {
-    path: "test/annexB/built-ins/String/prototype/substr/start-negative.js",
-    code: `return ["abc".substr(-1), "abc".substr(-2), "abc".substr(-3), "abc".substr(-4), "abc".substr(-1.1)]`,
-    expected: ["c", "bc", "abc", "abc", "c"],
-    labels: ["-1", "-2", "-3", "size + intStart < 0", "floating point rounding semantics"],
-  },
-  {
-    path: "test/annexB/built-ins/String/prototype/substr/length-negative.js",
-    code: `return [
-      "abc".substr(0, -1), "abc".substr(0, -2), "abc".substr(0, -3), "abc".substr(0, -4),
-      "abc".substr(1, -1), "abc".substr(1, -2), "abc".substr(1, -3), "abc".substr(1, -4),
-      "abc".substr(2, -1), "abc".substr(2, -2), "abc".substr(2, -3), "abc".substr(2, -4),
-      "abc".substr(3, -1), "abc".substr(3, -2), "abc".substr(3, -3), "abc".substr(3, -4),
-    ]`,
-    expected: ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-    labels: [
-      "0, -1", "0, -2", "0, -3", "0, -4", "1, -1", "1, -2", "1, -3", "1, -4",
-      "2, -1", "2, -2", "2, -3", "2, -4", "3, -1", "3, -2", "3, -3", "3, -4",
-    ],
-  },
-  {
-    path: "test/annexB/built-ins/String/prototype/substr/length-positive.js",
-    code: `return [
-      "abc".substr(0, 1), "abc".substr(0, 2), "abc".substr(0, 3), "abc".substr(0, 4),
-      "abc".substr(1, 1), "abc".substr(1, 2), "abc".substr(1, 3), "abc".substr(1, 4),
-      "abc".substr(2, 1), "abc".substr(2, 2), "abc".substr(2, 3), "abc".substr(2, 4),
-      "abc".substr(3, 1), "abc".substr(3, 2), "abc".substr(3, 3), "abc".substr(3, 4),
-    ]`,
-    expected: ["a", "ab", "abc", "abc", "b", "bc", "bc", "bc", "c", "c", "c", "c", "", "", "", ""],
-    labels: [
-      "0, 1", "0, 1", "0, 1", "0, 1", "1, 1", "1, 1", "1, 1", "1, 1",
-      "2, 1", "2, 1", "2, 1", "2, 1", "3, 1", "3, 1", "3, 1", "3, 1",
-    ],
-  },
-  {
-    path: "test/annexB/built-ins/String/prototype/substr/length-falsey.js",
-    code: `return ["abc".substr(0, NaN), "abc".substr(1, NaN), "abc".substr(2, NaN), "abc".substr(3, NaN)]`,
-    expected: ["", "", "", ""],
-    labels: ["start: 0, length: NaN", "start: 1, length: NaN", "start: 2, length: NaN", "start: 3, length: NaN"],
-  },
-  {
-    path: "test/annexB/built-ins/String/prototype/substr/length-undef.js",
-    code: `return [
-      "abc".substr(0), "abc".substr(1), "abc".substr(2), "abc".substr(3),
-      "abc".substr(0, undefined), "abc".substr(1, undefined), "abc".substr(2, undefined), "abc".substr(3, undefined),
-    ]`,
-    expected: ["abc", "bc", "c", "", "abc", "bc", "c", ""],
-    labels: [
-      "start: 0, length: unspecified", "start: 1, length: unspecified", "start: 2, length: unspecified", "start: 3, length: unspecified",
-      "start: 0, length: undefined", "start: 1, length: undefined", "start: 2, length: undefined", "start: 3, length: undefined",
-    ],
-  },
-  {
-    path: "test/annexB/built-ins/String/prototype/substr/surrogate-pairs.js",
-    code: `return [
-      "\uD834\uDF06".substr(0), "\uD834\uDF06".substr(1), "\uD834\uDF06".substr(2),
-      "\uD834\uDF06".substr(0, 0), "\uD834\uDF06".substr(0, 1), "\uD834\uDF06".substr(0, 2),
-    ]`,
-    expected: ["\uD834\uDF06", "\uDF06", "", "", "\uD834", "\uD834\uDF06"],
-    labels: ["start: 0", "start: 1", "start: 2", "end: 0", "end: 1", "end: 2"],
   },
   {
     path: "test/built-ins/String/prototype/includes/String.prototype.includes_FailMissingLetter.js",

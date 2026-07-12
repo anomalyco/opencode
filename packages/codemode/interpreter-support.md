@@ -176,9 +176,9 @@ ultimate source of truth.
 ## Strings
 
 - [x] Case/normalization: `toLowerCase`, `toUpperCase`, `normalize`.
-- [x] Trimming: `trim`, `trimStart`, `trimEnd`, `trimLeft`, and `trimRight`.
+- [x] Trimming: `trim`, `trimStart`, and `trimEnd`.
 - [x] Searching/tests: `includes`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, and `search`.
-- [x] Slicing/access: `slice`, `substring`, `substr`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
+- [x] Slicing/access: `slice`, `substring`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
 - [x] Construction/transformation: `split`, `concat`, `repeat`, `padStart`, `padEnd`, `replace`, and `replaceAll`.
 - [x] Regular-expression integration: `match`, materialized `matchAll`, `replace`, `replaceAll`, `split`, and `search`.
 - [x] `localeCompare`; locale and options arguments are currently ignored.
