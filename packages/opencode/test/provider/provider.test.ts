@@ -1426,6 +1426,63 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("models.dev reasoning options authoritatively generate variants", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "openai",
+    name: "OpenAI",
+    env: [],
+    npm: "@ai-sdk/openai",
+    models: {
+      reasoner: {
+        id: "reasoner",
+        name: "Reasoner",
+        reasoning: true,
+        reasoning_options: [
+          { type: "future_control", value: true },
+          { type: "effort", values: ["high", null, 42] },
+        ],
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider)
+  const model = provider.models.reasoner
+
+  expect(model.reasoning_options).toEqual([{ type: "effort", values: ["high", null] }])
+  expect(model.variants).toEqual({
+    high: {
+      reasoningEffort: "high",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    },
+    none: {
+      reasoningEffort: "none",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    },
+  })
+})
+
+test("models.dev models without reasoning options do not use guessed variants", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "openai",
+    name: "OpenAI",
+    env: [],
+    npm: "@ai-sdk/openai",
+    models: {
+      reasoner: {
+        id: "gpt-5.4",
+        name: "Reasoner",
+        reasoning: true,
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider)
+  const model = provider.models.reasoner
+
+  expect(model.reasoning_options).toEqual([])
+  expect(model.variants).toEqual({})
+})
+
 test("public provider info omits invalid models", () => {
   const provider = Provider.fromModelsDevProvider({
     id: "test",

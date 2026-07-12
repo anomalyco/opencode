@@ -51,6 +51,9 @@ export const Model = Schema.Struct({
   release_date: Schema.String,
   attachment: Schema.Boolean,
   reasoning: Schema.Boolean,
+  // models.dev is external metadata and reasoning controls are expected to evolve.
+  // Provider normalization extracts the subset understood by this client.
+  reasoning_options: Schema.optional(Schema.Unknown),
   temperature: Schema.Boolean,
   tool_call: Schema.Boolean,
   interleaved: Schema.optional(

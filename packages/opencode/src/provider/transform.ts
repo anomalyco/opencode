@@ -670,8 +670,121 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
   )
 }
 
+type ReasoningOption = NonNullable<Provider.Model["reasoning_options"]>[number]
+type ReasoningBudgetOption = Extract<ReasoningOption, { type: "budget_tokens" }>
+
+function reasoningOptionVariants(model: Provider.Model): Record<string, Record<string, unknown>> | undefined {
+  if (model.reasoning_options === undefined) return
+  const effort = model.reasoning_options.find((option) => option.type === "effort")
+  if (effort?.type === "effort") {
+    return Object.fromEntries(
+      effort.values.flatMap((value): [string, Record<string, unknown>][] => {
+        const id = value === null ? "none" : value
+        const variant = reasoningEffortVariant(model, id)
+        return variant ? [[id, variant]] : []
+      }),
+    )
+  }
+  const budget = model.reasoning_options.find((option) => option.type === "budget_tokens")
+  if (budget?.type === "budget_tokens") return reasoningBudgetVariants(model, budget)
+  return {}
+}
+
+function reasoningEffortVariant(model: Provider.Model, effort: string): Record<string, unknown> | undefined {
+  if (model.api.npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
+  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    return { thinking: { type: "adaptive", display: "summarized" }, effort }
+  }
+  if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
+    return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+  }
+  if (model.api.npm === "@ai-sdk/azure") return { reasoningEffort: effort }
+  if (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/amazon-bedrock/mantle") {
+    return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
+  }
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+    const adaptive = anthropicAdaptiveEfforts(model.api.id) !== null
+    return {
+      reasoningConfig: {
+        type: adaptive ? "adaptive" : "enabled",
+        maxReasoningEffort: effort,
+        ...(adaptive && anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}),
+      },
+    }
+  }
+  if (model.api.npm === "@ai-sdk/gateway") {
+    if (model.id.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }
+    if (model.id.includes("google")) return { includeThoughts: true, thinkingLevel: effort }
+    return { reasoningEffort: effort }
+  }
+  if (model.api.npm === "@jerome-benoit/sap-ai-provider-v2") {
+    if (model.api.id.includes("anthropic")) {
+      return { modelParams: { thinking: { type: "adaptive", display: "summarized" }, output_config: { effort } } }
+    }
+    return { modelParams: { reasoning_effort: effort } }
+  }
+  if (
+    [
+      "@ai-sdk/openai-compatible",
+      "ai-gateway-provider",
+      "@ai-sdk/github-copilot",
+      "@ai-sdk/cerebras",
+      "@ai-sdk/togetherai",
+      "@ai-sdk/xai",
+      "@ai-sdk/deepinfra",
+      "venice-ai-sdk-provider",
+      "@ai-sdk/groq",
+      "@ai-sdk/mistral",
+    ].includes(model.api.npm)
+  ) {
+    return { reasoningEffort: effort }
+  }
+}
+
+function reasoningBudgetVariants(
+  model: Provider.Model,
+  option: ReasoningBudgetOption,
+): Record<string, Record<string, unknown>> {
+  const high =
+    option.max === undefined
+      ? Math.max(option.min ?? 0, 16_000)
+      : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
+  return Object.fromEntries(
+    [
+      { id: "high", budget: high },
+      ...(option.max === undefined || option.max === high ? [] : [{ id: "max", budget: option.max }]),
+    ].flatMap((item): [string, Record<string, unknown>][] => {
+      const variant = reasoningBudgetVariant(model, item.budget)
+      return variant ? [[item.id, variant]] : []
+    }),
+  )
+}
+
+function reasoningBudgetVariant(model: Provider.Model, budget: number): Record<string, unknown> | undefined {
+  if (model.api.npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
+  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    return { thinking: { type: "enabled", budgetTokens: budget } }
+  }
+  if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
+    return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+  }
+  if (model.api.npm === "@ai-sdk/amazon-bedrock" && model.api.id.includes("anthropic")) {
+    return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
+  }
+  if (model.api.npm === "@ai-sdk/gateway") {
+    if (model.id.includes("anthropic")) return { thinking: { type: "enabled", budgetTokens: budget } }
+    if (model.id.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+  }
+  if (model.api.npm === "@jerome-benoit/sap-ai-provider-v2" && model.api.id.includes("anthropic")) {
+    return { modelParams: { thinking: { type: "enabled", budget_tokens: budget } } }
+  }
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
+
+  const fromCatalog = reasoningOptionVariants(model)
+  if (fromCatalog) return fromCatalog
 
   const id = model.id.toLowerCase()
   const glm52 = ["glm-5.2", "glm-5-2", "glm-5p2"].some(

@@ -3031,6 +3031,31 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("models outside the catalog keep guessed variants", () => {
+    const model = createMockModel({
+      id: "openai/gpt-5.4",
+      providerID: "openai",
+      api: { id: "gpt-5.4", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+      release_date: "2026-03-05",
+    })
+
+    expect(Object.keys(ProviderTransform.variants(model))).toEqual(["none", "low", "medium", "high", "xhigh"])
+  })
+
+  test("catalog budget options drive variants", () => {
+    const model = createMockModel({
+      id: "anthropic/claude-budget",
+      providerID: "anthropic",
+      api: { id: "claude-budget", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      reasoning_options: [{ type: "budget_tokens", min: 1024, max: 64_000 }],
+    })
+
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
+      max: { thinking: { type: "enabled", budgetTokens: 64_000 } },
+    })
+  })
+
   test("deepseek returns empty object", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
