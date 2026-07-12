@@ -1613,7 +1613,7 @@ function UserMessage(props: {
               <For each={searchSegments()}>
                 {(segment) => {
                   if (!segment.match) return <span>{segment.text}</span>
-                  const color = () => (activeSearchStart() === segment.start ? theme.secondary : theme.warning)
+                  const color = () => (activeSearchStart() === segment.start ? theme.warning : theme.textMuted)
                   return <span style={{ bg: color(), fg: selectedForeground(theme, color()) }}>{segment.text}</span>
                 }}
               </For>

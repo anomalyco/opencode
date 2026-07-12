@@ -622,15 +622,15 @@ function getSyntaxRules(theme: Theme) {
     {
       scope: ["search.match"],
       style: {
-        foreground: selectedForeground(theme, theme.warning),
-        background: theme.warning,
+        foreground: selectedForeground(theme, theme.textMuted),
+        background: theme.textMuted,
       },
     },
     {
       scope: ["search.match.active"],
       style: {
-        foreground: selectedForeground(theme, theme.secondary),
-        background: theme.secondary,
+        foreground: selectedForeground(theme, theme.warning),
+        background: theme.warning,
         bold: true,
       },
     },
