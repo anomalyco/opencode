@@ -597,13 +597,14 @@ const layer = Layer.effect(
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
+        const error = parse(e)
+        const sqlError = MessageV2.sqlErrorMessage(e)
         yield* Effect.logError("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
-          error: errorMessage(e),
-          stack: e instanceof Error ? e.stack : undefined,
+          error: sqlError ?? errorMessage(e),
+          stack: sqlError ? undefined : e instanceof Error ? e.stack : undefined,
         })
-        const error = parse(e)
         if (SessionV1.ContextOverflowError.isInstance(error)) {
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error

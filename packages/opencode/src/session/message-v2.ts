@@ -34,7 +34,8 @@ import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
+import { isSqlError } from "effect/unstable/sql/SqlError"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -700,7 +701,7 @@ export function fromError(
         { cause: e },
       ).toObject()
     case e instanceof Error:
-      return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+      return new NamedError.Unknown({ message: sqlErrorMessage(e) ?? errorMessage(e) }, { cause: e }).toObject()
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)
@@ -728,6 +729,12 @@ export function fromError(
       } catch {}
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
   }
+}
+
+export function sqlErrorMessage(error: unknown): string | undefined {
+  if (isSqlError(error)) return error.message
+  if (!(error instanceof Error) || !Cause.isCause(error.cause)) return
+  return sqlErrorMessage(Cause.squash(error.cause))
 }
 
 export * as MessageV2 from "./message-v2"

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { Sqlite } from "@opencode-ai/core/database/sqlite"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { APICallError } from "ai"
+import { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
+import { Cause } from "effect"
+import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
@@ -1524,6 +1528,30 @@ describe("session.message-v2.fromError", () => {
         message: "The user dismissed this question",
       },
     })
+  })
+
+  test("surfaces SQLite details without query parameters", () => {
+    const cause = Object.assign(new Error("database or disk is full"), { code: "SQLITE_FULL" })
+    const error = new EffectDrizzleQueryError({
+      query: "INSERT INTO message (data) VALUES (?)",
+      params: ["sensitive-value"],
+      cause: Cause.fail(
+        new SqlError({
+          reason: classifySqliteError(cause, {
+            message: Sqlite.executeErrorMessage(cause),
+            operation: "execute",
+          }),
+        }),
+      ),
+    })
+
+    const result = MessageV2.fromError(error, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: { message: "Failed to execute statement: database or disk is full" },
+    })
+    expect(JSON.stringify(result)).not.toContain("sensitive-value")
   })
 
   test("classifies ZlibError from fetch as retryable APIError", () => {

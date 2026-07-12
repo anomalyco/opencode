@@ -63,7 +63,7 @@ const make = (options: Config) =>
         } catch (cause) {
           return Effect.fail(
             new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              reason: classifySqliteError(cause, { message: Sqlite.executeErrorMessage(cause), operation: "execute" }),
             }),
           )
         }
@@ -79,7 +79,7 @@ const make = (options: Config) =>
         } catch (cause) {
           return Effect.fail(
             new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              reason: classifySqliteError(cause, { message: Sqlite.executeErrorMessage(cause), operation: "execute" }),
             }),
           )
         }
