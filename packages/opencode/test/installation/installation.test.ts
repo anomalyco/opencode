@@ -223,6 +223,33 @@ describe("installation", () => {
       }),
     )
 
+    const miseAliasCalls: Array<{ cmd: string; args: readonly string[] }> = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          miseAliasCalls.push({ cmd, args })
+          if (cmd === "mise" && args[0] === "ls")
+            return JSON.stringify([
+              {
+                version: InstallationVersion,
+                requested_version: "latest",
+                source: { path: "/workspace/mise.toml" },
+              },
+            ])
+          return ""
+        },
+      ),
+    ).effect("honors the target when mise config uses an alias", () =>
+      Effect.gen(function* () {
+        yield* Installation.use.upgrade("mise", "9.9.9")
+        expect(miseAliasCalls).toContainEqual({
+          cmd: "mise",
+          args: ["use", "--path", "/workspace/mise.toml", "--pin", "opencode@9.9.9"],
+        })
+      }),
+    )
+
     testEffect(
       testLayer(
         () => jsonResponse({}),
@@ -230,15 +257,20 @@ describe("installation", () => {
           if (cmd === "mise" && args[0] === "ls")
             return JSON.stringify([
               {
-                version: "1.0.0",
-                requested_version: "1.0.0",
+                version: InstallationVersion,
+                requested_version: InstallationVersion,
                 source: { path: "/workspace/mise.toml" },
+              },
+              {
+                version: InstallationVersion,
+                requested_version: InstallationVersion,
+                source: { path: "/workspace/other.toml" },
               },
             ])
           return ""
         },
       ),
-    ).effect("fails when mise exec selected a version different from config", () =>
+    ).effect("fails when mise reports multiple active configurations", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(Installation.use.upgrade("mise", "9.9.9"))
         expect(error.stderr).toBe("Could not identify the active mise configuration.")

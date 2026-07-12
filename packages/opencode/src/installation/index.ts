@@ -173,29 +173,20 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
 
     const upgradeMise = Effect.fnUntraced(function* (target: string) {
       const current = yield* run(["mise", "ls", "--current", "--json", "opencode"])
-      const tool = Option.getOrUndefined(
-        Schema.decodeUnknownOption(Schema.fromJsonString(MiseTool))(current.stdout),
-      )?.[0]
+      const tools = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(MiseTool))(current.stdout))
+      const tool = tools?.length === 1 ? tools[0] : undefined
       if (current.code !== 0 || !tool?.source.path || tool.version !== InstallationVersion) {
         return yield* new UpgradeFailedError({ stderr: "Could not identify the active mise configuration." })
       }
 
       const requested = tool.requested_version
-      const version = semver.valid(requested)
-        ? target
-        : /^\d+$/.test(requested)
+      const fuzzy = /^\d+(?:\.\d+)?$/.test(requested)
+      const version = fuzzy
+        ? /^\d+$/.test(requested)
           ? target.split(".")[0]
-          : /^\d+\.\d+$/.test(requested)
-            ? target.split(".").slice(0, 2).join(".")
-            : requested
-      return yield* run([
-        "mise",
-        "use",
-        "--path",
-        tool.source.path,
-        semver.valid(requested) ? "--pin" : "--fuzzy",
-        `opencode@${version}`,
-      ])
+          : target.split(".").slice(0, 2).join(".")
+        : target
+      return yield* run(["mise", "use", "--path", tool.source.path, fuzzy ? "--fuzzy" : "--pin", `opencode@${version}`])
     })
 
     const result: Interface = {
