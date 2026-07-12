@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 // Split-footer status shown while a freshly launched CLI replaces a
 // version-mismatched background service before the TUI attaches.
-import { createCliRenderer, RGBA, TextAttributes, type CliRenderer } from "@opentui/core"
+import { createCliRenderer, RGBA, TextAttributes, type CliRenderer, type ThemeMode } from "@opentui/core"
 import { render, useTerminalDimensions } from "@opentui/solid"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
@@ -21,15 +21,17 @@ import {
   untrack,
 } from "solid-js"
 
-const stages = ["Keeping your session safe", "Starting the new background service", "Connecting to OpenCode"] as const
+const stages = ["Keeping your session safe", "Starting the new background service", "Loading OpenCode"] as const
 const stageFloor = 480
 const transitionDuration = 420
 const completionHold = 650
 
 export type Handle = {
   readonly begin: (from?: string) => boolean
-  readonly finish: () => Promise<void>
+  readonly loading: () => void
+  readonly finish: () => Promise<ThemeMode | null | undefined>
   readonly fail: (message: string) => Promise<void>
+  readonly close: () => Promise<void>
 }
 
 export const make = (): Handle => {
@@ -43,20 +45,29 @@ export const make = (): Handle => {
       })
       return true
     },
+    loading: () => {
+      void session?.then((active) => active?.loading())
+    },
     finish: async () => {
       const active = await session
-      await active?.finish()
+      return active?.finish()
     },
     fail: async (message) => {
       const active = await session
       await active?.fail(message)
     },
+    close: async () => {
+      const active = await session
+      await active?.close()
+    },
   }
 }
 
 type Session = {
-  readonly finish: () => Promise<void>
+  readonly loading: () => Promise<void>
+  readonly finish: () => Promise<ThemeMode | null>
   readonly fail: (message: string) => Promise<void>
+  readonly close: () => Promise<void>
 }
 
 async function open(from?: string): Promise<Session> {
@@ -80,6 +91,7 @@ async function open(from?: string): Promise<Session> {
     consoleMode: "disabled",
     clearOnShutdown: false,
   })
+  const terminalMode = renderer.waitForThemeMode(1000).catch(() => null)
   await render(
     () => (
       <UpdateFooter
@@ -98,9 +110,12 @@ async function open(from?: string): Promise<Session> {
     throw error
   })
   let shownAt = performance.now()
-  const advance = async (stage: number) => {
+  const waitForStage = async () => {
     const remaining = stageFloor - (performance.now() - shownAt)
     if (remaining > 0) await Bun.sleep(remaining)
+  }
+  const advance = async (stage: number) => {
+    await waitForStage()
     if (outcome() !== "running") return
     setActive(stage)
     shownAt = performance.now()
@@ -120,30 +135,42 @@ async function open(from?: string): Promise<Session> {
     setAnimating(false)
     if (completed) await Bun.sleep(hold)
   }
-  const close = async () => {
-    setAnimating(false)
-    if (renderer.isDestroyed) return
-    renderer.pause()
-    await Promise.race([renderer.idle(), Bun.sleep(500)])
-    renderer.destroy()
-  }
+  let closing: Promise<void> | undefined
+  const close = () =>
+    (closing ??= (async () => {
+      setAnimating(false)
+      if (renderer.isDestroyed) return
+      renderer.pause()
+      await Promise.race([renderer.idle(), Bun.sleep(500)])
+      renderer.destroy()
+    })())
+  let loading: Promise<void> | undefined
+  const load = () =>
+    (loading ??= (async () => {
+      await auto
+      await advance(2)
+    })())
   let settled: Promise<void> | undefined
   const settle = (task: () => Promise<void>) => (settled ??= task())
   return {
-    finish: () =>
-      settle(async () => {
-        await auto
-        await advance(2)
-        await Bun.sleep(stageFloor)
+    loading: load,
+    finish: async () => {
+      await settle(async () => {
+        await load()
+        await waitForStage()
         await transitionTo("success", completionHold)
+        await terminalMode
         await close()
-      }),
+      })
+      return terminalMode
+    },
     fail: (message) =>
       settle(async () => {
         setFailure(message)
         await transitionTo("failure", 250)
         await close()
       }),
+    close,
   }
 }
 

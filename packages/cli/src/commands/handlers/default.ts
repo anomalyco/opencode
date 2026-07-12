@@ -17,6 +17,7 @@ export default Runtime.handler(Commands, (input) =>
     const updater = yield* Updater.Service
     yield* updater.check().pipe(Effect.forkScoped)
     const preflight = UpdatePreflight.make()
+    yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const server = yield* Server.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
@@ -33,7 +34,7 @@ export default Runtime.handler(Commands, (input) =>
         Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")),
       ),
     )
-    yield* Effect.promise(() => preflight.finish())
+    preflight.loading()
     const config = yield* TuiConfig.load()
     let disposeSlots: (() => void) | undefined
     const runFork = Effect.runForkWith(yield* Effect.context())
@@ -41,6 +42,7 @@ export default Runtime.handler(Commands, (input) =>
       server,
       args: { continue: input.continue, sessionID: Option.getOrUndefined(input.session) },
       config,
+      terminalHandoff: () => preflight.finish(),
       log: (level, message, tags) => {
         const effect =
           level === "debug"

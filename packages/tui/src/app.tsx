@@ -12,7 +12,7 @@ import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import { createCliRenderer, MouseButton, type CliRendererConfig, type ThemeMode } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -150,6 +150,7 @@ export type TuiInput = {
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
   pluginHost: TuiPluginHost
+  terminalHandoff?: () => Promise<ThemeMode | null | undefined>
   log?: LogSink
 }
 
@@ -194,6 +195,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.map((response) => response.location.directory),
     Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
   )
+  const handedOffMode = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const reconnectEndpoint = input.server.reconnect
   const reconnect = reconnectEndpoint
     ? async (attempt: number) => {
@@ -267,7 +269,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
+        const mode = handedOffMode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
 
         await render(() => {
