@@ -16,6 +16,9 @@ export function createTabMemory(owner: Owner | null) {
   }
 
   return {
+    get<T>(key: string, name: string) {
+      return entries.get(key)?.get(name)?.value as T | undefined
+    },
     ensure<T>(key: string, name: string, init: () => T) {
       const state = entries.get(key) ?? new Map<string, Entry>()
       if (!entries.has(key)) entries.set(key, state)

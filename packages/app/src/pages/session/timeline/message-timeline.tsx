@@ -1386,7 +1386,7 @@ export function MessageTimeline(props: {
               "w-full": true,
               "pb-4": true,
               "pr-3": true,
-              "pl-2": settings.general.newLayoutDesigns(),
+              "pl-2.5": settings.general.newLayoutDesigns(),
               "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !settings.general.newLayoutDesigns(),
             }}

@@ -194,6 +194,7 @@ export default function StatsHome() {
                   pairs={homeComparisonPairs(stats().leaderboard["All Users"]["2M"])}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
+                  variant="featured"
                 />
               </>
             )}
