@@ -999,6 +999,37 @@ it.instance("resolves scoped npm plugins in config", () =>
   }),
 )
 
+it.effect("loads shared config above a child git repository", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const global = yield* tmpdirScoped()
+    const workspace = path.join(root, "workspace")
+    const project = path.join(workspace, "project")
+
+    yield* writeConfigEffect(path.join(workspace, ".opencode"), {
+      model: "shared/model",
+      username: "shared-user",
+    })
+    yield* writeConfigEffect(path.join(project, ".opencode"), { username: "project-user" })
+    yield* Effect.promise(async () => {
+      const child = Bun.spawn(["git", "init"], { cwd: project, stdout: "ignore", stderr: "ignore" })
+      await child.exited
+    })
+
+    yield* withGlobalConfigDir(
+      global,
+      withInstanceDir(
+        project,
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
+          expect(config.model).toBe("shared/model")
+          expect(config.username).toBe("project-user")
+        }),
+      ),
+    )
+  }),
+)
+
 it.effect("merges plugin arrays from global and local configs", () =>
   withConfigTree(
     {
