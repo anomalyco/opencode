@@ -223,3 +223,29 @@ Before stabilizing the client API:
 ## Flagged ambiguities
 
 - Legacy `experimental.chat.system.transform` can mutate the assembled baseline system prompt arbitrarily, but V2 plugins do not yet expose an equivalent hook. Decide separately whether to port it, replace dynamic uses with plugin-defined **Context Sources**, or narrow its semantics.
+
+---
+
+## Projekt-Metadaten (gepflegt von opencode)
+
+Letzte Änderung: 2026-07-12
+
+### Verzeichnisstruktur
+
+| Pfad | Beschreibung |
+|---|---|
+| `packages/opencode/src/util/process.ts` | Process-Spawning/-Management inkl. `stop()` |
+| `packages/opencode/src/lsp/` | LSP-Integration (client, server, launch) |
+| `packages/opencode/src/mcp/` | MCP-Integration |
+
+### Befehle (aus `packages/opencode/`)
+
+```bash
+bun typecheck            # Typ-Prüfung
+bun test                 # Tests (fehlgeschlagene)
+bun dev                  # TUI starten
+```
+
+### Letzte Änderungen
+
+- **2026-07-12**: `Process.stop()` in `util/process.ts` gefixt – SIGTERM → 5s Timeout → SIGKILL-Eskalation (bisher nur SIGTERM ohne Fallback). Gleicher Fix in SDK-Kopie `packages/sdk/js/src/process.ts`.

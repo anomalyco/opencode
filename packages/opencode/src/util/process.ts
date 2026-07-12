@@ -146,20 +146,38 @@ export async function run(cmd: string[], opts: RunOptions = {}): Promise<Result>
 
 // Duplicated in `packages/sdk/js/src/process.ts` because the SDK cannot import
 // `opencode` without creating a cycle. Keep both copies in sync.
+async function waitForExit(proc: ChildProcess): Promise<void> {
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+  await new Promise<void>((resolve) => {
+    proc.once("exit", () => resolve())
+    proc.once("error", () => resolve())
+  })
+}
+
 export async function stop(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
-  if (process.platform !== "win32" || !proc.pid) {
-    proc.kill()
-    return
+  if (process.platform === "win32" && proc.pid) {
+    const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
+      nothrow: true,
+    })
+    if (out.code === 0) return
   }
 
-  const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
-    nothrow: true,
-  })
+  proc.kill("SIGTERM")
+  if (proc.exitCode !== null || proc.signalCode !== null) return
 
-  if (out.code === 0) return
-  proc.kill()
+  const timeout = 5_000
+  const exited = waitForExit(proc)
+  const timer = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      try {
+        proc.kill("SIGKILL")
+      } catch {}
+      resolve()
+    }, timeout)
+  })
+  await Promise.race([exited, timer])
 }
 
 export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextResult> {
