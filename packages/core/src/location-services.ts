@@ -89,6 +89,10 @@ export function buildLocationServiceMap(
     LayerMap.make(
       (ref: Location.Ref) => {
         const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+        // Apply replacements during hoist, not afterward: replacements can
+        // introduce new tagged dependencies (Location.boundNode depends on
+        // Project), and the hoist walk is the only pass that can still slice
+        // those back out.
         const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
 
         return LayerNode.compile(location.node).pipe(
