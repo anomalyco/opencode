@@ -6,9 +6,10 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
-import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
+import path from "path"
 
 const encoder = new TextEncoder()
 
@@ -67,6 +68,19 @@ function testLayer(
 }
 
 describe("installation", () => {
+  describe("method", () => {
+    testEffect(testLayer(() => jsonResponse({}))).effect("detects mise-managed executables", () =>
+      Effect.gen(function* () {
+        const execPath = process.execPath
+        process.execPath = path.join("home", ".local", "share", "mise", "installs", "opencode", "1.2.3", "opencode")
+        const method = yield* Installation.use
+          .method()
+          .pipe(Effect.ensuring(Effect.sync(() => (process.execPath = execPath))))
+        expect(method).toBe("mise")
+      }),
+    )
+  })
+
   describe("latest", () => {
     testEffect(testLayer(() => jsonResponse({ tag_name: "v1.2.3" }))).effect(
       "reads release version from GitHub releases",
@@ -182,6 +196,58 @@ describe("installation", () => {
   })
 
   describe("upgrade", () => {
+    const miseCalls: Array<{ cmd: string; args: readonly string[] }> = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          miseCalls.push({ cmd, args })
+          if (cmd === "mise" && args[0] === "ls")
+            return JSON.stringify([
+              {
+                version: InstallationVersion,
+                requested_version: "1.2",
+                source: { path: "/workspace/parent/mise.staging.toml" },
+              },
+            ])
+          return ""
+        },
+      ),
+    ).effect("updates the active mise source while preserving a fuzzy pin", () =>
+      Effect.gen(function* () {
+        yield* Installation.use.upgrade("mise", "9.9.9")
+        expect(miseCalls).toContainEqual({
+          cmd: "mise",
+          args: ["use", "--path", "/workspace/parent/mise.staging.toml", "--fuzzy", "opencode@9.9"],
+        })
+      }),
+    )
+
+    const miseExecCalls: Array<{ cmd: string; args: readonly string[] }> = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          miseExecCalls.push({ cmd, args })
+          if (cmd === "mise" && args[0] === "ls")
+            return JSON.stringify([
+              {
+                version: "1.0.0",
+                requested_version: "1.0.0",
+                source: { path: "/workspace/mise.toml" },
+              },
+            ])
+          return ""
+        },
+      ),
+    ).effect("only installs when mise exec selected a version different from config", () =>
+      Effect.gen(function* () {
+        yield* Installation.use.upgrade("mise", "9.9.9")
+        expect(miseExecCalls).toContainEqual({ cmd: "mise", args: ["install", "opencode@9.9.9"] })
+        expect(miseExecCalls.some((call) => call.cmd === "mise" && call.args[0] === "use")).toBeFalse()
+      }),
+    )
+
     testEffect(
       testLayer(
         () => jsonResponse({}),
