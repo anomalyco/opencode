@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { DateTime, Duration, Effect, Fiber, Layer, Scope } from "effect"
+import { DateTime, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -443,6 +443,12 @@ describe("ShellTool", () => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
+            const events = yield* EventV2.Service
+            const admitted = yield* events.subscribe(SessionEvent.InputAdmitted).pipe(
+              Stream.filter((event) => event.data.sessionID === sessionID && event.data.input.type === "synthetic"),
+              Stream.runHead,
+              Effect.forkScoped({ startImmediately: true }),
+            )
             const settled = yield* settleTool(registry, call({ command: idleCommand, timeout: 50, background: true }))
             const structured = settled.output?.structured as Record<string, unknown> | undefined
             const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
@@ -454,6 +460,13 @@ describe("ShellTool", () => {
             const id = ShellSchema.ID.make(shellID)
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
+            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.input.data).toMatchObject({
+              description: idleCommand,
+              metadata: {
+                source: "shell",
+                state: "completed",
+              },
+            })
           }),
         )
       },

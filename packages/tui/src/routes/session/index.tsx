@@ -1246,14 +1246,16 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const { theme } = useTheme()
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
-  const completion = () => metadata()?.source === "subagent"
+  const source = () => stringValue(metadata()?.source)
+  const completion = () => source() === "subagent" || source() === "shell"
   const state = () => stringValue(metadata()?.state)
-  const agent = () => Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent")
+  const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
   const text = () => {
     if (props.message.type === "system") return props.message.text
     if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
+  const description = () => (source() === "shell" ? text().replace(/\s+/g, " ").trim() : text())
   const status = () => {
     if (state() === "completed") return "finished"
     if (state() === "error") return "failed"
@@ -1274,11 +1276,11 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
       }
     >
       <box marginLeft={3}>
-        <text>
+        <text wrapMode="none" truncate>
           <span style={{ fg: color() }}>
-            {state() === "completed" ? "↳" : "!"} {agent()} {status()}
+            {state() === "completed" ? "↳" : "!"} {actor()} {status()}
           </span>
-          <span style={{ fg: theme.textMuted }}> · {text()}</span>
+          <span style={{ fg: theme.textMuted }}> · {description()}</span>
         </text>
       </box>
     </Show>
