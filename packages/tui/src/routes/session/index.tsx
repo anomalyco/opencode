@@ -25,7 +25,18 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, InputRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  CodeRenderable,
+  InputRenderable,
+  Renderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  type MarkdownOptions,
+  type OnHighlightCallback,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -85,10 +96,12 @@ import { LocationProvider } from "../../context/location"
 import { SearchBar } from "./search-bar"
 import {
   collectSearchUnits,
+  estimateRenderedLine,
   findSearchHits,
   highlightSegments,
   initialSearchIndex,
   moveSearchIndex,
+  searchHighlights,
   type SearchDirection,
   type SearchHit,
 } from "../../util/session-search"
@@ -183,6 +196,7 @@ const context = createContext<{
   search: {
     query: () => string
     active: () => SearchHit | undefined
+    anchors: () => ReadonlySet<string>
   }
 }>()
 
@@ -469,20 +483,30 @@ export function Session() {
     if (!hits.length) return undefined
     return hits[Math.min(searchIndex(), hits.length - 1)]
   })
+  // In-place markdown highlighting only engages when matches are few enough to be meaningful;
+  // broad queries (single letters) would re-highlight every part on each keystroke.
+  const searchAnchors = createMemo(() => {
+    const hits = searchHits()
+    if (!hits.length || hits.length > 200) return new Set<string>()
+    return new Set(hits.map((hit) => hit.anchorID))
+  })
 
   // Content-space position of a hit: child.y is in screen coordinates, so translate through scrollTop.
+  // The row within the anchor is estimated wrap-aware so matches deep in long messages stay on screen.
   function searchAnchorY(hit: SearchHit) {
     if (!scroll || scroll.isDestroyed) return undefined
     const child = scroll.getChildren().find((c) => c.id === hit.anchorID)
     if (!child) return undefined
-    return scroll.scrollTop + (child.y - scroll.y) + Math.min(hit.line, Math.max(child.height - 1, 0))
+    const row = estimateRenderedLine(hit.text, hit.line, Math.max(20, child.width - 4))
+    return scroll.scrollTop + (child.y - scroll.y) + Math.min(row, Math.max(child.height - 1, 0))
   }
 
   function jumpToHit(hit: SearchHit | undefined) {
     if (!hit) return
     const y = searchAnchorY(hit)
     if (y === undefined) return
-    scroll.scrollTo(Math.max(0, y - Math.floor(scroll.height / 3)))
+    // Center the match: the row estimate is approximate, so give it slack in both directions.
+    scroll.scrollTo(Math.max(0, y - Math.floor(scroll.height / 2)))
   }
 
   function runSearch(query: string) {
@@ -1322,6 +1346,7 @@ export function Session() {
           search: {
             query: searchQuery,
             active: searchActive,
+            anchors: searchAnchors,
           },
         }}
       >
@@ -1460,11 +1485,9 @@ export function Session() {
                 </Show>
                 <Show when={searchOpen()}>
                   <SearchBar
-                    width={contentWidth()}
                     query={searchQuery()}
                     hits={searchHits()}
                     index={searchIndex()}
-                    active={searchActive()}
                     onQuery={runSearch}
                     onMove={moveSearch}
                     onClose={closeSearch}
@@ -1788,7 +1811,18 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     setExpanded((prev) => !prev)
   }
 
-  const searchActive = createMemo(() => ctx.search.active()?.anchorID === props.part.id)
+  const searchHighlighter = createMemo<OnHighlightCallback | undefined>(() => {
+    if (!ctx.search.anchors().has(props.part.id)) return undefined
+    const query = ctx.search.query()
+    const active = ctx.search.active()
+    const activeStart = active?.anchorID === props.part.id ? active.start : undefined
+    return (highlights, highlightContext) => {
+      // The rendered body is a slice of the reasoning unit text; map the active hit offset into it.
+      const blockOffset = activeStart === undefined ? -1 : content().indexOf(highlightContext.content)
+      const activeOffset = blockOffset === -1 ? undefined : activeStart! - blockOffset
+      return [...highlights, ...searchHighlights(highlightContext.content, query, activeOffset)]
+    }
+  })
 
   return (
     <Show when={content()}>
@@ -1799,7 +1833,6 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         marginTop={1}
         flexDirection="column"
         flexShrink={0}
-        backgroundColor={searchActive() ? theme.backgroundElement : undefined}
       >
         <box onMouseUp={toggle}>
           <ReasoningHeader
@@ -1820,6 +1853,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               content={summary().body}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
+              onHighlight={searchHighlighter()}
             />
           </box>
         </Show>
@@ -1875,17 +1909,52 @@ function ReasoningHeader(props: {
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
-  const searchActive = createMemo(() => ctx.search.active()?.anchorID === props.part.id)
+  const activeSearchStart = createMemo(() => {
+    const active = ctx.search.active()
+    if (!active || active.anchorID !== props.part.id) return
+    return active.start
+  })
+
+  // In-place search highlighting: markdown renders prose and code blocks through CodeRenderables,
+  // whose public onHighlight hook lets us append match spans to the tree-sitter highlights.
+  const codes = new Set<CodeRenderable>()
+  let searchHighlighter: OnHighlightCallback | undefined
+  const collectCodes = (renderable: Renderable) => {
+    if (renderable instanceof CodeRenderable) {
+      codes.add(renderable)
+      renderable.onHighlight = searchHighlighter
+    }
+    for (const child of renderable.getChildren()) collectCodes(child)
+  }
+  // Stable identity: reassigning renderNode would force a full markdown re-parse.
+  const renderNode: MarkdownOptions["renderNode"] = (_token, context) => {
+    const renderable = context.defaultRender()
+    if (renderable) collectCodes(renderable)
+    return renderable
+  }
+  createEffect(() => {
+    const query = ctx.search.query()
+    const activeStart = activeSearchStart()
+    searchHighlighter = ctx.search.anchors().has(props.part.id)
+      ? (highlights, context) => {
+          // Each block's content is a slice of the part text; map the active hit offset into it.
+          const blockOffset = activeStart === undefined ? -1 : props.part.text.trim().indexOf(context.content)
+          const activeOffset = blockOffset === -1 ? undefined : activeStart! - blockOffset
+          return [...highlights, ...searchHighlights(context.content, query, activeOffset)]
+        }
+      : undefined
+    for (const code of codes) {
+      if (code.isDestroyed) {
+        codes.delete(code)
+        continue
+      }
+      code.onHighlight = searchHighlighter
+    }
+  })
+
   return (
     <Show when={props.part.text.trim()}>
-      <box
-        id={props.part.id}
-        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
-        paddingLeft={3}
-        marginTop={1}
-        flexShrink={0}
-        backgroundColor={searchActive() ? theme.backgroundElement : undefined}
-      >
+      <box id={props.part.id} ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
@@ -1894,7 +1963,8 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
-          bg={searchActive() ? theme.backgroundElement : theme.background}
+          bg={theme.background}
+          renderNode={renderNode}
         />
       </box>
     </Show>

@@ -1,19 +1,17 @@
 import { InputRenderable, TextAttributes } from "@opentui/core"
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { SplitBorder } from "../../ui/border"
-import { useTheme, selectedForeground } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../config"
 import { useBindings } from "../../keymap"
-import { searchPreview, type SearchDirection, type SearchHit } from "../../util/session-search"
+import type { SearchDirection, SearchHit } from "../../util/session-search"
 
 const barCommands = ["search.previous", "search.next", "search.accept", "search.close"] as const
 
 export function SearchBar(props: {
-  width: number
   query: string
   hits: readonly SearchHit[]
   index: number
-  active: SearchHit | undefined
   onQuery: (value: string) => void
   onMove: (direction: SearchDirection) => void
   onClose: (accept: boolean) => void
@@ -88,20 +86,6 @@ export function SearchBar(props: {
     return ""
   })
 
-  const preview = createMemo(() => {
-    const active = props.active
-    if (!active) return
-    return searchPreview(active, Math.max(20, props.width - 16))
-  })
-
-  const previewLabel = createMemo(() => {
-    const active = props.active
-    if (!active) return ""
-    if (active.role === "user") return "you"
-    if (active.kind === "reasoning") return "thinking"
-    return "agent"
-  })
-
   return (
     <box paddingLeft={2} paddingRight={2} marginBottom={1}>
       <box
@@ -125,6 +109,8 @@ export function SearchBar(props: {
           }}
           placeholder="search session"
           placeholderColor={theme.textMuted}
+          textColor={theme.text}
+          focusedTextColor={theme.text}
           backgroundColor={theme.backgroundPanel}
           focusedBackgroundColor={theme.backgroundPanel}
           cursorColor={theme.text}
@@ -134,19 +120,6 @@ export function SearchBar(props: {
         </text>
         <text fg={theme.textMuted}>↵ keep · esc back · ^R↑ · ^S↓</text>
       </box>
-      <Show when={preview()}>
-        <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.textMuted} wrapMode="none">
-            <span style={{ fg: selectedForeground(theme, theme.secondary), bg: theme.secondary }}>
-              {" "}
-              {previewLabel()}{" "}
-            </span>{" "}
-            {preview()!.before}
-            <span style={{ bg: theme.warning, fg: selectedForeground(theme, theme.warning) }}>{preview()!.match}</span>
-            {preview()!.after}
-          </text>
-        </box>
-      </Show>
     </box>
   )
 }
