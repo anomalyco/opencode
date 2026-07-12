@@ -29,9 +29,15 @@ const completionHold = 650
 export type Handle = {
   readonly begin: (from?: string) => boolean
   readonly loading: () => void
-  readonly finish: () => Promise<ThemeMode | null | undefined>
+  readonly finish: () => Promise<Handoff | undefined>
   readonly fail: (message: string) => Promise<void>
   readonly close: () => Promise<void>
+}
+
+export type Handoff = {
+  readonly renderer: CliRenderer
+  readonly mode: ThemeMode | null
+  readonly complete: () => void
 }
 
 export const make = (): Handle => {
@@ -65,7 +71,7 @@ export const make = (): Handle => {
 
 type Session = {
   readonly loading: () => Promise<void>
-  readonly finish: () => Promise<ThemeMode | null>
+  readonly finish: () => Promise<Handoff>
   readonly fail: (message: string) => Promise<void>
   readonly close: () => Promise<void>
 }
@@ -76,6 +82,7 @@ async function open(from?: string): Promise<Session> {
   const [outcome, setOutcome] = createSignal<"running" | "success" | "failure">("running")
   const [failure, setFailure] = createSignal("")
   const [animating, setAnimating] = createSignal(true)
+  const [visible, setVisible] = createSignal(true)
   let resolveOutcome: (() => void) | undefined
   const renderer = await createCliRenderer({
     stdin: process.stdin,
@@ -83,26 +90,30 @@ async function open(from?: string): Promise<Session> {
     autoFocus: false,
     openConsoleOnError: false,
     exitOnCtrlC: false,
-    exitSignals: [],
     screenMode: "split-footer",
     footerHeight: 4,
     targetFps: 60,
+    useKittyKeyboard: {},
+    consoleOptions: {
+      keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+    },
     externalOutputMode: "capture-stdout",
     consoleMode: "disabled",
-    clearOnShutdown: false,
   })
   const terminalMode = renderer.waitForThemeMode(1000).catch(() => null)
   await render(
     () => (
-      <UpdateFooter
-        from={from}
-        active={active}
-        outcome={outcome}
-        failure={failure}
-        animating={animating}
-        renderer={renderer}
-        onOutcomeSettled={() => resolveOutcome?.()}
-      />
+      <Show when={visible()}>
+        <UpdateFooter
+          from={from}
+          active={active}
+          outcome={outcome}
+          failure={failure}
+          animating={animating}
+          renderer={renderer}
+          onOutcomeSettled={() => resolveOutcome?.()}
+        />
+      </Show>
     ),
     renderer,
   ).catch((error) => {
@@ -136,8 +147,10 @@ async function open(from?: string): Promise<Session> {
     if (completed) await Bun.sleep(hold)
   }
   let closing: Promise<void> | undefined
+  let transferred = false
   const close = () =>
     (closing ??= (async () => {
+      if (transferred) return
       setAnimating(false)
       if (renderer.isDestroyed) return
       renderer.pause()
@@ -159,10 +172,19 @@ async function open(from?: string): Promise<Session> {
         await load()
         await waitForStage()
         await transitionTo("success", completionHold)
-        await terminalMode
-        await close()
       })
-      return terminalMode
+      const mode = await terminalMode
+      renderer.externalOutputMode = "passthrough"
+      renderer.screenMode = "alternate-screen"
+      renderer.consoleMode = "console-overlay"
+      renderer.requestRender()
+      await Promise.race([renderer.idle(), Bun.sleep(500)])
+      transferred = true
+      return {
+        renderer,
+        mode,
+        complete: () => setVisible(false),
+      }
     },
     fail: (message) =>
       settle(async () => {
