@@ -629,7 +629,7 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
-  const fromCatalog = ProviderReasoning.variants(model)
+  const fromCatalog = ProviderReasoning.variants(model, OUTPUT_TOKEN_MAX)
   if (fromCatalog) return fromCatalog
 
   const id = model.id.toLowerCase()
@@ -1303,8 +1303,25 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   return { [key]: normalized }
 }
 
-export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
-  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+export function maxOutputTokens(
+  model: Provider.Model,
+  outputTokenMax = OUTPUT_TOKEN_MAX,
+  options?: Record<string, unknown>,
+): number {
+  const output = Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+  // Anthropic-backed SDKs add the thinking budget to maxOutputTokens, so reserve it from the total envelope here.
+  const config =
+    model.api.npm === "@ai-sdk/anthropic" ||
+    model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+    (model.api.npm === "@ai-sdk/gateway" && model.api.id.includes("anthropic"))
+      ? options?.thinking
+      : model.api.npm === "@ai-sdk/amazon-bedrock" && model.api.id.includes("anthropic")
+        ? options?.reasoningConfig
+        : undefined
+  if (!isPlainObject(config)) return output
+  if (config.type !== "enabled") return output
+  if (typeof config.budgetTokens !== "number") return output
+  return Math.max(1, output - config.budgetTokens)
 }
 
 type JsonRecord = Record<string, unknown>

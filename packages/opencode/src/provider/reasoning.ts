@@ -6,7 +6,7 @@ type Variant = Record<string, unknown>
 type ReasoningOption = NonNullable<Provider.Model["reasoning_options"]>[number]
 type BudgetOption = Extract<ReasoningOption, { type: "budget_tokens" }>
 
-export function variants(model: Provider.Model): Record<string, Variant> | undefined {
+export function variants(model: Provider.Model, outputTokenMax: number): Record<string, Variant> | undefined {
   if (model.reasoning_options === undefined) return
   const effort = model.reasoning_options.find((option) => option.type === "effort")
   if (effort?.type === "effort") {
@@ -19,7 +19,7 @@ export function variants(model: Provider.Model): Record<string, Variant> | undef
     )
   }
   const budget = model.reasoning_options.find((option) => option.type === "budget_tokens")
-  if (budget?.type === "budget_tokens") return budgetVariants(model, budget)
+  if (budget?.type === "budget_tokens") return budgetVariants(model, budget, outputTokenMax)
   return {}
 }
 
@@ -71,19 +71,19 @@ function effortVariant(model: Provider.Model, effort: string): Variant | undefin
   }
 }
 
-function budgetVariants(model: Provider.Model, option: BudgetOption): Record<string, Variant> {
-  const high =
-    option.max === undefined
-      ? Math.max(option.min ?? 0, 16_000)
-      : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
+function budgetVariants(model: Provider.Model, option: BudgetOption, outputTokenMax: number): Record<string, Variant> {
+  const output = Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+  const min = option.min ?? 0
+  const max = Math.min(option.max ?? output - 1, output - 1)
+  if (max < min) return {}
+  const high = Math.min(Math.max(min, Math.floor(output / 2)), max)
   return Object.fromEntries(
-    [
-      { id: "high", budget: high },
-      ...(option.max === undefined || option.max === high ? [] : [{ id: "max", budget: option.max }]),
-    ].flatMap((item): [string, Variant][] => {
-      const variant = budgetVariant(model, item.budget)
-      return variant ? [[item.id, variant]] : []
-    }),
+    [{ id: "high", budget: high }, ...(max === high ? [] : [{ id: "max", budget: max }])].flatMap(
+      (item): [string, Variant][] => {
+        const variant = budgetVariant(model, item.budget)
+        return variant ? [[item.id, variant]] : []
+      },
+    ),
   )
 }
 

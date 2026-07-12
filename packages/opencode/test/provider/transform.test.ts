@@ -3052,8 +3052,46 @@ describe("ProviderTransform.variants", () => {
 
     expect(ProviderTransform.variants(model)).toEqual({
       high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
-      max: { thinking: { type: "enabled", budgetTokens: 64_000 } },
+      max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
     })
+  })
+
+  test("catalog budget options fit within small model output limits", () => {
+    const model = createMockModel({
+      id: "subconscious/tim-qwen3.6-27b",
+      providerID: "subconscious",
+      api: { id: "subconscious/tim-qwen3.6-27b", url: "https://api.subconscious.dev", npm: "@ai-sdk/anthropic" },
+      limit: { context: 8192, output: 5000 },
+      reasoning_options: [{ type: "budget_tokens" }],
+    })
+    const variants = ProviderTransform.variants(model)
+
+    expect(variants).toEqual({
+      high: { thinking: { type: "enabled", budgetTokens: 2500 } },
+      max: { thinking: { type: "enabled", budgetTokens: 4999 } },
+    })
+    expect(ProviderTransform.maxOutputTokens(model, undefined, variants.high)).toBe(2500)
+    expect(ProviderTransform.maxOutputTokens(model, undefined, variants.max)).toBe(1)
+    expect(
+      ProviderTransform.maxOutputTokens(
+        {
+          ...model,
+          api: { ...model.api, id: "anthropic.claude-v2", npm: "@ai-sdk/amazon-bedrock" },
+        },
+        undefined,
+        { reasoningConfig: { type: "enabled", budgetTokens: 2500 } },
+      ),
+    ).toBe(2500)
+    expect(
+      ProviderTransform.maxOutputTokens(
+        {
+          ...model,
+          api: { ...model.api, id: "anthropic/claude-v2", npm: "@ai-sdk/gateway" },
+        },
+        undefined,
+        variants.high,
+      ),
+    ).toBe(2500)
   })
 
   test("catalog gateway aliases use the routed API ID", () => {
@@ -3083,7 +3121,7 @@ describe("ProviderTransform.variants", () => {
     })
     expect(ProviderTransform.variants(google)).toEqual({
       high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
-      max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } },
+      max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 31_999 } },
     })
   })
 
