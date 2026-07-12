@@ -217,7 +217,7 @@ export const Definitions = {
   "search.previous": keybind("ctrl+r,up", "Go to previous match from the search bar"),
   "search.next": keybind("ctrl+s,down", "Go to next match from the search bar"),
   "search.accept": keybind("return", "Accept search and keep position"),
-  "search.close": keybind("escape", "Close search and restore position"),
+  "search.close": keybind("escape,ctrl+c", "Close search and restore position"),
   "prompt.autocomplete.prev": keybind("up,ctrl+p", "Move to previous autocomplete item"),
   "prompt.autocomplete.next": keybind("down,ctrl+n", "Move to next autocomplete item"),
   "prompt.autocomplete.hide": keybind("escape", "Hide autocomplete"),

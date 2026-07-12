@@ -87,18 +87,23 @@ export function SearchBar(props: {
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} marginBottom={1}>
+    <box
+      width="100%"
+      border={["left"]}
+      customBorderChars={SplitBorder.customBorderChars}
+      borderColor={props.hits.length || !props.query.trim() ? theme.warning : theme.error}
+    >
       <box
         flexDirection="row"
+        alignItems="center"
         gap={1}
-        paddingLeft={1}
-        paddingRight={1}
+        paddingLeft={2}
+        paddingRight={2}
+        paddingTop={1}
+        paddingBottom={1}
         backgroundColor={theme.backgroundPanel}
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={props.hits.length || !props.query.trim() ? theme.secondary : theme.error}
+        width="100%"
       >
-        <text fg={theme.textMuted}>⌕</text>
         <input
           flexGrow={1}
           onInput={(value: string) => props.onQuery(value)}
