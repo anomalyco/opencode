@@ -135,6 +135,7 @@ describe("fromPromise", () => {
           await ctx.tool.transform((tools) => {
             tools.add({
               name: "hello",
+              codemode: false,
               description: "Hello",
               input: Schema.Struct({ name: Schema.String }),
               output: Schema.String,
