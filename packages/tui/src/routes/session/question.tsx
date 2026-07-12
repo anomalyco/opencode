@@ -100,6 +100,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   function selectTab(index: number) {
     setStore("tab", index)
     setStore("selected", 0)
+    setStore("editing", false)
   }
 
   function selectOption() {
@@ -133,6 +134,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   useBindings(() => ({
     mode: QUESTION_MODE,
     enabled: store.editing && !confirm(),
+    priority: 1,
     commands: [
       {
         name: "prompt.clear",
@@ -147,6 +149,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
           textarea?.setText("")
         },
       },
+      {
+        name: "app.exit",
+        title: "Reject question",
+        category: "Question",
+        run() {
+          reject()
+        },
+      },
     ],
     bindings: [
       {
@@ -158,6 +168,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         },
       },
       ...tuiConfig.keybinds.get("prompt.clear"),
+      ...tuiConfig.keybinds.get("app.exit"),
       {
         key: "return",
         desc: "Submit answer edit",
@@ -214,6 +225,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     return {
       mode: QUESTION_MODE,
       enabled: !store.editing,
+      priority: 1,
       commands: [
         {
           name: "app.exit",
