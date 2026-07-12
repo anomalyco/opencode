@@ -679,9 +679,9 @@ function reasoningOptionVariants(model: Provider.Model): Record<string, Record<s
   if (effort?.type === "effort") {
     return Object.fromEntries(
       effort.values.flatMap((value): [string, Record<string, unknown>][] => {
-        const id = value === null ? "none" : value
-        const variant = reasoningEffortVariant(model, id)
-        return variant ? [[id, variant]] : []
+        if (value === null) return []
+        const variant = reasoningEffortVariant(model, value)
+        return variant ? [[value, variant]] : []
       }),
     )
   }
@@ -693,12 +693,18 @@ function reasoningOptionVariants(model: Provider.Model): Record<string, Record<s
 function reasoningEffortVariant(model: Provider.Model, effort: string): Record<string, unknown> | undefined {
   if (model.api.npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") {
-    return { thinking: { type: "adaptive", display: "summarized" }, effort }
+    if (!anthropicAdaptiveEfforts(model.api.id)) return { effort }
+    return {
+      thinking: { type: "adaptive", ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}) },
+      effort,
+    }
   }
   if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
     return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
   }
-  if (model.api.npm === "@ai-sdk/azure") return { reasoningEffort: effort }
+  if (model.api.npm === "@ai-sdk/azure") {
+    return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
+  }
   if (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/amazon-bedrock/mantle") {
     return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
   }
@@ -713,13 +719,25 @@ function reasoningEffortVariant(model: Provider.Model, effort: string): Record<s
     }
   }
   if (model.api.npm === "@ai-sdk/gateway") {
-    if (model.id.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }
+    if (model.id.includes("anthropic")) {
+      if (!anthropicAdaptiveEfforts(model.api.id)) return { effort }
+      return {
+        thinking: { type: "adaptive", ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}) },
+        effort,
+      }
+    }
     if (model.id.includes("google")) return { includeThoughts: true, thinkingLevel: effort }
     return { reasoningEffort: effort }
   }
   if (model.api.npm === "@jerome-benoit/sap-ai-provider-v2") {
     if (model.api.id.includes("anthropic")) {
-      return { modelParams: { thinking: { type: "adaptive", display: "summarized" }, output_config: { effort } } }
+      if (!anthropicAdaptiveEfforts(model.api.id)) return { modelParams: { output_config: { effort } } }
+      return {
+        modelParams: {
+          thinking: { type: "adaptive", ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}) },
+          output_config: { effort },
+        },
+      }
     }
     return { modelParams: { reasoning_effort: effort } }
   }
@@ -777,6 +795,9 @@ function reasoningBudgetVariant(model: Provider.Model, budget: number): Record<s
   }
   if (model.api.npm === "@jerome-benoit/sap-ai-provider-v2" && model.api.id.includes("anthropic")) {
     return { modelParams: { thinking: { type: "enabled", budget_tokens: budget } } }
+  }
+  if (model.api.npm === "@jerome-benoit/sap-ai-provider-v2" && model.api.id.includes("gemini")) {
+    return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
   }
 }
 

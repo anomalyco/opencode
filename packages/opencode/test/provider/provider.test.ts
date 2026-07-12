@@ -1454,11 +1454,6 @@ test("models.dev reasoning options authoritatively generate variants", () => {
       reasoningSummary: "auto",
       include: ["reasoning.encrypted_content"],
     },
-    none: {
-      reasoningEffort: "none",
-      reasoningSummary: "auto",
-      include: ["reasoning.encrypted_content"],
-    },
   })
 })
 
