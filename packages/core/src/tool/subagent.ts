@@ -74,7 +74,7 @@ export const Plugin = {
         sessionID: parentID,
         text: `<subagent id="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
         description,
-        metadata: { source: "subagent", childID, agent, state, description },
+        metadata: { source: "subagent", childID, agent, state },
       })
     })
 

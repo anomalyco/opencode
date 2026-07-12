@@ -1245,17 +1245,10 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const { theme } = useTheme()
-  const completion = () => props.message.type === "synthetic" && props.message.metadata?.source === "subagent"
-  const state = () => {
-    if (props.message.type !== "synthetic") return
-    return typeof props.message.metadata?.state === "string" ? props.message.metadata.state : undefined
-  }
-  const agent = () => {
-    if (props.message.type !== "synthetic") return "Subagent"
-    return typeof props.message.metadata?.agent === "string"
-      ? Locale.titlecase(props.message.metadata.agent)
-      : "Subagent"
-  }
+  const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
+  const completion = () => metadata()?.source === "subagent"
+  const state = () => stringValue(metadata()?.state)
+  const agent = () => Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent")
   const text = () => {
     if (props.message.type === "system") return props.message.text
     if (props.message.type === "synthetic") return props.message.description ?? ""
@@ -1280,11 +1273,13 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
         </InlineToolRow>
       }
     >
-      <box marginLeft={3} flexDirection="row">
-        <text fg={color()}>
-          {state() === "completed" ? "↳" : "!"} {agent()} {status()}
+      <box marginLeft={3}>
+        <text>
+          <span style={{ fg: color() }}>
+            {state() === "completed" ? "↳" : "!"} {agent()} {status()}
+          </span>
+          <span style={{ fg: theme.textMuted }}> · {text()}</span>
         </text>
-        <text fg={theme.textMuted}> · {text()}</text>
       </box>
     </Show>
   )

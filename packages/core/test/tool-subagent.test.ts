@@ -295,7 +295,6 @@ describe("SubagentTool", () => {
               childID,
               agent: "reviewer",
               state: "completed",
-              description: "background review",
             },
           })
           const database = yield* Database.Service
