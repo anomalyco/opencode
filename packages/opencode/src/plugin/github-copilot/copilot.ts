@@ -163,6 +163,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               "User-Agent": `opencode/${InstallationVersion}`,
               Authorization: `Bearer ${info.refresh}`,
               "Openai-Intent": "conversation-edits",
+              "Copilot-Integration-Id":
+                process.env["OPENCODE_COPILOT_INTEGRATION_ID"] ?? "vscode-chat",
             }
 
             if (isVision) {
