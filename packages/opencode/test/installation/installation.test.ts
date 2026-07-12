@@ -223,12 +223,10 @@ describe("installation", () => {
       }),
     )
 
-    const miseExecCalls: Array<{ cmd: string; args: readonly string[] }> = []
     testEffect(
       testLayer(
         () => jsonResponse({}),
         (cmd, args) => {
-          miseExecCalls.push({ cmd, args })
           if (cmd === "mise" && args[0] === "ls")
             return JSON.stringify([
               {
@@ -240,11 +238,10 @@ describe("installation", () => {
           return ""
         },
       ),
-    ).effect("only installs when mise exec selected a version different from config", () =>
+    ).effect("fails when mise exec selected a version different from config", () =>
       Effect.gen(function* () {
-        yield* Installation.use.upgrade("mise", "9.9.9")
-        expect(miseExecCalls).toContainEqual({ cmd: "mise", args: ["install", "opencode@9.9.9"] })
-        expect(miseExecCalls.some((call) => call.cmd === "mise" && call.args[0] === "use")).toBeFalse()
+        const error = yield* Effect.flip(Installation.use.upgrade("mise", "9.9.9"))
+        expect(error.stderr).toBe("Could not identify the active mise configuration.")
       }),
     )
 

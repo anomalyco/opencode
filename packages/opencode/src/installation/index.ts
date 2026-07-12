@@ -173,12 +173,11 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
 
     const upgradeMise = Effect.fnUntraced(function* (target: string) {
       const current = yield* run(["mise", "ls", "--current", "--json", "opencode"])
-      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MiseTool))(current.stdout).pipe(
-        Effect.option,
-      )
-      const tool = Option.getOrUndefined(decoded)?.[0]
+      const tool = Option.getOrUndefined(
+        Schema.decodeUnknownOption(Schema.fromJsonString(MiseTool))(current.stdout),
+      )?.[0]
       if (current.code !== 0 || !tool?.source.path || tool.version !== InstallationVersion) {
-        return yield* run(["mise", "install", `opencode@${target}`])
+        return yield* new UpgradeFailedError({ stderr: "Could not identify the active mise configuration." })
       }
 
       const requested = tool.requested_version
@@ -239,6 +238,7 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           }
         }
 
+        // Preserve existing startup ordering so the TUI is subscribed before update events are emitted.
         if (mise) return "mise" as Method
         return "unknown" as Method
       }),
