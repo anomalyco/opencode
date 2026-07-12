@@ -560,7 +560,7 @@ describe("Promise.all over arbitrary arrays", () => {
     expect(trace.maxActive).toBeGreaterThan(1)
   })
 
-  test("caps live tool-call concurrency at the fixed internal constant (8)", async () => {
+  test("does not cap live tool-call concurrency", async () => {
     const trace = makeTrace()
     const result = await value(
       `
@@ -572,8 +572,7 @@ describe("Promise.all over arbitrary arrays", () => {
       { trace },
     )
     expect(result).toBe(20)
-    expect(trace.maxActive).toBeGreaterThan(1)
-    expect(trace.maxActive).toBeLessThanOrEqual(8)
+    expect(trace.maxActive).toBe(20)
   })
 
   test("resolves the empty array", async () => {

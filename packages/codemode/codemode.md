@@ -77,15 +77,15 @@ order, and a combinator settles one reaction turn after its deciding member - wi
 parity beyond that. At normal completion CodeMode interrupts everything still running - race losers,
 fail-fast `Promise.all` stragglers, and fire-and-forget calls alike: the program has returned, so no future await can
 exist, and work whose completion matters must be awaited by the program. Waiting for any class of leftover instead
-would let it hold the execution open, or deadlock it when queued work needs tool-call permits the leftovers occupy.
+would let it hold the execution open indefinitely.
 Rejections that settled un-awaited before the return become `Success.warnings` diagnostics. A fatal program failure or
 host interruption closes the execution promise scope and interrupts its active fibers instead. A timeout does the
 same, except that a value the program already returned is preserved alongside a `TimeoutExceeded` warning rather than
-discarded. At most eight tool calls execute concurrently.
+discarded. CodeMode does not limit tool-call concurrency.
 
 The public execution-policy knobs are `timeoutMs`, `maxToolCalls`, and `maxOutputBytes`. The package supplies no
-defaults because budgets are host policy. The interpreter also enforces fixed internal boundaries for tool-call
-concurrency and data nesting depth. `maxOutputBytes` bounds retained payload bytes, not the complete rendered message;
+defaults because budgets are host policy. The interpreter also enforces a fixed internal data nesting depth.
+`maxOutputBytes` bounds retained payload bytes, not the complete rendered message;
 warning diagnostics have an equal separate budget so a large value cannot starve them, and fixed truncation notices and
 host-added framing are intentionally outside the budgets.
 
