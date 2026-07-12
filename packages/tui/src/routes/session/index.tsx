@@ -25,7 +25,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { BoxRenderable, InputRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -82,6 +82,16 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { SearchBar } from "./search-bar"
+import {
+  collectSearchUnits,
+  findSearchHits,
+  highlightSegments,
+  initialSearchIndex,
+  moveSearchIndex,
+  type SearchDirection,
+  type SearchHit,
+} from "../../util/session-search"
 
 addDefaultParsers(parsers.parsers)
 
@@ -134,6 +144,9 @@ const sessionBindingCommands = [
   "session.messages_last_user",
   "session.message.next",
   "session.message.previous",
+  "session.search",
+  "session.search.next",
+  "session.search.previous",
   "messages.copy",
   "session.copy",
   "session.export",
@@ -167,6 +180,10 @@ const context = createContext<{
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
   tui: ReturnType<typeof useTuiConfig>
+  search: {
+    query: () => string
+    active: () => SearchHit | undefined
+  }
 }>()
 
 function use() {
@@ -420,6 +437,113 @@ export function Session() {
     }, 50)
   }
 
+  const [searchOpen, setSearchOpen] = createSignal(false)
+  const [searchQuery, setSearchQuery] = createSignal("")
+  const [searchIndex, setSearchIndex] = createSignal(0)
+  let searchLast = ""
+  let searchOrigin: number | undefined
+  let searchOriginAtBottom = false
+  let searchInput: InputRenderable | undefined
+
+  // Search state is session-local: switching sessions closes the bar and drops highlights.
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => {
+        setSearchOpen(false)
+        setSearchQuery("")
+        setSearchIndex(0)
+        searchOrigin = undefined
+        searchLast = ""
+      },
+      { defer: true },
+    ),
+  )
+
+  const searchUnits = createMemo(() =>
+    searchQuery().trim() ? collectSearchUnits(messages(), sync.data.part, session()?.revert?.messageID) : [],
+  )
+  const searchHits = createMemo(() => findSearchHits(searchUnits(), searchQuery()))
+  const searchActive = createMemo(() => {
+    const hits = searchHits()
+    if (!hits.length) return undefined
+    return hits[Math.min(searchIndex(), hits.length - 1)]
+  })
+
+  // Content-space position of a hit: child.y is in screen coordinates, so translate through scrollTop.
+  function searchAnchorY(hit: SearchHit) {
+    if (!scroll || scroll.isDestroyed) return undefined
+    const child = scroll.getChildren().find((c) => c.id === hit.anchorID)
+    if (!child) return undefined
+    return scroll.scrollTop + (child.y - scroll.y) + Math.min(hit.line, Math.max(child.height - 1, 0))
+  }
+
+  function jumpToHit(hit: SearchHit | undefined) {
+    if (!hit) return
+    const y = searchAnchorY(hit)
+    if (y === undefined) return
+    scroll.scrollTo(Math.max(0, y - Math.floor(scroll.height / 3)))
+  }
+
+  function runSearch(query: string) {
+    const previous = untrack(searchActive)
+    setSearchQuery(query)
+    const hits = searchHits()
+    if (!hits.length) return
+    // Readline behavior: when the current match still matches the refined query, stay on it
+    // instead of snapping back and discarding manual cycling.
+    if (previous) {
+      const kept = hits.findIndex((hit) => hit.anchorID === previous.anchorID && hit.start === previous.start)
+      if (kept !== -1) {
+        setSearchIndex(kept)
+        return
+      }
+    }
+    // Otherwise anchor from where the search started; the +2 covers the rows the bar itself
+    // took from the viewport after the origin was captured.
+    const top = searchOrigin ?? scroll?.scrollTop ?? 0
+    const bottom = top + (scroll?.height ?? 0) + 2
+    const index = initialSearchIndex(hits.map(searchAnchorY), top, bottom, "previous")
+    if (index < 0) return
+    setSearchIndex(index)
+    jumpToHit(hits[index])
+  }
+
+  function moveSearch(direction: SearchDirection) {
+    const hits = searchHits()
+    if (!hits.length) return
+    const index = moveSearchIndex(hits.length, Math.min(searchIndex(), hits.length - 1), direction)
+    setSearchIndex(index)
+    jumpToHit(hits[index])
+  }
+
+  function openSearch() {
+    if (searchOpen()) {
+      searchInput?.focus()
+      return
+    }
+    searchOrigin = scroll && !scroll.isDestroyed ? scroll.scrollTop : undefined
+    searchOriginAtBottom =
+      scroll && !scroll.isDestroyed ? scroll.scrollTop >= scroll.scrollHeight - scroll.height - 1 : false
+    setSearchQuery("")
+    setSearchIndex(0)
+    setSearchOpen(true)
+  }
+
+  function closeSearch(accept: boolean) {
+    if (searchQuery().trim()) searchLast = searchQuery()
+    if (!accept) {
+      // Opened while stuck to the bottom: restore all the way down, since closing the bar
+      // returns rows to the viewport and a raw offset would land short of the bottom.
+      if (searchOriginAtBottom) toBottom()
+      else if (searchOrigin !== undefined && scroll && !scroll.isDestroyed) scroll.scrollTo(searchOrigin)
+      setSearchQuery("")
+    }
+    setSearchOpen(false)
+    searchOrigin = undefined
+    prompt?.focus()
+  }
+
   const local = useLocal()
 
   function enterChild(sessionID: string) {
@@ -527,6 +651,41 @@ export function Session() {
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
+      },
+    },
+    {
+      title: "Search session",
+      value: "session.search",
+      category: "Session",
+      slash: {
+        name: "search",
+        aliases: ["find"],
+      },
+      run: () => {
+        dialog.clear()
+        openSearch()
+      },
+    },
+    {
+      title: "Next search match",
+      value: "session.search.next",
+      category: "Session",
+      hidden: true,
+      enabled: searchHits().length > 0,
+      run: () => {
+        dialog.clear()
+        moveSearch("next")
+      },
+    },
+    {
+      title: "Previous search match",
+      value: "session.search.previous",
+      category: "Session",
+      hidden: true,
+      enabled: searchHits().length > 0,
+      run: () => {
+        dialog.clear()
+        moveSearch("previous")
       },
     },
     {
@@ -1160,6 +1319,10 @@ export function Session() {
           providers,
           sync,
           tui: tuiConfig,
+          search: {
+            query: searchQuery,
+            active: searchActive,
+          },
         }}
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1295,6 +1458,20 @@ export function Session() {
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
                 </Show>
+                <Show when={searchOpen()}>
+                  <SearchBar
+                    width={contentWidth()}
+                    query={searchQuery()}
+                    hits={searchHits()}
+                    index={searchIndex()}
+                    active={searchActive()}
+                    onQuery={runSearch}
+                    onMove={moveSearch}
+                    onClose={closeSearch}
+                    onRecall={() => searchLast || undefined}
+                    ref={(input) => (searchInput = input)}
+                  />
+                </Show>
                 <Show when={visible()}>
                   <pluginRuntime.Slot
                     name="session_prompt"
@@ -1377,6 +1554,13 @@ function UserMessage(props: {
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
+  const searchSegments = createMemo(() => highlightSegments(text(), ctx.search.query()))
+  const activeSearchStart = createMemo(() => {
+    const active = ctx.search.active()
+    if (!active || active.anchorID !== props.message.id) return
+    return active.start
+  })
+
   return (
     <>
       <Show when={text()}>
@@ -1402,7 +1586,15 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()}</text>
+            <text fg={theme.text}>
+              <For each={searchSegments()}>
+                {(segment) => {
+                  if (!segment.match) return <span>{segment.text}</span>
+                  const color = () => (activeSearchStart() === segment.start ? theme.secondary : theme.warning)
+                  return <span style={{ bg: color(), fg: selectedForeground(theme, color()) }}>{segment.text}</span>
+                }}
+              </For>
+            </text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1596,14 +1788,18 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     setExpanded((prev) => !prev)
   }
 
+  const searchActive = createMemo(() => ctx.search.active()?.anchorID === props.part.id)
+
   return (
     <Show when={content()}>
       <box
+        id={props.part.id}
         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         paddingLeft={3}
         marginTop={1}
         flexDirection="column"
         flexShrink={0}
+        backgroundColor={searchActive() ? theme.backgroundElement : undefined}
       >
         <box onMouseUp={toggle}>
           <ReasoningHeader
@@ -1679,9 +1875,17 @@ function ReasoningHeader(props: {
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const searchActive = createMemo(() => ctx.search.active()?.anchorID === props.part.id)
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        id={props.part.id}
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+        backgroundColor={searchActive() ? theme.backgroundElement : undefined}
+      >
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
@@ -1690,7 +1894,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
-          bg={theme.background}
+          bg={searchActive() ? theme.backgroundElement : theme.background}
         />
       </box>
     </Show>
