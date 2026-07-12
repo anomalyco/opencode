@@ -68,6 +68,7 @@ import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
+import { fileManagerApp } from "@/utils/file-manager"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -1030,8 +1031,24 @@ function HomeProjectRow(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
+  const platform = usePlatform()
   const serverUnreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
   const [state, setState] = createStore({ menuOpen: false })
+  const canRevealInFileManager = () =>
+    platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(props.server)
+  const fileManagerActionLabel = () =>
+    props.language.t(
+      fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel,
+    )
+  const revealInFileManager = () => {
+    if (!platform.openPath) return
+    platform.openPath(props.project.worktree).catch((err: unknown) =>
+      showToast({
+        title: props.language.t("common.requestFailed"),
+        description: errorMessage(err, props.language.t("common.requestFailed")),
+      }),
+    )
+  }
   return (
     <div class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
@@ -1073,6 +1090,9 @@ function HomeProjectRow(props: {
               <MenuV2.Item onSelect={() => props.editProject(props.server, props.project)}>
                 {props.language.t("dialog.project.edit.title")}
               </MenuV2.Item>
+              <Show when={canRevealInFileManager()}>
+                <MenuV2.Item onSelect={revealInFileManager}>{fileManagerActionLabel()}</MenuV2.Item>
+              </Show>
               <MenuV2.Item
                 disabled={props.unseenCount === 0}
                 onSelect={() => props.clearNotifications(props.server, props.project)}
