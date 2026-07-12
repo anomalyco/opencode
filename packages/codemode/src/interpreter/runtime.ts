@@ -1,4 +1,4 @@
-import { Cause, Effect, Semaphore } from "effect"
+import { Cause, Effect } from "effect"
 import { isBlockedMember, ToolReference, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
 import {
   type AstNode,
@@ -50,7 +50,7 @@ import { dateMethods } from "../stdlib/date.js"
 import { mathConstants } from "../stdlib/math.js"
 import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
 import { objectMethodsPreservingIdentity } from "../stdlib/object.js"
-import { promiseStatics, TOOL_CALL_CONCURRENCY } from "../stdlib/promise.js"
+import { promiseStatics } from "../stdlib/promise.js"
 import { escapeRegexHint, regexpMethods, regexpProperties, regexFailureReason } from "../stdlib/regexp.js"
 import { stringMethods, stringStatics } from "../stdlib/string.js"
 import {
@@ -150,7 +150,6 @@ export class Interpreter<R> {
   private readonly invokeSearch: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   private readonly logs: Array<string>
-  private readonly callPermits: Semaphore.Semaphore
   private readonly promises: PromiseRuntime<R>
   private readonly runner: CallbackRunner<R> = {
     invokeFunction: (fn, args) => this.invokeFunction(fn, args),
@@ -163,7 +162,6 @@ export class Interpreter<R> {
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
     promises: PromiseRuntime<R>,
     logs: Array<string> = [],
-    callPermits: Semaphore.Semaphore = Semaphore.makeUnsafe(TOOL_CALL_CONCURRENCY),
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = new ScopeStack([globalScope])
@@ -171,7 +169,6 @@ export class Interpreter<R> {
     this.invokeSearch = invokeSearch
     this.toolKeys = toolKeys
     this.logs = logs
-    this.callPermits = callPermits
     this.promises = promises
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
     globalScope.set("search", { mutable: false, value: new SearchFunction() })
@@ -239,7 +236,7 @@ export class Interpreter<R> {
     path: ReadonlyArray<string>,
     args: Array<unknown>,
   ): Effect.Effect<SandboxPromise, never, R> {
-    return this.createPromise(this.callPermits.withPermit(Effect.suspend(() => this.invokeTool(path, args))))
+    return this.createPromise(Effect.suspend(() => this.invokeTool(path, args)))
   }
 
   private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
@@ -1496,14 +1493,7 @@ export class Interpreter<R> {
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
-    const invocation = new Interpreter(
-      this.invokeTool,
-      this.invokeSearch,
-      this.toolKeys,
-      this.promises,
-      this.logs,
-      this.callPermits,
-    )
+    const invocation = new Interpreter(this.invokeTool, this.invokeSearch, this.toolKeys, this.promises, this.logs)
     invocation.scopes = new ScopeStack([...fn.capturedScopes, new Map()])
     const run = Effect.gen(function* () {
       // Seed all parameters first so defaults cannot fall through to same-named outer bindings.

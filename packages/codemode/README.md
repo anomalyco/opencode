@@ -177,8 +177,8 @@ No limit has a default, on purpose: execution budgets are host policy. A host wi
 interruption should set `maxOutputBytes` and `timeoutMs`. Limits are safe integers; invalid configuration throws a
 `RangeError` at construction. Exceeding `maxOutputBytes` never fails the execution - oversized output is truncated
 with an in-band marker. The timeout interrupts in-flight tool fibers and pure busy loops alike; a value the program
-already returned survives a cleanup timeout as a success with a `TimeoutExceeded` warning. Two internals are fixed
-constants, not knobs: at most 8 concurrent tool calls, and 32 levels of data nesting at boundaries.
+already returned survives a cleanup timeout as a success with a `TimeoutExceeded` warning. CodeMode does not limit
+tool-call concurrency. Data nesting at boundaries is limited to 32 levels.
 
 ## Boundaries and Non-Goals
 

@@ -10,7 +10,7 @@ import type { FormWithLocation } from "../../../src/context/data"
 import { KVProvider } from "../../../src/context/kv"
 import { SDKProvider } from "../../../src/context/sdk"
 import { ThemeProvider } from "../../../src/context/theme"
-import { TuiConfigProvider } from "../../../src/config/v1"
+import { ConfigProvider } from "../../../src/config"
 import { OpencodeKeymapProvider, registerOpencodeKeymap } from "../../../src/keymap"
 import { ToastProvider } from "../../../src/ui/toast"
 import { tmpdir } from "../../fixture/fixture"
@@ -76,7 +76,7 @@ async function mountForm(root: string, width = 80) {
           }}
         >
           <OpencodeKeymapProvider keymap={keymap}>
-            <TuiConfigProvider config={config}>
+            <ConfigProvider config={config}>
               <SDKProvider client={createClient(transport.fetch)} api={createApi(transport.fetch)}>
                 <KVProvider>
                   <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
@@ -86,7 +86,7 @@ async function mountForm(root: string, width = 80) {
                   </ThemeProvider>
                 </KVProvider>
               </SDKProvider>
-            </TuiConfigProvider>
+            </ConfigProvider>
           </OpencodeKeymapProvider>
         </ClipboardProvider>
       </TestTuiContexts>

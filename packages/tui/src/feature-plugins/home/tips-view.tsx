@@ -25,7 +25,6 @@ type Shortcuts = {
   messagesLast: TipShortcut
   messagesPageDown: TipShortcut
   messagesPageUp: TipShortcut
-  messagesToggleConceal: TipShortcut
   modelCycleRecent: TipShortcut
   modelList: TipShortcut
   sessionExport: TipShortcut
@@ -115,7 +114,6 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
     messagesLast: configShortcut(props.api, "session.last"),
     messagesPageDown: configShortcut(props.api, "session.page.down"),
     messagesPageUp: configShortcut(props.api, "session.page.up"),
-    messagesToggleConceal: configShortcut(props.api, "session.toggle.conceal"),
     modelCycleRecent: useCommandShortcut("model.cycle_recent"),
     modelList: useCommandShortcut("model.list"),
     sessionExport: configShortcut(props.api, "session.export"),
@@ -267,9 +265,8 @@ const TIPS: Tip[] = [
   "Run {highlight}opencode debug config{/highlight} to troubleshoot configuration",
   "Use {highlight}--print-logs{/highlight} flag to see detailed logs in stderr",
   (shortcuts) => `Use ${commandText("/timeline", shortcuts.sessionTimeline())} to jump to specific messages`,
-  (shortcuts) => press(shortcuts.messagesToggleConceal(), "to toggle code block visibility in messages"),
   (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status info`,
-  "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth scrolling",
+  "Enable {highlight}scroll.acceleration{/highlight} in {highlight}cli.json{/highlight} for smooth scrolling",
   (shortcuts) =>
     shortcuts.commandList()
       ? `Toggle username display in chat via the command palette (${shortcutText(shortcuts.commandList())})`

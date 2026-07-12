@@ -9,7 +9,7 @@ import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { useTuiConfig } from "../config/v1"
+import { useConfig } from "../config"
 import { getScrollAcceleration } from "../util/scroll"
 import { useBindings } from "../keymap"
 
@@ -118,7 +118,7 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
   const toast = useToast()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
   const error = () => statusMeta(props.server.status, theme).error ?? "Unknown MCP connection error"
   const height = createMemo(() => Math.max(3, Math.floor(dimensions().height / 2) - 5))
@@ -164,7 +164,7 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
           ref={(element: ScrollBoxRenderable) => (scroll = element)}
           height={height()}
           scrollbarOptions={{ visible: false }}
-          scrollAcceleration={getScrollAcceleration(tuiConfig)}
+          scrollAcceleration={getScrollAcceleration(config)}
         >
           <text fg={theme.text} wrapMode="word">
             {error()}

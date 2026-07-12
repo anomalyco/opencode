@@ -3,14 +3,19 @@ title: "Migrate from V1"
 description: "Move from OpenCode V1 to the OpenCode 2.0 beta."
 ---
 
-<Note>
-  The only intentional breaking changes in V2 are the server API and the plugin API. All other functionality is intended
-  to remain compatible with V1.
-</Note>
+## Breaking changes
 
-Existing config files, agent definitions, command definitions, skills, and other files in `.opencode/` should continue to
-work without changes. If one of these stops working in V2, treat it as a beta compatibility bug rather than an expected
-migration requirement.
+V2 has three intentional breaking changes:
+
+- [Plugins](#plugins) use a new plugin API.
+- The [server API and clients](#server-api-and-clients) have new contracts.
+- [TUI configuration](#tui-configuration) moves from layered `tui.json(c)` files to one global `cli.json` file (auto migrated).
+
+All other functionality is intended to remain compatible with V1.
+
+Existing server config files, agent definitions, command definitions, skills, and other files in `.opencode/` should
+continue to work without changes. If one of these stops working in V2, treat it as a beta compatibility bug rather than
+an expected migration requirement.
 
 <Tip>
   Run `/report` if existing V1 functionality does not work in V2. The report skill collects diagnostics and helps you file
@@ -465,6 +470,58 @@ files from the current directory up to the project root.
 If a V1 setup relied on a `CLAUDE.md` fallback, move that guidance into the applicable `AGENTS.md`. V2 currently only
 discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also run `/report` with the affected
 project details. See [Instructions](/instructions).
+
+## TUI configuration
+
+V1 loaded `tui.json(c)` from the global config directory and from project directories discovered while walking up from
+the current directory. V2 instead stores CLI and TUI settings in one global file:
+
+```text
+~/.config/opencode/cli.json
+```
+
+The CLI owns this file. The background service does not load it, and V2 does not discover or merge project-local
+`tui.json(c)` or `cli.json` files.
+
+The native V2 format groups related settings. For example:
+
+```jsonc
+// V1: ~/.config/opencode/tui.json
+{
+  "theme": "tokyonight",
+  "scroll_speed": 2,
+  "scroll_acceleration": {
+    "enabled": true
+  }
+}
+
+// V2: ~/.config/opencode/cli.json
+{
+  "theme": {
+    "name": "tokyonight"
+  },
+  "scroll": {
+    "speed": 2,
+    "acceleration": true
+  }
+}
+```
+
+V2 migrates the global TUI configuration automatically. On the first CLI or TUI startup, when `cli.json` does not already
+exist, it:
+
+- Reads `~/.config/opencode/tui.json`.
+- Reads persisted TUI preferences from the legacy `kv.json` state file.
+- Converts supported settings to the native grouped format and writes `~/.config/opencode/cli.json`.
+- Leaves the V1 files unchanged so V1 can continue using them.
+
+Migration runs only while `cli.json` is absent. Once that file exists, V2 treats it as the source of truth and does not
+continually synchronize later changes from `tui.json` or `kv.json`. If you created `cli.json` before starting V2, merge any
+V1 settings you still need into it manually.
+
+Project-local V1 TUI configuration is not migrated because V2 has no project-local CLI configuration. Move settings you
+still want into the global `cli.json`; when multiple projects used different values for the same setting, choose the
+global behavior you want V2 to use.
 
 ## Plugins
 

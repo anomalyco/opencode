@@ -914,12 +914,6 @@ function getSyntaxRules(theme: Theme) {
         foreground: theme.text,
       },
     },
-    {
-      scope: ["conceal"],
-      style: {
-        foreground: theme.textMuted,
-      },
-    },
     // Additional common highlight groups
     {
       scope: ["string.special", "string.special.url"],

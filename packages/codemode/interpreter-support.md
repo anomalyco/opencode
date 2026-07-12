@@ -24,7 +24,7 @@ ultimate source of truth.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
-- [x] Cooperative timeout, tool-call accounting, output bounding, and a maximum of eight concurrent tool calls.
+- [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
 - [ ] Full JavaScript or TypeScript compatibility. CodeMode is a bounded orchestration language.
 
 ## Values and literals
@@ -291,7 +291,6 @@ ultimate source of truth.
 These are actionable implementation items. Check them off only when behavior and direct tests land.
 
 - [x] Return real promises from `Promise.all`, `Promise.allSettled`, and `Promise.race`.
-- [ ] Bound pending tool-call admission/allocation in addition to execution concurrency.
 - [ ] Guarantee every advertised tool path is executable, including dotted and blocked path segments.
 - [ ] Define safe outbound handling for non-finite numbers and `undefined` so invalid values cannot silently become
       `null` in render-only or OpenAPI tool calls.

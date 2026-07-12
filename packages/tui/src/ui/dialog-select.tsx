@@ -17,7 +17,7 @@ import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
-import { useTuiConfig } from "../config/v1"
+import { useConfig } from "../config"
 import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
 
 export interface DialogSelectProps<T> {
@@ -86,8 +86,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const dialog = useDialog()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const config = useConfig().data
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   const [store, setStore] = createStore({
     selected: 0,
@@ -130,7 +130,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const labels = new Map<string, string>()
 
     for (const action of shownActions()) {
-      const label = formatKeyBindings(actionBindings().get(action.command), tuiConfig)
+      const label = formatKeyBindings(actionBindings().get(action.command), config)
       if (label) labels.set(action.command, label)
     }
 
@@ -450,7 +450,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         })),
       ],
       bindings: [
-        ...tuiConfig.keybinds.gather("dialog.select", [
+        ...config.keybinds.gather("dialog.select", [
           "dialog.select.prev",
           "dialog.select.next",
           "dialog.select.page_up",
@@ -459,7 +459,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           "dialog.select.end",
           "dialog.select.submit",
         ]),
-        ...visible.flatMap((item) => tuiConfig.keybinds.get(item.command)),
+        ...visible.flatMap((item) => config.keybinds.get(item.command)),
         ...(visible.length
           ? [
               {

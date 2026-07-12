@@ -144,7 +144,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const patchLeftBorder = createMemo<BorderSides[]>(() => (showFileTree() ? ["left"] : []))
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
   const defaultView = createMemo(() => {
-    if (props.api.tuiConfig.diff_style === "stacked") return "unified"
+    if (props.api.tuiConfig.diffs?.view === "unified") return "unified"
+    if (props.api.tuiConfig.diffs?.view === "split") return "split"
     return splitAvailable() ? "split" : "unified"
   })
   const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.api.kv.get(KV_VIEW)))

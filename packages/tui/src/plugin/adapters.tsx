@@ -1,5 +1,5 @@
 import type { TuiDialogSelectOption, TuiPluginApi, TuiSlotProps } from "@opencode-ai/plugin/tui"
-import type { TuiConfig } from "../config/v1"
+import type { Config } from "../config"
 import type { useEvent } from "../context/event"
 import type { useRoute } from "../context/route"
 import type { useSDK } from "../context/sdk"
@@ -23,7 +23,7 @@ export { createPluginRoutes, createTuiApi } from "./api"
 
 type Input = {
   version: string
-  tuiConfig: TuiConfig.Resolved
+  tuiConfig: Config.Resolved
   dialog: ReturnType<typeof useDialog>
   keymap: ReturnType<typeof useOpencodeKeymap>
   kv: ReturnType<typeof useKV>

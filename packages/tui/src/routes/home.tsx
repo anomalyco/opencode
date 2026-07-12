@@ -8,8 +8,6 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
 import { useEditorContext } from "../context/editor"
-import { useTerminalDimensions } from "@opentui/solid"
-import { useTuiConfig } from "../config/v1"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 import { useData } from "../context/data"
 import { LocationProvider } from "../context/location"
@@ -29,16 +27,9 @@ export function Home() {
   const args = useArgs()
   const local = useLocal()
   const editor = useEditorContext()
-  const dimensions = useTerminalDimensions()
-  const tuiConfig = useTuiConfig()
   const data = useData()
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
   const forms = createMemo(() => data.session.form.list("global", data.location.default()) ?? [])
-  const promptMaxWidth = createMemo(() => {
-    const configured = tuiConfig.prompt?.max_width
-    if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
-    return configured ?? 75
-  })
   let sent = false
 
   onMount(() => {
@@ -83,7 +74,7 @@ export function Home() {
             </pluginRuntime.Slot>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />
-          <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
+          <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
             <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
               <Prompt
                 ref={bind}

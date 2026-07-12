@@ -75,7 +75,8 @@ import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
-import { TuiConfigProvider, useTuiConfig, type TuiConfig } from "./config/v1"
+import { Config, ConfigProvider, useConfig } from "./config"
+import { TuiConfigV1 } from "./config/v1"
 import { createTuiApiAdapters } from "./plugin/adapters"
 import { createTuiApi } from "./plugin/api"
 import { createPluginRuntime, PluginRuntimeProvider, usePluginRuntime, type TuiPluginHost } from "./plugin/runtime"
@@ -144,7 +145,6 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
-  "app.toggle.session_directory_filter",
 ] as const
 
 export type TuiInput = {
@@ -154,7 +154,7 @@ export type TuiInput = {
     reload?: () => Promise<void>
   }
   args: Args
-  config: TuiConfig.Resolved
+  config: Config.Interface | TuiConfigV1.Resolved
   onSnapshot?: () => Promise<string[]>
   pluginHost: TuiPluginHost
   terminalHandoff?: () => Promise<
@@ -200,9 +200,43 @@ function isVersionGreater(left: string, right: string) {
   return a.prerelease.localeCompare(b.prerelease, undefined, { numeric: true }) > 0
 }
 
+function fromV1(config: TuiConfigV1.Resolved): Config.Info {
+  return {
+    theme: config.theme ? { name: config.theme } : undefined,
+    plugins: config.plugin?.map((plugin) =>
+      typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
+    ),
+    leader: { timeout: config.leader_timeout },
+    scroll:
+      config.scroll_speed === undefined && config.scroll_acceleration === undefined
+        ? undefined
+        : { speed: config.scroll_speed, acceleration: config.scroll_acceleration?.enabled },
+    attention: config.attention,
+    diffs: config.diff_style === undefined ? undefined : { view: config.diff_style === "stacked" ? "unified" : "auto" },
+    mouse: config.mouse,
+  }
+}
+
+function isConfigInterface(config: Config.Interface | TuiConfigV1.Resolved): config is Config.Interface {
+  return "get" in config && typeof config.get === "function" && "update" in config && typeof config.update === "function"
+}
+
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
+  const configInput = input.config
+  const loaded = yield* Effect.gen(function* () {
+    if (isConfigInterface(configInput)) {
+      return {
+        service: configInput,
+        info: yield* Effect.tryPromise(() => configInput.get()),
+        legacy: undefined,
+      }
+    }
+    return { service: undefined, info: fromV1(configInput), legacy: configInput }
+  })
+  const config = Config.resolve(loaded.info, { terminalSuspend: process.platform !== "win32" })
+  if (loaded.legacy) config.keybinds = loaded.legacy.keybinds
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
   const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
@@ -235,7 +269,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               useKittyKeyboard: {},
               autoFocus: false,
               openConsoleOnError: false,
-              useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
+              useMouse: !Flag.OPENCODE_DISABLE_MOUSE && config.mouse,
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
@@ -263,7 +297,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
-        Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
+        Effect.sync(() => registerOpencodeKeymap(keymap, renderer, config)),
         (unregister) => Effect.sync(unregister),
       )
       yield* Effect.addFinalizer(() =>
@@ -337,19 +371,23 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                           <ClipboardProvider>
                             <OpencodeKeymapProvider keymap={keymap}>
                               <ArgsProvider {...input.args}>
-                                <KVProvider>
-                                  <ToastProvider>
-                                    <RouteProvider
-                                      initialRoute={
-                                        input.args.continue
-                                          ? {
-                                              type: "session",
-                                              sessionID: "dummy",
-                                            }
-                                          : undefined
-                                      }
-                                    >
-                                      <TuiConfigProvider config={input.config}>
+                                <ConfigProvider
+                                  config={config}
+                                  service={loaded.service}
+                                  options={{ terminalSuspend: process.platform !== "win32" }}
+                                >
+                                  <KVProvider>
+                                    <ToastProvider>
+                                      <RouteProvider
+                                        initialRoute={
+                                          input.args.continue
+                                            ? {
+                                                type: "session",
+                                                sessionID: "dummy",
+                                              }
+                                            : undefined
+                                        }
+                                      >
                                         <PluginRuntimeProvider value={pluginRuntime}>
                                           <SDKProvider
                                             client={createOpencodeClient({ ...options, directory })}
@@ -373,6 +411,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                       <App
                                                                         onSnapshot={input.onSnapshot}
                                                                         pluginHost={input.pluginHost}
+                                                                        pluginConfig={loaded.legacy ?? config}
                                                                         pair={
                                                                           input.server.endpoint.auth
                                                                             ? input.server.endpoint.auth
@@ -397,10 +436,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             </PermissionProvider>
                                           </SDKProvider>
                                         </PluginRuntimeProvider>
-                                      </TuiConfigProvider>
-                                    </RouteProvider>
-                                  </ToastProvider>
-                                </KVProvider>
+                                      </RouteProvider>
+                                    </ToastProvider>
+                                  </KVProvider>
+                                </ConfigProvider>
                               </ArgsProvider>
                             </OpencodeKeymapProvider>
                           </ClipboardProvider>
@@ -430,10 +469,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost; pair?: DialogPairCredentials }) {
+function App(props: {
+  onSnapshot?: () => Promise<string[]>
+  pluginHost: TuiPluginHost
+  pluginConfig: any
+  pair?: DialogPairCredentials
+}) {
   const log = useLog({ component: "app" })
   const startup = useTuiStartup()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -452,7 +496,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const exit = useExit()
   const promptRef = usePromptRef()
   const pluginRuntime = usePluginRuntime()
-  const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
+  const attention = createTuiAttention({ renderer, config, kv })
   const clipboard = useClipboard()
 
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
@@ -486,7 +530,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const api = createTuiApi(
     createTuiApiAdapters({
       version: InstallationVersion,
-      tuiConfig,
+      tuiConfig: config,
       dialog,
       keymap,
       kv,
@@ -507,7 +551,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   props.pluginHost
     .start({
       api,
-      config: tuiConfig,
+      config: props.pluginConfig,
       runtime: pluginRuntime,
       dispose: () => attention.dispose(),
     })
@@ -1005,17 +1049,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        name: "app.toggle.session_directory_filter",
-        title: kv.get("session_directory_filter_enabled", true)
-          ? "Disable session directory filtering"
-          : "Enable session directory filtering",
-        category: "System",
-        run: async () => {
-          kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
-          dialog.clear()
-        },
-      },
-      {
         name: "permission.mode",
         title:
           local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
@@ -1037,11 +1070,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
+    bindings: config.keybinds.gather("app", appBindingCommands),
   }))
 
   useBindings(() => ({
-    bindings: tuiConfig.keybinds.gather("app.global", appGlobalBindingCommands),
+    bindings: config.keybinds.gather("app.global", appGlobalBindingCommands),
   }))
 
   useBindings(() => ({
@@ -1051,7 +1084,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (!current?.focused) return true
       return current.current.text === ""
     },
-    bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
+    bindings: config.keybinds.gather("app_exit", ["app.exit"]),
   }))
 
   event.on("tui.command.execute", (evt, { workspace }) => {

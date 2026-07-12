@@ -10,7 +10,7 @@ import type {
   TuiAttentionSoundPack,
   TuiAttentionSoundPackInfo,
 } from "@opencode-ai/plugin/tui"
-import { AttentionSoundName, type TuiConfig } from "./config/v1"
+import { AttentionSoundName, type Config } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"
@@ -80,7 +80,7 @@ function clampVolume(volume: number) {
   return Math.min(1, Math.max(0, volume))
 }
 
-function soundVolume(input: TuiAttentionNotifyInput, config: Pick<TuiConfig.Resolved, "attention">) {
+function soundVolume(input: TuiAttentionNotifyInput, config: Pick<Config.Resolved, "attention">) {
   if (!config.attention.sound) return
   if (input.sound === false) return
   if (input.sound === undefined) return clampVolume(config.attention.volume)
@@ -113,7 +113,7 @@ function focusSkip(when: TuiAttentionWhen, focus: FocusState) {
 
 export function createTuiAttention(input: {
   renderer: AttentionRenderer
-  config: Pick<TuiConfig.Resolved, "attention">
+  config: Pick<Config.Resolved, "attention">
   kv?: TuiKV
   audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
 }): TuiAttentionHost {

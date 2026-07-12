@@ -48,7 +48,7 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "../../context/args"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
-import { useTuiConfig } from "../../config/v1"
+import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
@@ -154,7 +154,7 @@ export function Prompt(props: PromptProps) {
   const project = useProject()
   const data = useData()
   const currentLocation = useLocation()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
@@ -538,7 +538,7 @@ export function Prompt(props: PromptProps) {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    bindings: tuiConfig.keybinds.gather("prompt.palette", [
+    bindings: config.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
@@ -779,7 +779,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
-      bindings: tuiConfig.keybinds.get("prompt.paste"),
+      bindings: config.keybinds.get("prompt.paste"),
     }
   })
 
@@ -787,7 +787,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.text !== "",
-      bindings: tuiConfig.keybinds.get("prompt.clear"),
+      bindings: config.keybinds.get("prompt.clear"),
     }
   })
 
@@ -870,7 +870,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("prompt.history.previous"),
+      bindings: config.keybinds.get("prompt.history.previous"),
     }
   })
 
@@ -910,7 +910,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("prompt.history.next"),
+      bindings: config.keybinds.get("prompt.history.next"),
     }
   })
 
@@ -1321,7 +1321,7 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
-  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
+  const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
   const moveLabelWidth = createMemo(() => Math.max(12, Math.min(44, dimensions().width - 48)))
 
   return (

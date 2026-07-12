@@ -10,7 +10,7 @@ import { useSDK } from "../../context/sdk"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
-import { useTuiConfig } from "../../config/v1"
+import { useConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const FORM_MODE = "form"
@@ -149,7 +149,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const modeStack = useOpencodeModeStack()
   const clipboard = useClipboard()
   const toast = useToast()
@@ -590,7 +590,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           setStore("editing", false)
         },
       },
-      ...tuiConfig.keybinds.get("prompt.clear"),
+      ...config.keybinds.get("prompt.clear"),
       {
         key: "tab",
         desc: "Next field",
@@ -691,7 +691,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               },
               { key: "c", desc: "Copy link", group: "Form", cmd: copyExternal },
               { key: "escape", desc: "Dismiss form", group: "Form", cmd: cancel },
-              ...tuiConfig.keybinds.get("app.exit"),
+              ...config.keybinds.get("app.exit"),
             ]
           : confirm()
             ? [
@@ -711,7 +711,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 { key: "k", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(-1) },
                 { key: "down", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(1) },
                 { key: "j", desc: "Scroll review", group: "Form", cmd: () => review?.scrollBy(1) },
-                ...tuiConfig.keybinds.get("app.exit"),
+                ...config.keybinds.get("app.exit"),
               ]
             : [
                 ...Array.from({ length: max }, (_, index) => ({
@@ -754,7 +754,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   group: "Form",
                   cmd: cancel,
                 },
-                ...tuiConfig.keybinds.get("app.exit"),
+                ...config.keybinds.get("app.exit"),
               ]),
       ],
     }

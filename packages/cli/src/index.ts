@@ -11,6 +11,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { AppProcess } from "@opencode-ai/core/process"
+import { Config } from "./config"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -51,6 +52,7 @@ Effect.logInfo("cli starting", {
 }).pipe(
   Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
   Effect.annotateLogs({ role: "cli" }),
+  Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
   Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node]))),
   Effect.provide(Observability.layer),

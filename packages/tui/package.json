@@ -12,10 +12,10 @@
   "exports": {
     ".": "./src/index.tsx",
     "./builtins": "./src/feature-plugins/builtins.ts",
+    "./config": "./src/config/index.tsx",
+    "./config/keybind": "./src/config/keybind.ts",
     "./config/v1": "./src/config/v1/index.tsx",
     "./config/v1/keybind": "./src/config/v1/keybind.ts",
-    "./config/v2": "./src/config/v2/index.ts",
-    "./config/v2/keybind": "./src/config/v2/keybind.ts",
     "./context/args": "./src/context/args.tsx",
     "./context/epilogue": "./src/context/epilogue.tsx",
     "./context/exit": "./src/context/exit.tsx",

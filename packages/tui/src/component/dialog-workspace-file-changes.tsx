@@ -5,7 +5,7 @@ import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilePath } from "../ui/file-path"
 import { useTheme } from "../context/theme"
-import { useTuiConfig } from "../config/v1"
+import { useConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
 
@@ -32,9 +32,9 @@ export function DialogWorkspaceFileChanges(props: {
 }) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const dimensions = useTerminalDimensions()
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const [store, setStore] = createStore({ active: "yes" as WorkspaceFileChangesChoice })
   const height = createMemo(() => Math.min(props.files.length, 8))
   const fileNameWidth = createMemo(

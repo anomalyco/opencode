@@ -407,13 +407,40 @@ type TuiAttentionConfigView = {
   sounds: Partial<Record<TuiAttentionSoundName, string>>
 }
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
-  NonNullable<PluginConfig["tui"]> & {
-    leader_timeout: number
-    attention: TuiAttentionConfigView
-    plugin_enabled?: Record<string, boolean>
-    keybinds: TuiBindingLookupView
+type TuiConfigView = {
+  $schema?: string
+  theme?: string | { name?: string; mode?: "system" | "dark" | "light" }
+  plugin?: PluginConfig["plugin"]
+  plugins?: ReadonlyArray<string | { package: string; options?: Record<string, any> }>
+  plugin_enabled?: Record<string, boolean>
+  leader?: { timeout: number }
+  leader_timeout?: number
+  scroll?: { speed?: number; acceleration?: boolean }
+  scroll_speed?: number
+  scroll_acceleration?: { enabled: boolean }
+  attention: TuiAttentionConfigView
+  diffs?: {
+    wrap?: "word" | "none"
+    tree?: boolean
+    single?: boolean
+    view?: "auto" | "split" | "unified"
   }
+  diff_style?: "auto" | "stacked"
+  terminal?: { title?: boolean }
+  prompt?:
+    | { editor?: boolean; paste?: "compact" | "full" }
+    | { max_height?: number; max_width?: number | "auto" }
+  session?: {
+    sidebar?: "auto" | "hide"
+    scrollbar?: boolean
+    thinking?: "show" | "hide"
+    grouping?: "auto" | "none"
+  }
+  hints?: { tips?: boolean; onboarding?: boolean }
+  animations?: boolean
+  mouse: boolean
+  keybinds: TuiBindingLookupView
+}
 
 export type TuiApp = {
   readonly version: string

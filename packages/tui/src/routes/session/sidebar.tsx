@@ -1,7 +1,7 @@
 import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
-import { useTuiConfig } from "../../config/v1"
+import { useConfig } from "../../config"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { usePluginRuntime } from "../../plugin/runtime"
 
@@ -11,9 +11,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
   const data = useData()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
     <Show when={session()}>

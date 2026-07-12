@@ -4,7 +4,6 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
-import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-sdk"
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
@@ -32,7 +31,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     const task = Effect.runPromise(
       run({
         server: { endpoint: { url: server.url.toString() } },
-        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        config: { get: async () => ({}), update: async () => ({}) },
         args: {},
         log: () => {},
         pluginHost: {
@@ -118,7 +117,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     const task = Effect.runPromise(
       run({
         server: { endpoint: { url: server.url.toString() } },
-        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        config: { get: async () => ({}), update: async () => ({}) },
         args: { sessionID: "dummy" },
         log: () => {},
         pluginHost: {

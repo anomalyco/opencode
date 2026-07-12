@@ -11,7 +11,7 @@ import { useSDK } from "../../context/sdk"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
-import { useTuiConfig } from "../../config/v1"
+import { useConfig } from "../../config"
 import { useLocation } from "../../context/location"
 import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -92,7 +92,7 @@ export function Autocomplete(props: {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const paths = useTuiPaths()
   const location = useLocation()
   const [store, setStore] = createStore({
@@ -628,7 +628,7 @@ export function Autocomplete(props: {
         },
       },
     ],
-    bindings: tuiConfig.keybinds.gather("prompt.autocomplete", [
+    bindings: config.keybinds.gather("prompt.autocomplete", [
       "prompt.autocomplete.prev",
       "prompt.autocomplete.next",
       "prompt.autocomplete.hide",
@@ -714,7 +714,7 @@ export function Autocomplete(props: {
   })
 
   let scroll: ScrollBoxRenderable
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
     <box

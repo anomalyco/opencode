@@ -64,7 +64,7 @@ import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { sessionEpilogue } from "../../util/presentation"
-import { useTuiConfig } from "../../config/v1"
+import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -88,7 +88,6 @@ const sessionBindingCommands = [
   "session.undo",
   "session.redo",
   "session.sidebar.toggle",
-  "session.toggle.conceal",
   "session.toggle.thinking",
   "session.toggle.scrollbar",
   "session.toggle.exploration_grouping",
@@ -121,13 +120,12 @@ const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] 
 const context = createContext<{
   width: number
   sessionID: string
-  conceal: () => boolean
   thinkingMode: () => ThinkingMode
   showThinking: () => boolean
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
-  tui: ReturnType<typeof useTuiConfig>
+  config: ReturnType<typeof useConfig>["data"]
 }>()
 
 function use() {
@@ -149,7 +147,7 @@ export function Session() {
   const data = useData()
   const project = useProject()
   const paths = useTuiPaths()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -198,7 +196,6 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
-  const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
   const showThinking = createMemo(() => true)
@@ -217,7 +214,7 @@ export function Session() {
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
@@ -472,15 +469,6 @@ export function Session() {
       },
     },
     {
-      title: conceal() ? "Disable code concealment" : "Enable code concealment",
-      value: "session.toggle.conceal",
-      category: "Session",
-      run: () => {
-        setConceal((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
       title: (() => {
         const next = nextThinkingMode(thinkingMode())
         if (next === "hide") return "Collapse thinking"
@@ -507,7 +495,7 @@ export function Session() {
       },
     },
     {
-      title: groupExploration() ? "Show exploration tools individually" : "Group exploration tools",
+      title: groupExploration() ? "Show tool calls individually" : "Group related tool calls",
       value: "session.toggle.exploration_grouping",
       category: "Session",
       run: () => {
@@ -835,17 +823,17 @@ export function Session() {
   }))
 
   useBindings(() => ({
-    bindings: tuiConfig.keybinds.gather("session.global", sessionGlobalBindingCommands),
+    bindings: config.keybinds.gather("session.global", sessionGlobalBindingCommands),
   }))
 
   useBindings(() => ({
     enabled: () => renderer.currentFocusedEditor === null,
-    bindings: tuiConfig.keybinds.gather("session.global.unfocused", sessionGlobalUnfocusedBindingCommands),
+    bindings: config.keybinds.gather("session.global.unfocused", sessionGlobalUnfocusedBindingCommands),
   }))
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
+    bindings: config.keybinds.gather("session", sessionBindingCommands),
   }))
 
   // snap to bottom when session changes
@@ -865,13 +853,12 @@ export function Session() {
             return contentWidth()
           },
           sessionID: route.sessionID,
-          conceal,
           thinkingMode,
           showThinking,
           groupExploration,
           diffWrapMode,
           models,
-          tui: tuiConfig,
+          config,
         }}
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1329,7 +1316,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             internalBlockMode="top-level"
             content={content()}
             tableOptions={{ style: "grid" }}
-            conceal={ctx.conceal()}
+            conceal={false}
             fg={theme.markdownText}
             bg={theme.background}
           />
@@ -1747,7 +1734,7 @@ function ReasoningPart(props: {
               streaming={true}
               syntaxStyle={syntax()}
               content={summary().body}
-              conceal={ctx.conceal()}
+              conceal={false}
               fg={theme.textMuted}
             />
           </box>
@@ -1813,7 +1800,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
           internalBlockMode="top-level"
           content={props.part.text.trim()}
           tableOptions={{ style: "grid" }}
-          conceal={ctx.conceal()}
+          conceal={false}
           fg={theme.markdownText}
           bg={theme.background}
         />
@@ -2465,8 +2452,9 @@ function Edit(props: ToolProps) {
   const pathFormatter = usePathFormatter()
 
   const view = createMemo(() => {
-    const diffStyle = ctx.tui.diff_style
-    if (diffStyle === "stacked") return "unified"
+    const diffView = ctx.config.diffs?.view
+    if (diffView === "unified") return "unified"
+    if (diffView === "split") return "split"
     // Default to "auto" behavior
     return ctx.width > 120 ? "split" : "unified"
   })
@@ -2541,7 +2529,8 @@ function ApplyPatch(props: ToolProps) {
     })
   })
   const view = createMemo(() => {
-    if (ctx.tui.diff_style === "stacked") return "unified"
+    if (ctx.config.diffs?.view === "unified") return "unified"
+    if (ctx.config.diffs?.view === "split") return "split"
     return ctx.width > 120 ? "split" : "unified"
   })
 

@@ -45,6 +45,7 @@
     "@parcel/watcher": "2.5.1",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
+    "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
     "open": "10.1.2",
     "opentui-spinner": "catalog:",
