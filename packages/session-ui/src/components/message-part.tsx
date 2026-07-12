@@ -2159,7 +2159,7 @@ ToolRegistry.register({
                 </div>
                 <Show when={!pending() && props.input.filePath?.includes("/")}>
                   <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                    <span data-slot="message-part-directory">{`\u202A${getDirectory(props.input.filePath!)}\u202C`}</span>
                   </div>
                 </Show>
               </div>
@@ -2226,7 +2226,7 @@ ToolRegistry.register({
                 </div>
                 <Show when={!pending() && props.input.filePath?.includes("/")}>
                   <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                    <span data-slot="message-part-directory">{`\u202A${getDirectory(props.input.filePath!)}\u202C`}</span>
                   </div>
                 </Show>
               </div>
@@ -2408,7 +2408,7 @@ ToolRegistry.register({
                   </div>
                   <Show when={!pending() && single()!.relativePath.includes("/")}>
                     <div data-slot="message-part-path">
-                      <span data-slot="message-part-directory">{getDirectory(single()!.relativePath)}</span>
+                      <span data-slot="message-part-directory">{`\u202A${getDirectory(single()!.relativePath)}\u202C`}</span>
                     </div>
                   </Show>
                 </div>
