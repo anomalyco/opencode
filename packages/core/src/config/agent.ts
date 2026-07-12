@@ -18,6 +18,7 @@ export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   description: Schema.String.pipe(Schema.optional),
   mode: Schema.Literals(["subagent", "primary", "all"]).pipe(Schema.optional),
   hidden: Schema.Boolean.pipe(Schema.optional),
+  hiddenFromCycle: Schema.Boolean.pipe(Schema.optional),
   color: Color.pipe(Schema.optional),
   steps: PositiveInt.pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),

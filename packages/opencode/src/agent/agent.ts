@@ -38,6 +38,7 @@ export const Info = Schema.Struct({
   mode: Schema.Literals(["subagent", "primary", "all"]),
   native: Schema.optional(Schema.Boolean),
   hidden: Schema.optional(Schema.Boolean),
+  hiddenFromCycle: Schema.optional(Schema.Boolean),
   topP: Schema.optional(Schema.Finite),
   temperature: Schema.optional(Schema.Finite),
   color: Schema.optional(Schema.String),
@@ -287,6 +288,7 @@ const layer = Layer.effect(
           item.mode = value.mode ?? item.mode
           item.color = value.color ?? item.color
           item.hidden = value.hidden ?? item.hidden
+          item.hiddenFromCycle = value.hidden_from_cycle ?? value.hiddenFromCycle ?? item.hiddenFromCycle
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})

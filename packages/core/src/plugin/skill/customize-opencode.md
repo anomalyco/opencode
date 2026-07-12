@@ -266,8 +266,11 @@ frontmatter.
 `mode` is one of `"primary"`, `"subagent"`, `"all"`.
 
 Allowed top-level frontmatter fields: `name, model, variant, description, mode,
-hidden, color, steps, options, permission, disable, temperature, top_p`. Any
-unknown field is silently routed into `options`.
+hidden, hidden_from_cycle, color, steps, options, permission, disable, temperature,
+top_p`. Any unknown field is silently routed into `options`.
+
+`hidden_from_cycle` hides the agent from tab/shift+tab rotation but keeps it
+visible in `/agents` for manual selection.
 
 To disable a built-in agent: `agent: { build: { disable: true } }`, or in a
 file, `disable: true` in frontmatter.

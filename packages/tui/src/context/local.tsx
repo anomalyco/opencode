@@ -75,7 +75,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
-      const agents = createMemo(() => sync.data.agent.filter((agent) => agent.mode !== "subagent" && !agent.hidden))
+      const agents = createMemo(() =>
+        sync.data.agent.filter((agent) => agent.mode !== "subagent" && !agent.hidden && !agent.hiddenFromCycle),
+      )
+      const allAgents = createMemo(() =>
+        sync.data.agent.filter((agent) => agent.mode !== "subagent" && !agent.hidden),
+      )
       const visibleAgents = createMemo(() => sync.data.agent.filter((agent) => !agent.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
@@ -91,13 +96,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       ])
       return {
         list() {
-          return agents()
+          return allAgents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
+          const fromRotation = agents().find((x) => x.name === agentStore.current)
+          if (fromRotation) return fromRotation
+          const fromAll = allAgents().find((x) => x.name === agentStore.current)
+          if (fromAll) return fromAll
+          return agents().at(0)
         },
         set(name: string) {
-          if (!agents().some((x) => x.name === name))
+          if (!allAgents().some((x) => x.name === name))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,

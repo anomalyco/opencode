@@ -27,6 +27,9 @@ const AgentSchema = Schema.StructWithRest(
     hidden: Schema.optional(Schema.Boolean).annotate({
       description: "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
     }),
+    hidden_from_cycle: Schema.optional(Schema.Boolean).annotate({
+      description: "Hide from tab/shift+tab rotation but still show in /agents (default: false)",
+    }),
     options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
     color: Schema.optional(Color).annotate({
       description: "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
@@ -50,6 +53,7 @@ const KNOWN_KEYS = new Set([
   "top_p",
   "mode",
   "hidden",
+  "hidden_from_cycle",
   "color",
   "steps",
   "maxSteps",
