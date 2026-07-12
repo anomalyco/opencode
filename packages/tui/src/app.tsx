@@ -442,7 +442,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
 
-    renderer.clearSelection()
+    // Delay clearSelection to prevent visual reflow ("text shrinking") in the console
+    setTimeout(() => renderer.clearSelection(), 150)
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(

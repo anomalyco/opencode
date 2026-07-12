@@ -68,8 +68,52 @@ export async function read() {
     if (x11.length) return { data: x11.toString("base64"), mime: "image/png" }
   }
 
-  // Windows: use PowerShell Get-Clipboard directly (faster and more reliable than clipboardy)
+  // Windows: try Win32 API first (works in admin/elevated terminals), then PowerShell, then clipboardy
   if (platform() === "win32" || release().includes("WSL")) {
+    // Win32 API fallback - works in all terminal privilege levels
+    try {
+      const { dlopen, ptr, CStr } = await import("bun:ffi")
+      const user32 = dlopen("user32.dll", {
+        OpenClipboard: { args: ["u32"], returns: "ptr" },
+        CloseClipboard: { args: [], returns: "i32" },
+        GetClipboardData: { args: ["u32"], returns: "ptr" },
+        GlobalLock: { args: ["ptr"], returns: "ptr" },
+        GlobalUnlock: { args: ["ptr"], returns: "i32" },
+        GlobalSize: { args: ["ptr"], returns: "usize" },
+      })
+      if (user32.symbols.OpenClipboard(0)) {
+        try {
+          const hData = user32.symbols.GetClipboardData(1) // CF_UNICODETEXT = 1
+          if (hData) {
+            const pStr = user32.symbols.GlobalLock(hData)
+            if (pStr) {
+              try {
+                const size = user32.symbols.GlobalSize(hData)
+                const bytes = new Uint8Array(Number(size))
+                const view = new Uint8Array(bytes.buffer)
+                const src = new Uint8Array(
+                  (globalThis as any).__memory.slice(pStr, Number(size)),
+                )
+                view.set(src)
+                // Read as null-terminated UTF-16LE string
+                const decoder = new TextDecoder("utf-16le")
+                const raw = decoder.decode(view)
+                const result = raw.replace(/\0+$/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                if (result) return { data: result, mime: "text/plain" }
+              } finally {
+                user32.symbols.GlobalUnlock(hData)
+              }
+            }
+          }
+        } finally {
+          user32.symbols.CloseClipboard()
+        }
+      }
+    } catch {
+      // Win32 FFI not available (non-Bun runtime), fall through
+    }
+
+    // PowerShell fallback
     const text = await command("powershell.exe", [
       "-NonInteractive",
       "-NoProfile",

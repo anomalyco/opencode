@@ -39,7 +39,8 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
     .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
     .catch(toast.error)
 
-  renderer.clearSelection()
+  // Delay clearSelection to prevent visual reflow ("text shrinking") in the console
+  setTimeout(() => renderer.clearSelection(), 150)
   return true
 }
 
@@ -64,7 +65,8 @@ export function handleSelectionKey(
   }
 
   if (event.name === "escape") {
-    renderer.clearSelection()
+    // Delay clearSelection to prevent visual reflow
+    setTimeout(() => renderer.clearSelection(), 150)
     event.preventDefault()
     event.stopPropagation()
     return
