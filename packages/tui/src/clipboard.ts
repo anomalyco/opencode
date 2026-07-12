@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process"
+import { execFile, spawn, execSync } from "node:child_process"
 import { readFile, rm } from "node:fs/promises"
 import { platform, release, tmpdir } from "node:os"
 import path from "node:path"
@@ -18,6 +18,15 @@ function command(command: string, args: string[] = [], input?: string) {
     })
     if (input !== undefined) child.stdin?.end(input)
   })
+}
+
+function commandSync(command: string, args: string[] = []): Buffer {
+  const result = execSync(`${command} ${args.map(a => `"${a}"`).join(" ")}`, {
+    timeout: 5000,
+    windowsHide: true,
+    encoding: "buffer",
+  })
+  return Buffer.isBuffer(result) ? result : Buffer.from(String(result))
 }
 
 function writeOsc52(text: string) {
@@ -68,52 +77,23 @@ export async function read() {
     if (x11.length) return { data: x11.toString("base64"), mime: "image/png" }
   }
 
-  // Windows: try Win32 API first (works in admin/elevated terminals), then PowerShell, then clipboardy
+  // Windows: try PowerShell with execSync first (works in admin/elevated terminals), then spawn, then clipboardy
   if (platform() === "win32" || release().includes("WSL")) {
-    // Win32 API fallback - works in all terminal privilege levels
+    // Method 1: execSync — most reliable in admin terminals
     try {
-      const { dlopen, ptr, CStr } = await import("bun:ffi")
-      const user32 = dlopen("user32.dll", {
-        OpenClipboard: { args: ["u32"], returns: "ptr" },
-        CloseClipboard: { args: [], returns: "i32" },
-        GetClipboardData: { args: ["u32"], returns: "ptr" },
-        GlobalLock: { args: ["ptr"], returns: "ptr" },
-        GlobalUnlock: { args: ["ptr"], returns: "i32" },
-        GlobalSize: { args: ["ptr"], returns: "usize" },
-      })
-      if (user32.symbols.OpenClipboard(0)) {
-        try {
-          const hData = user32.symbols.GetClipboardData(1) // CF_UNICODETEXT = 1
-          if (hData) {
-            const pStr = user32.symbols.GlobalLock(hData)
-            if (pStr) {
-              try {
-                const size = user32.symbols.GlobalSize(hData)
-                const bytes = new Uint8Array(Number(size))
-                const view = new Uint8Array(bytes.buffer)
-                const src = new Uint8Array(
-                  (globalThis as any).__memory.slice(pStr, Number(size)),
-                )
-                view.set(src)
-                // Read as null-terminated UTF-16LE string
-                const decoder = new TextDecoder("utf-16le")
-                const raw = decoder.decode(view)
-                const result = raw.replace(/\0+$/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                if (result) return { data: result, mime: "text/plain" }
-              } finally {
-                user32.symbols.GlobalUnlock(hData)
-              }
-            }
-          }
-        } finally {
-          user32.symbols.CloseClipboard()
-        }
-      }
+      const result = commandSync("powershell.exe", [
+        "-NonInteractive",
+        "-NoProfile",
+        "-command",
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard",
+      ])
+      const text = result.toString("utf-8").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trimEnd()
+      if (text) return { data: text, mime: "text/plain" }
     } catch {
-      // Win32 FFI not available (non-Bun runtime), fall through
+      // Fall through
     }
 
-    // PowerShell fallback
+    // Method 2: spawn — original approach
     const text = await command("powershell.exe", [
       "-NonInteractive",
       "-NoProfile",
