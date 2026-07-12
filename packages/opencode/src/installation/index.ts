@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Effect, Layer, Schema, Context, Stream } from "effect"
+import { Effect, Layer, Schema, Context, Stream, Option } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
@@ -15,7 +15,7 @@ import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/inst
 import { NpmConfig } from "@opencode-ai/core/npm-config"
 import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 
-export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
+export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "mise" | "unknown"
 
 export type ReleaseType = "patch" | "minor" | "major"
 
@@ -71,6 +71,13 @@ const ChocoPackage = Schema.Struct({
   d: Schema.Struct({ results: Schema.Array(Schema.Struct({ Version: Schema.String })) }),
 })
 const ScoopManifest = NpmPackage
+const MiseTool = Schema.Array(
+  Schema.Struct({
+    version: Schema.String,
+    requested_version: Schema.String,
+    source: Schema.Struct({ path: Schema.String }),
+  }),
+)
 
 export interface Interface {
   readonly info: () => Effect.Effect<Info>
@@ -164,6 +171,34 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
     )
 
+    const upgradeMise = Effect.fnUntraced(function* (target: string) {
+      const current = yield* run(["mise", "ls", "--current", "--json", "opencode"])
+      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MiseTool))(current.stdout).pipe(
+        Effect.option,
+      )
+      const tool = Option.getOrUndefined(decoded)?.[0]
+      if (current.code !== 0 || !tool?.source.path || tool.version !== InstallationVersion) {
+        return yield* run(["mise", "install", `opencode@${target}`])
+      }
+
+      const requested = tool.requested_version
+      const version = semver.valid(requested)
+        ? target
+        : /^\d+$/.test(requested)
+          ? target.split(".")[0]
+          : /^\d+\.\d+$/.test(requested)
+            ? target.split(".").slice(0, 2).join(".")
+            : requested
+      return yield* run([
+        "mise",
+        "use",
+        "--path",
+        tool.source.path,
+        semver.valid(requested) ? "--pin" : "--fuzzy",
+        `opencode@${version}`,
+      ])
+    })
+
     const result: Interface = {
       info: Effect.fn("Installation.info")(function* () {
         return {
@@ -172,9 +207,10 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         }
       }),
       method: Effect.fn("Installation.method")(function* () {
+        const exec = process.execPath.toLowerCase()
+        const mise = exec.includes(path.join("mise", "installs", "opencode"))
         if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
-        const exec = process.execPath.toLowerCase()
 
         const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
           { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
@@ -198,11 +234,12 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           const output = yield* check.command()
           const installedName =
             check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-          if (output.includes(installedName)) {
+          if (!mise && output.includes(installedName)) {
             return check.name
           }
         }
 
+        if (mise) return "mise" as Method
         return "unknown" as Method
       }),
       latest: Effect.fn("Installation.latest")(function* (installMethod?: Method) {
@@ -304,6 +341,9 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
             break
           case "scoop":
             upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
+            break
+          case "mise":
+            upgradeResult = yield* upgradeMise(target)
             break
           default:
             return yield* new UpgradeFailedError({ stderr: `Unknown installation method: ${m}` })
