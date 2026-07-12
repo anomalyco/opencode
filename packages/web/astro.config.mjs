@@ -16,6 +16,11 @@ export default defineConfig({
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",
+    routes: {
+      extend: {
+        exclude: [{ pattern: "/docs/pagefind/*" }],
+      },
+    },
   }),
   devToolbar: {
     enabled: false,
