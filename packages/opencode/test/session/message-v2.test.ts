@@ -1531,7 +1531,9 @@ describe("session.message-v2.fromError", () => {
   })
 
   test("surfaces SQLite details without query parameters", () => {
-    const cause = Object.assign(new Error("database or disk is full"), { code: "SQLITE_FULL" })
+    const cause = Object.assign(new Error("database or disk is full: native-sensitive-value"), {
+      code: "SQLITE_FULL",
+    })
     const error = new EffectDrizzleQueryError({
       query: "INSERT INTO message (data) VALUES (?)",
       params: ["sensitive-value"],
@@ -1552,6 +1554,7 @@ describe("session.message-v2.fromError", () => {
       data: { message: "Failed to execute statement: database or disk is full" },
     })
     expect(JSON.stringify(result)).not.toContain("sensitive-value")
+    expect(JSON.stringify(result)).not.toContain("native-sensitive-value")
   })
 
   test("classifies ZlibError from fetch as retryable APIError", () => {

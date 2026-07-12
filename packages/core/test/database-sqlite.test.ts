@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
+import { Sqlite } from "@opencode-ai/core/database/sqlite"
 import { Cause, Effect } from "effect"
 import { sql } from "drizzle-orm"
 import path from "path"
 import { tmpdir } from "./fixture/tmpdir"
 
-test("preserves native SQLite execution error details", async () => {
+test("preserves SQLite execution error codes", async () => {
   await using tmp = await tmpdir()
 
   await Effect.runPromise(
@@ -18,8 +19,19 @@ test("preserves native SQLite execution error details", async () => {
       if (!Cause.isCause(error.cause)) throw new Error("Expected query cause")
       const cause = Cause.squash(error.cause)
       if (!(cause instanceof Error)) throw new Error("Expected SQLite cause")
-      expect(cause.message).toContain("Failed to execute statement")
-      expect(cause.message).toContain("UNIQUE constraint failed")
+      expect(cause.message).toBe("Failed to execute statement (SQLITE_CONSTRAINT_UNIQUE)")
+      expect(cause.message).not.toContain("diagnostic.value")
     }).pipe(Effect.provide(Database.layerFromPath(path.join(tmp.path, "error.sqlite"))), Effect.scoped),
   )
+})
+
+test("reports disk exhaustion without copying the native message", () => {
+  const bun = Object.assign(new Error("database or disk is full: sensitive-value"), { code: "SQLITE_FULL" })
+  const node = Object.assign(new Error("database or disk is full: sensitive-value"), {
+    code: "ERR_SQLITE_ERROR",
+    errcode: 13,
+  })
+
+  expect(Sqlite.executeErrorMessage(bun)).toBe("Failed to execute statement: database or disk is full")
+  expect(Sqlite.executeErrorMessage(node)).toBe("Failed to execute statement: database or disk is full")
 })
