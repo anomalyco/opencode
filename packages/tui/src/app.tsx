@@ -1091,8 +1091,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
+
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          if (!promptRef.current?.focused) return
+          keymap.dispatchCommand("prompt.paste")
+          evt.preventDefault()
+          evt.stopPropagation()
+          return
+        }
 
         if (!Selection.copy(renderer, toast, clipboard)) return
         evt.preventDefault()
