@@ -203,12 +203,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
-    const search = (query: string, dirs: "true" | "false") =>
+    const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
       sdk()
-        .client.find.files({ query, dirs })
+        .client.find.files({ query, dirs, limit: options?.limit }, { signal: options?.signal })
         .then(
           (x) => (x.data ?? []).map(path.normalize),
-          () => [],
+          (error) => {
+            if (options?.signal?.aborted) throw error
+            return []
+          },
         )
 
     const stop = sdk().event.listen((e) => {
@@ -284,7 +287,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setScrollLeft,
       selectedLines,
       setSelectedLines,
-      searchFiles: (query: string) => search(query, "false"),
+      searchFiles: (query: string, options?: { limit?: number; signal?: AbortSignal }) =>
+        search(query, "false", options),
       searchFilesAndDirectories: (query: string) => search(query, "true"),
     }
   },

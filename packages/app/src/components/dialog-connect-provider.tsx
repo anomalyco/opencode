@@ -7,28 +7,173 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Tag } from "@opencode-ai/ui/tag"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@/utils/toast"
-import { type Accessor, createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
+import {
+  type Accessor,
+  type Component,
+  createEffect,
+  createMemo,
+  createResource,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
-import { useProviders } from "@/hooks/use-providers"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
+import { CustomProviderForm } from "./dialog-custom-provider"
 
-export function DialogConnectProvider(props: { provider: string; directory?: Accessor<string | undefined> }) {
+const CUSTOM_ID = "_custom"
+
+export function useProviderConnectController(options: { onBack?: () => void } = {}) {
+  const [store, setStore] = createStore({ selected: undefined as string | undefined })
+  const reset = () => setStore("selected", undefined)
+
+  return {
+    selected: () => store.selected,
+    select: (provider?: string) => setStore("selected", provider),
+    back: options.onBack ?? reset,
+  }
+}
+
+export const DialogConnectProvider: Component<{
+  directory?: Accessor<string | undefined>
+  controller?: ReturnType<typeof useProviderConnectController>
+}> = (props) => {
+  const fallback = useProviderConnectController()
+  const controller = props.controller ?? fallback
+  const language = useLanguage()
+  const reset = controller.back
+  const back = { current: reset }
+  const select = (provider?: string) => {
+    back.current = reset
+    controller.select(provider)
+  }
+
+  return (
+    <Dialog
+      class="h-full"
+      transition
+      title={
+        <Show when={controller.selected()} fallback={language.t("command.provider.connect")}>
+          <IconButton
+            tabIndex={-1}
+            icon="arrow-left"
+            variant="ghost"
+            onClick={() => back.current()}
+            aria-label={language.t("common.goBack")}
+          />
+        </Show>
+      }
+    >
+      <Switch>
+        <Match when={controller.selected() === CUSTOM_ID}>
+          <CustomProviderForm />
+        </Match>
+        <Match when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}>
+          {(provider) => (
+            <ProviderConnection
+              provider={provider()}
+              directory={props.directory}
+              onBack={reset}
+              setBack={(handler) => (back.current = handler)}
+            />
+          )}
+        </Match>
+        <Match when={true}>
+          <ProviderPicker directory={props.directory} onSelect={select} />
+        </Match>
+      </Switch>
+    </Dialog>
+  )
+}
+
+function ProviderPicker(props: { directory?: Accessor<string | undefined>; onSelect: (provider: string) => void }) {
+  const providers = useProviders(props.directory)
+  const language = useLanguage()
+  const popularGroup = () => language.t("dialog.provider.group.popular")
+  const otherGroup = () => language.t("dialog.provider.group.other")
+  const customLabel = () => language.t("settings.providers.tag.custom")
+  const note = (id: string) => {
+    if (id === "anthropic") return language.t("dialog.provider.anthropic.note")
+    if (id === "openai") return language.t("dialog.provider.openai.note")
+    if (id.startsWith("github-copilot")) return language.t("dialog.provider.copilot.note")
+    if (id === "opencode-go") return language.t("dialog.provider.opencodeGo.tagline")
+    return undefined
+  }
+
+  return (
+    <List
+      class="px-3"
+      search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
+      emptyMessage={language.t("dialog.provider.empty")}
+      activeIcon="plus-small"
+      key={(x) => x?.id}
+      items={() => {
+        language.locale()
+        return [{ id: CUSTOM_ID, name: customLabel() }, ...providers.all().values()]
+      }}
+      filterKeys={["id", "name"]}
+      groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}
+      sortBy={(a, b) => {
+        if (a.id === CUSTOM_ID) return -1
+        if (b.id === CUSTOM_ID) return 1
+        if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
+          return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
+        return a.name.localeCompare(b.name)
+      }}
+      sortGroupsBy={(a, b) => {
+        const popular = popularGroup()
+        if (a.category === popular && b.category !== popular) return -1
+        if (b.category === popular && a.category !== popular) return 1
+        return 0
+      }}
+      onSelect={(x) => {
+        if (!x) return
+        props.onSelect(x.id)
+      }}
+    >
+      {(i) => (
+        <div class="px-1.25 w-full flex items-center gap-x-3">
+          <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
+          <span>{i.name}</span>
+          <Show when={i.id === "opencode"}>
+            <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
+          </Show>
+          <Show when={i.id === CUSTOM_ID}>
+            <Tag>{language.t("settings.providers.tag.custom")}</Tag>
+          </Show>
+          <Show when={i.id === "opencode"}>
+            <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+          </Show>
+          <Show when={note(i.id)}>{(value) => <div class="text-14-regular text-text-weak">{value()}</div>}</Show>
+          <Show when={i.id === "opencode-go"}>
+            <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+          </Show>
+        </div>
+      )}
+    </List>
+  )
+}
+
+function ProviderConnection(props: {
+  provider: string
+  directory?: Accessor<string | undefined>
+  onBack: () => void
+  setBack: (handler: () => void) => void
+}) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const providers = useProviders(props.directory)
-
-  const all = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider directory={props.directory} />)
-    })
-  }
 
   const alive = { value: true }
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -364,20 +509,14 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
   }
 
   function goBack() {
-    if (methods().length === 1) {
-      all()
-      return
-    }
-    if (store.authorization) {
+    if (methods().length > 1 && store.methodIndex !== undefined) {
       dispatch({ type: "method.reset" })
       return
     }
-    if (store.methodIndex !== undefined) {
-      dispatch({ type: "method.reset" })
-      return
-    }
-    all()
+    props.onBack()
   }
+
+  props.setBack(goBack)
 
   function MethodSelection() {
     return (
@@ -599,79 +738,67 @@ export function DialogConnectProvider(props: { provider: string; directory?: Acc
   }
 
   return (
-    <Dialog
-      title={
-        <IconButton
-          tabIndex={-1}
-          icon="arrow-left"
-          variant="ghost"
-          onClick={goBack}
-          aria-label={language.t("common.goBack")}
-        />
-      }
-    >
-      <div class="flex flex-col gap-6 px-2.5 pb-3">
-        <div class="px-2.5 flex gap-4 items-center">
-          <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">
-            <Switch>
-              <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
-                {language.t("provider.connect.title.anthropicProMax")}
-              </Match>
-              <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
-            </Switch>
-          </div>
-        </div>
-        <div class="px-2.5 pb-10 flex flex-col gap-6">
-          <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
-            <Switch>
-              <Match when={loading()}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-2">
-                    <Spinner />
-                    <span>{language.t("provider.connect.status.inProgress")}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={store.methodIndex === undefined}>
-                <MethodSelection />
-              </Match>
-              <Match when={store.state === "pending"}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-2">
-                    <Spinner />
-                    <span>{language.t("provider.connect.status.inProgress")}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={store.state === "prompt"}>
-                <AuthPromptsView />
-              </Match>
-              <Match when={store.state === "error"}>
-                <div class="text-14-regular text-text-base">
-                  <div class="flex items-center gap-x-2">
-                    <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                    <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
-                  </div>
-                </div>
-              </Match>
-              <Match when={method()?.type === "api"}>
-                <ApiAuthView />
-              </Match>
-              <Match when={method()?.type === "oauth"}>
-                <Switch>
-                  <Match when={store.authorization?.method === "code"}>
-                    <OAuthCodeView />
-                  </Match>
-                  <Match when={store.authorization?.method === "auto"}>
-                    <OAuthAutoView />
-                  </Match>
-                </Switch>
-              </Match>
-            </Switch>
-          </div>
+    <div class="flex flex-col gap-6 px-2.5 pb-3">
+      <div class="px-2.5 flex gap-4 items-center">
+        <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
+        <div class="text-16-medium text-text-strong">
+          <Switch>
+            <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
+              {language.t("provider.connect.title.anthropicProMax")}
+            </Match>
+            <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
+          </Switch>
         </div>
       </div>
-    </Dialog>
+      <div class="px-2.5 pb-10 flex flex-col gap-6">
+        <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
+          <Switch>
+            <Match when={loading()}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-2">
+                  <Spinner />
+                  <span>{language.t("provider.connect.status.inProgress")}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={store.methodIndex === undefined}>
+              <MethodSelection />
+            </Match>
+            <Match when={store.state === "pending"}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-2">
+                  <Spinner />
+                  <span>{language.t("provider.connect.status.inProgress")}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={store.state === "prompt"}>
+              <AuthPromptsView />
+            </Match>
+            <Match when={store.state === "error"}>
+              <div class="text-14-regular text-text-base">
+                <div class="flex items-center gap-x-2">
+                  <Icon name="circle-ban-sign" class="text-icon-critical-base" />
+                  <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
+                </div>
+              </div>
+            </Match>
+            <Match when={method()?.type === "api"}>
+              <ApiAuthView />
+            </Match>
+            <Match when={method()?.type === "oauth"}>
+              <Switch>
+                <Match when={store.authorization?.method === "code"}>
+                  <OAuthCodeView />
+                </Match>
+                <Match when={store.authorization?.method === "auto"}>
+                  <OAuthAutoView />
+                </Match>
+              </Switch>
+            </Match>
+          </Switch>
+        </div>
+      </div>
+    </div>
   )
 }
