@@ -3031,100 +3031,6 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("models outside the catalog keep guessed variants", () => {
-    const model = createMockModel({
-      id: "openai/gpt-5.4",
-      providerID: "openai",
-      api: { id: "gpt-5.4", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
-      release_date: "2026-03-05",
-    })
-
-    expect(Object.keys(ProviderTransform.variants(model))).toEqual(["none", "low", "medium", "high", "xhigh"])
-  })
-
-  test("catalog budget options drive variants", () => {
-    const model = createMockModel({
-      id: "anthropic/claude-budget",
-      providerID: "anthropic",
-      api: { id: "claude-budget", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
-      reasoning_options: [{ type: "budget_tokens", min: 1024, max: 64_000 }],
-    })
-
-    expect(ProviderTransform.variants(model)).toEqual({
-      high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
-      max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
-    })
-  })
-
-  test("catalog budget options fit within small model output limits", () => {
-    const model = createMockModel({
-      id: "subconscious/tim-qwen3.6-27b",
-      providerID: "subconscious",
-      api: { id: "subconscious/tim-qwen3.6-27b", url: "https://api.subconscious.dev", npm: "@ai-sdk/anthropic" },
-      limit: { context: 8192, output: 5000 },
-      reasoning_options: [{ type: "budget_tokens" }],
-    })
-    const variants = ProviderTransform.variants(model)
-
-    expect(variants).toEqual({
-      high: { thinking: { type: "enabled", budgetTokens: 2500 } },
-      max: { thinking: { type: "enabled", budgetTokens: 4999 } },
-    })
-    expect(ProviderTransform.maxOutputTokens(model, undefined, variants.high)).toBe(2500)
-    expect(ProviderTransform.maxOutputTokens(model, undefined, variants.max)).toBe(1)
-    expect(
-      ProviderTransform.maxOutputTokens(
-        {
-          ...model,
-          api: { ...model.api, id: "anthropic.claude-v2", npm: "@ai-sdk/amazon-bedrock" },
-        },
-        undefined,
-        { reasoningConfig: { type: "enabled", budgetTokens: 2500 } },
-      ),
-    ).toBe(2500)
-    expect(
-      ProviderTransform.maxOutputTokens(
-        {
-          ...model,
-          api: { ...model.api, id: "anthropic/claude-v2", npm: "@ai-sdk/gateway" },
-        },
-        undefined,
-        variants.high,
-      ),
-    ).toBe(2500)
-  })
-
-  test("catalog gateway aliases use the routed API ID", () => {
-    const anthropic = createMockModel({
-      id: "my-claude",
-      providerID: "gateway",
-      api: {
-        id: "anthropic/claude-sonnet-4-6",
-        url: "https://gateway.ai",
-        npm: "@ai-sdk/gateway",
-      },
-      reasoning_options: [{ type: "effort", values: ["high"] }],
-    })
-    const google = createMockModel({
-      id: "my-gemini",
-      providerID: "gateway",
-      api: {
-        id: "google/gemini-2.5-pro",
-        url: "https://gateway.ai",
-        npm: "@ai-sdk/gateway",
-      },
-      reasoning_options: [{ type: "budget_tokens", min: 128, max: 32_768 }],
-    })
-
-    expect(ProviderTransform.variants(anthropic)).toEqual({
-      high: { thinking: { type: "adaptive" }, effort: "high" },
-    })
-    expect(ProviderTransform.variants(google)).toEqual({
-      high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
-      max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 31_999 } },
-    })
-  })
-
   test("deepseek returns empty object", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
@@ -3466,23 +3372,6 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
-    test("configured aliases use the routed API ID", () => {
-      const model = createMockModel({
-        id: "my-claude",
-        providerID: "gateway",
-        api: {
-          id: "anthropic/claude-sonnet-4-6",
-          url: "https://gateway.ai",
-          npm: "@ai-sdk/gateway",
-        },
-      })
-
-      expect(ProviderTransform.variants(model).high).toEqual({
-        thinking: { type: "adaptive" },
-        effort: "high",
-      })
-    })
-
     test("anthropic sonnet 4.6 models return adaptive thinking options", () => {
       const model = createMockModel({
         id: "anthropic/claude-sonnet-4-6",

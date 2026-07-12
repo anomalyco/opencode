@@ -4,7 +4,6 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
-import { ProviderReasoning } from "./reasoning"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -17,6 +16,11 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export const OUTPUT_TOKEN_MAX = 32_000
+
+// OpenAI Responses `include` value that returns the encrypted reasoning state
+// needed for stateless multi-turn reasoning (store: false). Hoisted so every
+// branch that requests it stays in lockstep.
+const INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"] as const
 
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
@@ -593,6 +597,40 @@ function openaiCompatibleReasoningEfforts(id: string) {
   return gpt5CodexReasoningEfforts(apiId) ?? versionedGpt5ReasoningEfforts(apiId) ?? OPENAI_EFFORTS
 }
 
+function anthropicOpus47OrLater(apiId: string) {
+  // Matches "opus-4.7" (Anthropic/Bedrock/Vertex) and "claude-4.7-opus" (SAP AI Core inverted).
+  // Greedy \d+ correctly extends to multi-digit majors (e.g. "claude-10.0-opus") for forward compatibility.
+  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  const major = Number(version[1] ?? version[3])
+  const minor = Number(version[2] ?? version[4])
+  return major > 4 || (major === 4 && minor >= 7)
+}
+
+function anthropicSonnet5OrLater(apiId: string) {
+  const version = /sonnet-(\d+)(?:[.@-]|$)|claude-(\d+)-sonnet(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  return Number(version[1] ?? version[2]) >= 5
+}
+
+function anthropicAdaptiveEfforts(apiId: string): string[] | null {
+  if (anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes("fable-5")) {
+    return ["low", "medium", "high", "xhigh", "max"]
+  }
+  if (
+    ["opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus", "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet"].some((v) =>
+      apiId.includes(v),
+    )
+  ) {
+    return ["low", "medium", "high", "max"]
+  }
+  return null
+}
+
+function anthropicOmitsThinking(apiId: string) {
+  return anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes("fable-5")
+}
+
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
   if (!id.includes("gemini-3")) return ["low", "high"]
@@ -606,6 +644,12 @@ function googleThinkingBudgetMax(apiId: string) {
   const id = apiId.toLowerCase()
   if (id.includes("2.5") && id.includes("pro") && !id.includes("flash")) return 32_768
   return 24_576
+}
+
+// SAP's Zod schema drops unknown top-level keys; reasoning controls survive
+// only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
+function wrapInSapModelParams(variants: Record<string, Record<string, any>>): Record<string, Record<string, any>> {
+  return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
 }
 
 function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
@@ -629,9 +673,6 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
-  const fromCatalog = ProviderReasoning.variants(model, OUTPUT_TOKEN_MAX)
-  if (fromCatalog) return fromCatalog
-
   const id = model.id.toLowerCase()
   const glm52 = ["glm-5.2", "glm-5-2", "glm-5p2"].some(
     (name) => id.includes(name) || model.api.id.toLowerCase().includes(name),
@@ -645,8 +686,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       thinking: { thinking: { type: "adaptive" } },
     }
   }
-  const adaptiveThinkingOmitted = ProviderReasoning.anthropicOmitsThinking(model.api.id)
-  const adaptiveEfforts = ProviderReasoning.anthropicAdaptiveEfforts(model.api.id)
+  const adaptiveThinkingOmitted = anthropicOmitsThinking(model.api.id)
+  const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (glm52 && model.api.npm === "@openrouter/ai-sdk-provider") {
     // OpenRouter maps xhigh to GLM-5.2's native max effort.
     return {
@@ -718,7 +759,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     }
 
     case "@ai-sdk/gateway":
-      if (model.api.id.includes("anthropic")) {
+      if (model.id.includes("anthropic")) {
         if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
@@ -751,7 +792,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         }
       }
-      if (model.api.id.includes("google")) {
+      if (model.id.includes("google")) {
         if (id.includes("2.5")) {
           return {
             high: {
@@ -803,7 +844,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: ProviderReasoning.INCLUDE_ENCRYPTED_REASONING,
+            include: INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -837,7 +878,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: ProviderReasoning.INCLUDE_ENCRYPTED_REASONING,
+            include: INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -850,7 +891,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             {
               reasoningEffort: effort,
               reasoningSummary: "auto",
-              include: ProviderReasoning.INCLUDE_ENCRYPTED_REASONING,
+              include: INCLUDE_ENCRYPTED_REASONING,
             },
           ]),
         )
@@ -863,7 +904,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: ProviderReasoning.INCLUDE_ENCRYPTED_REASONING,
+            include: INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -1010,7 +1051,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         if (adaptiveEfforts) {
           // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
           // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
-          return ProviderReasoning.wrapInSapModelParams(
+          return wrapInSapModelParams(
             Object.fromEntries(
               adaptiveEfforts.map((effort) => [
                 effort,
@@ -1022,21 +1063,19 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             ),
           )
         }
-        return ProviderReasoning.wrapInSapModelParams({
+        return wrapInSapModelParams({
           high: { thinking: { type: "enabled", budget_tokens: 16000 } },
           max: { thinking: { type: "enabled", budget_tokens: 31999 } },
         })
       }
       if (id.includes("gemini") && id.includes("2.5")) {
-        return ProviderReasoning.wrapInSapModelParams(googleThinkingVariants(model))
+        return wrapInSapModelParams(googleThinkingVariants(model))
       }
       if (id.includes("gpt") || /\bo[1-9]/.test(id)) {
         const efforts = openaiReasoningEfforts(id, model.release_date)
-        return ProviderReasoning.wrapInSapModelParams(
-          Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])),
-        )
+        return wrapInSapModelParams(Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])))
       }
-      return ProviderReasoning.wrapInSapModelParams(
+      return wrapInSapModelParams(
         Object.fromEntries(["low", "medium", "high"].map((effort) => [effort, { reasoning_effort: effort }])),
       )
     }
@@ -1112,7 +1151,7 @@ export function options(input: {
   if (input.model.providerID === "meta" && input.model.api.npm === "@ai-sdk/openai") {
     result["reasoningEffort"] = "high"
     result["reasoningSummary"] = "auto"
-    result["include"] = ProviderReasoning.INCLUDE_ENCRYPTED_REASONING
+    result["include"] = INCLUDE_ENCRYPTED_REASONING
   }
 
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
@@ -1175,7 +1214,7 @@ export function options(input: {
         result["reasoningSummary"] = "auto"
       }
       if (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle") {
-        result["include"] = ProviderReasoning.INCLUDE_ENCRYPTED_REASONING
+        result["include"] = INCLUDE_ENCRYPTED_REASONING
       }
     }
 
@@ -1192,7 +1231,7 @@ export function options(input: {
 
     if (input.model.providerID.startsWith("opencode")) {
       result["promptCacheKey"] = input.sessionID
-      result["include"] = ProviderReasoning.INCLUDE_ENCRYPTED_REASONING
+      result["include"] = INCLUDE_ENCRYPTED_REASONING
       result["reasoningSummary"] = "auto"
     }
   }
@@ -1303,25 +1342,8 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   return { [key]: normalized }
 }
 
-export function maxOutputTokens(
-  model: Provider.Model,
-  outputTokenMax = OUTPUT_TOKEN_MAX,
-  options?: Record<string, unknown>,
-): number {
-  const output = Math.min(model.limit.output, outputTokenMax) || outputTokenMax
-  // Anthropic-backed SDKs add the thinking budget to maxOutputTokens, so reserve it from the total envelope here.
-  const config =
-    model.api.npm === "@ai-sdk/anthropic" ||
-    model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
-    (model.api.npm === "@ai-sdk/gateway" && model.api.id.includes("anthropic"))
-      ? options?.thinking
-      : model.api.npm === "@ai-sdk/amazon-bedrock" && model.api.id.includes("anthropic")
-        ? options?.reasoningConfig
-        : undefined
-  if (!isPlainObject(config)) return output
-  if (config.type !== "enabled") return output
-  if (typeof config.budgetTokens !== "number") return output
-  return Math.max(1, output - config.budgetTokens)
+export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
+  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
 }
 
 type JsonRecord = Record<string, unknown>
