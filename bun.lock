@@ -1083,6 +1083,7 @@
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
+    "@remix-run/router": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
   },
@@ -1104,6 +1105,7 @@
     "@opentui/solid": "0.4.3",
     "@pierre/diffs": "1.2.10",
     "@playwright/test": "1.59.1",
+    "@remix-run/router": "1.23.2",
     "@sentry/solid": "10.36.0",
     "@sentry/vite-plugin": "4.6.0",
     "@shikijs/stream": "4.2.0",
@@ -2426,7 +2428,7 @@
 
     "@remix-run/node-fetch-server": ["@remix-run/node-fetch-server@0.8.1", "", {}, "sha512-J1dev372wtJqmqn9U/qbpbZxbJSQrogNN2+Qv1lKlpATpe/WQ9aCZfl/xSb9d2Rgh1IyLSvNxZAXPZxruO6Xig=="],
 
-    "@remix-run/router": ["@remix-run/router@1.9.0", "", {}, "sha512-bV63itrKBC0zdT27qYm6SDZHlkXwFL1xMBuhkn+X7l0+IIhNaH5wuuvZKp6eKhCD4KFhujhfhCT1YxXW6esUIA=="],
+    "@remix-run/router": ["@remix-run/router@1.23.2", "", {}, "sha512-Ic6m2U/rMjTkhERIa/0ZtXJP17QUi2CbWE7cqx4J58M8aA3QTfW+2UlQ4psvTX9IO1RfNVhK3pcpdjej7L+t2w=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-beta.27", "", {}, "sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA=="],
 
