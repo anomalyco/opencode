@@ -370,20 +370,17 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
-          ctx.event.preventDefault()
-          ctx.event.stopPropagation()
           const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
+            ctx.event.preventDefault()
+            ctx.event.stopPropagation()
             await pasteAttachment({
               filename: "clipboard",
               mime: content.mime,
               content: content.data,
             })
-            return
           }
-          if (content?.mime === "text/plain") {
-            await pasteInputText(content.data)
-          }
+          // Text paste is handled by bracketed paste (onPaste) which is faster
         },
       },
       {

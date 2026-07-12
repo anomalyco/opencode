@@ -68,6 +68,18 @@ export async function read() {
     if (x11.length) return { data: x11.toString("base64"), mime: "image/png" }
   }
 
+  // Windows: use PowerShell Get-Clipboard directly (faster and more reliable than clipboardy)
+  if (platform() === "win32" || release().includes("WSL")) {
+    const text = await command("powershell.exe", [
+      "-NonInteractive",
+      "-NoProfile",
+      "-command",
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard",
+    ]).catch(() => Buffer.alloc(0))
+    const result = text.toString("utf-8").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trimEnd()
+    if (result) return { data: result, mime: "text/plain" }
+  }
+
   const { default: clipboardy } = await import("clipboardy")
   const text = await clipboardy.read().catch(() => undefined)
   if (text) return { data: text, mime: "text/plain" }
