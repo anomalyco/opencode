@@ -42,16 +42,23 @@ stdenv.mkDerivation (finalAttrs: {
     ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
   };
 
-  # https://github.com/electron/electron/issues/31121
-  # mac builds use a .app bundle which doesnt have this issue
-  postPatch = lib.optionalString stdenv.isLinux ''
-    BASE_PATH=packages/desktop
-    FILES=(src/main/windows.ts)
-    for file in "''${FILES[@]}"; do
-      substituteInPlace $BASE_PATH/$file \
-        --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
-    done
-  '';
+  postPatch =
+    ''
+      # NOTE: Relax Bun version check to be a warning instead of an error
+      substituteInPlace packages/script/src/index.ts \
+        --replace-fail 'throw new Error(`This script requires bun@''${expectedBunVersionRange}' \
+                       'console.warn(`Warning: This script requires bun@''${expectedBunVersionRange}'
+    ''
+    # https://github.com/electron/electron/issues/31121
+    # mac builds use a .app bundle which doesnt have this issue
+    + lib.optionalString stdenv.isLinux ''
+      BASE_PATH=packages/desktop
+      FILES=(src/main/windows.ts)
+      for file in "''${FILES[@]}"; do
+        substituteInPlace $BASE_PATH/$file \
+          --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
+      done
+    '';
 
   preBuild = ''
     cp -r "${electron.dist}" $HOME/.electron-dist
