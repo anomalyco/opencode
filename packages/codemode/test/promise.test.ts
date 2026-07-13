@@ -17,7 +17,13 @@ type Trace = {
 
 const makeTrace = (): Trace => ({ starts: [], active: 0, maxActive: 0, completed: 0, interrupted: 0 })
 
-/** Echoes `id` after `ms` milliseconds, recording start order, live concurrency, and interruption. */
+/**
+ * Echoes `id` after `ms` milliseconds, recording start order, live concurrency, and interruption.
+ *
+ * Convention: a sleeper the test expects to be interrupted sleeps 60000ms so the assertion
+ * has no scheduling margin (interruption costs no wall time). Short sleeps are only for
+ * calls that must complete.
+ */
 const sleepyTool = (trace: Trace) =>
   Tool.make({
     description: "Echo an id after a delay",
@@ -228,7 +234,7 @@ describe("first-class promise values", () => {
     const trace = makeTrace()
     const result = await run(
       `
-        tools.host.sleepy({ id: 1, ms: 30 })
+        tools.host.sleepy({ id: 1, ms: 60000 })
         return "done"
       `,
       { trace },
@@ -373,7 +379,7 @@ describe("first-class promise values", () => {
     const trace = makeTrace()
     const result = await run(
       `
-        tools.host.sleepy({ id: 1, ms: 1_000 })
+        tools.host.sleepy({ id: 1, ms: 60_000 })
         throw new Error("boom")
       `,
       { trace },
@@ -601,7 +607,7 @@ describe("Promise.all over arbitrary arrays", () => {
         `
           try {
             await Promise.all([
-              tools.host.sleepy({ id: 1, ms: 100 }),
+              tools.host.sleepy({ id: 1, ms: 60000 }),
               tools.host.fail({}),
             ])
             return -1
@@ -643,7 +649,7 @@ describe("Promise.all over arbitrary arrays", () => {
       await value(
         `
           const failLater = async () => {
-            await tools.host.sleepy({ id: 1, ms: 40 })
+            await tools.host.sleepy({ id: 1, ms: 60000 })
             throw new Error("later")
           }
           const aggregate = Promise.all([Promise.reject(new Error("first")), failLater()])
@@ -712,7 +718,7 @@ describe("Promise.race", () => {
     const result = await value(
       `
         const fast = tools.host.sleepy({ id: 1, ms: 10 })
-        const slow = tools.host.sleepy({ id: 2, ms: 40 })
+        const slow = tools.host.sleepy({ id: 2, ms: 60000 })
         return await Promise.race([fast, slow])
       `,
       { trace },
@@ -740,8 +746,8 @@ describe("Promise.race", () => {
       await value(
         `
           const nested = Promise.all([
-            tools.host.sleepy({ id: 1, ms: 40 }),
-            tools.host.sleepy({ id: 2, ms: 40 }),
+            tools.host.sleepy({ id: 1, ms: 60000 }),
+            tools.host.sleepy({ id: 2, ms: 60000 }),
           ])
           return await Promise.race(["immediate", nested])
         `,
@@ -769,7 +775,7 @@ describe("Promise.race", () => {
   test("a plain value wins over pending promises", async () => {
     const trace = makeTrace()
     expect(
-      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 40 }), "immediate"])`, { trace }),
+      await value(`return await Promise.race([tools.host.sleepy({ id: 1, ms: 60000 }), "immediate"])`, { trace }),
     ).toBe("immediate")
     expect(trace.completed).toBe(0)
     expect(trace.interrupted).toBe(1)
