@@ -1578,4 +1578,189 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   return schema
 }
 
+export function reasoningVariants(model: ModelsDev.Model, target: Provider.Model): Provider.Model["variants"] {
+  const options = model.reasoning_options
+  if (options === undefined) return
+  if (options.length === 0) return {}
+
+  const effort = options.find((option) => option.type === "effort")
+  if (effort) return nonEmptyVariants(effortVariants(target, effort.values))
+
+  const toggle = options.some((option) => option.type === "toggle")
+  const budget = options.find((option) => option.type === "budget_tokens")
+  if (!budget) return toggle ? nonEmptyVariants(reasoningToggle(target)) : undefined
+
+  return nonEmptyVariants({
+    ...(toggle ? reasoningToggle(target) : {}),
+    ...budgetVariants(target, budget.min, budget.max),
+  })
+}
+
+function effortVariants(model: Provider.Model, values: readonly unknown[]) {
+  return Object.fromEntries(
+    values.flatMap((value) => {
+      const id = (() => {
+        if (value === null) return "none"
+        if (typeof value === "string") return value
+      })()
+      if (id === undefined) return []
+      const settings = reasoningEffort(model, id)
+      return settings ? [[id, settings]] : []
+    }),
+  )
+}
+
+function budgetVariants(model: Provider.Model, min?: number, max?: number) {
+  const limit = model.limit.output - 1
+  if (limit <= 0) return {}
+  const high = Math.min(
+    max === undefined ? Math.max(min ?? 0, 16_000) : Math.min(Math.max(min ?? 0, 16_000), max),
+    limit,
+  )
+  const maximum = max === undefined ? undefined : Math.min(max, limit)
+  return Object.fromEntries(
+    [
+      { id: "high", budget: high },
+      ...(maximum === undefined || maximum === high ? [] : [{ id: "max", budget: maximum }]),
+    ].flatMap((item) => {
+      const settings = reasoningBudget(model, item.budget)
+      return settings ? [[item.id, settings]] : []
+    }),
+  )
+}
+
+function nonEmptyVariants(variants: NonNullable<Provider.Model["variants"]>): Provider.Model["variants"] {
+  return Object.keys(variants).length > 0 ? variants : undefined
+}
+
+function reasoningToggle(model: Provider.Model): NonNullable<Provider.Model["variants"]> {
+  if (model.api.npm === "@ai-sdk/alibaba")
+    return {
+      none: { enableThinking: false },
+      high: { enableThinking: true },
+    }
+  if (model.api.npm === "@ai-sdk/cohere")
+    return {
+      none: { thinking: { type: "disabled" } },
+      high: { thinking: { type: "enabled" } },
+    }
+  return {}
+}
+
+function reasoningEffort(model: Provider.Model, effort: string) {
+  switch (model.api.npm) {
+    case "@openrouter/ai-sdk-provider":
+      return { reasoning: { effort } }
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google-vertex/anthropic":
+      return anthropicEffort(model, effort)
+    case "@ai-sdk/google":
+    case "@ai-sdk/google-vertex":
+      return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+    case "@ai-sdk/amazon-bedrock":
+      if (anthropicAdaptiveEfforts(model.api.id))
+        return {
+          reasoningConfig: {
+            type: "adaptive",
+            maxReasoningEffort: effort,
+            ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}),
+          },
+        }
+      if (model.api.id.includes("anthropic")) return
+      return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
+    case "@ai-sdk/gateway":
+      if (model.id.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }
+      if (model.id.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+      return { reasoningEffort: effort }
+    case "@ai-sdk/github-copilot":
+      // OAuth discovery replaces these with variants from Copilot's /models capabilities.
+      if (model.id.includes("gemini")) return
+      if (model.id.includes("claude")) return { reasoningEffort: effort }
+      return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
+    case "@ai-sdk/openai":
+    case "@ai-sdk/amazon-bedrock/mantle":
+      return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
+    case "@ai-sdk/azure":
+      return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
+    case "@jerome-benoit/sap-ai-provider-v2":
+      if (model.id.includes("anthropic"))
+        return { modelParams: { thinking: { type: "adaptive", display: "summarized" }, output_config: { effort } } }
+      return { modelParams: { reasoning_effort: effort } }
+    case "@ai-sdk/openai-compatible":
+    case "@ai-sdk/xai":
+    case "@ai-sdk/mistral":
+    case "@ai-sdk/groq":
+    case "@ai-sdk/cerebras":
+    case "@ai-sdk/deepinfra":
+    case "@ai-sdk/togetherai":
+    case "venice-ai-sdk-provider":
+    case "ai-gateway-provider":
+      return { reasoningEffort: effort }
+    case "@ai-sdk/cohere":
+    case "@ai-sdk/perplexity":
+    case "@ai-sdk/vercel":
+    case "@ai-sdk/alibaba":
+    case "gitlab-ai-provider":
+      return
+  }
+}
+
+function anthropicEffort(model: Provider.Model, effort: string) {
+  if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value))) return { effort }
+  if (!anthropicAdaptiveEfforts(model.api.id)) return
+  return {
+    thinking: {
+      type: "adaptive",
+      ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}),
+    },
+    effort,
+  }
+}
+
+function reasoningBudget(model: Provider.Model, budget: number) {
+  switch (model.api.npm) {
+    case "@openrouter/ai-sdk-provider":
+      return { reasoning: { max_tokens: budget } }
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google-vertex/anthropic":
+      return { thinking: { type: "enabled", budgetTokens: budget } }
+    case "@ai-sdk/google":
+    case "@ai-sdk/google-vertex":
+      return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+    case "@ai-sdk/amazon-bedrock":
+      return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
+    case "@ai-sdk/gateway":
+      if (model.id.includes("anthropic")) return { thinking: { type: "enabled", budgetTokens: budget } }
+      if (model.id.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+      return
+    case "@ai-sdk/cohere":
+      return { thinking: { type: "enabled", tokenBudget: budget } }
+    case "@ai-sdk/alibaba":
+      return { enableThinking: true, thinkingBudget: budget }
+    case "@jerome-benoit/sap-ai-provider-v2":
+      if (model.id.includes("anthropic"))
+        return { modelParams: { thinking: { type: "enabled", budget_tokens: budget } } }
+      if (model.id.includes("gemini"))
+        return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
+      return
+    case "@ai-sdk/amazon-bedrock/mantle":
+    case "@ai-sdk/azure":
+    case "@ai-sdk/cerebras":
+    case "@ai-sdk/deepinfra":
+    case "@ai-sdk/github-copilot":
+    case "@ai-sdk/groq":
+    case "@ai-sdk/mistral":
+    case "@ai-sdk/openai":
+    case "@ai-sdk/openai-compatible":
+    case "@ai-sdk/perplexity":
+    case "@ai-sdk/togetherai":
+    case "@ai-sdk/vercel":
+    case "@ai-sdk/xai":
+    case "ai-gateway-provider":
+    case "gitlab-ai-provider":
+    case "venice-ai-sdk-provider":
+      return
+  }
+}
+
 export * as ProviderTransform from "./transform"
