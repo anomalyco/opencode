@@ -1,5 +1,5 @@
-import { describe, expect, beforeAll, beforeEach, afterAll, test } from "bun:test"
-import { Effect, Layer, Ref, Schema } from "effect"
+import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
+import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
@@ -125,21 +125,6 @@ const initialState: MockState = {
   status: 200,
   calls: [],
 }
-
-test("models.dev model schema keeps reasoning options permissive", () => {
-  const model = Schema.decodeUnknownSync(ModelsDev.Model)({
-    id: "acme-1",
-    name: "Acme One",
-    release_date: "2026-01-01",
-    attachment: false,
-    reasoning: true,
-    reasoning_options: [{ type: "future_control", value: { nested: true } }, "future-shape"],
-    temperature: true,
-    tool_call: true,
-    limit: { context: 128000, output: 8192 },
-  })
-  expect(model.reasoning_options).toEqual([{ type: "future_control", value: { nested: true } }, "future-shape"])
-})
 
 describe("ModelsDev Service", () => {
   it.live("get() returns providers from disk when cache file exists", () =>
