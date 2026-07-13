@@ -102,6 +102,35 @@ export function isPrivateIp(ip: string): boolean {
 
 const ALLOW_PRIVATE_HINT = "Set OPENCODE_WEBFETCH_ALLOW_PRIVATE=1 to allow fetching private/internal addresses."
 
+/**
+ * Pull the charset label out of a Content-Type header, e.g.
+ * `text/html; charset=Shift_JIS` -> `shift_jis`. Returns undefined when no
+ * charset is declared. Surrounding quotes (`charset="utf-8"`) are stripped.
+ */
+export function parseCharset(contentType: string): string | undefined {
+  const match = contentType.match(/;\s*charset\s*=\s*"?([^";]+)"?/i)
+  return match ? match[1]!.trim().toLowerCase() || undefined : undefined
+}
+
+/**
+ * Decode a response body using the charset advertised in its Content-Type,
+ * falling back to UTF-8. Previously every body was decoded as UTF-8, so pages
+ * served as windows-1252, shift_jis, euc-kr, etc. came back as mojibake.
+ * An unknown/unsupported label (TextDecoder throws on construction) also falls
+ * back to UTF-8 rather than failing the whole fetch.
+ */
+export function decodeBody(buffer: Uint8Array, contentType: string): string {
+  const charset = parseCharset(contentType)
+  if (charset && charset !== "utf-8" && charset !== "utf8") {
+    try {
+      return new TextDecoder(charset).decode(buffer)
+    } catch {
+      // Unsupported label — fall through to UTF-8.
+    }
+  }
+  return new TextDecoder("utf-8").decode(buffer)
+}
+
 export async function assertPublicUrl(rawUrl: string): Promise<void> {
   // URL.hostname keeps brackets for IPv6 literals (e.g. "[::1]"); strip them so net.isIP works.
   const host = new URL(rawUrl).hostname.replace(/^\[|\]$/g, "")
@@ -300,7 +329,7 @@ export const WebFetchTool = Tool.define(
             }
           }
 
-          const content = new TextDecoder().decode(arrayBuffer)
+          const content = decodeBody(arrayBuffer, contentType)
 
           // Handle content based on requested format and actual content type
           switch (params.format) {

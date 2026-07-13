@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { isPrivateIp, assertPublicUrl } from "../../src/tool/webfetch"
+import { isPrivateIp, assertPublicUrl, parseCharset, decodeBody } from "../../src/tool/webfetch"
 
 describe("isPrivateIp", () => {
   const priv = [
@@ -92,5 +92,37 @@ describe("assertPublicUrl", () => {
 
   test("allows a public IPv6 literal without DNS", async () => {
     await expect(assertPublicUrl("http://[2606:4700:4700::1111]/")).resolves.toBeUndefined()
+  })
+})
+
+describe("parseCharset", () => {
+  test("extracts a charset label", () => {
+    expect(parseCharset("text/html; charset=Shift_JIS")).toBe("shift_jis")
+  })
+  test("strips surrounding quotes", () => {
+    expect(parseCharset('text/html; charset="utf-8"')).toBe("utf-8")
+  })
+  test("tolerates spacing", () => {
+    expect(parseCharset("text/html ; charset = windows-1252")).toBe("windows-1252")
+  })
+  test("returns undefined when absent", () => {
+    expect(parseCharset("text/html")).toBeUndefined()
+    expect(parseCharset("")).toBeUndefined()
+  })
+})
+
+describe("decodeBody", () => {
+  test("decodes windows-1252 declared bodies", () => {
+    // 0x93/0x94 are curly quotes in windows-1252 but invalid lead bytes in UTF-8.
+    const bytes = new Uint8Array([0x93, 0x68, 0x69, 0x94])
+    expect(decodeBody(bytes, "text/html; charset=windows-1252")).toBe("“hi”")
+  })
+  test("defaults to utf-8 when no charset is declared", () => {
+    const bytes = new TextEncoder().encode("héllo")
+    expect(decodeBody(bytes, "text/plain")).toBe("héllo")
+  })
+  test("falls back to utf-8 for an unsupported charset label", () => {
+    const bytes = new TextEncoder().encode("ok")
+    expect(decodeBody(bytes, "text/plain; charset=not-a-real-charset")).toBe("ok")
   })
 })
