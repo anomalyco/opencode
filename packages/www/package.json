@@ -8,6 +8,7 @@
     "dev": "vite dev --host 0.0.0.0 --port 3000",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "pretypecheck": "fumadocs-mdx",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
