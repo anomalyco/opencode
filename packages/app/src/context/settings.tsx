@@ -277,11 +277,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         // Terminal visibility is handled at the session level via `settings.general.showTerminal`,
         // but here we additionally suppress file tree and search to match the Cowork-style UI.
         fileTree: () => {
-          if (withFallback(() => store.general?.workMode, defaultSettings.general.workMode)()) return false
+          if ((store.general?.workMode ?? defaultSettings.general.workMode) === true) return false
           return visible(showFileTree)()
         },
         search: () => {
-          if (withFallback(() => store.general?.workMode, defaultSettings.general.workMode)()) return false
+          if ((store.general?.workMode ?? defaultSettings.general.workMode) === true) return false
           return visible(showSearch)()
         },
         status: visible(showStatus),

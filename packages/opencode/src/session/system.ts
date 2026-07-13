@@ -99,7 +99,7 @@ const layer = Layer.effect(
         // requirement) so the surrounding environment() stays R: never.
         if (agent?.name === "work") {
           const mod = yield* Effect.promise(() => import("@opencode-ai/core/work"))
-          const docs = mod.Instructions.read(ctx.directory as AbsolutePath)
+          const docs = mod.Instructions.read(AbsolutePath.make(ctx.directory))
           if (docs.global || docs.folder) {
             const parts = ["<work_instructions>"]
             if (docs.global) parts.push("  <global>", ...docs.global.split("\n").map((l) => `    ${l}`), "  </global>")

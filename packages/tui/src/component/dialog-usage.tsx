@@ -46,11 +46,7 @@ export function DialogUsage() {
       reasoning += msg.tokens.reasoning
       cacheRead += msg.tokens.cache.read
       cacheWrite += msg.tokens.cache.write
-
-      const model = sync.data.provider.find((p) => p.id === msg.providerID)?.models[msg.modelID]
-      if (model?.cost) {
-        cost += msg.tokens.input * model.cost.input + msg.tokens.output * model.cost.output
-      }
+      cost += msg.cost
     }
 
     return { input, output, reasoning, cacheRead, cacheWrite, total: input + output + reasoning + cacheRead + cacheWrite, cost }

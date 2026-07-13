@@ -210,7 +210,7 @@ export const Plugin = define({
             { action: "edit", resource: "*", effect: "ask" },
             // OUTPUTS/ is the only place the work agent may freely write deliverables.
             { action: "edit", resource: path.join("OUTPUTS", "*"), effect: "allow" },
-            { action: "edit", resource: path.join("OUTPUTS", "**", "*"), effect: "allow" }
+            { action: "edit", resource: path.join("OUTPUTS", "**", "*"), effect: "allow" },
             // Context folders are read-mostly: edits require explicit approval.
             { action: "edit", resource: path.join("ABOUT-ME", "**", "*"), effect: "ask" },
             { action: "edit", resource: path.join("PROJECTS", "**", "*"), effect: "ask" },
