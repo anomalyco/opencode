@@ -140,7 +140,7 @@ export function createPathHelpers(scope: () => string) {
     return normalize(tabValue)
   }
 
-  const normalizeDir = (input: string) => normalize(input).replace(/\/+$/, "")
+  const normalizeDir = (input: string) => normalize(input).replace(/\\/g, "/").replace(/\/+$/, "")
 
   return {
     normalize,

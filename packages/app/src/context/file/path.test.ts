@@ -21,6 +21,13 @@ describe("file path helpers", () => {
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
   })
 
+  test("normalizeDir canonicalizes Windows directory separators", () => {
+    const path = createPathHelpers(() => "C:\\repo")
+    expect(path.normalizeDir("frontend\\")).toBe("frontend")
+    expect(path.normalizeDir("frontend\\src\\")).toBe("frontend/src")
+    expect(path.normalizeDir("C:\\repo\\frontend\\")).toBe("frontend")
+  })
+
   test("keeps query/hash stripping behavior stable", () => {
     expect(stripQueryAndHash("a/b.ts#L12?x=1")).toBe("a/b.ts")
     expect(stripQueryAndHash("a/b.ts?x=1#L12")).toBe("a/b.ts")
