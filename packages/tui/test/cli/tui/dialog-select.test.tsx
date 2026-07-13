@@ -6,13 +6,7 @@ import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { onCleanup } from "solid-js"
-import { ConfigProvider } from "../../../src/config"
-import { KVProvider } from "../../../src/context/kv"
-import { ThemeProvider } from "../../../src/context/theme"
-import { OpencodeKeymapProvider, registerOpencodeKeymap } from "../../../src/keymap"
-import { DialogProvider } from "../../../src/ui/dialog"
-import { DialogSelect, type DialogSelectOption } from "../../../src/ui/dialog-select"
-import { ToastProvider } from "../../../src/ui/toast"
+import type { DialogSelectOption } from "../../../src/ui/dialog-select"
 import { tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -27,6 +21,23 @@ async function renderSelect(
   await mkdir(state, { recursive: true })
   await Bun.write(path.join(state, "kv.json"), "{}")
   const config = createTuiResolvedConfig()
+  const [
+    { ConfigProvider },
+    { KVProvider },
+    { ThemeProvider },
+    { OpencodeKeymapProvider, registerOpencodeKeymap },
+    { DialogProvider },
+    { DialogSelect },
+    { ToastProvider },
+  ] = await Promise.all([
+    import("../../../src/config"),
+    import("../../../src/context/kv"),
+    import("../../../src/context/theme"),
+    import("../../../src/keymap"),
+    import("../../../src/ui/dialog"),
+    import("../../../src/ui/dialog-select"),
+    import("../../../src/ui/toast"),
+  ])
 
   function Harness() {
     const renderer = useRenderer()
