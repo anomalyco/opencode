@@ -60,7 +60,7 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
   const compatible = yield* discover(options)
   if (compatible !== undefined) return compatible
   const existing = yield* find(options)
-  if (existing !== undefined && (options.version === undefined || existing.version === options.version))
+  if (existing?.version !== undefined && (options.version === undefined || existing.version === options.version))
     return existing.endpoint
   yield* Effect.sync(() => options.onStart?.(existing === undefined ? "missing" : "version-mismatch", existing?.info))
   if (existing !== undefined) yield* kill(existing.info, options).pipe(Effect.ignore)
