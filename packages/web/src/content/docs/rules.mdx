@@ -66,7 +66,11 @@ opencode also supports reading the `AGENTS.md` file from multiple locations. And
 
 ### Project
 
-Place an `AGENTS.md` in your project root for project-specific rules. These only apply when you are working in this directory or its sub-directories.
+Place an `AGENTS.md` in your project root for project-specific rules. OpenCode also discovers `AGENTS.md` files by walking up from your working directory to the project boundary. For Git repositories, the boundary is the repository root. For non-Git directories, the boundary is the filesystem root.
+
+This means OpenCode loads every `AGENTS.md` it finds along the path — including files in parent directories. If you have an `AGENTS.md` in your home directory (`~/AGENTS.md`), it will be inherited by every project under your home folder.
+
+To prevent this behavior, set `OPENCODE_DISABLE_PROJECT_CONFIG=1` (see [Claude Code Compatibility](#claude-code-compatibility)).
 
 ### Global
 
@@ -90,17 +94,27 @@ export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
 export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
+To prevent OpenCode from discovering project-level `AGENTS.md`, `CLAUDE.md`, or `opencode.json` files in parent directories, set:
+
+```bash
+export OPENCODE_DISABLE_PROJECT_CONFIG=1
+```
+
+This is useful for creating isolated reproduction environments or running in CI where you want to guarantee only global instructions apply.
+
 ---
 
 ## Precedence
 
-When opencode starts, it looks for rule files in this order:
+When opencode starts, it loads rule files in this order:
 
-1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`)
-2. **Global file** at `~/.config/opencode/AGENTS.md`
-3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
+1. **Global file** at `~/.config/opencode/AGENTS.md`
+2. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
+3. **Project files** by walking up from the current directory, loading every `AGENTS.md` found along the path
 
-The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
+For a given directory, `AGENTS.md` takes precedence over `CLAUDE.md`. If `AGENTS.md` exists anywhere in the project, the `CLAUDE.md` fallback is not used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
+
+All discovered project files are loaded together — not just the first one. This means if you have `AGENTS.md` in both your project root and a parent directory, both are included. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip project-level discovery.
 
 ---
 
