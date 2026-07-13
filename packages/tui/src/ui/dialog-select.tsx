@@ -676,7 +676,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                               active()
                                 ? actionFocused()
                                   ? theme.backgroundElement
-                                  : (option.bg ?? theme.backgroundElement)
+                                  : (option.bg ?? theme.primary)
                                 : RGBA.fromInts(0, 0, 0, 0)
                             }
                           >
@@ -751,8 +751,9 @@ function Option(props: {
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
+  const fg = selectedForeground(theme)
   const text = createMemo(() => {
-    if (props.active && !props.muted) return theme.text
+    if (props.active && !props.muted) return fg
     if (props.muted && (props.active || props.current)) return theme.textMuted
     if (props.current) return theme.primary
     return theme.text
@@ -785,12 +786,12 @@ function Option(props: {
               ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
               : Locale.truncate(props.title, props.titleWidth ?? 61))}
         <Show when={props.description}>
-          <span style={{ fg: props.active && !props.muted ? theme.text : theme.textMuted }}> {props.description}</span>
+          <span style={{ fg: props.active && !props.muted ? fg : theme.textMuted }}> {props.description}</span>
         </Show>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
-          <text fg={props.active && !props.muted ? theme.text : theme.textMuted}>{props.footer}</text>
+          <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
         </box>
       </Show>
     </>

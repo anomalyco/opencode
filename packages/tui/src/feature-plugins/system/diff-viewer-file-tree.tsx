@@ -82,17 +82,17 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                   <box
                     flexDirection="row"
                     width="100%"
-                    backgroundColor={highlighted() ? props.theme.backgroundElement : undefined}
+                    backgroundColor={highlighted() ? props.theme.primary : undefined}
                     onMouseUp={() => props.onRowClick?.(row)}
                   >
-                    <text fg={highlighted() ? props.theme.text : fadedColor()} wrapMode="none" flexShrink={0}>
+                    <text fg={highlighted() ? props.theme.background : fadedColor()} wrapMode="none" flexShrink={0}>
                       {prefix()}
                     </text>
                     <box flexGrow={1} minWidth={0}>
                       <text
                         fg={
                           highlighted()
-                            ? props.theme.text
+                            ? props.theme.background
                             : selected()
                               ? props.theme.primary
                               : reviewed() || row.kind === "directory"
@@ -105,7 +105,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                       </text>
                     </box>
                     <text
-                      fg={highlighted() ? props.theme.text : props.theme.textMuted}
+                      fg={highlighted() ? props.theme.background : props.theme.textMuted}
                       wrapMode="none"
                       flexShrink={0}
                     >

@@ -13,7 +13,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
 import { useConfig } from "../../config"
 import { useLocation } from "../../context/location"
-import { useTheme } from "../../context/theme"
+import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
@@ -746,7 +746,7 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index === store.selected ? theme.backgroundElement : undefined}
+              backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
               onMouseMove={() => {
                 setStore("input", "mouse")
@@ -761,11 +761,11 @@ export function Autocomplete(props: {
               }}
               onMouseUp={() => select()}
             >
-              <text fg={theme.text} flexShrink={0}>
+              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}
               </text>
               <Show when={option().description}>
-                <text fg={index === store.selected ? theme.text : theme.textMuted} wrapMode="none">
+                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
                   {" " + option().description?.trimStart()}
                 </text>
               </Show>

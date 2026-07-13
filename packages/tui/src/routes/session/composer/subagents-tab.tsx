@@ -1,10 +1,10 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
 import { useSDK } from "../../../context/sdk"
-import { useTheme } from "../../../context/theme"
+import { useTheme, selectedForeground } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { useBindings, useCommandShortcut } from "../../../keymap"
 import { useComposerTab } from "./index"
@@ -22,6 +22,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const data = useData()
   const sdk = useSDK()
   const { theme } = useTheme()
+  const fg = selectedForeground(theme)
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const interruptHint = useCommandShortcut("composer.subagent.interrupt")
@@ -214,7 +215,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? theme.backgroundElement : undefined}
+                  backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -223,7 +224,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={entry.current ? theme.primary : theme.text}
+                      fg={active() ? fg : entry.current ? theme.primary : theme.text}
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -231,7 +232,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text fg={active() ? theme.text : theme.textMuted} wrapMode="none">
+                    <text fg={active() ? fg : theme.textMuted} wrapMode="none">
                       {status()}
                     </text>
                   </Show>

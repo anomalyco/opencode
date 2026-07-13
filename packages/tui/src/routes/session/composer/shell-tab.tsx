@@ -1,10 +1,10 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
 import { useLocation } from "../../../context/location"
 import { useSDK } from "../../../context/sdk"
-import { useTheme } from "../../../context/theme"
+import { useTheme, selectedForeground } from "../../../context/theme"
 import { useBindings, useCommandShortcut } from "../../../keymap"
 import { useComposerTab } from "./index"
 
@@ -13,6 +13,7 @@ export function ShellTab(props: { sessionID: string }) {
   const location = useLocation()
   const sdk = useSDK()
   const { theme } = useTheme()
+  const fg = selectedForeground(theme)
   const composer = useComposerTab()
   const killHint = useCommandShortcut("composer.shell.kill")
 
@@ -113,11 +114,11 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? theme.backgroundElement : undefined}
+                  backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={theme.text}
+                    fg={active() ? fg : theme.text}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >
