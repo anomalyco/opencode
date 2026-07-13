@@ -39,6 +39,7 @@ import {
   uniqueComparisonPairs,
   type ComparisonModelRef,
 } from "../compare-cards"
+import { createBreadcrumbMenuRoot } from "../breadcrumb-menu"
 import {
   applyThemePreference,
   Footer,
@@ -284,9 +285,10 @@ function ModelHero(props: {
   const labModels = () =>
     props.catalogData?.labs.find((lab) => lab.id === providerSlug(labId()))?.models ??
     (props.catalog ? [props.catalog] : [])
+  const menuRoot = createBreadcrumbMenuRoot()
   return (
     <section id="overview" data-section="model-hero">
-      <nav data-component="model-hero-breadcrumb" aria-label="Data breadcrumb">
+      <nav ref={menuRoot} data-component="model-hero-breadcrumb" aria-label="Data breadcrumb">
         <a data-slot="model-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
           Data
         </a>
@@ -294,14 +296,14 @@ function ModelHero(props: {
         <Show
           when={labs().length > 0}
           fallback={
-            <span data-slot="model-hero-crumb" data-current="true">
+            <span data-slot="model-hero-crumb" data-menu="true">
               <span>{props.labName}</span>
               <ChevronDownIcon />
             </span>
           }
         >
           <details data-component="model-hero-menu">
-            <summary data-slot="model-hero-crumb" data-current="true">
+            <summary data-slot="model-hero-crumb" data-menu="true">
               <span>{props.labName}</span>
               <ChevronDownIcon />
             </summary>
@@ -324,14 +326,14 @@ function ModelHero(props: {
         <Show
           when={labModels().length > 0}
           fallback={
-            <span data-slot="model-hero-crumb" data-current="true" aria-current="page">
+            <span data-slot="model-hero-crumb" data-menu="true" data-current="true" aria-current="page">
               <span>{modelName()}</span>
               <ChevronDownIcon />
             </span>
           }
         >
           <details data-component="model-hero-menu">
-            <summary data-slot="model-hero-crumb" data-current="true" aria-current="page">
+            <summary data-slot="model-hero-crumb" data-menu="true" data-current="true" aria-current="page">
               <span>{modelName()}</span>
               <ChevronDownIcon />
             </summary>

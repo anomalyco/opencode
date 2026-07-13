@@ -29,6 +29,7 @@ import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
+import { createBreadcrumbMenuRoot } from "../breadcrumb-menu"
 import {
   applyThemePreference,
   Footer,
@@ -205,8 +206,9 @@ function LabHero(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[] }) {
 function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
   const language = useLanguage()
   const labs = () => props.labs ?? []
+  const menuRoot = createBreadcrumbMenuRoot()
   return (
-    <nav data-component="lab-hero-breadcrumb" aria-label="Data breadcrumb">
+    <nav ref={menuRoot} data-component="lab-hero-breadcrumb" aria-label="Data breadcrumb">
       <a data-slot="lab-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
         Data
       </a>

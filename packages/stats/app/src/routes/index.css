@@ -3113,8 +3113,16 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-slot="model-hero-crumb"][data-current="true"] {
+[data-page="stats"] a[data-slot="model-hero-crumb"] {
+  color: var(--stats-hero-muted);
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"][data-menu="true"] {
   padding-right: 4px;
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"][data-current="true"] {
+  color: var(--stats-text);
 }
 
 [data-page="stats"] [data-component="model-hero-menu"] {
@@ -3151,7 +3159,7 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  color: var(--stats-faint);
+  color: currentColor;
 }
 
 [data-page="stats"] [data-component="model-hero-menu"][open] [data-slot="model-hero-crumb"] svg {
@@ -5531,6 +5539,14 @@
   line-height: 1.1;
   text-decoration: none;
   white-space: nowrap;
+}
+
+[data-page="stats"] a[data-slot="compare-home-crumb"] {
+  color: var(--stats-hero-muted);
+}
+
+[data-page="stats"] [data-slot="compare-home-crumb"][data-current="true"] {
+  color: var(--stats-text);
 }
 
 [data-page="stats"] a[data-slot="compare-home-crumb"]:hover,
