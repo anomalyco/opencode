@@ -4,7 +4,6 @@ import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { KVProvider } from "../../../src/context/kv"
 import { ThemeProvider } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
 import { DiffViewerFileTree } from "../../../src/feature-plugins/system/diff-viewer-file-tree"
@@ -182,9 +181,7 @@ function withTheme(component: () => JSX.Element) {
   return (
     <TestTuiContexts>
       <ConfigProvider config={createTuiResolvedConfig()}>
-        <KVProvider>
-          <ThemeProvider mode="dark">{component()}</ThemeProvider>
-        </KVProvider>
+        <ThemeProvider mode="dark">{component()}</ThemeProvider>
       </ConfigProvider>
     </TestTuiContexts>
   )

@@ -71,7 +71,6 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
-import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -179,23 +178,6 @@ function errorMessage(error: unknown) {
     return error.data.message
   }
   return error instanceof Error ? error.message : String(error)
-}
-
-function isVersionGreater(left: string, right: string) {
-  const parse = (value: string) => {
-    const [core, prerelease] = value.replace(/^v/, "").split("-", 2)
-    return { core: core.split(".").map((part) => Number.parseInt(part, 10) || 0), prerelease }
-  }
-  const a = parse(left)
-  const b = parse(right)
-  for (let index = 0; index < Math.max(a.core.length, b.core.length); index++) {
-    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0)
-    if (difference) return difference > 0
-  }
-  if (a.prerelease === b.prerelease) return false
-  if (!a.prerelease) return true
-  if (!b.prerelease) return false
-  return a.prerelease.localeCompare(b.prerelease, undefined, { numeric: true }) > 0
 }
 
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
@@ -343,67 +325,65 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   service={input.config}
                                   options={{ terminalSuspend: process.platform !== "win32" }}
                                 >
-                                  <KVProvider>
-                                    <ToastProvider>
-                                      <RouteProvider
-                                        initialRoute={
-                                          input.args.continue
-                                            ? {
-                                                type: "session",
-                                                sessionID: "dummy",
-                                              }
-                                            : undefined
-                                        }
-                                      >
-                                        <PluginRuntimeProvider value={pluginRuntime}>
-                                          <SDKProvider
-                                            client={createOpencodeClient({ ...options, directory })}
-                                            api={api}
-                                            reconnect={reconnect}
-                                            reload={input.server.reload}
-                                          >
-                                            <PermissionProvider>
-                                              <ProjectProvider>
-                                                <SyncProvider>
-                                                  <DataProvider>
-                                                    <ThemeProvider mode={mode}>
-                                                      <LocalProvider>
-                                                        <PromptStashProvider>
-                                                          <DialogProvider>
-                                                            <FrecencyProvider>
-                                                              <PromptHistoryProvider>
-                                                                <PromptRefProvider>
-                                                                  <EditorContextProvider>
-                                                                    <LocationProvider>
-                                                                      <App
-                                                                        pluginHost={input.pluginHost}
-                                                                        pair={
-                                                                          input.server.endpoint.auth
-                                                                            ? input.server.endpoint.auth
-                                                                            : {
-                                                                                username: "opencode",
-                                                                                password: "",
-                                                                              }
-                                                                        }
-                                                                      />
-                                                                    </LocationProvider>
-                                                                  </EditorContextProvider>
-                                                                </PromptRefProvider>
-                                                              </PromptHistoryProvider>
-                                                            </FrecencyProvider>
-                                                          </DialogProvider>
-                                                        </PromptStashProvider>
-                                                      </LocalProvider>
-                                                    </ThemeProvider>
-                                                  </DataProvider>
-                                                </SyncProvider>
-                                              </ProjectProvider>
-                                            </PermissionProvider>
-                                          </SDKProvider>
-                                        </PluginRuntimeProvider>
-                                      </RouteProvider>
-                                    </ToastProvider>
-                                  </KVProvider>
+                                  <ToastProvider>
+                                    <RouteProvider
+                                      initialRoute={
+                                        input.args.continue
+                                          ? {
+                                              type: "session",
+                                              sessionID: "dummy",
+                                            }
+                                          : undefined
+                                      }
+                                    >
+                                      <PluginRuntimeProvider value={pluginRuntime}>
+                                        <SDKProvider
+                                          client={createOpencodeClient({ ...options, directory })}
+                                          api={api}
+                                          reconnect={reconnect}
+                                          reload={input.server.reload}
+                                        >
+                                          <PermissionProvider>
+                                            <ProjectProvider>
+                                              <SyncProvider>
+                                                <DataProvider>
+                                                  <ThemeProvider mode={mode}>
+                                                    <LocalProvider>
+                                                      <PromptStashProvider>
+                                                        <DialogProvider>
+                                                          <FrecencyProvider>
+                                                            <PromptHistoryProvider>
+                                                              <PromptRefProvider>
+                                                                <EditorContextProvider>
+                                                                  <LocationProvider>
+                                                                    <App
+                                                                      pluginHost={input.pluginHost}
+                                                                      pair={
+                                                                        input.server.endpoint.auth
+                                                                          ? input.server.endpoint.auth
+                                                                          : {
+                                                                              username: "opencode",
+                                                                              password: "",
+                                                                            }
+                                                                      }
+                                                                    />
+                                                                  </LocationProvider>
+                                                                </EditorContextProvider>
+                                                              </PromptRefProvider>
+                                                            </PromptHistoryProvider>
+                                                          </FrecencyProvider>
+                                                        </DialogProvider>
+                                                      </PromptStashProvider>
+                                                    </LocalProvider>
+                                                  </ThemeProvider>
+                                                </DataProvider>
+                                              </SyncProvider>
+                                            </ProjectProvider>
+                                          </PermissionProvider>
+                                        </SDKProvider>
+                                      </PluginRuntimeProvider>
+                                    </RouteProvider>
+                                  </ToastProvider>
                                 </ConfigProvider>
                               </ArgsProvider>
                             </OpencodeKeymapProvider>
@@ -440,13 +420,13 @@ function App(props: {
 }) {
   const log = useLog({ component: "app" })
   const startup = useTuiStartup()
-  const config = useConfig().data
+  const configState = useConfig()
+  const config = configState.data
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
-  const kv = useKV()
   const keymap = useOpencodeKeymap()
   const event = useEvent()
   const sdk = useSDK()
@@ -459,7 +439,7 @@ function App(props: {
   const exit = useExit()
   const promptRef = usePromptRef()
   const pluginRuntime = usePluginRuntime()
-  const attention = createTuiAttention({ renderer, config, kv })
+  const attention = createTuiAttention({ renderer, config, update: configState.update })
   const clipboard = useClipboard()
 
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
@@ -496,7 +476,6 @@ function App(props: {
       tuiConfig: config,
       dialog,
       keymap,
-      kv,
       route,
       routes: pluginRuntime.routes,
       event,
@@ -549,8 +528,8 @@ function App(props: {
 
     renderer.clearSelection()
   }
-  const [terminalTitleEnabled, setTerminalTitleEnabled] = kv.signal("terminal_title_enabled", true)
-  const [pasteSummaryEnabled, setPasteSummaryEnabled] = kv.signal("paste_summary_enabled", true)
+  const terminalTitleEnabled = () => config.terminal?.title ?? true
+  const pasteSummaryEnabled = () => config.prompt?.paste !== "full"
 
   createEffect(() => {
     renderer.useMouse = !Flag.OPENCODE_DISABLE_MOUSE && config.mouse
@@ -880,6 +859,7 @@ function App(props: {
       {
         name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
+        hidden: true,
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
           dialog.clear()
@@ -889,6 +869,7 @@ function App(props: {
       {
         name: "theme.mode.lock",
         title: locked() ? "Unlock theme mode" : "Lock theme mode",
+        hidden: true,
         run: () => {
           if (locked()) unlock()
           else lock()
@@ -956,41 +937,57 @@ function App(props: {
         name: "terminal.title.toggle",
         title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
         category: "System",
+        hidden: true,
         run: () => {
-          setTerminalTitleEnabled((prev) => {
-            const next = !prev
-            kv.set("terminal_title_enabled", next)
-            if (!next) renderer.setTerminalTitle("")
-            return next
-          })
+          const next = !terminalTitleEnabled()
+          if (!next) renderer.setTerminalTitle("")
+          void configState
+            .update((draft) => {
+              draft.terminal = { ...draft.terminal, title: next }
+            })
+            .catch(toast.error)
           dialog.clear()
         },
       },
       {
         name: "app.toggle.animations",
-        title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+        title: (config.animations ?? true) ? "Disable animations" : "Enable animations",
         category: "System",
+        hidden: true,
         run: () => {
-          kv.set("animations_enabled", !kv.get("animations_enabled", true))
+          void configState
+            .update((draft) => {
+              draft.animations = !(config.animations ?? true)
+            })
+            .catch(toast.error)
           dialog.clear()
         },
       },
       {
         name: "app.toggle.file_context",
-        title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
+        title: (config.prompt?.editor ?? true) ? "Disable file context" : "Enable file context",
         category: "System",
+        hidden: true,
         run: () => {
-          kv.set("file_context_enabled", !kv.get("file_context_enabled", true))
+          void configState
+            .update((draft) => {
+              draft.prompt = { ...draft.prompt, editor: !(config.prompt?.editor ?? true) }
+            })
+            .catch(toast.error)
           dialog.clear()
         },
       },
       {
         name: "app.toggle.diffwrap",
-        title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+        title: (config.diffs?.wrap ?? "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
         category: "System",
+        hidden: true,
         run: () => {
-          const current = kv.get("diff_wrap_mode", "word")
-          kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+          void configState
+            .update((draft) => {
+              draft.diffs = { ...draft.diffs, wrap: (config.diffs?.wrap ?? "word") === "word" ? "none" : "word" }
+            })
+            .catch(toast.error)
           dialog.clear()
         },
       },
@@ -998,12 +995,13 @@ function App(props: {
         name: "app.toggle.paste_summary",
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
+        hidden: true,
         run: () => {
-          setPasteSummaryEnabled((prev) => {
-            const next = !prev
-            kv.set("paste_summary_enabled", next)
-            return next
-          })
+          void configState
+            .update((draft) => {
+              draft.prompt = { ...draft.prompt, paste: pasteSummaryEnabled() ? "full" : "compact" }
+            })
+            .catch(toast.error)
           dialog.clear()
         },
       },
@@ -1101,20 +1099,12 @@ function App(props: {
   event.on("installation.update-available", async (evt) => {
     const version = evt.data.version
 
-    const skipped = kv.get("skipped_version")
-    if (skipped && !isVersionGreater(version, skipped)) return
-
     const choice = await DialogConfirm.show(
       dialog,
       `Update Available`,
       `A new release v${version} is available. Would you like to update now?`,
-      "skip",
+      "later",
     )
-
-    if (choice === false) {
-      kv.set("skipped_version", version)
-      return
-    }
 
     if (choice !== true) return
 

@@ -118,6 +118,9 @@ export const Info = Schema.Struct({
       grouping: Schema.optional(Schema.Literals(["auto", "none"])).annotate({
         description: "Group related transcript items automatically or render each item separately",
       }),
+      markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
+        description: "Show Markdown syntax markers or conceal them in rendered transcript content",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   hints: Schema.optional(

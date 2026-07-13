@@ -4,18 +4,20 @@ import { createMemo, Show } from "solid-js"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
 import { FilePath } from "../../ui/file-path"
+import { useConfig } from "../../config"
 
 const id = "internal:sidebar-footer"
 
 function View(props: { api: TuiPluginApi; directory: string }) {
   const paths = useTuiPaths()
+  const config = useConfig()
   const theme = () => props.api.theme.current
   const has = createMemo(() =>
     props.api.state.provider.some(
       (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
     ),
   )
-  const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
+  const done = createMemo(() => !(config.data.hints?.onboarding ?? true))
   const show = createMemo(() => !has() && !done())
   const location = createMemo(() => {
     const branch = props.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
@@ -44,7 +46,16 @@ function View(props: { api: TuiPluginApi; directory: string }) {
               <text fg={theme().text}>
                 <b>Getting started</b>
               </text>
-              <text fg={theme().textMuted} onMouseDown={() => props.api.kv.set("dismissed_getting_started", true)}>
+              <text
+                fg={theme().textMuted}
+                onMouseDown={() =>
+                  void config
+                    .update((draft) => {
+                      draft.hints = { ...draft.hints, onboarding: false }
+                    })
+                    .catch(() => {})
+                }
+              >
                 ✕
               </text>
             </box>

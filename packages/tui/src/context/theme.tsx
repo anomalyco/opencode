@@ -22,7 +22,6 @@ import {
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { useKV } from "./kv"
 import { useConfig } from "../config"
 import { Global } from "@opencode-ai/core/global"
 import { Glob } from "@opencode-ai/core/util/glob"
@@ -103,8 +102,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light"; source?: ThemeSource }) => {
     const renderer = useRenderer()
-    const config = useConfig().data
-    const kv = useKV()
+    const configState = useConfig()
+    const config = configState.data
     const themes = props.source ?? themeSource
     const pick = (value: unknown) => {
       if (value === "dark" || value === "light") return value
@@ -113,12 +112,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     setStore(
       produce((draft) => {
-        const lock = pick(kv.get("theme_mode_lock"))
+        const lock = pick(config.theme?.mode)
         const mode = lock ?? pick(renderer.themeMode) ?? props.mode
-        if (!lock && pick(kv.get("theme_mode")) !== undefined) kv.set("theme_mode", undefined)
         draft.mode = mode
         draft.lock = lock
-        const active = config.theme?.name ?? kv.get("theme", "opencode")
+        const active = config.theme?.name ?? "opencode"
         draft.active = typeof active === "string" ? active : "opencode"
         draft.ready = false
       }),
@@ -132,10 +130,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     createEffect(() => {
       const mode = config.theme?.mode
       if (mode === "dark" || mode === "light") {
-        pin(mode)
+        pin(mode, false)
         return
       }
-      if (mode === "system" && store.lock !== undefined) free()
+      if (mode === "system" && store.lock !== undefined) free(false)
     })
 
     function syncCustomThemes() {
@@ -209,23 +207,31 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     function apply(mode: "dark" | "light") {
-      if (store.lock !== undefined) kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
       refreshSystemTheme(mode)
     }
 
-    function pin(mode: "dark" | "light" = store.mode) {
+    function pin(mode: "dark" | "light" = store.mode, persist = true) {
       setStore("lock", mode)
-      kv.set("theme_mode_lock", mode)
       apply(mode)
+      if (!persist) return
+      void configState
+        .update((draft) => {
+          draft.theme = { ...draft.theme, mode }
+        })
+        .catch(() => {})
     }
 
-    function free() {
+    function free(persist = true) {
       setStore("lock", undefined)
-      kv.set("theme_mode_lock", undefined)
-      kv.set("theme_mode", undefined)
       refreshSystemTheme(renderer.themeMode ?? store.mode)
+      if (!persist) return
+      void configState
+        .update((draft) => {
+          draft.theme = { ...draft.theme, mode: "system" }
+        })
+        .catch(() => {})
     }
 
     const handle = (mode: "dark" | "light") => {
@@ -265,13 +271,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const values = createMemo(() => {
       const active = store.themes[store.active]
       if (active) return resolveTheme(active, store.mode)
-
-      const saved = kv.get("theme")
-      if (typeof saved === "string") {
-        const theme = store.themes[saved]
-        if (theme) return resolveTheme(theme, store.mode)
-      }
-
       return resolveTheme(store.themes.opencode, store.mode)
     })
 
@@ -302,7 +301,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       set(theme: string) {
         if (!hasTheme(theme)) return false
         setStore("active", theme)
-        kv.set("theme", theme)
+        void configState
+          .update((draft) => {
+            draft.theme = { ...draft.theme, name: theme }
+          })
+          .catch(() => {})
         return true
       },
       get ready() {

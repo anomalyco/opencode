@@ -35,9 +35,23 @@ test("migrates tui and kv config into cli.json", async () => {
     path.join(directory, "kv.json"),
     JSON.stringify({
       theme_mode_lock: "light",
+      attention_sound_pack: "custom.pack",
+      diff_wrap_mode: "none",
+      diff_viewer_show_file_tree: false,
+      diff_viewer_single_patch: true,
+      diff_viewer_view: "split",
+      terminal_title_enabled: false,
+      file_context_enabled: false,
       paste_summary_enabled: false,
+      sidebar: "hide",
+      scrollbar_visible: true,
+      thinking_mode: "show",
       exploration_grouping: false,
       tips_hidden: true,
+      dismissed_getting_started: true,
+      animations_enabled: false,
+      skipped_version: "9.9.9",
+      which_key_layout: "overlay",
     }),
   )
 
@@ -56,12 +70,17 @@ test("migrates tui and kv config into cli.json", async () => {
       plugins: [{ package: "example", options: { mode: "safe" } }, "-disabled"],
       leader: { timeout: 500 },
       scroll: { speed: 2, acceleration: true },
-      diffs: { view: "unified" },
-      prompt: { paste: "full" },
-      session: { grouping: "none" },
-      hints: { tips: false },
+      attention: { sound_pack: "custom.pack" },
+      diffs: { wrap: "none", tree: false, single: true, view: "split" },
+      terminal: { title: false },
+      prompt: { editor: false, paste: "full" },
+      session: { sidebar: "hide", scrollbar: true, thinking: "show", grouping: "none" },
+      hints: { tips: false, onboarding: false },
+      animations: false,
       mouse: false,
     })
+    expect(config).not.toHaveProperty("skipped_version")
+    expect(config).not.toHaveProperty("which_key")
     expect((await Bun.file(path.join(directory, "cli.json")).json()).keybinds).toEqual({ leader: "ctrl+o" })
     expect(await Bun.file(path.join(directory, "cli.json")).exists()).toBe(true)
     expect(await Bun.file(path.join(directory, "tui.json")).exists()).toBe(true)

@@ -5,7 +5,6 @@ import { DiffRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/c
 import { testRender, useRenderer } from "@opentui/solid"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { KVProvider } from "../../../src/context/kv"
 import { ThemeProvider } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
 import { SDKProvider } from "../../../src/context/sdk"
@@ -174,11 +173,9 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
         <SDKProvider client={createClient(transport.fetch)} api={createApi(transport.fetch)}>
           <OpencodeKeymapProvider keymap={keymap}>
             <ConfigProvider config={config}>
-              <KVProvider>
-                <ThemeProvider mode="dark">
-                  {renderDiff?.({ params: "params" in current ? current.params : undefined })}
-                </ThemeProvider>
-              </KVProvider>
+              <ThemeProvider mode="dark">
+                {renderDiff?.({ params: "params" in current ? current.params : undefined })}
+              </ThemeProvider>
             </ConfigProvider>
           </OpencodeKeymapProvider>
         </SDKProvider>

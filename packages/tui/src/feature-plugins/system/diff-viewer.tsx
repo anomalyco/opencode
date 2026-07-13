@@ -19,6 +19,7 @@ import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
+import { useConfig } from "../../config"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -41,9 +42,6 @@ const MIN_SPLIT_WIDTH = 100
 const FILE_TREE_WIDTH = 32
 const PLAIN_TEXT_FILETYPE = "opencode-plain-text"
 const VCS_DIFF_CONTEXT_LINES = 12
-const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
-const KV_SINGLE_PATCH = "diff_viewer_single_patch"
-const KV_VIEW = "diff_viewer_view"
 type DiffMode = "working" | "branch" | "last-turn"
 type DiffViewerFocus = "patches" | "files"
 type DiffView = "split" | "unified"
@@ -92,6 +90,7 @@ function diffSourceLabel(mode: DiffMode) {
 function DiffViewer(props: { api: TuiPluginApi }) {
   const dimensions = useTerminalDimensions()
   const sdk = useSDK()
+  const config = useConfig()
   const themeState = useTheme()
   const theme = () => props.api.theme.current
   const params = () =>
@@ -135,11 +134,9 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   })
   const files = createMemo(() => diff() ?? [])
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
-  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(
-    props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false,
-  )
+  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(config.data.diffs?.tree ?? true)
   const showFileTree = createMemo(() => showDiffViewerFileTree(fileTreeEnabled(), files().length))
-  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get<boolean>(KV_SINGLE_PATCH, false) === true)
+  const [singlePatch, setSinglePatch] = createSignal(config.data.diffs?.single ?? false)
   const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? 33 : 0) - 4)
   const patchLeftBorder = createMemo<BorderSides[]>(() => (showFileTree() ? ["left"] : []))
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
@@ -148,7 +145,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     if (props.api.tuiConfig.diffs?.view === "split") return "split"
     return splitAvailable() ? "split" : "unified"
   })
-  const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.api.kv.get(KV_VIEW)))
+  const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(config.data.diffs?.view))
   const view = createMemo(() => (splitAvailable() ? (viewOverride() ?? defaultView()) : "unified"))
   const fileTree = createMemo(() => buildFileTree(files()))
   const [expandedFileNodes, setExpandedFileNodes] = createSignal<ReadonlySet<number>>(new Set())
@@ -623,23 +620,33 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       name: "diff.toggle_file_tree",
       title: "Toggle diff viewer file tree",
       category: "VCS",
+      hidden: true,
       run() {
         const next = !fileTreeEnabled()
         if (!next) setFocus("patches")
         setFileTreeEnabled(next)
-        props.api.kv.set(KV_SHOW_FILE_TREE, next)
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, tree: next }
+          })
+          .catch(() => {})
       },
     },
     {
       name: "diff.single_patch",
       title: "Toggle single patch view",
       category: "VCS",
+      hidden: true,
       run() {
         setSelectedHunk(undefined)
         if (!singlePatch()) {
           ensureHighlightedPatchFile()
           setSinglePatch(true)
-          props.api.kv.set(KV_SINGLE_PATCH, true)
+          void config
+            .update((draft) => {
+              draft.diffs = { ...draft.diffs, single: true }
+            })
+            .catch(() => {})
           scrollSinglePatchToTop()
           return
         }
@@ -653,7 +660,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
           )
         if (fileIndex !== undefined) selectPatchFile(fileIndex)
         setSinglePatch(false)
-        props.api.kv.set(KV_SINGLE_PATCH, false)
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, single: false }
+          })
+          .catch(() => {})
         if (fileIndex !== undefined) scrollToPatchFileIndexAfterRender(fileIndex)
       },
     },
@@ -669,12 +680,17 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       name: "diff.toggle_view",
       title: "Toggle diff viewer split or unified view",
       category: "VCS",
+      hidden: true,
       run() {
         if (!splitAvailable()) return
         setSelectedHunk(undefined)
         const next = view() === "split" ? "unified" : "split"
         setViewOverride(next)
-        props.api.kv.set(KV_VIEW, next)
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, view: next }
+          })
+          .catch(() => {})
       },
     },
     {

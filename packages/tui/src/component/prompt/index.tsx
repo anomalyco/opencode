@@ -43,7 +43,6 @@ import { useDialog } from "../../ui/dialog"
 import { DialogIntegration } from "../dialog-integration"
 import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
-import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "../../context/args"
@@ -177,11 +176,10 @@ export function Prompt(props: PromptProps) {
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
-  const kv = useKV()
-  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
-  const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
+  const fileContextEnabled = createMemo(() => config.prompt?.editor ?? true)
   const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
   const editorContext = createMemo(() => {
     const selection = fileContextEnabled() ? editor.selection() : undefined
@@ -1191,7 +1189,7 @@ export function Prompt(props: PromptProps) {
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if (
       (lineCount >= 3 || pastedContent.length > 150) &&
-      kv.get("paste_summary_enabled", true)
+      config.prompt?.paste !== "full"
     ) {
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
@@ -1495,7 +1493,7 @@ export function Prompt(props: PromptProps) {
             <Match when={status() === "running"}>
               <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                 <box marginLeft={1}>
-                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                  <Show when={config.animations ?? true} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>

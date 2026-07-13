@@ -7,7 +7,6 @@ import path from "node:path"
 import { onCleanup } from "solid-js"
 import { ClipboardProvider } from "../../../src/context/clipboard"
 import type { FormWithLocation } from "../../../src/context/data"
-import { KVProvider } from "../../../src/context/kv"
 import { SDKProvider } from "../../../src/context/sdk"
 import { ThemeProvider } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
@@ -21,7 +20,6 @@ import { createApi, createClient, createEventStream, createFetch } from "../../f
 async function mountForm(root: string, width = 80) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
-  await Bun.write(path.join(state, "kv.json"), "{}")
 
   const replies: unknown[] = []
   const copied: string[] = []
@@ -78,13 +76,11 @@ async function mountForm(root: string, width = 80) {
           <OpencodeKeymapProvider keymap={keymap}>
             <ConfigProvider config={config}>
               <SDKProvider client={createClient(transport.fetch)} api={createApi(transport.fetch)}>
-                <KVProvider>
-                  <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
-                    <ToastProvider>
-                      <FormPrompt form={form} />
-                    </ToastProvider>
-                  </ThemeProvider>
-                </KVProvider>
+                <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+                  <ToastProvider>
+                    <FormPrompt form={form} />
+                  </ToastProvider>
+                </ThemeProvider>
               </SDKProvider>
             </ConfigProvider>
           </OpencodeKeymapProvider>

@@ -78,6 +78,13 @@ const settings: Setting[] = [
     values: ["hide", "show"],
   },
   {
+    title: "Markdown",
+    category: "Session",
+    path: ["session", "markdown"],
+    default: "rendered",
+    values: ["source", "rendered"],
+  },
+  {
     title: "Grouping",
     category: "Session",
     path: ["session", "grouping"],

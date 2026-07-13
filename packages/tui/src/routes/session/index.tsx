@@ -54,7 +54,6 @@ import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
-import { useKV } from "../../context/kv.tsx"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { useEpilogue } from "../../context/epilogue"
@@ -66,7 +65,7 @@ import { DialogExportResult } from "../../ui/dialog-export-result"
 import { sessionEpilogue } from "../../util/presentation"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
-import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
@@ -122,6 +121,7 @@ const context = createContext<{
   sessionID: string
   thinkingMode: () => ThinkingMode
   showThinking: () => boolean
+  markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
@@ -147,8 +147,8 @@ export function Session() {
   const data = useData()
   const project = useProject()
   const paths = useTuiPaths()
-  const config = useConfig().data
-  const kv = useKV()
+  const configState = useConfig()
+  const config = configState.data
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
@@ -194,15 +194,14 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
+  const sidebar = createMemo(() => config.session?.sidebar ?? "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
-  const thinking = useThinkingMode()
-  const thinkingMode = thinking.mode
+  const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showThinking = createMemo(() => true)
-  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
-  const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
-  const [groupExploration, setGroupExploration] = kv.signal("exploration_grouping", true)
+  const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
+  const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
+  const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
+  const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -462,7 +461,11 @@ export function Session() {
       run: () => {
         batch(() => {
           const isVisible = sidebarVisible()
-          setSidebar(() => (isVisible ? "hide" : "auto"))
+          void configState
+            .update((draft) => {
+              draft.session = { ...draft.session, sidebar: isVisible ? "hide" : "auto" }
+            })
+            .catch(toast.error)
           setSidebarOpen(!isVisible)
         })
         dialog.clear()
@@ -476,12 +479,17 @@ export function Session() {
       })(),
       value: "session.toggle.thinking",
       category: "Session",
+      hidden: true,
       slash: {
         name: "thinking",
         aliases: ["toggle-thinking"],
       },
       run: () => {
-        thinking.set(nextThinkingMode(thinkingMode()))
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, thinking: nextThinkingMode(thinkingMode()) }
+          })
+          .catch(toast.error)
         dialog.clear()
       },
     },
@@ -489,8 +497,13 @@ export function Session() {
       title: "Toggle session scrollbar",
       value: "session.toggle.scrollbar",
       category: "Session",
+      hidden: true,
       run: () => {
-        setShowScrollbar((prev) => !prev)
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, scrollbar: !showScrollbar() }
+          })
+          .catch(toast.error)
         dialog.clear()
       },
     },
@@ -498,8 +511,13 @@ export function Session() {
       title: groupExploration() ? "Show tool calls individually" : "Group related tool calls",
       value: "session.toggle.exploration_grouping",
       category: "Session",
+      hidden: true,
       run: () => {
-        setGroupExploration((prev) => !prev)
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, grouping: groupExploration() ? "none" : "auto" }
+          })
+          .catch(toast.error)
         dialog.clear()
       },
     },
@@ -855,6 +873,7 @@ export function Session() {
           sessionID: route.sessionID,
           thinkingMode,
           showThinking,
+          markdownMode,
           groupExploration,
           diffWrapMode,
           models,
@@ -1287,7 +1306,6 @@ function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { typ
 
 function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
   const ctx = use()
-  const kv = useKV()
   const { theme, syntax } = useTheme()
   const status = () => props.message.status
   const text = () => (props.message.status === "failed" ? props.message.error.message : props.message.summary)
@@ -1300,7 +1318,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
         <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
           <Switch>
             <Match when={status() === "running"}>
-              <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯</text>}>
+              <Show when={ctx.config.animations ?? true} fallback={<text fg={color()}>⋯</text>}>
                 <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
               </Show>
             </Match>
@@ -1320,7 +1338,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             internalBlockMode="top-level"
             content={content()}
             tableOptions={{ style: "grid" }}
-            conceal={false}
+            conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdownText}
             bg={theme.background}
           />
@@ -1745,7 +1763,7 @@ function ReasoningPart(props: {
               streaming={true}
               syntaxStyle={syntax()}
               content={summary().body}
-              conceal={false}
+              conceal={ctx.markdownMode() === "rendered"}
               fg={theme.textMuted}
             />
           </box>
@@ -1811,7 +1829,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
           internalBlockMode="top-level"
           content={props.part.text.trim()}
           tableOptions={{ style: "grid" }}
-          conceal={false}
+          conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdownText}
           bg={theme.background}
         />

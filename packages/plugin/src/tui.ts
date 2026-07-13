@@ -358,6 +358,7 @@ export type TuiTheme = {
   readonly ready: boolean
 }
 
+/** @deprecated Persistent TUI KV storage is not supported in V2. */
 export type TuiKV = {
   get: <Value = unknown>(key: string, fallback?: Value) => Value
   set: (key: string, value: unknown) => void
@@ -434,6 +435,7 @@ type TuiConfigView = {
     sidebar?: "auto" | "hide"
     scrollbar?: boolean
     thinking?: "show" | "hide"
+    markdown?: "source" | "rendered"
     grouping?: "auto" | "none"
   }
   hints?: { tips?: boolean; onboarding?: boolean }
@@ -628,6 +630,7 @@ export type TuiPluginApi = {
     dialog: TuiDialogStack
   }
   readonly tuiConfig: Frozen<TuiConfigView>
+  /** @deprecated Persistent TUI KV storage is not supported in V2. */
   kv: TuiKV
   state: TuiState
   theme: TuiTheme

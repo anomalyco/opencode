@@ -8,7 +8,6 @@ import type { useData } from "../context/data"
 import type { useTheme } from "../context/theme"
 import { Dialog as DialogUI, type useDialog } from "../ui/dialog"
 import type { useOpencodeKeymap } from "../keymap"
-import type { useKV } from "../context/kv"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -26,7 +25,6 @@ type Input = {
   tuiConfig: Config.Resolved
   dialog: ReturnType<typeof useDialog>
   keymap: ReturnType<typeof useOpencodeKeymap>
-  kv: ReturnType<typeof useKV>
   route: ReturnType<typeof useRoute>
   routes: PluginRoutes
   event: ReturnType<typeof useEvent>
@@ -292,15 +290,12 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
       return input.tuiConfig
     },
     kv: {
-      get(key, fallback) {
-        return input.kv.get(key, fallback)
+      get(_key, fallback) {
+        if (fallback === undefined) throw new Error("Persistent TUI KV storage is not supported")
+        return fallback
       },
-      set(key, value) {
-        input.kv.set(key, value)
-      },
-      get ready() {
-        return input.kv.ready
-      },
+      set() {},
+      ready: true,
     },
     state: stateApi(input.sync, input.data),
     get client() {

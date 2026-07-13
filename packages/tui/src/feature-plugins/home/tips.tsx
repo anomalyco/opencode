@@ -5,10 +5,12 @@ import { Tips } from "./tips-view"
 import { useBindings } from "../../keymap"
 import { useData } from "../../context/data"
 import { hasConnectedProvider } from "../../util/connected-provider"
+import { useConfig } from "../../config"
 
 const id = "internal:home-tips"
 
 function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connected: boolean }) {
+  const config = useConfig()
   useBindings(() => ({
     commands: [
       {
@@ -16,8 +18,13 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
         title: props.hidden ? "Show tips" : "Hide tips",
         category: "System",
         namespace: "palette",
+        hidden: true,
         run() {
-          props.api.kv.set("tips_hidden", !props.api.kv.get("tips_hidden", false))
+          void config
+            .update((draft) => {
+              draft.hints = { ...draft.hints, tips: props.hidden }
+            })
+            .catch(() => {})
           props.api.ui.dialog.clear()
         },
       },
@@ -40,7 +47,8 @@ const tui: TuiPlugin = async (api) => {
     slots: {
       home_bottom() {
         const data = useData()
-        const hidden = createMemo(() => api.kv.get("tips_hidden", false))
+        const config = useConfig().data
+        const hidden = createMemo(() => !(config.hints?.tips ?? true))
         const first = createMemo(() => api.state.session.count() === 0)
         const connected = createMemo(() => hasConnectedProvider(data.location.integration.list() ?? []))
         const show = createMemo(() => (!first() || !connected()) && !hidden())

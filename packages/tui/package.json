@@ -19,7 +19,6 @@
     "./context/args": "./src/context/args.tsx",
     "./context/epilogue": "./src/context/epilogue.tsx",
     "./context/exit": "./src/context/exit.tsx",
-    "./context/kv": "./src/context/kv.tsx",
     "./context/log": "./src/context/log.tsx",
     "./context/project": "./src/context/project.tsx",
     "./context/runtime": "./src/context/runtime.tsx",
