@@ -336,18 +336,6 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.showSessionProgressBar.title")}
-          description={language.t("settings.general.row.showSessionProgressBar.description")}
-        >
-          <div data-action="settings-show-session-progress-bar">
-            <Switch
-              checked={settings.general.showSessionProgressBar()}
-              onChange={(checked) => settings.general.setShowSessionProgressBar(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
           title={language.t("settings.general.row.newLayoutDesigns.title")}
           description={language.t("settings.general.row.newLayoutDesigns.description")}
         >
@@ -452,11 +440,6 @@ export const SettingsGeneral: Component = () => {
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => option && theme.setColorScheme(option.value)}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewColorScheme(option.value)
-              return () => theme.cancelPreview()
-            }}
             variant="secondary"
             size="small"
             triggerVariant="settings"
@@ -482,11 +465,6 @@ export const SettingsGeneral: Component = () => {
             onSelect={(option) => {
               if (!option) return
               theme.setTheme(option.id)
-            }}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewTheme(option.id)
-              return () => theme.cancelPreview()
             }}
             variant="secondary"
             size="small"

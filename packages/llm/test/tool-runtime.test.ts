@@ -598,7 +598,7 @@ describe("LLMClient tools", () => {
         include: ["reasoning.encrypted_content"],
         input: [
           { role: "user" },
-          { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "encrypted-state" },
+          { type: "reasoning", summary: [], encrypted_content: "encrypted-state" },
           { type: "function_call", call_id: "call_1", name: "get_weather" },
           { type: "function_call_output", call_id: "call_1" },
         ],

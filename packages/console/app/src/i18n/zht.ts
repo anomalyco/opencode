@@ -240,9 +240,8 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.banner.text": "MiniMax M3 限時享有 3 倍使用額度",
   "go.meta.description":
-    "Go 首月 $5，之後 $10/月，提供對 GLM-5.1、GLM-5、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 的 5 小時充裕請求額度。",
+    "Go 首月 $5，之後 $10/月，提供對 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 的 5 小時充裕請求額度。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
     "Go 將代理編碼帶給全世界的程式設計師。提供寬裕的限額以及對最強大開源模型的穩定存取，讓你可以使用強大的代理進行構建，而無需擔心成本或可用性。",
@@ -290,7 +289,7 @@ export const dict = {
   "go.problem.item2": "寬裕的限額與穩定存取",
   "go.problem.item3": "專為盡可能多的程式設計師打造",
   "go.problem.item4":
-    "包含 GLM-5.1、GLM-5、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 與 DeepSeek V4 Flash",
+    "包含 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 與 DeepSeek V4 Flash",
   "go.how.title": "Go 如何運作",
   "go.how.body": "Go 起價為首月 $5，之後 $10/月。您可以將其與 OpenCode 或任何代理搭配使用。",
   "go.how.step1.title": "建立帳號",
@@ -312,7 +311,7 @@ export const dict = {
   "go.faq.a2": "Go 包含下方列出的模型，提供充足的額度與穩定的存取。",
   "go.faq.q3": "Go 與 Zen 一樣嗎？",
   "go.faq.a3":
-    "不。Zen 是按量付費，而 Go 首月 $5，之後 $10/月，提供充裕的額度，並可可靠地存取 GLM-5.1、GLM-5、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 等開源模型。",
+    "不。Zen 是按量付費，而 Go 首月 $5，之後 $10/月，提供充裕的額度，並可可靠地存取 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 等開源模型。",
   "go.faq.q4": "Go 費用是多少？",
   "go.faq.a4.p1.beforePricing": "Go 費用為",
   "go.faq.a4.p1.pricingLink": "首月 $5",
@@ -334,7 +333,7 @@ export const dict = {
 
   "go.faq.q9": "免費模型與 Go 有什麼區別？",
   "go.faq.a9":
-    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為 200 次請求/天。Go 包括 GLM-5.1、GLM-5、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 與 DeepSeek V4 Flash，並在滾動視窗（5 小時、每週和每月）內執行更高的請求配額，大約相當於每 5 小時 $12、每週 $30 和每月 $60（實際請求數因模型和使用情況而異）。",
+    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為 200 次請求/天。Go 包括 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 與 DeepSeek V4 Flash，並在滾動視窗（5 小時、每週和每月）內執行更高的請求配額，大約相當於每 5 小時 $12、每週 $30 和每月 $60（實際請求數因模型和使用情況而異）。",
 
   "zen.api.error.rateLimitExceeded": "超出頻率限制。請稍後再試。",
   "zen.api.error.modelNotSupported": "不支援模型 {{model}}",
@@ -356,6 +355,7 @@ export const dict = {
     "你的工作區已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已停用",
+  "zen.api.error.regionNotAllowed": "此模型部署於中國。如果你想使用此模型，請在設定中啟用它：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已結束。您可以訂閱 OpenCode Go 繼續使用該模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
@@ -631,6 +631,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "達到使用限制後使用您的可用餘額",
   "workspace.lite.subscription.selectProvider":
     "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
+  "workspace.lite.providers.title": "提供商",
+  "workspace.lite.providers.description": "控制用於路由的提供商。",
+  "workspace.lite.providers.useChina": "啟用部署在中國的模型",
   "workspace.lite.black.message": "您目前已訂閱 OpenCode Black 或在候補名單中。若要切換至 Go，請先取消訂閱。",
   "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
   "workspace.lite.promo.description":

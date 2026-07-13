@@ -20,6 +20,11 @@
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
+  user-select: none;
+}
+
+.settings-v2-panel :is(input, textarea, [contenteditable="true"]) {
+  user-select: text;
 }
 
 .settings-v2-panel::-webkit-scrollbar {
@@ -167,11 +172,21 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
+@media (max-width: 639px) {
+  .settings-v2[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+    [data-slot="tabs-v2-list"] {
+    width: 144px;
+    min-width: 144px;
+    padding-inline: 8px;
+  }
+}
+
 .settings-v2-nav-footer {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 4px 0 4px 4px;
+  user-select: none;
 }
 
 .settings-v2-nav-footer > span {
@@ -390,7 +405,7 @@
   overflow: hidden;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -624,7 +639,7 @@
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-header"] {
   align-items: center;
-  padding: 24px 24px 0;
+  padding: 24px 24px 16px;
 }
 
 [data-component="dialog-v2"].settings-v2-server-dialog [data-slot="dialog-body"] {

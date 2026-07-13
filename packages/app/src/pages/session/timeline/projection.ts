@@ -1,7 +1,10 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, mapArray, type Accessor } from "solid-js"
+import { reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
+
+export { reuseTimelineRows } from "./row-reconciliation"
 
 const emptyAssistantMessages: AssistantMessage[] = []
 
@@ -11,6 +14,7 @@ export function createTimelineProjection(input: {
   parts: (messageID: string) => Part[]
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
+  inlineComments: Accessor<boolean>
 }) {
   const messageByID = createMemo(() => new Map(input.messages().map((message) => [message.id, message] as const)))
   const assistantMessagesByParent = createMemo(() => {
@@ -56,6 +60,7 @@ export function createTimelineProjection(input: {
             input.showReasoningSummaries(),
             input.status().type,
             activeMessageID() === userMessage.id,
+            input.inlineComments(),
           ),
         ),
       ),
@@ -101,16 +106,4 @@ export function createTimelineProjection(input: {
     rowByKey,
     rows,
   }
-}
-
-export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
-  if (!previous?.length) return rows
-  const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
-  const next = rows.map((row) => {
-    const existing = byKey.get(TimelineRow.key(row))
-    if (!existing) return row
-    return TimelineRow.equals(existing, row) ? existing : row
-  })
-  if (previous.length === next.length && previous.every((row, index) => row === next[index])) return previous
-  return next
 }

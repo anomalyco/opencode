@@ -26,7 +26,7 @@ export function SettingsServerScope(props: ParentProps) {
 
 function SettingsServerDataProviders(props: ParentProps<{ server: ServerConnection.Any }>) {
   const global = useGlobal()
-  const serverCtx = () => global.createServerCtx(props.server)
+  const serverCtx = () => global.ensureServerCtx(props.server)
 
   return (
     <QueryClientProvider client={serverCtx().queryClient}>
