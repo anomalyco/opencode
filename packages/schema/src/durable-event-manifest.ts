@@ -10,6 +10,7 @@ export const SessionDurable = {
 } as const
 
 export const Durable = Event.durable([
+  Event.Compacted,
   ...SessionV1.Event.Definitions.filter((definition) => definition.durable !== undefined),
   ...SessionEvent.DurableDefinitions,
 ])
