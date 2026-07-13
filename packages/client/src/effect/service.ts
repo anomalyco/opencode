@@ -55,7 +55,8 @@ const discoverLocal = Effect.fnUntraced(function* (options: Options) {
 })
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
-// version-mismatched one, and otherwise spawns the service command detached.
+// version-mismatched one, and otherwise spawns small contenders until a server
+// becomes discoverable. A contender is never killed merely for slow startup.
 export const start = Effect.fn("service.start")(function* (options: StartOptions = {}) {
   const compatible = yield* discover(options)
   if (compatible !== undefined) return compatible
@@ -67,31 +68,33 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
 
   const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
   if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
-  const child = yield* Effect.try({
+  const spawnContender = Effect.try({
     try: () => {
       const child = spawn(command, args, { detached: true, stdio: "ignore" })
+      let error: Error | undefined
+      child.once("error", (cause) => {
+        error = new Error("Failed to start server", { cause })
+      })
       child.unref()
-      return child
+      return { child, error: () => error }
     },
     catch: (cause) => new Error("Failed to start server", { cause }),
   })
-
-  return yield* discoverLocal(options).pipe(
-    Effect.flatMap((found) =>
-      found === undefined ? Effect.fail(new Error("Server is not ready")) : Effect.succeed(found),
-    ),
-    Effect.retry(poll),
-    Effect.tap((found) =>
-      found.info.pid === child.pid
-        ? Effect.void
-        : Effect.sync(() => {
-            child.kill("SIGTERM")
-          }),
-    ),
-    Effect.map((found) => found.endpoint),
-    Effect.tapError(() => Effect.try({ try: () => child.kill("SIGTERM"), catch: () => undefined }).pipe(Effect.ignore)),
-    Effect.mapError(() => new Error("Failed to start server")),
-  )
+  const found = yield* Effect.gen(function* () {
+    const contender = yield* spawnContender
+    const found = yield* discoverLocal(options).pipe(
+      Effect.filterOrFail((found) => found !== undefined),
+      Effect.retry(poll),
+      Effect.option,
+    )
+    if (Option.isSome(found)) return found
+    const error = contender.error()
+    if (error !== undefined) return yield* Effect.fail(error)
+    if (contender.child.exitCode !== null && contender.child.exitCode !== 0)
+      return yield* Effect.fail(new Error(`Server process exited with code ${contender.child.exitCode}`))
+    return found
+  }).pipe(Effect.repeat({ until: Option.isSome }))
+  return Option.getOrThrow(found).endpoint
 })
 
 export const stop = Effect.fn("service.stop")(function* (options: Options = {}) {
@@ -181,7 +184,8 @@ const find = Effect.fnUntraced(function* (options: Options) {
   return yield* probe(info, undefined, true)
 })
 
-// 50ms cadence bounded at ~5s, shared by stop escalation and start readiness.
+// 50ms cadence bounded at ~5s, shared by stop escalation and each start
+// discovery window.
 const poll = Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(100)))
 
 const signal = (pid: number, name: NodeJS.Signals) =>

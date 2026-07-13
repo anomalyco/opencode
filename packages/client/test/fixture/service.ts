@@ -1,7 +1,16 @@
 import { rename, writeFile } from "node:fs/promises"
 
-const [registration, mode] = process.argv.slice(2)
+const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
+if (mode === "failed") process.exit(1)
+
+if (mode === "delayed") {
+  const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
+    .then(() => true)
+    .catch(() => false)
+  if (!owner) process.exit()
+  await Bun.sleep(Number(delay))
+}
 
 let requests = 0
 const server = Bun.serve({

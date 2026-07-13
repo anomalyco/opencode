@@ -59,7 +59,40 @@ test("a legacy health response is still replaced", async () => {
   await existing.exited
 })
 
-function run<A, E>(effect: Effect.Effect<A, E, never>) {
+test("waits for a slow winner without killing it", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const endpoint = await run(
+    Service.start({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "delayed", "6000"],
+    }),
+  )
+  const info = await Bun.file(registration).json()
+  try {
+    expect(endpoint.url).toBe(info.url)
+    expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: info.pid })
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+  }
+}, 15_000)
+
+test("reports a contender that fails to start", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  await expect(
+    run(
+      Service.start({
+        file: registration,
+        version: "test",
+        command: [process.execPath, fixture, registration, "failed"],
+      }),
+    ),
+  ).rejects.toThrow("Server process exited with code 1")
+}, 10_000)
+
+function run<A, E>(effect: Effect.Effect<A, E>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 }
 
