@@ -136,14 +136,14 @@ test("theme swaps restyle active reasoning without resetting the stream", async 
     ...RUN_THEME_FALLBACK,
     block: {
       ...RUN_THEME_FALLBACK.block,
-      subtleSyntax: previousSyntax,
+      syntax: previousSyntax,
     },
   }
   const next = {
     ...RUN_THEME_FALLBACK,
     block: {
       ...RUN_THEME_FALLBACK.block,
-      subtleSyntax: nextSyntax,
+      syntax: nextSyntax,
     },
   }
   const out = await setup({ theme: previous, onThemeRelease: (theme) => released.push(theme) })

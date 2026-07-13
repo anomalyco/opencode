@@ -143,7 +143,7 @@ export class RunScrollbackStream {
     }
 
     active.renderable.fg = entryColor(active.commit, theme)
-    active.renderable.syntaxStyle = entrySyntax(active.commit, theme)
+    active.renderable.syntaxStyle = entrySyntax(theme)
   }
 
   private createEntry(commit: StreamCommit, body: ActiveBody): ActiveEntry {
@@ -165,7 +165,7 @@ export class RunScrollbackStream {
           ? new CodeRenderable(surface.renderContext, {
               content: "",
               filetype: body.filetype,
-              syntaxStyle: entrySyntax(commit, this.theme),
+              syntaxStyle: entrySyntax(this.theme),
               width: "100%",
               wrapMode: "word",
               drawUnstyledText: false,
@@ -175,7 +175,7 @@ export class RunScrollbackStream {
             })
           : new MarkdownRenderable(surface.renderContext, {
               content: "",
-              syntaxStyle: entrySyntax(commit, this.theme),
+              syntaxStyle: entrySyntax(this.theme),
               width: "100%",
               streaming: true,
               internalBlockMode: "top-level",

@@ -23,7 +23,7 @@ import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
-import { createSyntaxStyleMemo, generateSubtleSyntax, useTheme } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -1716,7 +1716,7 @@ function ReasoningPart(props: {
   part: SessionMessageAssistantReasoning
   message: SessionMessageAssistant
 }) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -1736,8 +1736,6 @@ function ReasoningPart(props: {
     return end === undefined ? 0 : Math.max(0, end - start)
   })
   const summary = createMemo(() => reasoningSummary(content()))
-  const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
-
   const toggle = () => {
     if (!inMinimal()) return
     setExpanded((prev) => !prev)

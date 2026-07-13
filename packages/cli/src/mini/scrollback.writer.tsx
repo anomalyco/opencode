@@ -84,7 +84,7 @@ export function RunEntryContent(props: {
   const theme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
   const body = createMemo(() => props.body ?? entryBody(props.commit))
   const style = createMemo(() => entryLook(props.commit, theme().entry))
-  const syntax = createMemo(() => entrySyntax(props.commit, theme()))
+  const syntax = createMemo(() => entrySyntax(theme()))
   const color = createMemo(() => entryColor(props.commit, theme()))
   const suppressBackgrounds = createMemo(() => props.opts?.suppressBackgrounds === true)
   const diffBg = (color: ColorInput) => (suppressBackgrounds() ? transparent : color)

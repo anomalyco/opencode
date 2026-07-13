@@ -47,7 +47,6 @@ export type RunBlockTheme = {
   text: ColorInput
   muted: ColorInput
   syntax?: SyntaxStyle
-  subtleSyntax?: SyntaxStyle
   diffAdded: ColorInput
   diffRemoved: ColorInput
   diffAddedBg: ColorInput
@@ -172,40 +171,8 @@ function tint(base: RGBA, overlay: RGBA, value: number): RGBA {
   )
 }
 
-function blend(color: RGBA, bg: RGBA): RGBA {
-  if (color.a >= 1) {
-    return color
-  }
-
-  return RGBA.fromValues(
-    bg.r + (color.r - bg.r) * color.a,
-    bg.g + (color.g - bg.g) * color.a,
-    bg.b + (color.b - bg.b) * color.a,
-    1,
-  )
-}
-
 function chroma(color: RGBA) {
   return Math.max(color.r, color.g, color.b) - Math.min(color.r, color.g, color.b)
-}
-
-function opaqueSyntaxStyle(style: SyntaxStyle | undefined, bg: RGBA): SyntaxStyle | undefined {
-  if (!style) {
-    return undefined
-  }
-
-  return SyntaxStyle.fromStyles(
-    Object.fromEntries(
-      [...style.getAllStyles()].map(([name, value]) => [
-        name,
-        {
-          ...value,
-          fg: value.fg ? blend(value.fg, bg) : value.fg,
-          bg: value.bg ? blend(value.bg, bg) : value.bg,
-        },
-      ]),
-    ),
-  )
 }
 
 function indexedPalette(colors: TerminalColors, size: number = Math.max(colors.palette.length, 16)): RGBA[] {
@@ -502,10 +469,7 @@ function map(
   scrollbackTheme: TuiThemeCurrent,
   splash: RunSplashTheme,
   syntax?: SyntaxStyle,
-  subtleSyntax?: SyntaxStyle,
 ): RunTheme {
-  const opaqueSubtleSyntax = opaqueSyntaxStyle(subtleSyntax, scrollbackTheme.background)
-  subtleSyntax?.destroy()
   const footerBackground = alpha(footerTheme.background, 1)
   const footerMode = mode(footerBackground)
   const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
@@ -566,7 +530,6 @@ function map(
       text: scrollbackTheme.text,
       muted: scrollbackTheme.textMuted,
       syntax,
-      subtleSyntax: opaqueSubtleSyntax,
       diffAdded: scrollbackTheme.diffAdded,
       diffRemoved: scrollbackTheme.diffRemoved,
       diffAddedBg: transparent,
@@ -677,13 +640,7 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
       _hasSelectedListItemText: true,
     }
     const syntax = shared.generateSyntax(syntaxTheme)
-    return map(
-      footerTheme,
-      scrollbackTheme,
-      splashTheme(scrollbackTheme, indexed),
-      syntax,
-      shared.generateSubtleSyntax(syntaxTheme),
-    )
+    return map(footerTheme, scrollbackTheme, splashTheme(scrollbackTheme, indexed), syntax)
   } catch {
     return RUN_THEME_FALLBACK
   }

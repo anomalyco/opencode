@@ -90,7 +90,6 @@ export type Theme = {
   _hasSelectedListItemText: boolean
 }
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
-export type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
@@ -555,32 +554,6 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean): RGBA {
 
 export function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
-}
-
-export function generateSubtleSyntax(theme: Theme, overrides?: SyntaxStyleOverrides) {
-  const rules = getSyntaxRules(theme)
-  return SyntaxStyle.fromTheme(
-    rules.map((rule) => {
-      const override = rule.scope.reduce((acc, scope) => ({ ...acc, ...overrides?.[scope] }), {})
-      if (rule.style.foreground) {
-        const fg = rule.style.foreground
-        return {
-          ...rule,
-          style: {
-            ...rule.style,
-            ...override,
-            foreground: RGBA.fromInts(
-              Math.round(fg.r * 255),
-              Math.round(fg.g * 255),
-              Math.round(fg.b * 255),
-              Math.round(theme.thinkingOpacity * 255),
-            ),
-          },
-        }
-      }
-      return rule
-    }),
-  )
 }
 
 function getSyntaxRules(theme: Theme) {
