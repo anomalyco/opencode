@@ -177,7 +177,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
   }
 
   const queuedStart = (rows: SessionRow[]) => {
-    const index = rows.findIndex((row) => row.type === "message" && isPending(row.messageID))
+    const index = rows.findIndex(
+      (row) => row.type === "compaction-queued" || (row.type === "message" && isPending(row.messageID)),
+    )
     return index === -1 ? rows.length : index
   }
 

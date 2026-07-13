@@ -1203,6 +1203,21 @@ test("restores queued compaction from durable pending input", async () => {
     ])
 
     emitEvent(events, {
+      id: "evt_text_ended",
+      created: 2,
+      type: "session.text.ended",
+      durable: durable(sessionID, 5),
+      data: {
+        sessionID,
+        assistantMessageID: "message-assistant",
+        ordinal: 0,
+        text: "Active output",
+      },
+    })
+    await wait(() => rows.some((row) => row.type === "part"))
+    expect(rows.map((row) => row.type)).toEqual(["part", "compaction-queued", "compaction-queued"])
+
+    emitEvent(events, {
       id: "evt_compaction_started",
       created: 2,
       type: "session.compaction.started",
