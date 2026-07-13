@@ -876,7 +876,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("loads global, ancestor, and .opencode configuration up to the project boundary", () =>
+  it.live("loads global and ancestor configuration across the project boundary", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -936,6 +936,7 @@ describe("Config", () => {
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
+              "outside",
               "root",
               "parent",
               "directory",
@@ -951,6 +952,8 @@ describe("Config", () => {
               AbsolutePath.make(path.join(root, ".agents")),
               "global",
               AbsolutePath.make(global),
+              "outside",
+              AbsolutePath.make(path.join(tmp.path, "opencode.json")),
               "root",
               AbsolutePath.make(path.join(root, "opencode.json")),
               "parent",

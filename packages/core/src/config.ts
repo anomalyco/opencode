@@ -200,7 +200,6 @@ const layer = Layer.effect(
             .up({
               targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
               start: location.directory,
-              stop: location.project.directory,
             })
           .pipe(Effect.orDie)
 
