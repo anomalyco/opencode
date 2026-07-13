@@ -3161,8 +3161,8 @@ describe("ProviderTransform.reasoningVariants", () => {
         target("@ai-sdk/anthropic"),
       ),
     ).toEqual({
-      high: { thinking: { type: "enabled", budgetTokens: 32_000 } },
-      max: { thinking: { type: "enabled", budgetTokens: 63_999 } },
+      high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
+      max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
     })
   })
 
@@ -3186,6 +3186,18 @@ describe("ProviderTransform.reasoningVariants", () => {
     ).toEqual({
       high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
       max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+    })
+  })
+
+  test("preserves explicit inclusive budget maxima", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "budget_tokens", min: 1_024, max: 24_576 }]),
+        target("@ai-sdk/google", "gemini-2.5-pro"),
+      ),
+    ).toEqual({
+      high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 12_288 } },
+      max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24_576 } },
     })
   })
 

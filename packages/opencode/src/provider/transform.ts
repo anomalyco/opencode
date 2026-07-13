@@ -1611,10 +1611,9 @@ function effortVariants(model: Provider.Model, values: readonly unknown[]) {
 }
 
 function budgetVariants(model: Provider.Model, min?: number, max?: number) {
-  const allocation = Math.min(max ?? 32_000, model.limit.output)
-  if (allocation <= 1) return {}
-  const maximum = allocation - 1
-  const high = Math.min(Math.max(min ?? 0, Math.floor(allocation / 2)), maximum)
+  const maximum = Math.min(max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
+  if (maximum <= 0) return {}
+  const high = Math.min(Math.max(min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
   return Object.fromEntries(
     [
       { id: "high", budget: high },
