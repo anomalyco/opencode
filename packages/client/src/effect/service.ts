@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
-import { spawn } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -41,6 +41,11 @@ export type StartOptions = Options & {
   readonly onStart?: (reason: StartReason, existing?: Info) => void
 }
 
+type Contender = {
+  readonly child: ChildProcess
+  readonly error: () => Error | undefined
+}
+
 // Read-only lookup: registration file plus health check and version gate.
 // Never spawns; escalation to start() is the caller's policy.
 export const discover = Effect.fn("service.discover")(function* (options: Options = {}) {
@@ -68,6 +73,7 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
 
   const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
   if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
+  const contenders = new Set<Contender>()
   const spawnContender = Effect.try({
     try: () => {
       const child = spawn(command, args, { detached: true, stdio: "ignore" })
@@ -81,21 +87,40 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
     catch: (cause) => new Error("Failed to start server", { cause }),
   })
   const found = yield* Effect.gen(function* () {
+    if (options.version !== undefined) {
+      const owner = yield* find(options)
+      if (owner !== undefined && owner.version !== options.version) yield* kill(owner.info, options).pipe(Effect.ignore)
+    }
     const contender = yield* spawnContender
+    contenders.add(contender)
     const found = yield* discoverLocal(options).pipe(
       Effect.filterOrFail((found) => found !== undefined),
       Effect.retry(poll),
       Effect.option,
     )
     if (Option.isSome(found)) return found
-    const error = contender.error()
-    if (error !== undefined) return yield* Effect.fail(error)
-    if (contender.child.exitCode !== null && contender.child.exitCode !== 0)
-      return yield* Effect.fail(new Error(`Server process exited with code ${contender.child.exitCode}`))
+    const failure = [...contenders].map(contenderFailure).find((error): error is Error => error !== undefined)
+    const finished = [...contenders].filter(contenderFinished)
+    finished.forEach((contender) => contenders.delete(contender))
+    if (failure !== undefined) return yield* Effect.fail(failure)
     return found
   }).pipe(Effect.repeat({ until: Option.isSome }))
   return Option.getOrThrow(found).endpoint
 })
+
+function contenderFailure(contender: Contender) {
+  const error = contender.error()
+  if (error !== undefined) return error
+  if (contender.child.exitCode !== null && contender.child.exitCode !== 0)
+    return new Error(`Server process exited with code ${contender.child.exitCode}`)
+  if (contender.child.signalCode !== null)
+    return new Error(`Server process terminated by ${contender.child.signalCode}`)
+  return undefined
+}
+
+function contenderFinished(contender: Contender) {
+  return contender.error() !== undefined || contender.child.exitCode !== null || contender.child.signalCode !== null
+}
 
 export const stop = Effect.fn("service.stop")(function* (options: Options = {}) {
   const fs = yield* FileSystem.FileSystem

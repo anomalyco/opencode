@@ -92,6 +92,58 @@ test("reports a contender that fails to start", async () => {
   ).rejects.toThrow("Server process exited with code 1")
 }, 10_000)
 
+test("reports a contender terminated by a signal", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  await expect(
+    run(
+      Service.start({
+        file: registration,
+        version: "test",
+        command: [process.execPath, fixture, registration, "signal"],
+      }),
+    ),
+  ).rejects.toThrow(/Server process (terminated by|exited with code)/)
+}, 10_000)
+
+test("reports a slow winner that fails after later contenders exit", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  await expect(
+    run(
+      Service.start({
+        file: registration,
+        version: "test",
+        command: [process.execPath, fixture, registration, "delayed-failed", "8000"],
+      }),
+    ),
+  ).rejects.toThrow("Server process exited with code 1")
+}, 15_000)
+
+test("replaces an incompatible owner that appears during startup", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const starting = run(
+    Service.start({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "delayed", "8000"],
+    }),
+  )
+  await Bun.sleep(1_000)
+  const old = spawn(registration, "old")
+  await waitForFile(registration)
+  const endpoint = await starting
+  const info = await Bun.file(registration).json()
+  try {
+    expect(endpoint.url).toBe(info.url)
+    expect(info.version).toBe("test")
+    await old.exited
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+  }
+}, 20_000)
+
 function run<A, E>(effect: Effect.Effect<A, E>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 }
