@@ -2,10 +2,14 @@ import { Config } from "@/config/config"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Installation } from "@/installation"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { GlobalBus } from "@/bus/global"
 
 export async function upgrade() {
+  // A local dev build (working-tree dist, channel "local") must never be
+  // nudged toward a release build — 0.0.0-dev-* vs 1.x always reads as a
+  // major update. Only real installs (curl/brew/npm channels) check.
+  if (InstallationLocal) return
   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
   if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
   const method = await Installation.method()
