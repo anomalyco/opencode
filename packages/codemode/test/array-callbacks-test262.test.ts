@@ -323,3 +323,44 @@ describe("Test262 Array callback adaptations", () => {
     })
   }
 })
+
+describe("Array callback regressions", () => {
+  test("reduce and reduceRight find the first present element", async () => {
+    expect(
+      await value(`
+        const left = []
+        left[2] = 3
+        const right = []
+        right[2] = 4
+        return [left.reduce((a, b) => a + b), right.reduceRight((a, b) => a + b)]
+      `),
+    ).toEqual([3, 4])
+  })
+
+  test("reduce and reduceRight reject arrays containing only holes", async () => {
+    expect(
+      await value(`
+        const values = []
+        values[2] = 1
+        values.pop()
+        let left = false
+        let right = false
+        try { values.reduce((a, b) => a + b) } catch { left = true }
+        try { values.reduceRight((a, b) => a + b) } catch { right = true }
+        return [left, right]
+      `),
+    ).toEqual([true, true])
+  })
+
+  test("findLast returns the value observed before predicate mutation", async () => {
+    expect(
+      await value(`
+        const values = [1]
+        return values.findLast((item, index, array) => {
+          array[index] = 2
+          return true
+        })
+      `),
+    ).toBe(1)
+  })
+})

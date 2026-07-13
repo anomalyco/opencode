@@ -727,16 +727,14 @@ const invokeArrayMethod = <R>(
         }
         return undefined
       case "reduce": {
-        let accumulator: unknown
-        let start: number
-        if (args.length >= 2) {
-          accumulator = args[1]
-          start = 0
-        } else {
-          if (length === 0)
+        let start = 0
+        let accumulator = args[1]
+        if (args.length < 2) {
+          while (start < length && !(start in target)) start += 1
+          if (start === length)
             throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
-          accumulator = target[0]
-          start = 1
+          accumulator = target[start]
+          start += 1
         }
         for (let index = start; index < length; index += 1) {
           if (!(index in target)) continue
@@ -745,16 +743,14 @@ const invokeArrayMethod = <R>(
         return accumulator
       }
       case "reduceRight": {
-        let accumulator: unknown
-        let start: number
-        if (args.length >= 2) {
-          accumulator = args[1]
-          start = length - 1
-        } else {
-          if (length === 0)
+        let start = length - 1
+        let accumulator = args[1]
+        if (args.length < 2) {
+          while (start >= 0 && !(start in target)) start -= 1
+          if (start < 0)
             throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
-          accumulator = target[length - 1]
-          start = length - 2
+          accumulator = target[start]
+          start -= 1
         }
         for (let index = start; index >= 0; index -= 1) {
           if (!(index in target)) continue
@@ -764,7 +760,8 @@ const invokeArrayMethod = <R>(
       }
       case "findLast":
         for (let index = length - 1; index >= 0; index -= 1) {
-          if (yield* apply([target[index], index, target])) return target[index]
+          const item = target[index]
+          if (yield* apply([item, index, target])) return item
         }
         return undefined
       case "findLastIndex":

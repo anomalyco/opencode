@@ -167,11 +167,10 @@ ultimate source of truth.
 - [x] Mutation: `push`, `pop`, `shift`, `unshift`, `splice`, `fill`, and `copyWithin`.
 - [x] Materialized iteration helpers: `keys`, `values`, and `entries` return arrays rather than iterators.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
+- [x] Canonical indexes remain distinct from ordinary properties such as `"01"`, `"-1"`, and `"4294967295"`.
 - [ ] The mapper and `thisArg` forms of `Array.from`.
 - [ ] `Array.prototype.toSpliced`.
-- [ ] Canonical index handling: a key such as `"01"` must not alias index `1`.
 - [ ] Complete sparse-array parity. Promise combinators do consume holes as `undefined` members, as in JS.
-- [ ] Correct `findLast` return behavior when its predicate mutates the examined element.
 
 ## Strings
 
