@@ -2,10 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
-  formatCompletedSubagentDetail,
   formatSubagentRetry,
   formatSubagentTitle,
-  formatSubagentToolcalls,
   InlineToolRow,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -182,13 +180,6 @@ describe("TUI inline tool wrapping", () => {
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
   })
 
-  test("formats completed subagent toolcall details", () => {
-    expect(formatCompletedSubagentDetail(0, "501ms")).toBe("501ms")
-    expect(formatCompletedSubagentDetail(1, "501ms")).toBe("1 toolcall · 501ms")
-    expect(formatCompletedSubagentDetail(2, "501ms")).toBe("2 toolcalls · 501ms")
-    expect(formatSubagentToolcalls(0)).toBe("0 toolcalls")
-  })
-
   test("keeps background state attached to the subagent identity", () => {
     expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Subagent — Inspect renderer")
     expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
@@ -207,5 +198,4 @@ describe("TUI inline tool wrapping", () => {
   test("snapshots expanded tool errors under the tool text", async () => {
     expect(await renderFrame(() => <Fixture errorExpanded />, { width: 72, height: 12 })).toMatchSnapshot()
   })
-
 })
