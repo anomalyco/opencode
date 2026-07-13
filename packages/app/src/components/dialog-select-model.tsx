@@ -140,8 +140,8 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
-  const local = useLocal()
-  const directory = () => decode64(local.slug())
+  const local = props.model ? undefined : useLocal()
+  const directory = local ? () => decode64(local.slug()) : undefined
 
   const close = (dismiss: Dismiss) => {
     setStore("dismiss", dismiss)
