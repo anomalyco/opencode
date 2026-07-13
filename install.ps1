@@ -208,23 +208,40 @@ function Main {
     Write-Step "Configuring gentle-ai for opencode"
     $gentleExe = Join-Path $GENTLE_DIR "gentle-ai.exe"
     if (Test-Path $gentleExe) {
+        Write-Info "This may take a minute -- downloading skills, agents, and tools..."
         $envPath = $env:GENTLE_AI_CHANNEL
         if ($Channel -ne "stable") {
             $env:GENTLE_AI_CHANNEL = $Channel
         }
+        $prevEA = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         try {
-            $output = & $gentleExe install --agent opencode 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warn "gentle-ai install reported issues: $output"
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = $gentleExe
+            $psi.Arguments = "install --agent opencode"
+            $psi.UseShellExecute = $false
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $proc = [System.Diagnostics.Process]::Start($psi)
+            $stdout = $proc.StandardOutput.ReadToEnd()
+            $stderr = $proc.StandardError.ReadToEnd()
+            $proc.WaitForExit()
+            $output = "$stdout`n$stderr"
+            if ($proc.ExitCode -ne 0) {
+                Write-Warn "gentle-ai install exited with code $($proc.ExitCode)"
+                if ($output.Trim()) { Write-Host $output -ForegroundColor DarkGray }
+                Write-Warn "You can run 'gentle-ai install --agent opencode' manually later."
             } else {
                 Write-Success "gentle-ai configured opencode agent"
+                if ($output.Trim()) { Write-Host $output -ForegroundColor DarkGray }
             }
         }
         catch {
-            Write-Warn "gentle-ai install failed: $_"
+            Write-Warn "gentle-ai install error: $_"
             Write-Warn "You can run 'gentle-ai install --agent opencode' manually later."
         }
         finally {
+            $ErrorActionPreference = $prevEA
             $env:GENTLE_AI_CHANNEL = $envPath
         }
     }
