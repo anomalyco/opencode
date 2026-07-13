@@ -1,6 +1,6 @@
 # Service Lifecycle: Election, Restart, and Reconnect
 
-Status: proposed
+Status: in progress
 
 Incident: [#36688](https://github.com/anomalyco/opencode/issues/36688)
 
@@ -30,6 +30,19 @@ This proposal does not introduce a supervisor process, warm candidate server,
 protocol negotiation, idle background restart, or general execution-recovery
 framework.
 
+## Implementation Status
+
+| Area                      | State                                                                 |
+| ------------------------- | --------------------------------------------------------------------- |
+| Lifetime ownership        | Implemented on this branch with a scoped OS lock                      |
+| Contender behavior        | Implemented; losers exit before the server module is imported         |
+| Registration repair       | Implemented; the owner reasserts deleted or corrupt discovery         |
+| Client startup waiting    | Implemented; slow winners are not killed and waiting is indefinite    |
+| Lifecycle shell           | Pending; registration still appears only after application boot       |
+| Failed-state latching     | Pending; deterministic boot failure is reported but not held by owner |
+| Recovery diagnostics      | Pending; unresponsive-owner guidance still needs lifecycle UI work    |
+| Cross-platform validation | macOS runtime verified; Linux and Windows require CI runtime coverage |
+
 ## Context
 
 The V2 CLI runs a shared managed service that owns Sessions, location graphs,
@@ -46,19 +59,24 @@ Incident #36688 showed four failures in that replacement path:
   transport defect.
 - A losing contender remained alive and consumed about 1 GB of RSS.
 
-Today the service election path uses no lock at all. Election is
-last-writer-wins on the registration file: every `ensureRunning` spawns a full
-server, the newest process overwrites `server.json`, and a displaced server
-notices within its 10-second registration self-check and terminates itself.
-Every contender is a complete application boot, and ownership can change hands
-after the fact.
+The `origin/v2` baseline serializes service startup with `EffectFlock`. A
+contender acquires a three-second heartbeat lease, checks whether another
+service became discoverable, and only the winner crosses the application-boot
+boundary. This already prevents simultaneous heavy boots and makes startup
+losers exit.
 
-The codebase does expose a file-locking utility, `Flock` and `EffectFlock` in
-`packages/core/src/util`, used for config writes, MCP auth, npm installs, and
-repository caching. Despite its name it is an atomic-mkdir lease with a
-heartbeat and 60-second staleness takeover, not an OS-held lock. It remains
-appropriate for those short critical sections and is not the service ownership
-primitive.
+The lease is released immediately after registration, however, so it is not
+lifetime ownership. Registration then reverts to last-writer-wins authority: a
+deleted or corrupt registration can admit a second boot, a displaced server
+terminates itself through its 10-second registration self-check, and a stalled
+lease holder can be displaced after the three-second service staleness timeout.
+
+`Flock` and `EffectFlock` live in `packages/core/src/util` and are also used for
+config writes, MCP auth, npm installs, and repository caching. Despite the
+name, the primitive is an atomic-mkdir lease with heartbeat and staleness
+takeover, not an OS-held lock. It remains appropriate for bounded critical
+sections, including today's startup fence, but is not lifetime service
+ownership.
 
 The current implementation also mixes three different concepts:
 
@@ -290,17 +308,19 @@ domain type does not make fields optional to represent old formats.
 
 ## Election
 
-This design introduces election where none exists today. Last-writer-wins
-registration is replaced by a process-held OS lock that is acquired before any
-expensive boot work and held for the entire service lifetime.
+This design promotes today's startup fence into lifetime ownership.
+Last-writer-wins registration is replaced by a process-held OS lock that is
+acquired before any expensive boot work and held for the entire service
+lifetime.
 
 A heartbeat-and-staleness lease, including the existing `Flock` utility, is not
-sufficient for service ownership: after a 60-second heartbeat gap its lock can
-be broken and recreated, so an event-loop stall, a suspended machine, or a
-debugger pause can make a live owner appear stale and allow a contender to
-displace it. Service ownership requires a process-held OS lock, such as `flock`
-on Unix and `LockFileEx` on Windows. It cannot be broken because a heartbeat
-exceeded a timeout. Process death releases the lock through the OS.
+sufficient for service ownership: the service configures a three-second stale
+timeout, after which its lock can be broken and recreated. An event-loop stall,
+a suspended machine, or a debugger pause can therefore make a live owner appear
+stale and allow a contender to displace it. Service ownership requires a
+process-held OS lock, such as `flock` on Unix and `LockFileEx` on Windows. It
+cannot be broken because a heartbeat exceeded a timeout. Process death releases
+the lock through the OS.
 
 Neither Bun nor Node exposes these primitives directly, the existing `Flock`
 utility is an mkdir-plus-heartbeat lease rather than an OS-held lock, and the
@@ -414,14 +434,14 @@ or a foreign process occupying an explicitly configured port.
 
 The UI derives text from observations:
 
-| Observation | User-facing state |
-| --- | --- |
-| No registration | `Starting background service...` |
+| Observation              | User-facing state                   |
+| ------------------------ | ----------------------------------- |
+| No registration          | `Starting background service...`    |
 | Registration unreachable | `Waiting for background service...` |
-| Lifecycle `starting` | `Starting OpenCode vX...` |
-| Lifecycle `stopping` | `Updating to vX...` |
-| Lifecycle `failed` | Actionable failure message |
-| Lifecycle `ready` | Normal TUI |
+| Lifecycle `starting`     | `Starting OpenCode vX...`           |
+| Lifecycle `stopping`     | `Updating to vX...`                 |
+| Lifecycle `failed`       | Actionable failure message          |
+| Lifecycle `ready`        | Normal TUI                          |
 
 ## Graceful Session Continuity
 
@@ -515,18 +535,18 @@ behavior.
 
 ### Election tests
 
-| Scenario | Required result |
-| --- | --- |
-| Ten contenders start simultaneously | Exactly one crosses the application-boot boundary |
-| Winner pauses after lock acquisition | No loser initializes or remains alive |
-| Winner event loop pauses beyond the old stale timeout | Ownership is not displaced |
-| Winner crashes before bind | Lock releases; a later attempt wins |
-| Winner crashes after bind but before registration | Lock releases; a later attempt replaces stale discovery |
-| Registration is deleted while owner runs | No second owner initializes |
-| Registration is malformed | Lock still prevents a second owner |
-| Registration names a dead PID | New contender can acquire the released lock |
-| Two installation channels start | Each elects an independent owner |
-| Explicit configured port is foreign-owned | Fail diagnostically; do not kill the foreign process |
+| Scenario                                              | Required result                                         |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| Ten contenders start simultaneously                   | Exactly one crosses the application-boot boundary       |
+| Winner pauses after lock acquisition                  | No loser initializes or remains alive                   |
+| Winner event loop pauses beyond the old stale timeout | Ownership is not displaced                              |
+| Winner crashes before bind                            | Lock releases; a later attempt wins                     |
+| Winner crashes after bind but before registration     | Lock releases; a later attempt replaces stale discovery |
+| Registration is deleted while owner runs              | No second owner initializes                             |
+| Registration is malformed                             | Lock still prevents a second owner                      |
+| Registration names a dead PID                         | New contender can acquire the released lock             |
+| Two installation channels start                       | Each elects an independent owner                        |
+| Explicit configured port is foreign-owned             | Fail diagnostically; do not kill the foreign process    |
 
 The fixture records a marker immediately before application initialization. The
 tests assert that only one process writes that marker and that every loser exits
@@ -536,35 +556,35 @@ was the observed incident cost.
 
 ### Lifecycle tests
 
-| Scenario | Required result |
-| --- | --- |
-| Winner owns lock but application boot is paused | Health reports `starting` |
-| Application request arrives during startup | Immediate retryable `503` |
-| Application becomes ready | Lifecycle changes once from `starting` to `ready` |
-| Graceful replacement begins | Lifecycle reports `stopping` before disconnect |
-| Application initialization fails | Actionable `failed` observation; owner stays bound and holds the lock |
-| Registration is deleted while owner runs | Owner republishes it within one assertion interval |
-| Owner exits | Registration is removed only if it still names that owner |
+| Scenario                                        | Required result                                                       |
+| ----------------------------------------------- | --------------------------------------------------------------------- |
+| Winner owns lock but application boot is paused | Health reports `starting`                                             |
+| Application request arrives during startup      | Immediate retryable `503`                                             |
+| Application becomes ready                       | Lifecycle changes once from `starting` to `ready`                     |
+| Graceful replacement begins                     | Lifecycle reports `stopping` before disconnect                        |
+| Application initialization fails                | Actionable `failed` observation; owner stays bound and holds the lock |
+| Registration is deleted while owner runs        | Owner republishes it within one assertion interval                    |
+| Owner exits                                     | Registration is removed only if it still names that owner             |
 
 ### Update tests
 
-| Scenario | Required result |
-| --- | --- |
-| Background update installs vNext | Running vOld service does not restart |
-| Fresh vNext launch finds vOld | Exact old instance stops; vNext eventually becomes ready |
-| Two fresh vNext launches race | One heavy successor; both clients attach |
-| Existing vOld TUI reconnects to vNext | It never requests replacement |
-| Stale launcher observes a new instance | It does not signal the new instance |
+| Scenario                               | Required result                                          |
+| -------------------------------------- | -------------------------------------------------------- |
+| Background update installs vNext       | Running vOld service does not restart                    |
+| Fresh vNext launch finds vOld          | Exact old instance stops; vNext eventually becomes ready |
+| Two fresh vNext launches race          | One heavy successor; both clients attach                 |
+| Existing vOld TUI reconnects to vNext  | It never requests replacement                            |
+| Stale launcher observes a new instance | It does not signal the new instance                      |
 
 ### Reconnect tests
 
-| Scenario | Required result |
-| --- | --- |
-| Endpoint disappears and changes port | TUI rediscovers and rebuilds clients |
-| Service remains unavailable beyond old retry budget | TUI remains alive |
-| Event stream reconnects | Client performs authoritative state reconciliation |
-| Transport returns an unexpected defect | TUI formats it; no raw stack escapes |
-| Owner remains unresponsive | TUI waits and shows explicit restart guidance |
+| Scenario                                            | Required result                                    |
+| --------------------------------------------------- | -------------------------------------------------- |
+| Endpoint disappears and changes port                | TUI rediscovers and rebuilds clients               |
+| Service remains unavailable beyond old retry budget | TUI remains alive                                  |
+| Event stream reconnects                             | Client performs authoritative state reconciliation |
+| Transport returns an unexpected defect              | TUI formats it; no raw stack escapes               |
+| Owner remains unresponsive                          | TUI waits and shows explicit restart guidance      |
 
 ## Delivery Sequence
 
@@ -572,16 +592,16 @@ was the observed incident cost.
    under Bun on macOS, Linux, and Windows (`bun:ffi` to `flock` and
    `LockFileEx`), including release on hard kill and behavior across
    containers and network filesystems used in CI.
-2. **Build the subprocess test harness.** Cover simultaneous contenders, lock
-   release on crash, and loser exit before changing election. Pin the harness
-   to compiled-style startup, because dev-mode `start()` unconditionally
-   replaces a matching server and would mask attach behavior.
+2. **Expand the subprocess test harness.** Begin from the baseline
+   two-contender test and cover ten contenders, lock release on crash, a paused
+   winner, deleted or corrupt registration, and bounded loser exit before
+   changing ownership.
 3. **Contain client failure.** Make transport loss nonterminal, rediscover on
    every cycle, and format unexpected failures at the TUI boundary.
-4. **Introduce process-held lock election.** Acquire the lock before
-   application imports or initialization, hold it until process exit, make
-   losing contenders exit immediately, and invert the registration self-check
-   from self-termination to reassertion.
+4. **Promote the startup fence to process-held ownership.** Preserve the
+   existing pre-boot acquisition seam, replace its lease with the OS lock, hold
+   it until process exit, and invert the registration self-check from
+   self-termination to reassertion.
 5. **Bind the lifecycle shell first.** Publish registration and `starting`,
    return retryable `503` for application requests, then initialize the app.
    The health contract change is public API: regenerate clients from
@@ -590,8 +610,8 @@ was the observed incident cost.
    reconnect never activates replacement.
 7. **Integrate graceful replacement.** Preserve current background-install and
    fresh-launch activation behavior while invoking Session continuity hooks.
-8. **Harden explicit recovery.** Verify exact process identity in `service
-   restart`; never automatically kill an unresponsive owner.
+8. **Harden explicit recovery.** Verify exact process identity during explicit
+   `service restart`; never automatically kill an unresponsive owner.
 9. **Run the full multi-process suite.** Include repeated restart cycles and
    assert that no contender or child process remains afterward.
 
