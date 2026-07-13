@@ -90,6 +90,7 @@ function init() {
   let focus: Renderable | null
   function refocus() {
     setTimeout(() => {
+      if (store.stack.length > 0) return
       if (!focus) return
       if (focus.isDestroyed) return
       function find(item: Renderable) {
