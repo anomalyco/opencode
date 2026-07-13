@@ -1097,12 +1097,16 @@ export function options(input: {
     result["toolStreaming"] = false
   }
 
-  // openai and providers using openai package should set store to false by default.
+  // OpenAI-family Responses clients default to stateless mode (store: false).
+  // For @ai-sdk/xai, store:false also causes the SDK to inject
+  // include: ["reasoning.encrypted_content"] so follow-up turns can receive
+  // encrypted reasoning for rehydration.
   if (
     input.model.providerID === "openai" ||
     input.model.api.npm === "@ai-sdk/openai" ||
     input.model.api.npm === "@ai-sdk/github-copilot" ||
-    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
+    input.model.api.npm === "@ai-sdk/xai"
   ) {
     result["store"] = false
   }
@@ -1257,7 +1261,8 @@ export function smallOptions(model: Provider.Model) {
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/github-copilot"
+    model.api.npm === "@ai-sdk/github-copilot" ||
+    model.api.npm === "@ai-sdk/xai"
   ) {
     const base = { store: false }
     return mergeDeep(base, small)

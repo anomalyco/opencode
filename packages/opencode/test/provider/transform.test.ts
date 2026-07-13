@@ -155,6 +155,43 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.store).toBe(false)
   })
 
+  test("should set store=false for xAI provider by default", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: xaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(false)
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should set store=false for xAI SDK regardless of provider ID", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "custom-xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: xaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(false)
+  })
+
   test("should set store=false for azure provider by default", () => {
     const azureModel = {
       ...mockModel,
