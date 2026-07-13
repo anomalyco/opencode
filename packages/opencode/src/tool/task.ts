@@ -10,6 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -49,6 +50,7 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -88,6 +90,7 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const defaultTimeoutMs = flags.taskDefaultTimeoutMs ?? 5 * 60 * 1000
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -100,6 +103,12 @@ export const TaskTool = Tool.define(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
         )
       }
+      if (params.timeout !== undefined && params.timeout < 0) {
+        return yield* Effect.fail(
+          new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`),
+        )
+      }
+      const timeoutMs = params.timeout ?? defaultTimeoutMs
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
@@ -306,10 +315,23 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const result = yield* Effect.raceFirst(
+            const waited = Effect.raceFirst(
               background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
               background.waitForPromotion(nextSession.id),
-            )
+            ).pipe(Effect.map((result) => ({ kind: "done" as const, result })))
+            const timedOut = Effect.sleep(`${timeoutMs} millis`).pipe(Effect.map(() => ({ kind: "timeout" as const })))
+
+            const raced = yield* Effect.raceAll([waited, timedOut])
+            if (raced.kind === "timeout") {
+              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+              return yield* Effect.fail(
+                new Error(
+                  `task tool terminated subagent after exceeding timeout ${timeoutMs} ms. If this task is expected to take longer, retry with a larger timeout value in milliseconds.`,
+                ),
+              )
+            }
+
+            const result = raced.result
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
