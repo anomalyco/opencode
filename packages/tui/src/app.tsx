@@ -89,6 +89,9 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
 
+// How long (ms) the first Ctrl+C stays "armed" before a second press is needed again.
+const EXIT_CONFIRM_WINDOW = 1500
+
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
@@ -380,6 +383,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const sync = useSync()
   const project = useProject()
   const exit = useExit()
+  let exitConfirmTimer: ReturnType<typeof setTimeout> | undefined
   const promptRef = usePromptRef()
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
@@ -833,6 +837,26 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "System",
       },
       {
+        // Ctrl+C requires a second press within the confirm window to quit, so an
+        // accidental Ctrl+C on an empty prompt does not exit the app.
+        name: "app.exit.confirm",
+        title: "Exit the app",
+        hidden: true,
+        run: () => {
+          if (exitConfirmTimer !== undefined) {
+            clearTimeout(exitConfirmTimer)
+            exitConfirmTimer = undefined
+            exit()
+            return
+          }
+          toast.show({ variant: "primary", message: "Press Ctrl+C again to exit", duration: EXIT_CONFIRM_WINDOW })
+          exitConfirmTimer = setTimeout(() => {
+            exitConfirmTimer = undefined
+          }, EXIT_CONFIRM_WINDOW)
+        },
+        category: "System",
+      },
+      {
         name: "app.debug",
         title: "Toggle debug panel",
         category: "System",
@@ -979,7 +1003,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (!current?.focused) return true
       return current.current.input === ""
     },
-    bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
+    bindings: [
+      ...tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
+      ...tuiConfig.keybinds.gather("app_exit_confirm", ["app.exit.confirm"]),
+    ],
   }))
 
   event.on("tui.command.execute", (evt, { workspace }) => {

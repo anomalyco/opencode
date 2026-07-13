@@ -126,3 +126,55 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     mock.restore()
   }
 })
+
+test("app.exit.confirm requires two presses to exit", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  const calls = createFetch()
+  let api: TuiPluginApi | undefined
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: {},
+        pluginHost: {
+          async start(input) {
+            api = input.api
+            started()
+          },
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await ready
+    await setup.renderOnce()
+
+    // First press arms the confirm; the app must stay running.
+    api?.keymap.dispatchCommand("app.exit.confirm")
+    const settled = Symbol("settled")
+    const first = await Promise.race([task.then(() => settled), Promise.resolve("pending")])
+    expect(first).toBe("pending")
+    expect(setup.renderer.isDestroyed).toBe(false)
+
+    // Second press within the confirm window exits.
+    api?.keymap.dispatchCommand("app.exit.confirm")
+    await task
+    expect(setup.renderer.isDestroyed).toBe(true)
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})

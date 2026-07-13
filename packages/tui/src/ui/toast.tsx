@@ -7,7 +7,7 @@ import { TextAttributes } from "@opentui/core"
 export type ToastOptions = {
   title?: string
   message: string
-  variant: "info" | "success" | "warning" | "error"
+  variant: "primary" | "info" | "success" | "warning" | "error"
   duration: number
 }
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }

@@ -223,6 +223,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
             reject()
           },
         },
+        {
+          name: "app.exit.confirm",
+          title: "Reject question",
+          category: "Question",
+          run() {
+            reject()
+          },
+        },
       ],
       bindings: [
         {
@@ -252,6 +260,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
               ...tuiConfig.keybinds.get("app.exit"),
+              ...tuiConfig.keybinds.get("app.exit.confirm"),
             ]
           : [
               ...Array.from({ length: max }, (_, index) => ({
@@ -280,6 +289,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
               ...tuiConfig.keybinds.get("app.exit"),
+              ...tuiConfig.keybinds.get("app.exit.confirm"),
             ]),
       ],
     }
