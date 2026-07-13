@@ -1,4 +1,3 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
@@ -7,92 +6,20 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { getFilename } from "@opencode-ai/core/util/path"
-import { useMutation } from "@tanstack/solid-query"
-import { createMemo, For, Show } from "solid-js"
-import { createStore } from "solid-js/store"
-import { useGlobal } from "@/context/global"
+import { For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
 import { getProjectAvatarSource } from "@/pages/layout/helpers"
+import { createEditProjectModel } from "./edit-project"
 
 export function DialogEditProjectV2(props: { project: LocalProject; server: ServerConnection.Any }) {
-  const dialog = useDialog()
-  const global = useGlobal()
   const language = useLanguage()
-  const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
-  const serverSDK = () => serverCtx().sdk
-  const serverSync = () => serverCtx().sync
-  const folderName = createMemo(() => getFilename(props.project.worktree))
-  const defaultName = createMemo(() => props.project.name || folderName())
-
-  const [store, setStore] = createStore({
-    name: defaultName(),
-    color: props.project.icon?.color,
-    iconOverride: props.project.icon?.override,
-    startup: props.project.commands?.start ?? "",
-    dragOver: false,
-    iconHover: false,
-  })
-
-  let iconInput: HTMLInputElement | undefined
-
-  function handleFileSelect(file: File) {
-    if (!file.type.startsWith("image/")) return
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const result = event.target?.result
-      if (typeof result !== "string") return
-      setStore("iconOverride", result)
-      setStore("iconHover", false)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  function handleDrop(event: DragEvent) {
-    event.preventDefault()
-    setStore("dragOver", false)
-    const file = event.dataTransfer?.files[0]
-    if (file) handleFileSelect(file)
-  }
-
-  const saveMutation = useMutation(() => ({
-    mutationFn: async () => {
-      const name = store.name.trim() === folderName() ? "" : store.name.trim()
-      const start = store.startup.trim()
-
-      if (props.project.id && props.project.id !== "global") {
-        await serverSDK().client.project.update({
-          projectID: props.project.id,
-          directory: props.project.worktree,
-          name,
-          icon: { color: store.color || "", override: store.iconOverride || "" },
-          commands: { start },
-        })
-        serverSync().project.icon(props.project.worktree, store.iconOverride || undefined)
-        dialog.close()
-        return
-      }
-
-      serverSync().project.meta(props.project.worktree, {
-        name,
-        icon: { color: store.color || undefined, override: store.iconOverride || undefined },
-        commands: { start: start || undefined },
-      })
-      dialog.close()
-    },
-  }))
-
-  function handleSubmit(event: SubmitEvent) {
-    event.preventDefault()
-    if (saveMutation.isPending) return
-    saveMutation.mutate()
-  }
+  const model = createEditProjectModel(props)
 
   return (
     <Dialog fit>
-      <form onSubmit={handleSubmit} class="contents">
+      <form onSubmit={model.submit} class="contents">
         <DialogHeader>
           <DialogTitle>{language.t("dialog.project.edit.title")}</DialogTitle>
         </DialogHeader>
@@ -104,9 +31,9 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
               autofocus
               appearance="large"
               class="!w-full"
-              value={store.name}
-              placeholder={folderName()}
-              onInput={(event) => setStore("name", event.currentTarget.value)}
+              value={model.store.name}
+              placeholder={model.folderName()}
+              onInput={(event) => model.setStore("name", event.currentTarget.value)}
             />
           </Field>
 
@@ -120,55 +47,43 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
                 aria-label={language.t("dialog.project.edit.icon.alt")}
                 class="relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-[6px] outline outline-1 outline-transparent transition-[background-color,outline-color] focus-visible:outline-v2-border-border-focus"
                 classList={{
-                  "bg-v2-overlay-simple-overlay-hover outline-v2-border-border-focus": store.dragOver,
+                  "bg-v2-overlay-simple-overlay-hover outline-v2-border-border-focus": model.store.dragOver,
                 }}
-                onMouseEnter={() => setStore("iconHover", true)}
-                onMouseLeave={() => setStore("iconHover", false)}
-                onDrop={handleDrop}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  setStore("dragOver", true)
-                }}
-                onDragLeave={() => setStore("dragOver", false)}
-                onClick={() => {
-                  if (store.iconOverride && store.iconHover) {
-                    setStore("iconOverride", "")
-                    return
-                  }
-                  iconInput?.click()
-                }}
+                onMouseEnter={() => model.setStore("iconHover", true)}
+                onMouseLeave={() => model.setStore("iconHover", false)}
+                onDrop={model.drop}
+                onDragOver={model.dragOver}
+                onDragLeave={model.dragLeave}
+                onClick={model.iconClick}
               >
                 <ProjectAvatar
-                  fallback={store.name || defaultName()}
+                  fallback={model.store.name || model.defaultName()}
                   src={getProjectAvatarSource(props.project.id, {
-                    color: store.color,
+                    color: model.store.color,
                     url: props.project.icon?.url,
-                    override: store.iconOverride,
+                    override: model.store.iconOverride,
                   })}
-                  variant={getProjectAvatarVariant(store.color)}
+                  variant={getProjectAvatarVariant(model.store.color)}
                   class="!size-16 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[32px]"
                 />
                 <span
                   class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[6px] bg-v2-background-bg-contrast/80 text-v2-icon-icon-contrast backdrop-blur-[2px] transition-opacity"
                   classList={{
-                    "opacity-100": store.iconHover,
-                    "opacity-0": !store.iconHover,
+                    "opacity-100": model.store.iconHover,
+                    "opacity-0": !model.store.iconHover,
                   }}
                 >
-                  <Icon name={store.iconOverride ? "close" : "outline-share"} />
+                  <Icon name={model.store.iconOverride ? "close" : "outline-share"} />
                 </span>
               </button>
               <input
                 ref={(element) => {
-                  iconInput = element
+                  model.setIconInput(element)
                 }}
                 type="file"
                 accept="image/*"
                 class="hidden"
-                onChange={(event) => {
-                  const file = event.currentTarget.files?.[0]
-                  if (file) handleFileSelect(file)
-                }}
+                onChange={model.inputChange}
               />
               <div class="flex select-none flex-col gap-[6px] text-[11px] font-[440] leading-none tracking-[0.05px] text-v2-text-text-muted">
                 <span>{language.t("dialog.project.edit.icon.hint")}</span>
@@ -177,7 +92,7 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
             </div>
           </div>
 
-          <Show when={!store.iconOverride}>
+          <Show when={!model.store.iconOverride}>
             <div class="flex w-full flex-col gap-2">
               <div class="select-none text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base">
                 {language.t("dialog.project.edit.color")}
@@ -188,19 +103,22 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
                     <button
                       type="button"
                       aria-label={language.t("dialog.project.edit.color.select", { color })}
-                      aria-pressed={getProjectAvatarVariant(store.color) === color}
+                      aria-pressed={getProjectAvatarVariant(model.store.color) === color}
                       class="flex size-8 items-center justify-center rounded-[10px] p-1 outline outline-1 outline-transparent transition-[background-color,outline-color] hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-v2-border-border-focus"
                       classList={{
                         "bg-v2-overlay-simple-overlay-hover [box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]":
-                          getProjectAvatarVariant(store.color) === color,
+                          getProjectAvatarVariant(model.store.color) === color,
                       }}
                       onClick={() => {
-                        if (getProjectAvatarVariant(store.color) === color && !props.project.icon?.url) return
-                        setStore("color", getProjectAvatarVariant(store.color) === color ? undefined : color)
+                        if (getProjectAvatarVariant(model.store.color) === color && !props.project.icon?.url) return
+                        model.setStore(
+                          "color",
+                          getProjectAvatarVariant(model.store.color) === color ? undefined : color,
+                        )
                       }}
                     >
                       <ProjectAvatar
-                        fallback={store.name || defaultName()}
+                        fallback={model.store.name || model.defaultName()}
                         variant={getProjectAvatarVariant(color)}
                         class="!size-6 [&_[data-slot=project-avatar-surface]]:!rounded-[6px]"
                       />
@@ -217,19 +135,19 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
             <TextareaV2
               class="!w-full [&_[data-slot=textarea-v2-textarea]]:font-mono"
               rows={3}
-              value={store.startup}
+              value={model.store.startup}
               placeholder={language.t("dialog.project.edit.worktree.startup.placeholder")}
               spellcheck={false}
-              onInput={(event) => setStore("startup", event.currentTarget.value)}
+              onInput={(event) => model.setStore("startup", event.currentTarget.value)}
             />
           </Field>
         </DialogBody>
         <DialogFooter>
-          <ButtonV2 type="button" variant="neutral" disabled={saveMutation.isPending} onClick={() => dialog.close()}>
+          <ButtonV2 type="button" variant="neutral" disabled={model.save.isPending} onClick={model.close}>
             {language.t("common.cancel")}
           </ButtonV2>
-          <ButtonV2 type="submit" variant="contrast" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? language.t("common.saving") : language.t("common.save")}
+          <ButtonV2 type="submit" variant="contrast" disabled={model.save.isPending}>
+            {model.save.isPending ? language.t("common.saving") : language.t("common.save")}
           </ButtonV2>
         </DialogFooter>
       </form>
