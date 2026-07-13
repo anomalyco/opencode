@@ -403,6 +403,34 @@ export function NewHome() {
 
   command.register("home", () => [
     {
+      id: "command.palette",
+      title: language.t("command.palette"),
+      hidden: true,
+      onSelect: async () => {
+        const conn = focusedServer()
+        if (!conn) return
+        const ctx = global.ensureServerCtx(conn)
+        const { DialogHomeCommandPaletteV2 } = await import("@/components/dialog-command-palette-v2")
+        void dialog.show(() => (
+          <DialogHomeCommandPaletteV2
+            server={conn}
+            onSelectSession={(entry) => {
+              if (!entry.sessionID || !entry.directory || !entry.server) return
+              const sessionID = entry.sessionID
+              const server = entry.server
+              const directory = entry.project?.worktree ?? entry.directory
+              ctx.projects.open(directory)
+              ctx.projects.touch(directory)
+              void startTransition(() => {
+                const tab = tabs.addSessionTab({ server, sessionId: sessionID })
+                tabs.select(tab)
+              })
+            }}
+          />
+        ))
+      },
+    },
+    {
       id: "home.sessions.search.focus",
       title: searchPlaceholder(),
       keybind: "mod+f",

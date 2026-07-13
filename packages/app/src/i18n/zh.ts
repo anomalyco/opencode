@@ -120,6 +120,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此会话",
 
   "palette.search.placeholder": "搜索文件、命令和会话",
+  "palette.search.placeholder.home": "搜索命令和会话",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",

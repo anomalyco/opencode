@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
+  "palette.search.placeholder.home": "Pretraži komande i sesije",
   "palette.empty": "Nema rezultata",
   "palette.group.commands": "Komande",
   "palette.group.files": "Datoteke",

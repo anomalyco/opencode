@@ -82,6 +82,7 @@ export const dict = {
   "command.session.unshare": "세션 공유 중지",
   "command.session.unshare.description": "이 세션 공유 중지",
   "palette.search.placeholder": "파일, 명령어 및 세션 검색",
+  "palette.search.placeholder.home": "명령어 및 세션 검색",
   "palette.empty": "결과 없음",
   "palette.group.commands": "명령어",
   "palette.group.files": "파일",

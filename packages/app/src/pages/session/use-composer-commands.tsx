@@ -11,6 +11,7 @@ const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
     ...option,
     category,
+    scope: "session",
   })
 }
 

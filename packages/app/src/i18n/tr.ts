@@ -97,6 +97,7 @@ export const dict = {
   "command.session.unshare.description": "Bu oturumun paylaşımını durdur",
 
   "palette.search.placeholder": "Dosya, komut ve oturum ara",
+  "palette.search.placeholder.home": "Komut ve oturum ara",
   "palette.empty": "Sonuç bulunamadı",
   "palette.group.commands": "Komutlar",
   "palette.group.files": "Dosyalar",

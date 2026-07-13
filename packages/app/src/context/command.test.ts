@@ -1,5 +1,26 @@
 import { describe, expect, test } from "bun:test"
-import { resolveKeybindOption, upsertCommandRegistration } from "./command"
+import { commandPaletteOptions, resolveKeybindOption, upsertCommandRegistration, type CommandOption } from "./command"
+
+const paletteOptions: CommandOption[] = [
+  { id: "settings.open", title: "Open settings" },
+  { id: "session.undo", title: "Undo", scope: "session" },
+  { id: "file.open", title: "Open file", scope: "session" },
+  { id: "hidden", title: "Hidden", hidden: true },
+  { id: "disabled", title: "Disabled", disabled: true },
+]
+
+describe("commandPaletteOptions", () => {
+  test("keeps only general commands on home", () => {
+    expect(commandPaletteOptions(paletteOptions, "general").map((option) => option.id)).toEqual(["settings.open"])
+  })
+
+  test("keeps general and session commands in sessions", () => {
+    expect(commandPaletteOptions(paletteOptions, "session").map((option) => option.id)).toEqual([
+      "settings.open",
+      "session.undo",
+    ])
+  })
+})
 
 describe("upsertCommandRegistration", () => {
   test("replaces keyed registrations", () => {

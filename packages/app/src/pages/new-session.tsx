@@ -79,6 +79,7 @@ export default function NewSessionPage() {
     {
       id: "input.focus",
       title: language.t("command.input.focus"),
+      scope: "session",
       category: language.t("command.category.view"),
       keybind: "ctrl+l",
       onSelect: () => inputRef?.focus(),

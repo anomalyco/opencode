@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Stop med at dele denne session",
 
   "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
+  "palette.search.placeholder.home": "Søg i kommandoer og sessioner",
   "palette.empty": "Ingen resultater fundet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",

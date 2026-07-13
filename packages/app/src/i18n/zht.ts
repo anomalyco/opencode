@@ -97,6 +97,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此工作階段",
 
   "palette.search.placeholder": "搜尋檔案、命令和工作階段",
+  "palette.search.placeholder.home": "搜尋命令和工作階段",
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
   "palette.group.files": "檔案",

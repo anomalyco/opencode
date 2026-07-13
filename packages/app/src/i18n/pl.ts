@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "Przestań udostępniać sesję",
   "command.session.unshare.description": "Zatrzymaj udostępnianie tej sesji",
   "palette.search.placeholder": "Szukaj plików, poleceń i sesji",
+  "palette.search.placeholder.home": "Szukaj poleceń i sesji",
   "palette.empty": "Brak wyników",
   "palette.group.commands": "Polecenia",
   "palette.group.files": "Pliki",

@@ -90,6 +90,7 @@ export const dict = {
   "command.session.unshare": "Teilen der Sitzung aufheben",
   "command.session.unshare.description": "Teilen dieser Sitzung beenden",
   "palette.search.placeholder": "Dateien, Befehle und Sitzungen durchsuchen",
+  "palette.search.placeholder.home": "Befehle und Sitzungen durchsuchen",
   "palette.empty": "Keine Ergebnisse gefunden",
   "palette.group.commands": "Befehle",
   "palette.group.files": "Dateien",
