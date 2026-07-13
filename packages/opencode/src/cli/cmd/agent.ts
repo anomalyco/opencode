@@ -74,7 +74,8 @@ const AgentCreateCommand = effectCmd({
       const cliMode = args.mode as AgentMode | undefined
       const perms = args.permissions
 
-      const isFullyNonInteractive = cliPath && cliDescription && cliMode && perms !== undefined
+      const isFullyNonInteractive =
+        Boolean(cliPath) && Boolean(cliDescription) && Boolean(cliMode) && perms !== undefined
 
       if (!isFullyNonInteractive) {
         UI.empty()
