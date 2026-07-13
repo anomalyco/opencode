@@ -703,6 +703,58 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ---
 
+### DaoXE
+
+DaoXE is a multi-model multi-protocol API gateway. OpenCode can use it as an OpenAI-compatible provider (`@ai-sdk/openai-compatible`) for Chat Completions. DaoXE also exposes OpenAI Responses and Anthropic Messages for other clients; this guide uses the OpenAI-compatible path OpenCode already documents for custom gateways.
+
+1. Create an account at [DaoXE](https://daoxe.com), open the dashboard, and create an API key.
+
+2. Run the `/connect` command, choose **Other**, and enter provider id `daoxe`.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your DaoXE API key when prompted.
+
+4. Add DaoXE to your `opencode.json`. Use an exact model ID from your DaoXE account catalog (`GET https://daoxe.com/v1/models` or the [pricing page](https://daoxe.com/pricing) for discovery). Do not hardcode a static public model list.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "daoxe": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "DaoXE",
+         "options": {
+           "baseURL": "https://daoxe.com/v1"
+         },
+         "models": {
+           "YOUR_DAOXE_MODEL_ID": {
+             "name": "DaoXE model (replace with your account model ID)"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   Configuration notes:
+   - **npm**: `@ai-sdk/openai-compatible` targets OpenAI Chat Completions (`/v1/chat/completions`).
+   - **options.baseURL**: `https://daoxe.com/v1`.
+   - **models**: keys must be exact IDs available to your DaoXE account.
+   - DaoXE is not available in mainland China.
+
+5. Run `/models` and select the DaoXE model entry.
+
+   ```txt
+   /models
+   ```
+
+Examples and client notes: [DaoXE-AI](https://github.com/seven7763/DaoXE-AI).
+
+---
+
 ### DeepSeek
 
 1. Head over to the [DeepSeek console](https://platform.deepseek.com/), create an account, and click **Create new API key**.
