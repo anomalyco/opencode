@@ -1,14 +1,14 @@
 import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
 import { copyIn, copyOut } from "../tool-runtime.js"
 import {
-  isSandboxValue,
-  SandboxDate,
-  SandboxMap,
-  SandboxPromise,
-  SandboxRegExp,
-  SandboxSet,
-  SandboxURL,
-  SandboxURLSearchParams,
+  isCodeModeValue,
+  CodeModeDate,
+  CodeModeMap,
+  CodeModePromise,
+  CodeModeRegExp,
+  CodeModeSet,
+  CodeModeURL,
+  CodeModeURLSearchParams,
 } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
@@ -34,14 +34,14 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
   if (typeof value === "string") return JSON.stringify(value)
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   if (typeof value !== "object") return String(value)
-  if (value instanceof SandboxPromise) return "[Promise (await it to get its value)]"
-  if (value instanceof SandboxDate) return coerceToString(value)
-  if (value instanceof SandboxRegExp) return coerceToString(value)
-  if (value instanceof SandboxURL) return coerceToString(value)
-  if (value instanceof SandboxURLSearchParams) return coerceToString(value)
+  if (value instanceof CodeModePromise) return "[Promise (await it to get its value)]"
+  if (value instanceof CodeModeDate) return coerceToString(value)
+  if (value instanceof CodeModeRegExp) return coerceToString(value)
+  if (value instanceof CodeModeURL) return coerceToString(value)
+  if (value instanceof CodeModeURLSearchParams) return coerceToString(value)
   if (depth > MAX_CONSOLE_DEPTH) return "..."
   if (seen.has(value)) return "[Circular]"
-  if (value instanceof SandboxMap) {
+  if (value instanceof CodeModeMap) {
     seen.add(value)
     try {
       const entries = Array.from(value.map.entries(), ([key, item]): Array<unknown> => [key, item])
@@ -50,7 +50,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
       seen.delete(value)
     }
   }
-  if (value instanceof SandboxSet) {
+  if (value instanceof CodeModeSet) {
     seen.add(value)
     try {
       return `Set(${value.set.size}) ${formatConsoleValue(Array.from(value.set.values()), seen, depth + 1)}`
@@ -100,14 +100,14 @@ const consoleTableRows = (
   if (Array.isArray(data)) {
     return data.map((item, index) => ({ index: String(index), values: consoleTableValues(item, columns) }))
   }
-  if (data !== null && typeof data === "object" && !isSandboxValue(data)) {
+  if (data !== null && typeof data === "object" && !isCodeModeValue(data)) {
     return Object.entries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
   }
   return [{ index: "0", values: { Value: data } }]
 }
 
 const consoleTableValues = (value: unknown, columns: ReadonlyArray<string> | undefined): Record<string, unknown> => {
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && !isSandboxValue(value)) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value) && !isCodeModeValue(value)) {
     const source = value as Record<string, unknown>
     if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, source[column]]))
     return Object.fromEntries(Object.entries(source))

@@ -15,7 +15,7 @@ import {
   UriFunction,
 } from "./model.js"
 import { ToolReference } from "../tool-runtime.js"
-import { isSandboxValue, SandboxPromise } from "../values.js"
+import { isCodeModeValue, CodeModePromise } from "../values.js"
 
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof CodeModeFunction ||
@@ -26,13 +26,13 @@ export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof PromiseNamespace ||
   value instanceof PromiseMethodReference ||
   value instanceof PromiseInstanceMethodReference ||
-  value instanceof SandboxPromise ||
+  value instanceof CodeModePromise ||
   value instanceof CoercionFunction ||
   value instanceof UriFunction ||
   value instanceof SearchFunction ||
   value instanceof PromiseCapabilityFunction ||
   value instanceof ErrorConstructorReference ||
-  isSandboxValue(value)
+  isCodeModeValue(value)
 
 export const containsRuntimeReference = (value: unknown, seen = new Set<object>()): boolean => {
   if (isRuntimeReference(value)) return true
@@ -46,9 +46,9 @@ export const containsRuntimeReference = (value: unknown, seen = new Set<object>(
   return contains
 }
 
-// Sandbox values are data here, not opaque interpreter references.
+// CodeMode values are data here, not opaque interpreter references.
 export const containsOpaqueReference = (value: unknown, seen = new Set<object>()): boolean => {
-  if (isSandboxValue(value)) return false
+  if (isCodeModeValue(value)) return false
   if (isRuntimeReference(value)) return true
   if (value === null || typeof value !== "object") return false
   if (seen.has(value)) return false

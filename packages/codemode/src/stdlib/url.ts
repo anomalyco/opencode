@@ -66,7 +66,7 @@ export const invokeUriFunction = (ref: UriFunction, args: Array<unknown>, node: 
 }
 
 export const urlArgument = (value: unknown, label: string): string =>
-  value instanceof SandboxURL ? value.url.href : uriArgument(value, label)
+  value instanceof CodeModeURL ? value.url.href : uriArgument(value, label)
 
 export const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   if (!urlStatics.has(name)) throw new InterpreterRuntimeError(`URL.${name} is not available in CodeMode.`, node)
@@ -75,16 +75,16 @@ export const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNod
   const base = args[1] === undefined ? undefined : urlArgument(args[1], `URL.${name} base`)
   try {
     const url = new URL(input, base)
-    return name === "canParse" ? true : new SandboxURL(url)
+    return name === "canParse" ? true : new CodeModeURL(url)
   } catch {
     return name === "canParse" ? false : null
   }
 }
 
-export const invokeURLMethod = (value: SandboxURL, name: string, node: AstNode): string => {
+export const invokeURLMethod = (value: CodeModeURL, name: string, node: AstNode): string => {
   if (name === "toString" || name === "toJSON") return value.url.href
   throw new InterpreterRuntimeError(`URL method '${name}' is not available in CodeMode.`, node)
 }
 import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
-import { SandboxURL } from "../values.js"
+import { CodeModeURL } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"

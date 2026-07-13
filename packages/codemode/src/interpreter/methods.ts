@@ -13,13 +13,13 @@ import {
 import { rejectCircularInsertion } from "./references.js"
 import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
 import {
-  SandboxDate,
-  SandboxMap,
-  SandboxPromise,
-  SandboxRegExp,
-  SandboxSet,
-  SandboxURL,
-  SandboxURLSearchParams,
+  CodeModeDate,
+  CodeModeMap,
+  CodeModePromise,
+  CodeModeRegExp,
+  CodeModeSet,
+  CodeModeURL,
+  CodeModeURLSearchParams,
 } from "../values.js"
 import { invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
 import { invokeJsonMethod } from "../stdlib/json.js"
@@ -33,7 +33,7 @@ import { boundedData, coerceToNumber, coerceToString, invokeCoercion } from "../
 
 export type CallbackRunner<R> = {
   readonly invokeFunction: (fn: CodeModeFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  readonly settlePromise: (promise: SandboxPromise) => Effect.Effect<unknown, unknown, never>
+  readonly settlePromise: (promise: CodeModePromise) => Effect.Effect<unknown, unknown, never>
 }
 
 export const invokeIntrinsic = <R>(
@@ -57,22 +57,22 @@ export const invokeIntrinsic = <R>(
   if (Array.isArray(ref.receiver)) {
     return invokeArrayMethod(runner, ref.receiver, ref.name, args, node)
   }
-  if (ref.receiver instanceof SandboxDate) {
+  if (ref.receiver instanceof CodeModeDate) {
     return Effect.succeed(invokeDateMethod(ref.receiver, ref.name, node))
   }
-  if (ref.receiver instanceof SandboxRegExp) {
+  if (ref.receiver instanceof CodeModeRegExp) {
     return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node))
   }
-  if (ref.receiver instanceof SandboxMap) {
+  if (ref.receiver instanceof CodeModeMap) {
     return invokeMapMethod(runner, ref.receiver, ref.name, args, node)
   }
-  if (ref.receiver instanceof SandboxSet) {
+  if (ref.receiver instanceof CodeModeSet) {
     return invokeSetMethod(runner, ref.receiver, ref.name, args, node)
   }
-  if (ref.receiver instanceof SandboxURL) {
+  if (ref.receiver instanceof CodeModeURL) {
     return Effect.succeed(invokeURLMethod(ref.receiver, ref.name, node))
   }
-  if (ref.receiver instanceof SandboxURLSearchParams) {
+  if (ref.receiver instanceof CodeModeURLSearchParams) {
     return invokeURLSearchParamsMethod(runner, ref.receiver, ref.name, args, node)
   }
   throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
@@ -153,7 +153,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
         result = [value]
         break
       }
-      if (args[0] instanceof SandboxRegExp) {
+      if (args[0] instanceof CodeModeRegExp) {
         result = value.split(args[0].regex, optNum(1))
         break
       }
@@ -181,7 +181,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       break
     case "replace":
     case "replaceAll": {
-      if (args[0] instanceof SandboxRegExp) {
+      if (args[0] instanceof CodeModeRegExp) {
         const pattern = args[0].regex
         const replacement = str(1)
         if (name === "replaceAll" && !pattern.global) {
@@ -278,13 +278,13 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
           [supportedSyntaxMessage],
         )
       }
-      if (args[0] instanceof SandboxMap) return Array.from(args[0].map.entries(), ([key, item]) => [key, item])
-      if (args[0] instanceof SandboxSet) return Array.from(args[0].set.values())
-      if (args[0] instanceof SandboxURLSearchParams) {
+      if (args[0] instanceof CodeModeMap) return Array.from(args[0].map.entries(), ([key, item]) => [key, item])
+      if (args[0] instanceof CodeModeSet) return Array.from(args[0].set.values())
+      if (args[0] instanceof CodeModeURLSearchParams) {
         return Array.from(args[0].params.entries(), ([key, value]) => [key, value])
       }
       const source = args[0]
-      if (source instanceof SandboxPromise) {
+      if (source instanceof CodeModePromise) {
         throw new InterpreterRuntimeError(
           "Array.from received an un-awaited Promise; await it before creating the array.",
           node,
@@ -341,7 +341,7 @@ const invokeStringReplacer = <R>(
   }
 
   const pattern = args[0]
-  if (pattern instanceof SandboxRegExp) {
+  if (pattern instanceof CodeModeRegExp) {
     if (name === "replaceAll" && !pattern.regex.global) {
       throw new InterpreterRuntimeError(
         `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.regex.source}/${pattern.regex.flags}g, or use String.replace to replace only the first match.`,
@@ -364,7 +364,7 @@ const invokeStringReplacer = <R>(
     for (const match of matches) {
       const replacement = yield* apply(match.args)
       const resolved =
-        args[1] instanceof CodeModeFunction && args[1].async && replacement instanceof SandboxPromise
+        args[1] instanceof CodeModeFunction && args[1].async && replacement instanceof CodeModePromise
           ? yield* runner.settlePromise(replacement)
           : replacement
       output.push(
@@ -404,7 +404,7 @@ export const applyCollectionCallback = <R>(
 
 const invokeMapMethod = <R>(
   runner: CallbackRunner<R>,
-  target: SandboxMap,
+  target: CodeModeMap,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -446,7 +446,7 @@ const invokeMapMethod = <R>(
 
 const invokeSetMethod = <R>(
   runner: CallbackRunner<R>,
-  target: SandboxSet,
+  target: CodeModeSet,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -485,7 +485,7 @@ const invokeSetMethod = <R>(
 
 const invokeURLSearchParamsMethod = <R>(
   runner: CallbackRunner<R>,
-  target: SandboxURLSearchParams,
+  target: CodeModeURLSearchParams,
   name: string,
   args: Array<unknown>,
   node: AstNode,

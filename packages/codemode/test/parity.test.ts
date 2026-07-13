@@ -8,7 +8,7 @@ import { ToolRuntime } from "../src/tool-runtime.js"
 // a strict interpreter would throw but idiomatic JS yields undefined / succeeds.
 //
 // Note on the result boundary: this package normalizes a bare `undefined` result to `null` when
-// it crosses out of the sandbox (results are JSON data), so tests asserting an in-sandbox
+// it crosses out of CodeMode (results are JSON data), so tests asserting an in-CodeMode
 // `undefined` read check `=== undefined` inside the program and `null` at the boundary.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 const value = async (code: string) => {
@@ -108,7 +108,7 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
     expect(await value(`const a = []; return a.length ? a.reduce((s,x)=>s+x,0)/a.length : 0`)).toBe(0)
   })
 
-  test("a non-finite value becomes null when it leaves the sandbox", async () => {
+  test("a non-finite value becomes null when it leaves CodeMode", async () => {
     expect(await value(`return 5/0`)).toBeNull()
     expect(await value(`return 0/0`)).toBeNull()
     expect(await value(`return Math.max()`)).toBeNull()
@@ -116,12 +116,12 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
     expect(await value(`return { a: Number("x"), b: 2, c: [1/0] }`)).toEqual({ a: null, b: 2, c: [null] })
   })
 
-  test("NaN and Infinity are usable identifiers and inspectable in-sandbox", async () => {
+  test("NaN and Infinity are usable identifiers and inspectable in-CodeMode", async () => {
     expect(await value(`return Number.isNaN(NaN)`)).toBe(true)
     expect(await value(`return Infinity > 1e9`)).toBe(true)
     expect(await value(`return Number.isFinite(1/0)`)).toBe(false)
     expect(await value(`return [3,1,2].reduce((a,b)=>Math.max(a,b), -Infinity)`)).toBe(3)
-    // JSON.stringify inside the sandbox matches JS: non-finite serializes to null
+    // JSON.stringify inside CodeMode matches JS: non-finite serializes to null
     expect(await value(`return JSON.stringify({ x: Number("z") })`)).toBe('{"x":null}')
   })
 
@@ -321,12 +321,12 @@ describe("compound assignment matches its binary operator", () => {
     return a
   }
 
-  test("sandbox Date += concatenates its string form, like d = d + 1", async () => {
+  test("CodeMode Date += concatenates its string form, like d = d + 1", async () => {
     const result = await pair(`let d = new Date(1000); d += 1; return d`, `let d = new Date(1000); d = d + 1; return d`)
     expect(result).toBe("1970-01-01T00:00:01.000Z1")
   })
 
-  test("sandbox Date numeric compound ops use its time value", async () => {
+  test("CodeMode Date numeric compound ops use its time value", async () => {
     expect(
       await pair(`let d = new Date(1000); d -= 400; return d`, `let d = new Date(1000); d = d - 400; return d`),
     ).toBe(600)

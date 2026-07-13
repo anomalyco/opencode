@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
-// intra-sandbox checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
+// intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
 // values, while at the host boundary (final result, tool arguments, JSON.stringify) they
 // serialize exactly as JSON.stringify would: Date -> ISO string (invalid -> null),
 // URL -> href, and RegExp/Map/Set/URLSearchParams -> {}.
@@ -69,7 +69,7 @@ describe("Date", () => {
     ).toEqual([2024, 2, 5, 6, 7, 8, 9])
   })
 
-  test("invalid dates yield NaN times, guardable in-sandbox", async () => {
+  test("invalid dates yield NaN times, guardable in-CodeMode", async () => {
     expect(await value(`return Number.isNaN(new Date("garbage").getTime())`)).toBe(true)
     expect(await value(`return new Date("garbage").toJSON()`)).toBeNull()
   })
@@ -702,11 +702,11 @@ describe("stdlib integration", () => {
     expect(await value(`const fn = () => 1; return !fn`)).toBe(false)
   })
 
-  test("object spread of sandbox values is a no-op, like JS", async () => {
+  test("object spread of CodeMode values is a no-op, like JS", async () => {
     expect(await value(`return { ...new Map([["a", 1]]), kept: true }`)).toEqual({ kept: true })
   })
 
-  test("dates inside Map values survive in-sandbox reads", async () => {
+  test("dates inside Map values survive in-CodeMode reads", async () => {
     expect(
       await value(`
       const m = new Map([["start", new Date(1000)]])
@@ -748,7 +748,7 @@ describe("stdlib integration", () => {
   })
 })
 
-describe("sandbox values at intra-sandbox checkpoints", () => {
+describe("CodeMode values at intra-CodeMode checkpoints", () => {
   test("Object.values/entries keep Dates usable", async () => {
     expect(await value(`return Object.values({ d: new Date(0) })[0].getTime()`)).toBe(0)
     expect(await value(`const [key, d] = Object.entries({ d: new Date(0) })[0]; return key + ":" + d.getTime()`)).toBe(
@@ -799,7 +799,7 @@ describe("sandbox values at intra-sandbox checkpoints", () => {
     )
   })
 
-  test("object and array spread keep sandbox values usable", async () => {
+  test("object and array spread keep CodeMode values usable", async () => {
     expect(
       await value(`
       const src = { m: new Map([["a", 1]]) }
@@ -811,7 +811,7 @@ describe("sandbox values at intra-sandbox checkpoints", () => {
     expect(await value(`const list = [new Date(1000)]; const copy = [...list]; return copy[0].getTime()`)).toBe(1000)
   })
 
-  test("Array.from over arrays keeps nested sandbox values usable", async () => {
+  test("Array.from over arrays keeps nested CodeMode values usable", async () => {
     expect(await value(`return Array.from([new Date(5)])[0].getTime()`)).toBe(5)
   })
 
@@ -866,7 +866,7 @@ describe("sandbox values at intra-sandbox checkpoints", () => {
     expect(await value(`return Object.values({ r: /ab+/ })[0].test("abb")`)).toBe(true)
   })
 
-  test("Object.* helpers see sandbox values as empty objects, never internals", async () => {
+  test("Object.* helpers see CodeMode values as empty objects, never internals", async () => {
     expect(await value(`return Object.keys(new Map([["a", 1]]))`)).toEqual([])
     expect(await value(`return Object.values(new Date(0))`)).toEqual([])
     expect(await value(`return Object.entries(new Set([1]))`)).toEqual([])

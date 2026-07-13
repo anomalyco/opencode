@@ -1,5 +1,5 @@
 import type { SafeObject } from "../tool-runtime.js"
-import type { SandboxPromise, SandboxURL } from "../values.js"
+import type { CodeModePromise, CodeModeURL } from "../values.js"
 
 export type SourcePosition = {
   line: number
@@ -35,7 +35,7 @@ export type StatementResult =
   | { kind: "continue" }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | SandboxURL
+  target: SafeObject | Array<unknown> | CodeModeURL
   key: string | number
 }
 
@@ -71,7 +71,7 @@ export type PromiseInstanceMethodName = "then" | "catch" | "finally"
 
 export class PromiseInstanceMethodReference {
   constructor(
-    readonly promise: SandboxPromise,
+    readonly promise: CodeModePromise,
     readonly name: PromiseInstanceMethodName,
   ) {}
 }

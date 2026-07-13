@@ -276,7 +276,7 @@ describe("CodeMode console capture", () => {
     expect(result.logs).toStrictEqual(["NaN", "Infinity -Infinity", '{"ratio":NaN,"bounds":[Infinity]}'])
   })
 
-  test("renders sandbox values nested inside logged containers", async () => {
+  test("renders CodeMode values nested inside logged containers", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `
@@ -311,7 +311,7 @@ describe("CodeMode console capture", () => {
     expect(result.logs).toStrictEqual(['{"box":Map(1) [["self",[Circular]]]}', '{"fn":[CodeMode reference],"ok":1}'])
   })
 
-  test("console.table renders sandbox value cells", async () => {
+  test("console.table renders CodeMode value cells", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `

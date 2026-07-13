@@ -73,14 +73,14 @@ import {
   valueConstructors,
 } from "../stdlib/value.js"
 import {
-  isSandboxValue,
-  SandboxDate,
-  SandboxMap,
-  SandboxPromise,
-  SandboxRegExp,
-  SandboxSet,
-  SandboxURL,
-  SandboxURLSearchParams,
+  isCodeModeValue,
+  CodeModeDate,
+  CodeModeMap,
+  CodeModePromise,
+  CodeModeRegExp,
+  CodeModeSet,
+  CodeModeURL,
+  CodeModeURLSearchParams,
 } from "../values.js"
 
 const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
@@ -91,24 +91,24 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   if (rhs instanceof GlobalNamespace) {
     switch (rhs.name) {
       case "Date":
-        return lhs instanceof SandboxDate
+        return lhs instanceof CodeModeDate
       case "RegExp":
-        return lhs instanceof SandboxRegExp
+        return lhs instanceof CodeModeRegExp
       case "Map":
-        return lhs instanceof SandboxMap
+        return lhs instanceof CodeModeMap
       case "Set":
-        return lhs instanceof SandboxSet
+        return lhs instanceof CodeModeSet
       case "URL":
-        return lhs instanceof SandboxURL
+        return lhs instanceof CodeModeURL
       case "URLSearchParams":
-        return lhs instanceof SandboxURLSearchParams
+        return lhs instanceof CodeModeURLSearchParams
       case "Array":
         return Array.isArray(lhs)
       case "Object":
         return lhs !== null && (typeof lhs === "object" || typeofValue(lhs) === "function")
     }
   }
-  if (rhs instanceof PromiseNamespace) return lhs instanceof SandboxPromise
+  if (rhs instanceof PromiseNamespace) return lhs instanceof CodeModePromise
   if (rhs instanceof CoercionFunction && (rhs.name === "Number" || rhs.name === "String" || rhs.name === "Boolean")) {
     return false
   }
@@ -226,7 +226,7 @@ export class Interpreter<R> {
       }
 
       // The implicit async body adopts returned promises before copy-out.
-      if (value instanceof SandboxPromise) value = yield* self.settlePromise(value)
+      if (value instanceof CodeModePromise) value = yield* self.settlePromise(value)
       return value
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
@@ -235,16 +235,16 @@ export class Interpreter<R> {
   private createToolCallPromise(
     path: ReadonlyArray<string>,
     args: Array<unknown>,
-  ): Effect.Effect<SandboxPromise, never, R> {
+  ): Effect.Effect<CodeModePromise, never, R> {
     return this.createPromise(Effect.suspend(() => this.invokeTool(path, args)))
   }
 
-  private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
+  private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<CodeModePromise, never, R> {
     return this.promises.create(effect)
   }
 
   // Fiber exits make settlement idempotent; yielding prevents inline continuation.
-  private settlePromise(promise: SandboxPromise): Effect.Effect<unknown, unknown, never> {
+  private settlePromise(promise: CodeModePromise): Effect.Effect<unknown, unknown, never> {
     const promises = this.promises
     return Effect.suspend(() => {
       promises.markObserved(promise)
@@ -971,7 +971,7 @@ export class Interpreter<R> {
         // Await always suspends, including for plain values.
         const self = this
         return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
-          value instanceof SandboxPromise ? self.settlePromise(value) : Effect.as(Effect.yieldNow, value),
+          value instanceof CodeModePromise ? self.settlePromise(value) : Effect.as(Effect.yieldNow, value),
         )
       }
       case "NewExpression":
@@ -1019,23 +1019,23 @@ export class Interpreter<R> {
     throw unsupportedSyntax("NewExpression", node)
   }
 
-  private constructDate(args: Array<unknown>): SandboxDate {
-    if (args.length === 0) return new SandboxDate(Date.now())
+  private constructDate(args: Array<unknown>): CodeModeDate {
+    if (args.length === 0) return new CodeModeDate(Date.now())
     if (args.length === 1) {
       const arg = args[0]
-      if (arg instanceof SandboxDate) return new SandboxDate(arg.time)
-      if (typeof arg === "number") return new SandboxDate(new Date(arg).getTime())
-      if (typeof arg === "string") return new SandboxDate(Date.parse(arg))
-      return new SandboxDate(Number.NaN)
+      if (arg instanceof CodeModeDate) return new CodeModeDate(arg.time)
+      if (typeof arg === "number") return new CodeModeDate(new Date(arg).getTime())
+      if (typeof arg === "string") return new CodeModeDate(Date.parse(arg))
+      return new CodeModeDate(Number.NaN)
     }
     const parts = args.map((arg) => coerceToNumber(arg))
-    return new SandboxDate(new Date(...(parts as [number, number])).getTime())
+    return new CodeModeDate(new Date(...(parts as [number, number])).getTime())
   }
 
-  private constructRegExp(args: Array<unknown>, node: AstNode): SandboxRegExp {
+  private constructRegExp(args: Array<unknown>, node: AstNode): CodeModeRegExp {
     const first = args[0]
     const pattern =
-      first instanceof SandboxRegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
+      first instanceof CodeModeRegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
     const flagsArg = args[1]
     if (flagsArg !== undefined && typeof flagsArg !== "string") {
       throw new InterpreterRuntimeError(
@@ -1043,9 +1043,9 @@ export class Interpreter<R> {
         node,
       )
     }
-    const flags = flagsArg ?? (first instanceof SandboxRegExp ? first.regex.flags : "")
+    const flags = flagsArg ?? (first instanceof CodeModeRegExp ? first.regex.flags : "")
     try {
-      return new SandboxRegExp(pattern, flags)
+      return new CodeModeRegExp(pattern, flags)
     } catch (error) {
       const reason = regexFailureReason(error)
       throw new InterpreterRuntimeError(
@@ -1057,12 +1057,12 @@ export class Interpreter<R> {
     }
   }
 
-  private constructMap(init: unknown, node: AstNode): SandboxMap {
-    const target = new SandboxMap()
+  private constructMap(init: unknown, node: AstNode): CodeModeMap {
+    const target = new CodeModeMap()
     if (init === undefined || init === null) return target
     const entries = Array.isArray(init)
       ? init
-      : init instanceof SandboxMap
+      : init instanceof CodeModeMap
         ? Array.from(init.map.entries(), ([key, item]): Array<unknown> => [key, item])
         : undefined
     if (entries === undefined) {
@@ -1080,12 +1080,12 @@ export class Interpreter<R> {
     return target
   }
 
-  private constructSet(init: unknown, node: AstNode): SandboxSet {
-    const target = new SandboxSet()
+  private constructSet(init: unknown, node: AstNode): CodeModeSet {
+    const target = new CodeModeSet()
     if (init === undefined || init === null) return target
     const items = Array.isArray(init)
       ? init
-      : init instanceof SandboxSet
+      : init instanceof CodeModeSet
         ? Array.from(init.set.values())
         : typeof init === "string"
           ? Array.from(init)
@@ -1097,7 +1097,7 @@ export class Interpreter<R> {
     return target
   }
 
-  private constructURL(args: Array<unknown>, node: AstNode): SandboxURL {
+  private constructURL(args: Array<unknown>, node: AstNode): CodeModeURL {
     if (args.length === 0) {
       throw new InterpreterRuntimeError("new URL(...) requires a URL string and an optional base URL.", node).as(
         "TypeError",
@@ -1106,7 +1106,7 @@ export class Interpreter<R> {
     const input = urlArgument(args[0], "new URL input")
     const base = args[1] === undefined ? undefined : urlArgument(args[1], "new URL base")
     try {
-      return new SandboxURL(new URL(input, base))
+      return new CodeModeURL(new URL(input, base))
     } catch {
       throw new InterpreterRuntimeError(
         `new URL(...) received an invalid URL${base === undefined ? "" : " or base URL"}.`,
@@ -1115,16 +1115,16 @@ export class Interpreter<R> {
     }
   }
 
-  private constructURLSearchParams(init: unknown, node: AstNode): SandboxURLSearchParams {
-    if (init === undefined) return new SandboxURLSearchParams(new URLSearchParams())
-    if (init instanceof SandboxURLSearchParams) {
-      return new SandboxURLSearchParams(new URLSearchParams(init.params))
+  private constructURLSearchParams(init: unknown, node: AstNode): CodeModeURLSearchParams {
+    if (init === undefined) return new CodeModeURLSearchParams(new URLSearchParams())
+    if (init instanceof CodeModeURLSearchParams) {
+      return new CodeModeURLSearchParams(new URLSearchParams(init.params))
     }
-    if (typeof init === "string") return new SandboxURLSearchParams(new URLSearchParams(init))
+    if (typeof init === "string") return new CodeModeURLSearchParams(new URLSearchParams(init))
     if (init === null || typeof init === "number" || typeof init === "boolean") {
-      return new SandboxURLSearchParams(new URLSearchParams(coerceToString(init)))
+      return new CodeModeURLSearchParams(new URLSearchParams(coerceToString(init)))
     }
-    if (init instanceof SandboxMap) {
+    if (init instanceof CodeModeMap) {
       return this.constructURLSearchParams(
         Array.from(init.map.entries(), ([key, value]) => [key, value]),
         node,
@@ -1143,9 +1143,9 @@ export class Interpreter<R> {
           string,
         ]
       })
-      return new SandboxURLSearchParams(new URLSearchParams(entries))
+      return new CodeModeURLSearchParams(new URLSearchParams(entries))
     }
-    if (isSandboxValue(init)) return new SandboxURLSearchParams(new URLSearchParams())
+    if (isCodeModeValue(init)) return new CodeModeURLSearchParams(new URLSearchParams())
     const data = boundedData(init, "new URLSearchParams input")
     if (data === null || typeof data !== "object") {
       throw new InterpreterRuntimeError(
@@ -1153,7 +1153,7 @@ export class Interpreter<R> {
         node,
       ).as("TypeError")
     }
-    return new SandboxURLSearchParams(
+    return new CodeModeURLSearchParams(
       new URLSearchParams(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, coerceToString(value)]))),
     )
   }
@@ -1176,7 +1176,7 @@ export class Interpreter<R> {
     // Null-prototype data needs explicit primitive coercion; identity and `in` retain raw objects.
     // Dates use string coercion for `+` and epoch time elsewhere.
     const coerceOperand = (operand: unknown): unknown => {
-      if (operand instanceof SandboxDate) return operator === "+" ? coerceToString(operand) : operand.time
+      if (operand instanceof CodeModeDate) return operator === "+" ? coerceToString(operand) : operand.time
       return operand !== null && typeof operand === "object" ? coerceToString(operand) : operand
     }
     const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"
@@ -1261,7 +1261,7 @@ export class Interpreter<R> {
         throw new InterpreterRuntimeError("Unary operators require data values in CodeMode.", node, "InvalidDataValue")
       }
       const operand =
-        value instanceof SandboxDate
+        value instanceof CodeModeDate
           ? value.time
           : value !== null && typeof value === "object"
             ? coerceToString(value)
@@ -1520,11 +1520,11 @@ export class Interpreter<R> {
     })
     if (!fn.async) return run
     // The initial yield assigns `box.own` before the body can self-resolve.
-    const box: { own?: SandboxPromise } = {}
+    const box: { own?: CodeModePromise } = {}
     return Effect.map(
       this.createPromise(
         Effect.flatMap(run, (value) => {
-          if (!(value instanceof SandboxPromise)) return Effect.succeed(value)
+          if (!(value instanceof CodeModePromise)) return Effect.succeed(value)
           if (value === box.own) return Effect.fail(selfResolutionError())
           return invocation.settlePromise(value)
         }),
@@ -1546,7 +1546,7 @@ export class Interpreter<R> {
 
         if (property.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(getNode(property, "argument"))
-          if (spread === null || spread === undefined || isSandboxValue(spread)) continue
+          if (spread === null || spread === undefined || isCodeModeValue(spread)) continue
           if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
             throw new InterpreterRuntimeError(
               "Object spread requires a data object in CodeMode.",
@@ -1748,28 +1748,28 @@ export class Interpreter<R> {
         if (objectValue.name === "String" && stringStatics.has(key)) return new GlobalMethodReference("String", key)
       }
 
-      if (objectValue instanceof SandboxDate) {
+      if (objectValue instanceof CodeModeDate) {
         if (typeof key === "string" && dateMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof SandboxRegExp) {
+      if (objectValue instanceof CodeModeRegExp) {
         if (typeof key === "string" && regexpProperties.has(key)) {
           return new ComputedValue((objectValue.regex as unknown as Record<string, unknown>)[key])
         }
         if (typeof key === "string" && regexpMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof SandboxMap) {
+      if (objectValue instanceof CodeModeMap) {
         if (key === "size") return new ComputedValue(objectValue.map.size)
         if (typeof key === "string" && mapMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof SandboxSet) {
+      if (objectValue instanceof CodeModeSet) {
         if (key === "size") return new ComputedValue(objectValue.set.size)
         if (typeof key === "string" && setMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof SandboxURL) {
+      if (objectValue instanceof CodeModeURL) {
         if (key === "searchParams") {
           return new ComputedValue(objectValue.searchParams)
         }
@@ -1777,7 +1777,7 @@ export class Interpreter<R> {
         if (typeof key === "string" && urlProperties.has(key)) return { target: objectValue, key }
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof SandboxURLSearchParams) {
+      if (objectValue instanceof CodeModeURLSearchParams) {
         if (key === "size") return new ComputedValue(objectValue.params.size)
         if (typeof key === "string" && urlSearchParamsMethods.has(key)) {
           return new IntrinsicReference(objectValue, key)
@@ -1786,7 +1786,7 @@ export class Interpreter<R> {
       }
 
       // Reject unknown promise properties so a missing await cannot hide.
-      if (objectValue instanceof SandboxPromise) {
+      if (objectValue instanceof CodeModePromise) {
         if (key === "then" || key === "catch" || key === "finally") {
           return new PromiseInstanceMethodReference(objectValue, key)
         }
@@ -1851,7 +1851,7 @@ export class Interpreter<R> {
         }
         return reference.key === "length" ? reference.target.length : reference.target[Number(reference.key)]
       }
-      if (reference.target instanceof SandboxURL) {
+      if (reference.target instanceof CodeModeURL) {
         return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
       }
       return reference.target[String(reference.key)]
@@ -1891,7 +1891,7 @@ export class Interpreter<R> {
       }
       const key = Array.isArray(reference.target) ? Number(reference.key) : String(reference.key)
       const current =
-        reference.target instanceof SandboxURL
+        reference.target instanceof CodeModeURL
           ? (reference.target.url as unknown as Record<string, unknown>)[key]
           : (reference.target as Record<PropertyKey, unknown>)[key]
       const { write, next, result } = yield* compute(current)
@@ -1915,7 +1915,7 @@ export class Interpreter<R> {
       target[index] = next
       return
     }
-    if (reference.target instanceof SandboxURL) {
+    if (reference.target instanceof CodeModeURL) {
       const property = key as string
       if (!urlWritableProperties.has(property)) {
         throw new InterpreterRuntimeError(`URL.${property} is read-only.`, node).as("TypeError")

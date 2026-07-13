@@ -1,45 +1,45 @@
 import type { Fiber } from "effect"
 
-export class SandboxPromise {
+export class CodeModePromise {
   constructor(readonly fiber: Fiber.Fiber<unknown, unknown>) {}
 }
 
-export class SandboxDate {
+export class CodeModeDate {
   constructor(readonly time: number) {}
 }
 
-export class SandboxRegExp {
+export class CodeModeRegExp {
   readonly regex: RegExp
   constructor(pattern: string, flags: string) {
     this.regex = new RegExp(pattern, flags)
   }
 }
 
-export class SandboxMap {
+export class CodeModeMap {
   readonly map = new Map<unknown, unknown>()
 }
 
-export class SandboxSet {
+export class CodeModeSet {
   readonly set = new Set<unknown>()
 }
 
-export class SandboxURLSearchParams {
+export class CodeModeURLSearchParams {
   constructor(readonly params: URLSearchParams) {}
 }
 
-export class SandboxURL {
-  readonly searchParams: SandboxURLSearchParams
+export class CodeModeURL {
+  readonly searchParams: CodeModeURLSearchParams
   constructor(readonly url: URL) {
-    this.searchParams = new SandboxURLSearchParams(url.searchParams)
+    this.searchParams = new CodeModeURLSearchParams(url.searchParams)
   }
 }
 
-export const isSandboxValue = (
+export const isCodeModeValue = (
   value: unknown,
-): value is SandboxDate | SandboxRegExp | SandboxMap | SandboxSet | SandboxURL | SandboxURLSearchParams =>
-  value instanceof SandboxDate ||
-  value instanceof SandboxRegExp ||
-  value instanceof SandboxMap ||
-  value instanceof SandboxSet ||
-  value instanceof SandboxURL ||
-  value instanceof SandboxURLSearchParams
+): value is CodeModeDate | CodeModeRegExp | CodeModeMap | CodeModeSet | CodeModeURL | CodeModeURLSearchParams =>
+  value instanceof CodeModeDate ||
+  value instanceof CodeModeRegExp ||
+  value instanceof CodeModeMap ||
+  value instanceof CodeModeSet ||
+  value instanceof CodeModeURL ||
+  value instanceof CodeModeURLSearchParams

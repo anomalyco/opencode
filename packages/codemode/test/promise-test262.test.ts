@@ -212,7 +212,7 @@ describe("Test262 Promise statics", () => {
     ])
   })
 
-  test("Promise.resolve adopts values and preserves sandbox-promise identity", async () => {
+  test("Promise.resolve adopts values and preserves CodeMode-promise identity", async () => {
     // Sources:
     // test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js
     // test/built-ins/Promise/resolve/resolve-non-obj.js
@@ -289,7 +289,7 @@ describe("Test262 Promise statics", () => {
     // test/built-ins/Promise/all/reject-immed.js
     // test/built-ins/Promise/allSettled/reject-immed.js
     // test/built-ins/Promise/race/reject-immed.js
-    // (adapted: immediately-rejecting thenables become sandbox promises that settled,
+    // (adapted: immediately-rejecting thenables become CodeMode promises that settled,
     //  and were even observed, before the combinator call)
     expect(
       await value(`
@@ -360,7 +360,7 @@ describe("Test262 Promise statics", () => {
     // test/built-ins/Promise/race/S25.4.4.3_A2.1_T1.js
     // test/built-ins/Promise/race/S25.4.4.3_A5.1_T1.js
     // (adapted: upstream requires Promise.race([]) to never settle; CodeMode intentionally
-    //  rejects with a catchable diagnostic instead of hanging, so this asserts the sandbox
+    //  rejects with a catchable diagnostic instead of hanging, so this asserts CodeMode
     //  divergence rather than the spec never-settles behavior)
     expect(
       await value(`
@@ -375,7 +375,7 @@ describe("Test262 Promise statics", () => {
     ).toEqual([true, true])
   })
 
-  test("Promise.resolve passes the same sandbox promise through nested chains", async () => {
+  test("Promise.resolve passes the same CodeMode promise through nested chains", async () => {
     // Source: test/built-ins/Promise/resolve/S25.4.4.5_A2.2_T1.js
     // (adapted: no executor construction, and identity is observed with Array includes
     //  because promises are not comparable data values in CodeMode)
@@ -1208,7 +1208,7 @@ describe("Test262 AggregateError", () => {
 
   test("coerces a non-string message to a string", async () => {
     // Source: test/built-ins/AggregateError/message-method-prop-cast.js (value coercion only; the
-    // upstream object-with-toString case is omitted because the sandbox has no user toString dispatch)
+    // upstream object-with-toString case is omitted because CodeMode has no user toString dispatch)
     expect(
       await value(`
         return [
@@ -1408,7 +1408,7 @@ describe("Test262 Promise constructor", () => {
 
   test.failing("calling Promise without new throws TypeError", async () => {
     // Source: test/built-ins/Promise/undefined-newtarget.js
-    // The sandbox currently reports a generic Error ("Only tools are callable in CodeMode.").
+    // CodeMode currently reports a generic Error ("Only tools are callable in CodeMode.").
     expect(
       await value(`
         try {

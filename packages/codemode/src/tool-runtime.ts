@@ -10,13 +10,13 @@ import {
 } from "./tool-schema.js"
 import { isDefinition as isToolDefinition, type Definition } from "./tool.js"
 import {
-  SandboxDate,
-  SandboxMap,
-  SandboxPromise,
-  SandboxRegExp,
-  SandboxSet,
-  SandboxURL,
-  SandboxURLSearchParams,
+  CodeModeDate,
+  CodeModeMap,
+  CodeModePromise,
+  CodeModeRegExp,
+  CodeModeSet,
+  CodeModeURL,
+  CodeModeURLSearchParams,
 } from "./values.js"
 
 const estimateTokens = (input: string) => Math.max(0, Math.round(input.length / 4))
@@ -141,16 +141,16 @@ const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
 export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
 
-// Checkpoint mode preserves sandbox values; boundary mode JSON-normalizes them.
-export const copyIn = (value: unknown, label: string, preserveSandboxValues = false): unknown =>
-  copyBounded(value, label, 0, new Set(), preserveSandboxValues)
+// Checkpoint mode preserves CodeMode values; boundary mode JSON-normalizes them.
+export const copyIn = (value: unknown, label: string, preserveCodeModeValues = false): unknown =>
+  copyBounded(value, label, 0, new Set(), preserveCodeModeValues)
 
 const copyBounded = (
   value: unknown,
   label: string,
   depth: number,
   seen: Set<object>,
-  preserveSandboxValues: boolean,
+  preserveCodeModeValues: boolean,
 ): unknown => {
   if (depth > MAX_VALUE_DEPTH) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
@@ -169,55 +169,55 @@ const copyBounded = (
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
   }
 
-  if (value instanceof SandboxPromise) {
+  if (value instanceof CodeModePromise) {
     throw new ToolRuntimeError(
       "InvalidDataValue",
       `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
     )
   }
 
-  if (preserveSandboxValues) {
+  if (preserveCodeModeValues) {
     if (
-      value instanceof SandboxDate ||
-      value instanceof SandboxRegExp ||
-      value instanceof SandboxMap ||
-      value instanceof SandboxSet ||
-      value instanceof SandboxURL ||
-      value instanceof SandboxURLSearchParams
+      value instanceof CodeModeDate ||
+      value instanceof CodeModeRegExp ||
+      value instanceof CodeModeMap ||
+      value instanceof CodeModeSet ||
+      value instanceof CodeModeURL ||
+      value instanceof CodeModeURLSearchParams
     ) {
       return value
     }
-    if (value instanceof Date) return new SandboxDate(value.getTime())
-    if (value instanceof RegExp) return new SandboxRegExp(value.source, value.flags)
+    if (value instanceof Date) return new CodeModeDate(value.getTime())
+    if (value instanceof RegExp) return new CodeModeRegExp(value.source, value.flags)
     if (value instanceof Map) {
-      const wrapped = new SandboxMap()
+      const wrapped = new CodeModeMap()
       for (const [key, item] of value.entries()) {
         wrapped.map.set(copyBounded(key, label, depth + 1, seen, true), copyBounded(item, label, depth + 1, seen, true))
       }
       return wrapped
     }
     if (value instanceof Set) {
-      const wrapped = new SandboxSet()
+      const wrapped = new CodeModeSet()
       for (const item of value.values()) wrapped.set.add(copyBounded(item, label, depth + 1, seen, true))
       return wrapped
     }
-    if (value instanceof URL) return new SandboxURL(new URL(value.href))
-    if (value instanceof URLSearchParams) return new SandboxURLSearchParams(new URLSearchParams(value))
+    if (value instanceof URL) return new CodeModeURL(new URL(value.href))
+    if (value instanceof URLSearchParams) return new CodeModeURLSearchParams(new URLSearchParams(value))
   }
 
-  if (value instanceof SandboxDate) {
+  if (value instanceof CodeModeDate) {
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   }
   if (value instanceof Date) {
     return Number.isFinite(value.getTime()) ? value.toISOString() : null
   }
-  if (value instanceof SandboxURL) return value.url.href
+  if (value instanceof CodeModeURL) return value.url.href
   if (value instanceof URL) return value.href
   if (
-    value instanceof SandboxRegExp ||
-    value instanceof SandboxMap ||
-    value instanceof SandboxSet ||
-    value instanceof SandboxURLSearchParams ||
+    value instanceof CodeModeRegExp ||
+    value instanceof CodeModeMap ||
+    value instanceof CodeModeSet ||
+    value instanceof CodeModeURLSearchParams ||
     value instanceof RegExp ||
     value instanceof Map ||
     value instanceof Set ||
@@ -233,8 +233,8 @@ const copyBounded = (
   seen.add(value)
 
   if (Array.isArray(value)) {
-    const copied = value.map((item) => copyBounded(item, label, depth + 1, seen, preserveSandboxValues))
-    if (preserveSandboxValues) {
+    const copied = value.map((item) => copyBounded(item, label, depth + 1, seen, preserveCodeModeValues))
+    if (preserveCodeModeValues) {
       // Checkpoint copies retain array metadata that boundary copies omit.
       for (const [key, item] of Object.entries(value)) {
         if (Object.hasOwn(copied, key)) continue
@@ -258,7 +258,7 @@ const copyBounded = (
     if (isBlockedMember(key)) {
       throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
     }
-    copied[key] = copyBounded(item, label, depth + 1, seen, preserveSandboxValues)
+    copied[key] = copyBounded(item, label, depth + 1, seen, preserveCodeModeValues)
   }
   seen.delete(value)
   return copied

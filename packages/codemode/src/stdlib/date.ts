@@ -36,7 +36,7 @@ export const invokeDateStatic = (name: string, args: Array<unknown>, node: AstNo
   }
 }
 
-export const invokeDateMethod = (value: SandboxDate, name: string, node: AstNode): unknown => {
+export const invokeDateMethod = (value: CodeModeDate, name: string, node: AstNode): unknown => {
   const hosted = new Date(value.time)
   switch (name) {
     case "getTime":
@@ -88,5 +88,5 @@ export const invokeDateMethod = (value: SandboxDate, name: string, node: AstNode
   }
 }
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { SandboxDate } from "../values.js"
+import { CodeModeDate } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"

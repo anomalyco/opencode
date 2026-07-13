@@ -20,7 +20,7 @@ ultimate source of truth.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
 - [x] JSON-like host boundaries with `undefined` and non-finite numbers normalized to `null`.
-- [x] Live Date, RegExp, Map, Set, URL, and URLSearchParams values inside the sandbox.
+- [x] Live Date, RegExp, Map, Set, URL, and URLSearchParams values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
@@ -94,7 +94,7 @@ ultimate source of truth.
 - [x] Optional property access and optional calls.
 - [x] Function/tool calls and spread arguments.
 - [x] Sequence expressions (the comma operator).
-- [x] `await` for sandbox promises; a plain value passes through unchanged, though every `await` still defers its
+- [x] `await` for CodeMode promises; a plain value passes through unchanged, though every `await` still defers its
       continuation one reaction turn.
 - [x] `new` for Error types, Date, RegExp, Map, Set, URL, URLSearchParams, and Promise.
 - [x] Arithmetic operators: `+`, `-`, `*`, `/`, `%`, and `**`.
@@ -109,7 +109,7 @@ ultimate source of truth.
 
 ## Promises and tools
 
-- [x] Tool calls start eagerly and return supervised, run-once sandbox promises.
+- [x] Tool calls start eagerly and return supervised, run-once CodeMode promises.
 - [x] Direct `await`, repeated awaits, and implicit resolution when a promise is returned from a function/program.
 - [x] `Promise.resolve` and `Promise.reject`.
 - [x] `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over supported collections containing
@@ -148,7 +148,7 @@ ultimate source of truth.
 - [x] Computed property names and object spread.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`.
 - [x] `Object.keys` over arrays and tool references.
-- [x] Object identity is preserved by in-sandbox Object helpers.
+- [x] Object identity is preserved by in-CodeMode Object helpers.
 - [x] Blocked access to `__proto__`, `constructor`, and `prototype`.
 - [ ] `Object.is`; runtime and tool-reference identity semantics need to be defined first.
 - [ ] `Object.groupBy`.

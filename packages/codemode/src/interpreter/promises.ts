@@ -17,24 +17,24 @@ import { applyCollectionCallback, type CallbackRunner } from "./methods.js"
 import { typeofValue } from "./references.js"
 import { spreadItems } from "../stdlib/collections.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
-import { SandboxPromise } from "../values.js"
+import { CodeModePromise } from "../values.js"
 
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class PromiseRuntime<R> {
-  private readonly active = new Set<SandboxPromise>()
-  private readonly ids = new WeakMap<SandboxPromise, number>()
-  private readonly observed = new WeakSet<SandboxPromise>()
+  private readonly active = new Set<CodeModePromise>()
+  private readonly ids = new WeakMap<CodeModePromise, number>()
+  private readonly observed = new WeakSet<CodeModePromise>()
   private readonly failures = new Map<number, Diagnostic>()
   private nextID = 0
 
   constructor(private readonly scope: Scope.Scope) {}
 
-  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<SandboxPromise, never, R> {
+  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<CodeModePromise, never, R> {
     return Effect.suspend(() => {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
       return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
-        const promise = new SandboxPromise(fiber)
+        const promise = new CodeModePromise(fiber)
         this.active.add(promise)
         this.ids.set(promise, id)
         fiber.addObserver((exit) => {
@@ -55,14 +55,14 @@ export class PromiseRuntime<R> {
   }
 
   // Observation must be recorded when responsibility transfers, before the consumer fiber runs.
-  markObserved(promise: SandboxPromise): void {
+  markObserved(promise: CodeModePromise): void {
     this.observed.add(promise)
     const id = this.ids.get(promise)
     this.ids.delete(promise)
     if (id !== undefined) this.failures.delete(id)
   }
 
-  await(promise: SandboxPromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
+  await(promise: CodeModePromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
     return Fiber.await(promise.fiber)
   }
 
@@ -94,7 +94,7 @@ export const invokePromiseMethod = <R>(
 ): Effect.Effect<unknown, unknown, R> => {
   if (ref.name === "resolve") {
     const value = args[0]
-    return value instanceof SandboxPromise ? Effect.succeed(value) : promises.create(Effect.succeed(value))
+    return value instanceof CodeModePromise ? Effect.succeed(value) : promises.create(Effect.succeed(value))
   }
   if (ref.name === "reject") {
     return promises.create(Effect.fail(new ProgramThrow(args[0])))
@@ -114,19 +114,19 @@ export const invokePromiseMethod = <R>(
   const items = Array.from(spread)
 
   for (const item of items) {
-    if (item instanceof SandboxPromise) promises.markObserved(item)
+    if (item instanceof CodeModePromise) promises.markObserved(item)
   }
 
   switch (ref.name) {
     case "all": {
       const observations = items.map((item) =>
-        item instanceof SandboxPromise ? Effect.flatten(promises.await(item)) : Effect.succeed(item),
+        item instanceof CodeModePromise ? Effect.flatten(promises.await(item)) : Effect.succeed(item),
       )
       return promises.create(settleAfterTurn(Effect.all(observations, { concurrency: "unbounded" })))
     }
     case "allSettled": {
       const observations = items.map((item) =>
-        item instanceof SandboxPromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
+        item instanceof CodeModePromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
       )
       return promises.create(
         settleAfterTurn(
@@ -168,13 +168,13 @@ export const invokePromiseMethod = <R>(
         )
       }
       const observations = items.map((item) =>
-        item instanceof SandboxPromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
+        item instanceof CodeModePromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
       )
       return promises.create(settleAfterTurn(Effect.flatten(Effect.raceAll(observations))))
     }
     case "any": {
       const flipped = items.map((item) =>
-        item instanceof SandboxPromise
+        item instanceof CodeModePromise
           ? Effect.flatMap(promises.await(item), (exit) => {
               if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
               if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
@@ -201,7 +201,7 @@ export const invokePromiseInstanceMethod = <R>(
   ref: PromiseInstanceMethodReference,
   args: Array<unknown>,
   node: AstNode,
-): Effect.Effect<SandboxPromise, never, R> => {
+): Effect.Effect<CodeModePromise, never, R> => {
   const method = `Promise.prototype.${ref.name}`
   promises.markObserved(ref.promise)
   if (ref.name === "finally") {
@@ -217,7 +217,7 @@ export const constructPromise = <R>(
   promises: PromiseRuntime<R>,
   executor: unknown,
   node: AstNode,
-): Effect.Effect<SandboxPromise, unknown, R> => {
+): Effect.Effect<CodeModePromise, unknown, R> => {
   if (!(executor instanceof CodeModeFunction)) {
     throw new InterpreterRuntimeError(
       "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
@@ -226,10 +226,10 @@ export const constructPromise = <R>(
   }
   return Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const box: { own?: SandboxPromise } = {}
+    const box: { own?: CodeModePromise } = {}
     const promise = yield* promises.create(
       Effect.flatMap(Deferred.await(deferred), (value) => {
-        if (!(value instanceof SandboxPromise)) return Effect.succeed(value)
+        if (!(value instanceof CodeModePromise)) return Effect.succeed(value)
         if (value === box.own) return Effect.fail(selfResolutionError(node))
         return runner.settlePromise(value)
       }),
@@ -281,7 +281,7 @@ const reactionHandler = (value: unknown, method: string, node: AstNode): Reactio
 // Teardown bypasses handlers; settled reactions yield once so handlers never run inline.
 const reactionExit = <R>(
   promises: PromiseRuntime<R>,
-  source: SandboxPromise,
+  source: CodeModePromise,
 ): Effect.Effect<Exit.Exit<unknown, unknown>, unknown, R> =>
   Effect.gen(function* () {
     const exit = yield* promises.await(source)
@@ -293,13 +293,13 @@ const reactionExit = <R>(
 const chainReaction = <R>(
   runner: CallbackRunner<R>,
   promises: PromiseRuntime<R>,
-  source: SandboxPromise,
+  source: CodeModePromise,
   onFulfilled: ReactionHandler | undefined,
   onRejected: ReactionHandler | undefined,
   method: string,
   node: AstNode,
-): Effect.Effect<SandboxPromise, never, R> => {
-  const box: { derived?: SandboxPromise } = {}
+): Effect.Effect<CodeModePromise, never, R> => {
+  const box: { derived?: CodeModePromise } = {}
   const body = Effect.gen(function* () {
     const exit = yield* reactionExit(promises, source)
     const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
@@ -307,7 +307,7 @@ const chainReaction = <R>(
     const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
     const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
     if (result === box.derived) return yield* Effect.fail(selfResolutionError(node))
-    if (result instanceof SandboxPromise) return yield* runner.settlePromise(result)
+    if (result instanceof CodeModePromise) return yield* runner.settlePromise(result)
     return result
   })
   return Effect.map(promises.create(body), (derived) => {
@@ -319,17 +319,17 @@ const chainReaction = <R>(
 const chainFinally = <R>(
   runner: CallbackRunner<R>,
   promises: PromiseRuntime<R>,
-  source: SandboxPromise,
+  source: CodeModePromise,
   cleanup: ReactionHandler | undefined,
   method: string,
   node: AstNode,
-): Effect.Effect<SandboxPromise, never, R> =>
+): Effect.Effect<CodeModePromise, never, R> =>
   promises.create(
     Effect.gen(function* () {
       const exit = yield* reactionExit(promises, source)
       if (cleanup !== undefined) {
         const result = yield* applyCollectionCallback(runner, cleanup, method, node)([])
-        if (result instanceof SandboxPromise) yield* runner.settlePromise(result)
+        if (result instanceof CodeModePromise) yield* runner.settlePromise(result)
       }
       return yield* exit
     }),
