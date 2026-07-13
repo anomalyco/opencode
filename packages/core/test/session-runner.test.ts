@@ -139,6 +139,11 @@ const compactModel = Model.make({
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
 })
+const fullOutputModel = Model.make({
+  id: "full-output",
+  provider: "fake",
+  route: OpenAIChat.route.with({ limits: { context: 262_144, output: 262_144 } }),
+})
 const undersizedContextModel = Model.make({
   id: "undersized-context",
   provider: "fake",
@@ -1862,6 +1867,25 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         summary: "## Objective\n- Preserve the updated task",
       })
+    }),
+  )
+
+  it.effect("does not compact immediately when the advertised output limit fills the context", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      currentModel = fullOutputModel
+      response = reply.textWithUsage("Earlier answer", "text-full-output-first", 9_500)
+      yield* admit(session, "Earlier question")
+      yield* session.resume(sessionID)
+
+      requests.length = 0
+      response = reply.text("Continued", "text-full-output-final")
+      yield* admit(session, "Continue")
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0])).toContain("Continue")
+      expect(yield* session.context(sessionID)).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
     }),
   )
 

@@ -16,6 +16,7 @@ import { Token } from "../util/token"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
+const OUTPUT_TOKEN_MAX = 32_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
@@ -320,7 +321,7 @@ const make = (dependencies: Dependencies) => {
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const output = input.model.route.defaults.limits?.output ?? 0
+    const output = Math.min(input.model.route.defaults.limits?.output ?? 0, OUTPUT_TOKEN_MAX)
     const used =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (used <= 0) return false
