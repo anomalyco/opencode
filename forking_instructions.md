@@ -203,3 +203,71 @@ git merge upstream/dev        # or a specific tag like v1.4.11
 - Always sync on a throwaway `sync/*` branch first; merge into `vm-main` only after
   it builds and tests pass.
 - Prefer merging release **tags** over the raw `dev` tip when you want stability.
+
+---
+
+## How release binaries are built (for our forked releases)
+
+### Key facts
+
+- The CLI is compiled with **Bun's single-file compiler** (`Bun.build({ compile: { target } })`),
+  which **cross-compiles every OS/arch from one Linux machine** — no per-OS build
+  runners are needed for the CLI itself.
+- The build script is `packages/opencode/script/build.ts`. It builds 12 targets:
+  - **linux**: `arm64`, `x64`, `x64-baseline`, `arm64-musl`, `x64-musl`, `x64-baseline-musl`
+  - **darwin (macOS)**: `arm64`, `x64`, `x64-baseline`
+  - **windows**: `arm64`, `x64`, `x64-baseline`
+  - "baseline" = no-AVX2 variant for older x64 CPUs; "musl" = Alpine-style libc.
+- Each target lands in `packages/opencode/dist/opencode-<os>-<arch>[-baseline][-musl]/bin/opencode`
+  plus a per-platform npm `package.json` (with `os`/`cpu`/`libc` constraints).
+- When releasing (`OPENCODE_RELEASE=true`), the script tars/zips each target
+  (`.tar.gz` for linux, `.zip` for mac/windows) and uploads them to the GitHub
+  release with `gh release upload v<version> ... --repo $GH_REPO`.
+- Version/channel come from env vars consumed by `@opencode-ai/script`:
+  `OPENCODE_VERSION` (the version string) and `OPENCODE_RELEASE` (set to publish).
+- npm distribution (`packages/opencode/script/publish.ts`): each platform binary is
+  its own npm package (e.g. `opencode-linux-x64`), and a meta package `opencode-ai`
+  lists them all as `optionalDependencies` with a postinstall that picks the right one.
+  It also builds a multi-arch Docker image and pushes AUR/Homebrew-style metadata —
+  all hardcoded to `anomalyco/opencode`, so **skip or rewrite this for our fork**.
+
+### CI pipeline (`.github/workflows/publish.yml`)
+
+Runs on push to `dev`/`beta` or manual dispatch. Jobs, in order:
+
+1. **version** — `script/version.ts` computes the version, creates a draft GitHub release.
+2. **build-cli** — one Ubuntu runner runs `./packages/opencode/script/build.ts`,
+   producing all platform binaries (this is the cross-compilation step).
+3. **sign-cli-windows** — Windows runner signs the `.exe`s via Azure Trusted Signing,
+   re-zips, uploads. *(Optional for us — unsigned exes work, just trigger SmartScreen.)*
+4. **build-electron** — desktop app only; a 6-way matrix of real macOS/Windows/Linux
+   runners with Apple/Azure code signing. *(Only needed if we ship the desktop app.)*
+5. **publish** — `script/publish.ts` bumps versions, publishes npm packages, Docker,
+   AUR, then finalizes the GitHub release. Note it **pushes a version-sync commit back
+   to `dev`** — for our fork that would need to target `vm-main` instead.
+
+Note the workflows are gated with `if: github.repository == 'anomalyco/opencode'`,
+so they won't run on our fork until we change that guard (and the `GH_REPO` /
+release-repo references) to `VMDevTeam/opencode-fork`.
+
+### Building our own release binaries locally
+
+```bash
+bun install
+
+# All 12 platform targets (cross-compiled from any machine):
+OPENCODE_VERSION=1.0.0-vm ./packages/opencode/script/build.ts
+
+# Just the current machine's platform (fast, for testing):
+OPENCODE_VERSION=1.0.0-vm ./packages/opencode/script/build.ts --single
+
+# Build AND upload archives to a GitHub release on our fork
+# (release must already exist: gh release create v1.0.0-vm --repo VMDevTeam/opencode-fork)
+OPENCODE_VERSION=1.0.0-vm OPENCODE_RELEASE=true GH_REPO=VMDevTeam/opencode-fork \
+  ./packages/opencode/script/build.ts
+```
+
+Binaries end up in `packages/opencode/dist/`. The build embeds the web UI
+(`packages/app` is built first; pass `--skip-embed-web-ui` to skip) and runs a
+`--version` smoke test on the host-platform binary. Requirements: `bun`, `zip`,
+`tar`, and `gh` (only for release upload).
