@@ -32,6 +32,11 @@ export function comparisonHref(first: ComparisonModelRef, second: ComparisonMode
   )}/${catalogSlug(second.slug)}`
 }
 
+export function canonicalComparisonHref(first: ComparisonModelRef, second: ComparisonModelRef) {
+  const models = [first, second].toSorted((a, b) => modelKey(a).localeCompare(modelKey(b)))
+  return comparisonHref(models[0], models[1])
+}
+
 export function uniqueComparisonPairs(pairs: ComparisonPair[]) {
   return pairs.reduce<{ keys: Set<string>; pairs: ComparisonPair[] }>(
     (result, pair) => {
@@ -80,7 +85,7 @@ function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
   return (
     <a
       data-component="compare-home-card"
-      href={comparisonHref(props.pair.first, props.pair.second)}
+      href={canonicalComparisonHref(props.pair.first, props.pair.second)}
       aria-label={`${props.pair.detail}: ${props.pair.first.name} vs ${props.pair.second.name}`}
     >
       <span data-slot="compare-home-card-head">
@@ -88,7 +93,7 @@ function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
           <strong>{props.pair.detail}</strong>
           <em>{props.pair.description ?? `${props.pair.first.name} vs ${props.pair.second.name}`}</em>
         </span>
-        <b aria-hidden="true" />
+        <ComparisonCardIcon />
       </span>
       <span data-slot="compare-home-card-divider" aria-hidden="true" />
       <span data-slot="compare-home-card-models">
@@ -104,9 +109,22 @@ function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
   )
 }
 
+function ComparisonCardIcon() {
+  return (
+    <b aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M12.9509 12.9884L14.4069 14.4444M2.44431 2.44434H6.44431V6.44434H2.44431V2.44434ZM2.44431 9.55542H6.44431V13.5554H2.44431V9.55542ZM9.55539 2.44434H13.5554V6.44434H9.55539V2.44434ZM13.5554 11.5554C13.5554 12.66 12.66 13.5554 11.5554 13.5554C10.4508 13.5554 9.55539 12.66 9.55539 11.5554C9.55539 10.4509 10.4508 9.55542 11.5554 9.55542C12.66 9.55542 13.5554 10.4509 13.5554 11.5554Z"
+          stroke="#808080"
+        />
+      </svg>
+    </b>
+  )
+}
+
 function ComparisonPanelCard(props: { pair: ComparisonPair }) {
   return (
-    <a data-component="comparison-card" href={comparisonHref(props.pair.first, props.pair.second)}>
+    <a data-component="comparison-card" href={canonicalComparisonHref(props.pair.first, props.pair.second)}>
       <span>{props.pair.detail}</span>
       <strong>
         {props.pair.first.name} <em>vs</em> {props.pair.second.name}

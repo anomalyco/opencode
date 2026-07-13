@@ -1,6 +1,8 @@
 import { Component, For, Show } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/core/util/path"
 import type { ContextItem } from "@/context/prompt"
@@ -12,6 +14,7 @@ type ContextItemsProps = {
   active: (item: PromptContextItem) => boolean
   openComment: (item: PromptContextItem) => void
   remove: (item: PromptContextItem) => void
+  newLayoutDesigns: boolean
   t: (key: string) => string
 }
 
@@ -27,10 +30,17 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
             const selected = props.active(item)
 
             return (
-              <TooltipV2
+              <Dynamic
+                component={props.newLayoutDesigns ? TooltipV2 : Tooltip}
                 value={
                   <span class="flex max-w-[300px]">
-                    <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
+                    <span
+                      classList={{
+                        "truncate-start [unicode-bidi:plaintext] min-w-0": true,
+                        "text-v2-text-text-muted": props.newLayoutDesigns,
+                        "text-text-invert-base": !props.newLayoutDesigns,
+                      }}
+                    >
                       {directory}
                     </span>
                     <span class="shrink-0">{filename}</span>
@@ -78,7 +88,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                     {(comment) => <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>}
                   </Show>
                 </div>
-              </TooltipV2>
+              </Dynamic>
             )
           }}
         </For>
