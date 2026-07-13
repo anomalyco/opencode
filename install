@@ -3,7 +3,7 @@ set -euo pipefail
 APP=opencode
 # fork: download from the opencode-skein fork's GitHub releases, not upstream.
 # Override with REPO=owner/name to point elsewhere.
-REPO="${REPO:-androidand/opencode}"
+REPO="${REPO:-androidand/opencode-skein}"
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'

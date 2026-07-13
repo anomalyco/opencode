@@ -23,10 +23,10 @@ export const ForkDistribution = {
    * `opencode upgrade` (curl method) re-installs THIS fork.
    */
   installUrl:
-    process.env.OPENCODE_INSTALL_URL ?? "https://raw.githubusercontent.com/androidand/opencode/dev/install",
+    process.env.OPENCODE_INSTALL_URL ?? "https://raw.githubusercontent.com/androidand/opencode-skein/dev/install",
 
   /** GitHub repo whose `releases/latest` defines the fork's latest version. */
-  releaseRepo: process.env.OPENCODE_RELEASE_REPO ?? "androidand/opencode",
+  releaseRepo: process.env.OPENCODE_RELEASE_REPO ?? "androidand/opencode-skein",
 
   /** Homebrew tap + formula for the fork. */
   brewTap: process.env.OPENCODE_BREW_TAP ?? "androidand/tap",

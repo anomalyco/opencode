@@ -27,7 +27,7 @@ concurrency:
 jobs:
   release:
     # Only ever run on the fork, never if this workflow lands upstream via sync.
-    if: github.repository == 'androidand/opencode'
+    if: github.repository == 'androidand/opencode-skein'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create releases + upload assets
