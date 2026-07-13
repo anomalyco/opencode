@@ -15,18 +15,30 @@ function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R
   return self.pipe(
     Effect.mapError((error) => {
       if (error instanceof ProviderAuth.OauthMissing) {
-        return new ProviderAuthApiError({ name: error._tag, data: { providerID: error.providerID } })
+        return new ProviderAuthApiError({
+          name: error._tag,
+          data: { providerID: error.providerID, message: "No active OAuth session was found for this provider" },
+        })
       }
       if (error instanceof ProviderAuth.OauthCodeMissing) {
-        return new ProviderAuthApiError({ name: error._tag, data: { providerID: error.providerID } })
+        return new ProviderAuthApiError({
+          name: error._tag,
+          data: { providerID: error.providerID, message: "No authorization code was provided in the OAuth callback" },
+        })
       }
       if (error instanceof ProviderAuth.OauthCallbackFailed) {
-        return new ProviderAuthApiError({ name: error._tag, data: {} })
+        return new ProviderAuthApiError({
+          name: error._tag,
+          data: { message: error.message || "OAuth authorization with the provider failed" },
+        })
       }
       if (error instanceof ProviderAuth.ValidationFailed) {
-        return new ProviderAuthApiError({ name: error._tag, data: { field: error.field, message: error.message } })
+        return new ProviderAuthApiError({
+          name: error._tag,
+          data: { field: error.field, message: error.message },
+        })
       }
-      return new ProviderAuthApiError({ name: "BadRequest", data: {} })
+      return new ProviderAuthApiError({ name: "BadRequest", data: { message: "Invalid request" } })
     }),
   )
 }

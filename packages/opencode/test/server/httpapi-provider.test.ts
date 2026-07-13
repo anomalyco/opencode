@@ -322,10 +322,10 @@ describe("provider HttpApi", () => {
       })
 
       expect(response.status).toBe(400)
-      expect(JSON.parse(response.body)).toEqual({
-        name: "ProviderAuthValidationFailed",
-        data: { field: "token", message: "Token must be ok" },
-      })
+      const body = JSON.parse(response.body)
+      expect(body.name).toBe("ProviderAuthValidationFailed")
+      expect(body.data.field).toBe("token")
+      expect(body.data.message).toBe("Token must be ok")
     }),
     { ...projectOptions, init: writeProviderAuthValidationPlugin },
     30000,
@@ -342,10 +342,11 @@ describe("provider HttpApi", () => {
       })
 
       expect(response.status).toBe(400)
-      expect(JSON.parse(response.body)).toEqual({
-        name: "ProviderAuthOauthMissing",
-        data: { providerID },
-      })
+      const body = JSON.parse(response.body)
+      expect(body.name).toBe("ProviderAuthOauthMissing")
+      expect(body.data.providerID).toBe(providerID)
+      expect(body.data.message).toBeString()
+      expect(body.data.message.length).toBeGreaterThan(0)
     }),
     projectOptions,
     30000,

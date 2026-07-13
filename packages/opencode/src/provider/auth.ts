@@ -75,7 +75,9 @@ export class OauthCodeMissing extends Schema.TaggedErrorClass<OauthCodeMissing>(
 
 export class OauthCallbackFailed extends Schema.TaggedErrorClass<OauthCallbackFailed>()(
   "ProviderAuthOauthCallbackFailed",
-  {},
+  {
+    message: Schema.String,
+  },
 ) {}
 
 export class ValidationFailed extends Schema.TaggedErrorClass<ValidationFailed>()("ProviderAuthValidationFailed", {
@@ -195,10 +197,13 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
         return yield* new OauthCodeMissing({ providerID: input.providerID })
       }
 
-      const result = yield* Effect.promise(() =>
-        match.method === "code" ? match.callback(input.code!) : match.callback(),
-      )
-      if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
+      const result = yield* Effect.tryPromise({
+        try: () => (match.method === "code" ? match.callback(input.code!) : match.callback()),
+        catch: (cause) => new OauthCallbackFailed({ message: `OAuth callback error: ${cause instanceof Error ? cause.message : String(cause)}` }),
+      }).pipe(Effect.catchTag("ProviderAuthOauthCallbackFailed", (e) => Effect.fail(e)))
+      if (!result || result.type !== "success") {
+        return yield* new OauthCallbackFailed({ message: "OAuth authorization with the provider failed" })
+      }
 
       if ("key" in result) {
         yield* auth.set(input.providerID, {
