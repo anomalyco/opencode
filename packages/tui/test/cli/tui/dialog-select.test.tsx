@@ -19,11 +19,9 @@ async function renderSelect(
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
-  await Bun.write(path.join(state, "kv.json"), "{}")
   const config = createTuiResolvedConfig()
   const [
     { ConfigProvider },
-    { KVProvider },
     { ThemeProvider },
     { OpencodeKeymapProvider, registerOpencodeKeymap },
     { DialogProvider },
@@ -31,7 +29,6 @@ async function renderSelect(
     { ToastProvider },
   ] = await Promise.all([
     import("../../../src/config"),
-    import("../../../src/context/kv"),
     import("../../../src/context/theme"),
     import("../../../src/keymap"),
     import("../../../src/ui/dialog"),
@@ -49,31 +46,29 @@ async function renderSelect(
       <TestTuiContexts directory={root} paths={{ home: root, state, worktree: root }}>
         <OpencodeKeymapProvider keymap={keymap}>
           <ConfigProvider config={config}>
-            <KVProvider>
-              <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
-                <ToastProvider>
-                  <DialogProvider>
-                    <DialogSelect
-                      title="Items"
-                      options={options}
-                      actions={[
-                        {
-                          command: "dialog.move_session.new",
-                          title: "new",
-                          selection: "none",
-                          onTrigger: onGlobal,
-                        },
-                        {
-                          command: "dialog.move_session.delete",
-                          title: "delete",
-                          onTrigger: onRow,
-                        },
-                      ]}
-                    />
-                  </DialogProvider>
-                </ToastProvider>
-              </ThemeProvider>
-            </KVProvider>
+            <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+              <ToastProvider>
+                <DialogProvider>
+                  <DialogSelect
+                    title="Items"
+                    options={options}
+                    actions={[
+                      {
+                        command: "dialog.move_session.new",
+                        title: "new",
+                        selection: "none",
+                        onTrigger: onGlobal,
+                      },
+                      {
+                        command: "dialog.move_session.delete",
+                        title: "delete",
+                        onTrigger: onRow,
+                      },
+                    ]}
+                  />
+                </DialogProvider>
+              </ToastProvider>
+            </ThemeProvider>
           </ConfigProvider>
         </OpencodeKeymapProvider>
       </TestTuiContexts>
