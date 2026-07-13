@@ -149,6 +149,30 @@ describe("plugin.codex", () => {
     await enabled.dispose?.()
   })
 
+  test("uses Codex context limits for OAuth GPT models", async () => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+    const provider = {
+      models: Object.fromEntries(
+        ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"].map((id) => [
+          id,
+          { id, api: { id }, limit, cost: {} },
+        ]),
+      ),
+    }
+
+    const models = await hooks.provider!.models!(provider as never, { auth: { type: "oauth" } } as never)
+
+    expect(models["gpt-5.4"]?.limit).toEqual(limit)
+    expect(models["gpt-5.5"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
+    expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
+    expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
+    expect(await hooks.provider!.models!(provider as never, { auth: { type: "api" } } as never)).toBe(
+      provider.models as never,
+    )
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     let auth = {
       type: "oauth" as const,
