@@ -205,6 +205,19 @@ function Main {
         Add-ToUserPath -Dir $GENTLE_DIR
     }
 
+    Write-Step "Backing up Engram database (if exists)"
+    $engramDbDir = Join-Path $env:USERPROFILE ".engram"
+    $engramDbPath = Join-Path $engramDbDir "engram.db"
+    if (Test-Path $engramDbPath) {
+        $backupName = "engram.db.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        $backupPath = Join-Path $engramDbDir $backupName
+        Copy-Item -Path $engramDbPath -Destination $backupPath -Force
+        $dbSize = (Get-Item $engramDbPath).Length
+        Write-Success "Backed up engram.db ($([math]::Round($dbSize / 1KB)) KB) -> $backupName"
+    } else {
+        Write-Info "No existing engram.db found — fresh install"
+    }
+
     Write-Step "Configuring gentle-ai for opencode"
     $gentleExe = Join-Path $GENTLE_DIR "gentle-ai.exe"
     if (Test-Path $gentleExe) {
