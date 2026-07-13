@@ -233,7 +233,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection) return
+        if (!props.preserveSelection) {
+          const next = Math.min(store.selected, flat().length - 1)
+          if (next >= 0 && next !== store.selected) setStore("selected", next)
+          return
+        }
         if (resetSelection && store.filter.length > 0) {
           const option = flat()[0]
           if (!option) return
