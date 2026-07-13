@@ -173,6 +173,30 @@ describe("plugin.codex", () => {
     )
   })
 
+  test("filters only the exact unsupported GPT-5.6 OAuth API model ID", async () => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const ids = [
+      "gpt-5.6",
+      "gpt-5.6-luna",
+      "gpt-5.6-luna-pro",
+      "gpt-5.6-sol",
+      "gpt-5.6-sol-pro",
+      "gpt-5.6-terra",
+      "gpt-5.6-terra-pro",
+      "gpt-5.6-preview",
+    ]
+    const provider = {
+      models: Object.fromEntries(ids.map((id) => [id, { id, api: { id }, limit: {}, cost: {} }])),
+    }
+
+    const models = await hooks.provider!.models!(provider as never, { auth: { type: "oauth" } } as never)
+
+    expect(Object.keys(models)).toEqual(ids.filter((id) => id !== "gpt-5.6"))
+    expect(await hooks.provider!.models!(provider as never, { auth: { type: "api" } } as never)).toBe(
+      provider.models as never,
+    )
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     let auth = {
       type: "oauth" as const,
