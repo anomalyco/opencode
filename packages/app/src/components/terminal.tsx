@@ -1,7 +1,8 @@
 import { withAlpha } from "@opencode-ai/ui/theme/color"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { HexColor } from "@opencode-ai/ui/theme/types"
+import { resolveThemeVariantV2 } from "@opencode-ai/ui/theme/v2/resolve"
+import type { HexColor, ResolvedV2Theme } from "@opencode-ai/ui/theme/types"
 import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -66,6 +67,19 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
   console.debug("[terminal]", ...values)
+}
+
+const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
+  let current = tokens[key]
+  for (let i = 0; i < 8 && current; i++) {
+    const match = /^var\(--([^)]+)\)$/.exec(current.trim())
+    if (!match) {
+      const hex = current.trim()
+      if (/^#[0-9a-fA-F]{8}$/.test(hex)) return hex.slice(0, 7)
+      return hex
+    }
+    current = tokens[match[1]]
+  }
 }
 
 const useTerminalUiBindings = (input: {
@@ -238,7 +252,10 @@ export const Terminal = (props: TerminalProps) => {
     if (!variant?.seeds && !variant?.palette) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
-    const background = resolved["background-stronger"] ?? fallback.background
+    const background = settings.general.newLayoutDesigns()
+      ? (resolveV2Token(resolveThemeVariantV2(variant, mode === "dark"), "v2-background-bg-base") ??
+        fallback.background)
+      : (resolved["background-stronger"] ?? fallback.background)
     const alpha = mode === "dark" ? 0.25 : 0.2
     const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
     const selectionBackground = withAlpha(base, alpha)

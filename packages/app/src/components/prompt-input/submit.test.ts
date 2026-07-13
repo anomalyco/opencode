@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import type { ModelSelection } from "@/context/local"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
@@ -33,6 +34,10 @@ const prompt = {
   current: () => promptValue,
   cursor: () => 0,
   dirty: () => true,
+  model: {
+    current: () => undefined,
+    set: () => undefined,
+  },
   reset: () => undefined,
   set: () => undefined,
   context: {
@@ -374,6 +379,39 @@ describe("prompt submit worktree selection", () => {
       message: {
         agent: "agent",
         model: { providerID: "provider", modelID: "model", variant: "high" },
+      },
+    })
+  })
+
+  test("uses an injected model selection", async () => {
+    params = { id: "session-1" }
+    const model = {
+      current: () => ({ id: "draft-model", provider: { id: "draft-provider" } }),
+      variant: { current: () => "draft-variant" },
+    } as unknown as ModelSelection
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      model,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(optimistic[0]).toMatchObject({
+      message: {
+        model: { providerID: "draft-provider", modelID: "draft-model", variant: "draft-variant" },
       },
     })
   })
