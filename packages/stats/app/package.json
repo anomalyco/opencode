@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",
+    "@kobalte/core": "catalog:",
     "@opencode-ai/stats-core": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
