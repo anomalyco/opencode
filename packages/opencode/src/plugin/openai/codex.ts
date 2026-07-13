@@ -6,15 +6,12 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
-import { isRecord } from "@/util/record"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
-const CODEX_COMPATIBILITY_VERSION = "0.144.0"
-const RESPONSES_LITE_MODEL = "gpt-5.6-luna"
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 const DISALLOWED_MODELS = new Set(["gpt-5.5-pro"])
 
@@ -421,9 +418,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
             const requestInit = {
               ...init,
-              body: parsed.pathname.endsWith("/responses")
-                ? prepareResponsesLiteRequest(init?.body, headers)
-                : init?.body,
+              body: init?.body,
               headers,
             }
             if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)
@@ -567,62 +562,4 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       output.maxOutputTokens = undefined
     },
   }
-}
-
-function prepareResponsesLiteRequest(body: BodyInit | null | undefined, headers: Headers) {
-  if (typeof body !== "string") return body
-  const request: unknown = JSON.parse(body)
-  if (!isRecord(request)) return body
-  if (request.model !== RESPONSES_LITE_MODEL) return body
-  if (!Array.isArray(request.input)) throw new Error("Responses Lite requires an input array")
-  if (request.tools !== undefined && !Array.isArray(request.tools)) {
-    throw new Error("Responses Lite requires a tools array")
-  }
-  if (request.instructions !== undefined && typeof request.instructions !== "string") {
-    throw new Error("Responses Lite requires string instructions")
-  }
-
-  const sessionID = headers.get("session-id")
-  if (!sessionID) throw new Error("Responses Lite requires a session-id header")
-
-  function stripImageDetail(value: unknown) {
-    if (Array.isArray(value)) {
-      value.forEach(stripImageDetail)
-      return
-    }
-    if (!isRecord(value)) return
-    if (value.type === "input_image") delete value.detail
-    Object.values(value).forEach(stripImageDetail)
-  }
-
-  stripImageDetail(request.input)
-  request.input = [
-    { type: "additional_tools", role: "developer", tools: request.tools ?? [] },
-    ...(request.instructions
-      ? [
-          {
-            type: "message",
-            role: "developer",
-            content: [{ type: "input_text", text: request.instructions }],
-          },
-        ]
-      : []),
-    ...request.input,
-  ]
-  delete request.tools
-  delete request.instructions
-  request.tool_choice = "auto"
-  request.parallel_tool_calls = false
-  request.prompt_cache_key = sessionID
-  request.reasoning = {
-    ...(isRecord(request.reasoning) ? request.reasoning : {}),
-    context: "all_turns",
-  }
-
-  headers.set("session-id", sessionID)
-  headers.set("x-session-affinity", sessionID)
-  headers.set("version", CODEX_COMPATIBILITY_VERSION)
-  headers.set(OpenAIWebSocketPool.RESPONSES_LITE_HEADER, "true")
-  headers.delete("content-length")
-  return JSON.stringify(request)
 }

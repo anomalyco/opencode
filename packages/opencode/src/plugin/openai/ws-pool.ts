@@ -4,8 +4,6 @@ import { isRecord } from "@/util/record"
 import { OpenAIWebSocket } from "./ws"
 
 export const TITLE_HEADER = "x-opencode-title"
-export const RESPONSES_LITE_HEADER = "x-openai-internal-codex-responses-lite"
-const RESPONSES_LITE_CLIENT_METADATA = "ws_request_header_x_openai_internal_codex_responses_lite"
 
 export interface CreateWebSocketFetchOptions {
   httpFetch?: typeof globalThis.fetch
@@ -100,16 +98,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       })
       const response = OpenAIWebSocket.streamResponsesWebSocket({
         socket: entry.socket,
-        body:
-          internalHeaders[RESPONSES_LITE_HEADER] === "true"
-            ? {
-                ...body,
-                client_metadata: {
-                  ...(isRecord(body.client_metadata) ? body.client_metadata : {}),
-                  [RESPONSES_LITE_CLIENT_METADATA]: "true",
-                },
-              }
-            : body,
+        body,
         idleTimeout,
         signal: init?.signal ?? undefined,
         onFirstEvent: (error) => resolveFirstEvent(error ?? true),
