@@ -54,6 +54,20 @@ describe("freeSlots", () => {
   })
 })
 
+describe("placement result serializability", () => {
+  // Regression: pick() once returned {...placement, release} — one object with
+  // a function on it. task.ts put that object into part metadata, and
+  // Session.updatePart structuredClone()s every part event, so any placed
+  // subagent died with DataCloneError ("The object can not be cloned") while
+  // inherit-parent spawns kept working. The data half must clone; the merged
+  // shape must remain a known-toxic example.
+  test("placement data half survives structuredClone; merged shape does not", () => {
+    const result = { placement: { providerID: "host", modelID: "m" }, release: () => {} }
+    expect(() => structuredClone({ model: result.placement })).not.toThrow()
+    expect(() => structuredClone({ model: result })).toThrow()
+  })
+})
+
 describe("bestModel context-adequacy filter", () => {
   const requiredCtx = 9_000
 

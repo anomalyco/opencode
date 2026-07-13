@@ -194,7 +194,10 @@ export const TaskTool = Tool.define(
                   ),
                 ),
               )
-      const model = next.model ?? placed ?? inherited
+      // Only the data half of the placement goes anywhere near metadata —
+      // part metadata is structuredClone()d on every update event, and the
+      // release() handle is a function (DataCloneError, dead subagent).
+      const model = next.model ?? placed?.placement ?? inherited
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,

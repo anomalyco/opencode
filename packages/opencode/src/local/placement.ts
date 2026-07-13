@@ -185,6 +185,12 @@ export function bestModel(input: {
  * single-slot) llama.cpp server. Returns null when nothing better than
  * inheriting the parent's provider exists — callers must treat null as
  * "inherit", never as an error.
+ *
+ * The result separates `placement` (pure data, safe to embed in part/session
+ * metadata) from `release` (the slot-reservation handle). They must never be
+ * merged into one object: part metadata is structuredClone()d on every event
+ * (Session.updatePart), and a function anywhere inside it throws
+ * DataCloneError and kills the subagent spawn.
  */
 export async function pick(input: {
   parent: Placement
@@ -193,7 +199,7 @@ export async function pick(input: {
   promptText?: string
   requiredCtx?: number
   timeoutMs?: number
-}): Promise<(Placement & { release: () => void }) | null> {
+}): Promise<{ placement: Placement; release: () => void } | null> {
   try {
     const requiredCtx = input.requiredCtx ?? estimateRequiredCtx(input.promptText)
     const parentInfo = input.providers[input.parent.providerID]
@@ -255,7 +261,7 @@ export async function pick(input: {
         requiredCtx,
         probed: candidates.length,
       })
-      return { ...best.placement, release }
+      return { placement: best.placement, release }
     }
     log.info("no idle local provider, inheriting parent", {
       parent: input.parent.providerID,
