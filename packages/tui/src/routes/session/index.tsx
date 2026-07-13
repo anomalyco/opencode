@@ -1244,6 +1244,7 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 }
 
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
+  const ctx = use()
   const { theme } = useTheme()
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
@@ -1261,6 +1262,9 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     if (state() === "error") return "failed"
     return state() ?? "finished"
   }
+  const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
+  const suffix = () =>
+    Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - Bun.stringWidth(heading())))
   const color = () => {
     if (state() === "error") return theme.error
     if (state() === "cancelled") return theme.warning
@@ -1276,11 +1280,9 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
       }
     >
       <box marginLeft={3}>
-        <text wrapMode="none" truncate>
-          <span style={{ fg: color() }}>
-            {state() === "completed" ? "↳" : "!"} {actor()} {status()}
-          </span>
-          <span style={{ fg: theme.textMuted }}> · {description()}</span>
+        <text wrapMode="none">
+          <span style={{ fg: color() }}>{heading()}</span>
+          <span style={{ fg: theme.textMuted }}>{suffix()}</span>
         </text>
       </box>
     </Show>

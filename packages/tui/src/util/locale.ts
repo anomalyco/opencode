@@ -63,6 +63,24 @@ export function truncate(str: string, len: number): string {
   return str.slice(0, len - 1) + "…"
 }
 
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+export function truncateWidth(str: string, width: number): string {
+  if (width <= 0) return ""
+  if (Bun.stringWidth(str) <= width) return str
+  if (width === 1) return "…"
+
+  const result: string[] = []
+  let used = 0
+  for (const item of graphemeSegmenter.segment(str)) {
+    const next = Bun.stringWidth(item.segment)
+    if (used + next > width - 1) break
+    result.push(item.segment)
+    used += next
+  }
+  return result.join("") + "…"
+}
+
 export function truncateLeft(str: string, len: number): string {
   if (str.length <= len) return str
   return "…" + str.slice(-(len - 1))
