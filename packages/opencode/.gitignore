@@ -6,3 +6,5 @@ app.log
 script/build-*.ts
 temporary-*.md
 .artifacts
+opencode-web-ui.gen.ts
+
