@@ -74,18 +74,40 @@ test("concurrent service processes elect one server", async () => {
     }),
   )
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
-  const first = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
-  const second = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
+  const processes = Array.from({ length: 10 }, () => Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" }))
 
   try {
     const registration = path.join(root, "state", "opencode", "service-local.json")
     const info = await waitForInfo(registration)
-    const winner = info.pid === first.pid ? first : second
-    const loser = info.pid === first.pid ? second : first
-    const exited = await Promise.race([loser.exited.then(() => true), Bun.sleep(10_000).then(() => false)])
+    const winner = processes.find((process) => process.pid === info.pid)
+    const losers = processes.filter((process) => process.pid !== info.pid)
+    const exited = await Promise.all(
+      losers.map((process) => Promise.race([process.exited.then(() => true), Bun.sleep(10_000).then(() => false)])),
+    )
 
-    expect(exited).toBe(true)
-    expect(winner.exitCode).toBe(null)
+    expect(exited).toEqual(losers.map(() => true))
+    expect(winner?.exitCode).toBe(null)
+    await fs.rm(registration)
+    const restored = await waitForInfo(registration)
+    expect(restored.id).toBe(info.id)
+    expect(restored.pid).toBe(info.pid)
+    await fs.writeFile(registration, "not-json")
+    const repaired = await waitForInfo(registration)
+    expect(repaired.id).toBe(info.id)
+    expect(repaired.pid).toBe(info.pid)
+
+    const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
+    try {
+      const contenderExited = await Promise.race([
+        contender.exited.then(() => true),
+        Bun.sleep(10_000).then(() => false),
+      ])
+      expect(contenderExited).toBe(true)
+      expect((await waitForInfo(registration)).id).toBe(info.id)
+    } finally {
+      contender.kill("SIGTERM")
+      await contender.exited
+    }
     expect(
       await withDatabase(
         database,
@@ -101,12 +123,11 @@ test("concurrent service processes elect one server", async () => {
     ).toEqual({ timeSuspended: null })
     expect(await waitForExecutionStart(database, sessionID)).toBe(1)
   } finally {
-    first.kill("SIGTERM")
-    second.kill("SIGTERM")
-    await Promise.all([first.exited, second.exited])
+    processes.forEach((process) => process.kill("SIGTERM"))
+    await Promise.all(processes.map((process) => process.exited))
     await fs.rm(root, { recursive: true, force: true })
   }
-})
+}, 60_000)
 
 function withDatabase<A, E>(file: string, effect: Effect.Effect<A, E, Database.Service>) {
   return Effect.runPromise(effect.pipe(Effect.provide(Database.layerFromPath(file)), Effect.scoped))
@@ -143,7 +164,7 @@ function waitForExecutionStart(file: string, sessionID: SessionV2.ID) {
 }
 
 async function waitForInfo(file: string) {
-  for (let attempt = 0; attempt < 200; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     const value = await Bun.file(file)
       .json()
       .catch(() => undefined)
