@@ -217,6 +217,7 @@ function View(props: { api: TuiPluginApi }) {
         {
           title: "install",
           command: "dialog.plugins.install",
+          selection: "none",
           hidden: lock(),
           onTrigger: () => {
             showInstall(props.api)
