@@ -522,7 +522,7 @@ function App(props: {
         toast.show({
           variant: "error",
           title: `MCP server failed: ${server.name}`,
-          message: "Open MCPs to view details.",
+          message: "Open MCP servers to view details.",
         })
     }
   })
@@ -785,7 +785,7 @@ function App(props: {
       },
       {
         name: "mcp.list",
-        title: "MCP Servers",
+        title: "MCP servers",
         category: "Agent",
         slashName: "mcps",
         run: () => {

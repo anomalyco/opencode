@@ -65,8 +65,8 @@ export const dict = {
   "command.message.next.description": "Go to the next user message",
   "command.model.choose": "Choose model",
   "command.model.choose.description": "Select a different model",
-  "command.mcp.toggle": "Toggle MCPs",
-  "command.mcp.toggle.description": "Toggle MCPs",
+  "command.mcp.toggle": "Manage MCP servers",
+  "command.mcp.toggle.description": "Enable or disable MCP servers",
   "command.agent.cycle": "Cycle agent",
   "command.agent.cycle.description": "Switch to the next agent",
   "command.agent.cycle.reverse": "Cycle agent backwards",
@@ -307,9 +307,9 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
   "prompt.toast.promptSendFailed.description": "Unable to retrieve session",
 
-  "dialog.mcp.title": "MCPs",
+  "dialog.mcp.title": "MCP servers",
   "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
-  "dialog.mcp.empty": "No MCPs configured",
+  "dialog.mcp.empty": "No MCP servers configured",
 
   "dialog.lsp.empty": "LSPs auto-detected from file types",
   "dialog.plugins.empty": "Plugins configured in opencode.json",

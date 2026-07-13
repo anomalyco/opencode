@@ -92,7 +92,7 @@ export function DialogMcp() {
         when={detail()}
         fallback={
           <DialogSelect
-            title="MCPs"
+            title="MCP servers"
             options={options()}
             current={focused()}
             preserveSelection
@@ -152,7 +152,7 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
     <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          MCP / {props.server.name}
+          MCP server: {props.server.name}
         </text>
         <text fg={theme.textMuted} onMouseUp={props.onBack}>
           esc back

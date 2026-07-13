@@ -22,9 +22,11 @@ export function DialogStatus() {
           esc
         </text>
       </box>
-      <Show when={mcp().length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
+      <Show when={mcp().length > 0} fallback={<text fg={theme.text}>No MCP servers</text>}>
         <box>
-          <text fg={theme.text}>{mcp().length} MCP Servers</text>
+          <text fg={theme.text}>
+            {mcp().length} MCP server{mcp().length === 1 ? "" : "s"}
+          </text>
           <For each={mcp()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
