@@ -2277,9 +2277,10 @@ export default function Page() {
                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
-                    reviewSidebarToggle={() => (
+                    reviewSidebarToggle={(disabled) => (
                       <SessionReviewV2SidebarToggle
                         opened={reviewV2State.sidebarOpened()}
+                        disabled={disabled}
                         onToggle={reviewV2State.toggleSidebar}
                       />
                     )}

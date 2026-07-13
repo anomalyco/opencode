@@ -71,7 +71,7 @@ export function SessionSidePanel(props: {
   reviewHasFocusableContent: () => boolean
   reviewCount: () => number
   reviewPanel: () => JSX.Element
-  reviewSidebarToggle?: () => JSX.Element
+  reviewSidebarToggle?: (disabled: boolean) => JSX.Element
   fileBrowserState?: SessionFileBrowserState
   activeDiff?: string
   focusReviewDiff: (path: string) => void
@@ -550,7 +550,9 @@ export function SessionSidePanel(props: {
                           >
                             <Show when={props.reviewSidebarToggle}>
                               {(toggle) => (
-                                <div class="h-full shrink-0 flex items-center justify-center">{toggle()()}</div>
+                                <div class="h-full shrink-0 flex items-center justify-center">
+                                  {toggle()(activeTab() === SESSION_OPEN_FILE_TAB)}
+                                </div>
                               )}
                             </Show>
                             <Show when={reviewTab() && props.canReview()}>
