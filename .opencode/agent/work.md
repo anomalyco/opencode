@@ -29,6 +29,9 @@ permissions:
     resource: "*.env.example"
     effect: allow
   - action: edit
+    resource: "*"
+    effect: ask
+  - action: edit
     resource: OUTPUTS/*
     effect: allow
   - action: edit
