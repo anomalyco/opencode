@@ -217,7 +217,7 @@ export const ruff: Info = {
 
 export const rlang: Info = {
   name: "air",
-  extensions: [".R"],
+  extensions: [".R", ".r"],
   async enabled() {
     const air = which("air")
     if (air == null) return false
