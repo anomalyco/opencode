@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -9,6 +9,7 @@ import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { TerminalOutput } from "@opencode-ai/core/terminal-output"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -438,7 +439,7 @@ export const ShellTool = Tool.define(
       const limits = yield* trunc.limits()
       const keep = limits.maxBytes * 2
       let full = ""
-      let last = ""
+      let committed = ""
       const list: Chunk[] = []
       let used = 0
       let file = ""
@@ -446,6 +447,23 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      // Keep raw bytes for the saved log, but bound the terminal-visible line
+      // before it contributes to the UI or model-facing output.
+      const terminal = TerminalOutput.make({ maxLineLength: keep })
+
+      const append = (chunk: string) => {
+        if (!chunk) return
+        const size = Buffer.byteLength(chunk, "utf-8")
+        list.push({ text: chunk, size })
+        used += size
+        while (used > keep && list.length > 1) {
+          const item = list.shift()
+          if (!item) break
+          used -= item.size
+          cut = true
+        }
+        committed = preview(committed + chunk)
+      }
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -483,19 +501,10 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const output = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
-              const size = Buffer.byteLength(chunk, "utf-8")
-              list.push({ text: chunk, size })
-              used += size
-              while (used > keep && list.length > 1) {
-                const item = list.shift()
-                if (!item) break
-                used -= item.size
-                cut = true
-              }
-
-              last = preview(last + chunk)
+              append(terminal.write(chunk))
+              const current = preview(committed + terminal.current())
 
               if (file) {
                 sink?.write(chunk)
@@ -506,7 +515,6 @@ export const ShellTool = Tool.define(
                     Effect.andThen((next) =>
                       Effect.sync(() => {
                         file = next
-                        cut = true
                         sink = createWriteStream(next, { flags: "a" })
                         full = ""
                       }),
@@ -514,7 +522,7 @@ export const ShellTool = Tool.define(
                     Effect.andThen(
                       ctx.metadata({
                         metadata: {
-                          output: last,
+                          output: current,
                         },
                       }),
                     ),
@@ -524,7 +532,7 @@ export const ShellTool = Tool.define(
 
               return ctx.metadata({
                 metadata: {
-                  output: last,
+                  output: current,
                 },
               })
             }),
@@ -554,6 +562,10 @@ export const ShellTool = Tool.define(
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
 
+          // Process close and stream callbacks are scheduled independently.
+          // Drain the output fiber before constructing the final result.
+          yield* Fiber.join(output)
+
           return exit.kind === "exit" ? exit.code : null
         }),
       ).pipe(Effect.orDie)
@@ -565,11 +577,13 @@ export const ShellTool = Tool.define(
         )
       }
       if (aborted) meta.push("User aborted the command")
-      const raw = list.map((item) => item.text).join("")
-      const end = tail(raw, limits.maxLines, limits.maxBytes)
+      append(terminal.finish())
+      if (terminal.truncated()) cut = true
+      const rendered = list.map((item) => item.text).join("")
+      const end = tail(rendered, limits.maxLines, limits.maxBytes)
       if (end.cut) cut = true
       if (!file && end.cut) {
-        file = yield* trunc.write(raw)
+        file = yield* trunc.write(full)
       }
 
       let output = end.text
@@ -585,10 +599,10 @@ export const ShellTool = Tool.define(
       return {
         title: input.command,
         metadata: {
-          output: last || preview(output),
+          output: committed || preview(output),
           exit: code,
           truncated: cut,
-          ...(cut && file ? { outputPath: file } : {}),
+          ...(file ? { outputPath: file } : {}),
         },
         output,
       }

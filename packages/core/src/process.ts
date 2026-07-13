@@ -4,6 +4,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
 import { makeGlobalNode } from "./effect/app-node"
+import { TerminalOutput } from "./terminal-output"
 
 export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()("AppProcessError", {
   command: Schema.String,
@@ -21,6 +22,7 @@ export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()(
 
 export interface RunOptions {
   readonly combineOutput?: boolean
+  readonly renderTerminalOutput?: boolean
   readonly maxOutputBytes?: number
   readonly maxErrorBytes?: number
   readonly signal?: AbortSignal
@@ -147,8 +149,29 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
           if (options?.combineOutput) {
+            const terminal = options.renderTerminalOutput
+              ? TerminalOutput.make({ maxLineLength: options.maxOutputBytes })
+              : undefined
+            const source = terminal
+              ? handle.all.pipe(
+                  Stream.decodeText,
+                  Stream.mapAccum(
+                    () => terminal,
+                    (state, chunk) => {
+                      const output = state.write(chunk)
+                      return [state, output ? [Buffer.from(output)] : []]
+                    },
+                    {
+                      onHalt: (state) => {
+                        const output = state.finish()
+                        return output ? [Buffer.from(output)] : []
+                      },
+                    },
+                  ),
+                )
+              : handle.all
             const [output, exitCode] = yield* Effect.all(
-              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+              [collectStream(source, options.maxOutputBytes), handle.exitCode],
               { concurrency: "unbounded" },
             )
             return {
@@ -157,7 +180,7 @@ const layer = Layer.effect(
               output: output.buffer,
               stdout: Buffer.alloc(0),
               stderr: Buffer.alloc(0),
-              outputTruncated: output.truncated,
+              outputTruncated: output.truncated || terminal?.truncated() === true,
               stdoutTruncated: false,
               stderrTruncated: false,
             } satisfies RunResult

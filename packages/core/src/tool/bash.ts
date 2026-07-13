@@ -166,6 +166,7 @@ const layer = Layer.effectDiscard(
               const result = yield* appProcess
                 .run(command, {
                   combineOutput: true,
+                  renderTerminalOutput: true,
                   timeout: Duration.millis(timeout),
                   maxOutputBytes: MAX_CAPTURE_BYTES,
                 })

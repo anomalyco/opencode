@@ -170,6 +170,7 @@ describe("BashTool", () => {
             expect(runs).toMatchObject([{ command: "pwd", cwd: realpathSync(tmp.path) }])
             expect(runs[0]?.options).toMatchObject({
               combineOutput: true,
+              renderTerminalOutput: true,
               maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
             })
             expect(assertions).toMatchObject([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd"] }])
@@ -251,6 +252,37 @@ describe("BashTool", () => {
                   exit: 0,
                 })
                 expect(settled.output?.structured).not.toHaveProperty("output")
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
+    )
+
+    it.live("returns the terminal-visible state of carriage-return output", () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          const script =
+            'for(let i=0;i<5000;i++)process.stdout.write("\\x1b[2K\\rPROGRESS index="+String(i).padStart(5,"0"));process.stdout.write("\\nFINAL_MARKER\\n")'
+          const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify(script)}`
+          return withTool(
+            tmp.path,
+            (registry) => settleTool(registry, call({ command })),
+            LayerNode.compile(AppProcess.node),
+          ).pipe(
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.output?.content[0]).toEqual({
+                  type: "text",
+                  text: "PROGRESS index=04999\nFINAL_MARKER\n",
+                })
+                expect(settled.output?.structured).toMatchObject({
+                  exit: 0,
+                  truncated: false,
+                })
               }),
             ),
           )

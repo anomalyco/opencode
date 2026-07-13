@@ -122,6 +122,12 @@ const fill = (mode: "lines" | "bytes", n: number) => {
   if (PS.has(sh())) return `& ${text}`
   return text
 }
+const progress = (count: number) => {
+  const code = `for(let i=0;i<${count};i++)process.stdout.write("\\x1b[2K\\rPROGRESS index="+String(i).padStart(5,"0"));process.stdout.write("\\nFINAL_MARKER\\n")`
+  const text = `${bin} -e ${evalarg(code)}`
+  if (PS.has(sh())) return `& ${text}`
+  return text
+}
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 
@@ -1088,6 +1094,45 @@ describe("tool.shell abort", () => {
           expect(result.output).toContain("stdout_msg")
           expect(result.output).toContain("stderr_msg")
           expect(result.metadata.exit).toBe(0)
+        }),
+      ),
+    )
+
+    it.live("renders carriage-return updates while preserving the raw log", () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const updates: string[] = []
+          const result = yield* run(
+            { command: progress(5000) },
+            {
+              ...ctx,
+              metadata: (input) =>
+                Effect.sync(() => {
+                  const output = input.metadata?.output
+                  if (typeof output === "string") updates.push(output)
+                }),
+            },
+          )
+          expect(result.output).toContain("PROGRESS index=04999")
+          expect(result.output).not.toContain("PROGRESS index=00000")
+          expect(result.output).toContain("FINAL_MARKER")
+          expect(result.output).not.toContain("\x1b[2K")
+          expect(result.output).not.toContain("...output truncated...")
+          expect(result.metadata.output).toContain("PROGRESS index=04999")
+          expect(result.metadata.truncated).toBe(false)
+          expect(updates.some((output) => output.includes("PROGRESS index=04999"))).toBe(true)
+          expect(updates.every((output) => (output.match(/PROGRESS index=/g)?.length ?? 0) <= 1)).toBe(true)
+          expect(updates.every((output) => !output.includes("\x1b[2K"))).toBe(true)
+
+          const outputPath = result.metadata.outputPath
+          expect(outputPath).toBeString()
+          if (typeof outputPath !== "string") return
+          const fs = yield* FSUtil.Service
+          const saved = yield* fs.readFileString(outputPath)
+          expect(saved.match(/PROGRESS index=/g)).toHaveLength(5000)
+          expect(saved).toContain("\x1b[2K\rPROGRESS index=00000")
+          expect(saved).toContain("FINAL_MARKER")
         }),
       ),
     )

@@ -57,6 +57,22 @@ describe("AppProcess", () => {
     )
 
     it.effect(
+      "renders terminal updates before applying the capture limit",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script =
+          'for(let i=0;i<5000;i++)process.stdout.write("\\rPROGRESS index="+String(i).padStart(5,"0"));process.stdout.write("\\nFINAL_MARKER\\n")'
+        const result = yield* svc.run(cmd("-e", script), {
+          combineOutput: true,
+          renderTerminalOutput: true,
+          maxOutputBytes: 100,
+        })
+        expect(result.output?.toString("utf8")).toBe("PROGRESS index=04999\nFINAL_MARKER\n")
+        expect(result.outputTruncated).toBe(false)
+      }),
+    )
+
+    it.effect(
       "non-zero exit returns RunResult; caller can require success",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
