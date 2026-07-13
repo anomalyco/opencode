@@ -33,7 +33,7 @@ it.live(
       ),
       (child) =>
         Effect.promise(async () => {
-          child.kill("SIGKILL")
+          kill(child)
           await child.exited
         }),
     )
@@ -52,7 +52,7 @@ it.live(
       process.kill(child.pid, "SIGCONT")
     }
 
-    child.kill("SIGKILL")
+    kill(child)
     yield* Effect.promise(() => child.exited)
     yield* Effect.scoped(ProcessLock.acquire(file))
   }),
@@ -63,4 +63,9 @@ function temp(prefix: string) {
     Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), prefix))),
     (root) => Effect.promise(() => fs.rm(root, { recursive: true, force: true })),
   )
+}
+
+function kill(child: Bun.Subprocess) {
+  if (process.platform === "win32") return child.kill()
+  return child.kill("SIGKILL")
 }

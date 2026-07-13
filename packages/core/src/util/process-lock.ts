@@ -1,5 +1,7 @@
-import { dlopen, ptr, read, type Pointer } from "bun:ffi"
+import { dlopen, read, type Pointer } from "bun:ffi"
+import { createHash } from "node:crypto"
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs"
+import { connect, createServer, type Server } from "node:net"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 
@@ -24,7 +26,7 @@ export namespace ProcessLock {
 
   export type LockError = HeldError | SystemError
 
-  export const acquire = Effect.fn("ProcessLock.acquire")(function* (file: string) {
+  const acquirePosix = Effect.fnUntraced(function* (file: string) {
     const fd = yield* Effect.try({
       try: () => {
         mkdirSync(path.dirname(file), { recursive: true })
@@ -53,17 +55,24 @@ export namespace ProcessLock {
       ),
     )
     if (result.acquired) {
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          closeSync(fd)
-        }),
-      )
-      return
+      return fd
     }
     closeSync(fd)
-    yield* result.held
+    return yield* result.held
       ? new HeldError({ file })
       : new SystemError({ file, operation: "acquire", code: String(result.code) })
+  })
+
+  export const acquire = Effect.fn("ProcessLock.acquire")(function* (file: string) {
+    if (process.platform === "win32") {
+      yield* Effect.acquireRelease(acquireWindows(file), closeWindows)
+      return
+    }
+    yield* Effect.acquireRelease(acquirePosix(file), (fd) =>
+      Effect.sync(() => {
+        closeSync(fd)
+      }),
+    )
   })
 }
 
@@ -76,14 +85,10 @@ const LOCK_EX = 2
 const LOCK_NB = 4
 const DARWIN_EWOULDBLOCK = 35
 const LINUX_EWOULDBLOCK = 11
-const LOCKFILE_FAIL_IMMEDIATELY = 1
-const LOCKFILE_EXCLUSIVE_LOCK = 2
-const ERROR_LOCK_VIOLATION = 33
 
 function lock(fd: number): Result {
   if (process.platform === "darwin") return lockDarwin(fd)
   if (process.platform === "linux") return lockLinux(fd)
-  if (process.platform === "win32") return lockWindows(fd)
   throw new Error(`Unsupported process lock platform: ${process.platform}`)
 }
 
@@ -114,32 +119,55 @@ function lockLinux(fd: number): Result {
   return { acquired: false, held: false, code }
 }
 
-function lockWindows(fd: number): Result {
-  const runtime = dlopen("ucrtbase.dll", {
-    _get_osfhandle: { args: ["i32"], returns: "i64" },
-  })
-  const kernel = dlopen("kernel32.dll", {
-    LockFileEx: { args: ["u64", "u32", "u32", "u32", "u32", "ptr"], returns: "i32" },
-    GetLastError: { args: [], returns: "u32" },
-  })
-  const handle = runtime.symbols._get_osfhandle(fd)
-  const result = kernel.symbols.LockFileEx(
-    handle,
-    LOCKFILE_FAIL_IMMEDIATELY | LOCKFILE_EXCLUSIVE_LOCK,
-    0,
-    1,
-    0,
-    ptr(new Uint8Array(32)),
-  )
-  const code = result === 0 ? kernel.symbols.GetLastError() : 0
-  runtime.close()
-  kernel.close()
-  if (result !== 0) return { acquired: true }
-  if (code === ERROR_LOCK_VIOLATION) return { acquired: false, held: true }
-  return { acquired: false, held: false, code }
-}
-
 function errorCode(pointer: Pointer | null) {
   if (pointer === null) throw new Error("Failed to read process lock error code")
   return read.i32(pointer, 0)
+}
+
+function acquireWindows(file: string) {
+  return Effect.callback<Server, ProcessLock.LockError>((resume) => {
+    const server = createServer()
+    const pipe = `\\\\.\\pipe\\opencode-process-lock-${createHash("sha256")
+      .update(path.resolve(file).toLowerCase())
+      .digest("hex")}`
+    const onError = (cause: NodeJS.ErrnoException) => {
+      server.off("listening", onListening)
+      const probe = connect(pipe)
+      const onProbeError = () => {
+        probe.off("connect", onConnect)
+        resume(
+          Effect.fail(
+            new ProcessLock.SystemError({
+              file,
+              operation: "acquire",
+              code: cause.code ?? cause.message,
+            }),
+          ),
+        )
+      }
+      const onConnect = () => {
+        probe.off("error", onProbeError)
+        probe.destroy()
+        resume(Effect.fail(new ProcessLock.HeldError({ file })))
+      }
+      probe.once("connect", onConnect)
+      probe.once("error", onProbeError)
+    }
+    const onListening = () => {
+      server.off("error", onError)
+      resume(Effect.succeed(server))
+    }
+    server.once("error", onError)
+    server.once("listening", onListening)
+    server.on("connection", (socket) => socket.destroy())
+    server.listen(pipe)
+    return Effect.sync(() => server.close())
+  })
+}
+
+function closeWindows(server: Server) {
+  return Effect.callback<void>((resume) => {
+    if (!server.listening) return resume(Effect.void)
+    server.close((error) => resume(error ? Effect.die(error) : Effect.void))
+  })
 }
