@@ -145,7 +145,7 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 }>
 
 type CustomDep = {
-  auth: (id: string) => Effect.Effect<Auth.Info | undefined>
+  auth: (id: string, profile?: string) => Effect.Effect<Auth.Info | undefined>
   config: () => Effect.Effect<ConfigV1.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
@@ -1354,7 +1354,7 @@ const layer = Layer.effect(
           [providerID: string]: CustomDiscoverModels
         } = {}
         const dep = {
-          auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+          auth: (id: string, profile?: string) => auth.get(id, profile).pipe(Effect.orDie),
           config: () => config.get(),
           env: () => env.all(),
           get: (key: string) => env.get(key),
@@ -1525,16 +1525,21 @@ const layer = Layer.effect(
           })
         }
 
-        // load apikeys
+        // load apikeys (supports composite keys like "provider:profile")
         const auths = yield* auth.all().pipe(Effect.orDie)
-        for (const [id, provider] of Object.entries(auths)) {
-          const providerID = ProviderV2.ID.make(id)
+        for (const [key, provider] of Object.entries(auths)) {
+          const parsed = Auth.parseKey(key)
+          const providerID = ProviderV2.ID.make(parsed.providerID)
           if (disabled.has(providerID)) continue
           if (provider.type === "api") {
-            mergeProvider(providerID, {
-              source: "api",
-              key: provider.key,
-            })
+            // For the default profile (no profile suffix), set the key directly
+            if (!parsed.profile) {
+              mergeProvider(providerID, {
+                source: "api",
+                key: provider.key,
+              })
+            }
+            // Named profiles are available via auth.get(providerID, profile)
           }
         }
 
@@ -1988,9 +1993,19 @@ export function sort<T extends { id: string }>(models: T[]) {
 }
 
 export function parseModel(model: string) {
-  const [providerID, ...rest] = model.split("/")
+  const [providerAndProfile, ...rest] = model.split("/")
+  const colonIdx = providerAndProfile.indexOf(":")
+  let providerID: string
+  let profile: string | undefined
+  if (colonIdx === -1) {
+    providerID = providerAndProfile
+  } else {
+    providerID = providerAndProfile.slice(0, colonIdx)
+    profile = providerAndProfile.slice(colonIdx + 1)
+  }
   return {
     providerID: ProviderV2.ID.make(providerID),
+    profile,
     modelID: ModelV2.ID.make(rest.join("/")),
   }
 }
