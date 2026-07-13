@@ -100,7 +100,16 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       })
       const response = OpenAIWebSocket.streamResponsesWebSocket({
         socket: entry.socket,
-        body: withResponsesLiteMetadata(body, internalHeaders),
+        body:
+          internalHeaders[RESPONSES_LITE_HEADER] === "true"
+            ? {
+                ...body,
+                client_metadata: {
+                  ...(isRecord(body.client_metadata) ? body.client_metadata : {}),
+                  [RESPONSES_LITE_CLIENT_METADATA]: "true",
+                },
+              }
+            : body,
         idleTimeout,
         signal: init?.signal ?? undefined,
         onFirstEvent: (error) => resolveFirstEvent(error ?? true),
@@ -194,17 +203,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   }
 
   return Object.assign(websocketFetch, { close, remove })
-}
-
-function withResponsesLiteMetadata(body: Record<string, unknown>, headers: Record<string, string>) {
-  if (headers[RESPONSES_LITE_HEADER] !== "true") return body
-  return {
-    ...body,
-    client_metadata: {
-      ...(isRecord(body.client_metadata) ? body.client_metadata : {}),
-      [RESPONSES_LITE_CLIENT_METADATA]: "true",
-    },
-  }
 }
 
 function connectionLimitError(event: Record<string, unknown>) {

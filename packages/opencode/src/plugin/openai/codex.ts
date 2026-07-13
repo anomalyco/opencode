@@ -14,15 +14,9 @@ const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 const CODEX_COMPATIBILITY_VERSION = "0.144.0"
-const RESPONSES_LITE_MODELS = new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
+const RESPONSES_LITE_MODEL = "gpt-5.6-luna"
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 const DISALLOWED_MODELS = new Set(["gpt-5.5-pro"])
-
-type ResponsesLiteRequest = Record<string, unknown> & {
-  input: unknown[]
-  tools?: unknown[]
-  instructions?: string
-}
 
 interface PkceCodes {
   verifier: string
@@ -272,7 +266,6 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPluginOptions = {}): Promise<Hooks> {
   const issuer = options.issuer ?? ISSUER
   const codexApiEndpoint = options.codexApiEndpoint ?? CODEX_API_ENDPOINT
-  const codexSessionIDs = new Map<string, string>()
   let websocketFetchInstalled = false
   const websocketFetches: Array<ReturnType<typeof OpenAIWebSocketPool.createWebSocketFetch>> = []
 
@@ -283,13 +276,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     async event(input) {
       if (input.event.type !== "session.deleted") return
-      const sessionID = input.event.properties.info.id
-      const codexSessionID = codexSessionIDs.get(sessionID)
-      for (const websocketFetch of websocketFetches) {
-        websocketFetch.remove(sessionID)
-        if (codexSessionID) websocketFetch.remove(codexSessionID)
-      }
-      codexSessionIDs.delete(sessionID)
+      for (const websocketFetch of websocketFetches) websocketFetch.remove(input.event.properties.info.id)
     },
     provider: {
       id: "openai",
@@ -427,7 +414,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
             const requestInit = {
               ...init,
               body: parsed.pathname.endsWith("/responses")
-                ? prepareResponsesLiteRequest(init?.body, headers, codexSessionIDs)
+                ? prepareResponsesLiteRequest(init?.body, headers)
                 : init?.body,
               headers,
             }
@@ -574,17 +561,31 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
   }
 }
 
-function prepareResponsesLiteRequest(
-  body: BodyInit | null | undefined,
-  headers: Headers,
-  sessionIDs: Map<string, string>,
-) {
+function prepareResponsesLiteRequest(body: BodyInit | null | undefined, headers: Headers) {
   if (typeof body !== "string") return body
-  const request = parseResponsesLiteRequest(body)
-  if (!request) return body
-  const sourceSessionID = requireSessionID(headers)
-  const sessionID = sessionIDs.get(sourceSessionID) ?? Bun.randomUUIDv7()
-  sessionIDs.set(sourceSessionID, sessionID)
+  const request: unknown = JSON.parse(body)
+  if (!isRecord(request)) return body
+  if (request.model !== RESPONSES_LITE_MODEL) return body
+  if (!Array.isArray(request.input)) throw new Error("Responses Lite requires an input array")
+  if (request.tools !== undefined && !Array.isArray(request.tools)) {
+    throw new Error("Responses Lite requires a tools array")
+  }
+  if (request.instructions !== undefined && typeof request.instructions !== "string") {
+    throw new Error("Responses Lite requires string instructions")
+  }
+
+  const sessionID = headers.get("session-id")
+  if (!sessionID) throw new Error("Responses Lite requires a session-id header")
+
+  function stripImageDetail(value: unknown) {
+    if (Array.isArray(value)) {
+      value.forEach(stripImageDetail)
+      return
+    }
+    if (!isRecord(value)) return
+    if (value.type === "input_image") delete value.detail
+    Object.values(value).forEach(stripImageDetail)
+  }
 
   stripImageDetail(request.input)
   request.input = [
@@ -616,34 +617,4 @@ function prepareResponsesLiteRequest(
   headers.set(OpenAIWebSocketPool.RESPONSES_LITE_HEADER, "true")
   headers.delete("content-length")
   return JSON.stringify(request)
-}
-
-function parseResponsesLiteRequest(body: string): ResponsesLiteRequest | undefined {
-  const request: unknown = JSON.parse(body)
-  if (!isRecord(request)) return
-  if (typeof request.model !== "string" || !RESPONSES_LITE_MODELS.has(request.model)) return
-  if (!Array.isArray(request.input)) throw new Error("Responses Lite requires an input array")
-  if (request.tools !== undefined && !Array.isArray(request.tools)) {
-    throw new Error("Responses Lite requires a tools array")
-  }
-  if (request.instructions !== undefined && typeof request.instructions !== "string") {
-    throw new Error("Responses Lite requires string instructions")
-  }
-  return request as ResponsesLiteRequest
-}
-
-function requireSessionID(headers: Headers) {
-  const sessionID = headers.get("session-id")
-  if (!sessionID) throw new Error("Responses Lite requires a session-id header")
-  return sessionID
-}
-
-function stripImageDetail(value: unknown) {
-  if (Array.isArray(value)) {
-    value.forEach(stripImageDetail)
-    return
-  }
-  if (!isRecord(value)) return
-  if (value.type === "input_image") delete value.detail
-  Object.values(value).forEach(stripImageDetail)
 }
