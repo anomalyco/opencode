@@ -363,7 +363,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selected() {
             const m = currentModel()
             if (!m) return undefined
-            const key = `${m.providerID}/${m.modelID}`
+            const a = agent.current()
+            const key = a ? `${a.name}/${m.providerID}/${m.modelID}` : `${m.providerID}/${m.modelID}`
             return modelStore.variant[key]
           },
           current() {
@@ -383,7 +384,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentModel()
             if (!m) return
-            const key = `${m.providerID}/${m.modelID}`
+            const a = agent.current()
+            const key = a ? `${a.name}/${m.providerID}/${m.modelID}` : `${m.providerID}/${m.modelID}`
             setModelStore("variant", key, value ?? "default")
             save()
           },
