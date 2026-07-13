@@ -27,6 +27,7 @@ import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
+import { ContextAnalyzer } from "@/context/analyzer"
 import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -1254,11 +1255,26 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, instructions, mcpInstructions, autoCtx, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
+              step === 1
+                ? Effect.gen(function* () {
+                    const info = yield* config.get()
+                    const cc = info.context
+                    if (!cc?.autoAdd) return [] as string[]
+                    const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+                    const query = lastUserMsg?.parts.filter((p) => p.type === "text").map((p) => (p as any).text ?? "").join(" ") ?? ""
+                    const suggestions = yield* Effect.promise(() =>
+                      ContextAnalyzer.analyzeContext(query, ctx.worktree, cc.maxFiles ?? 10, undefined, cc.includeTests ?? true),
+                    )
+                    if (suggestions.length === 0) return [] as string[]
+                    const lines = suggestions.map((s) => `  - ${s.filePath} (${s.reason})`)
+                    return [`[Auto context] Added ${suggestions.length} relevant file(s) based on your query:\n${lines.join("\n")}`]
+                  })
+                : (Effect.succeed([]) as Effect.Effect<string[]>),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
             const system = [
@@ -1266,6 +1282,7 @@ const layer = Layer.effect(
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
+              ...autoCtx,
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
