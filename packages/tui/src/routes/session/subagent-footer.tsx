@@ -1,4 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js"
+import type { Accessor } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
@@ -8,7 +9,10 @@ import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 
-export function SubagentFooter() {
+export function SubagentFooter(props: {
+  interruptCount: Accessor<number>
+  sessionBusy: Accessor<boolean>
+}) {
   const route = useRouteData("session")
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
@@ -59,6 +63,8 @@ export function SubagentFooter() {
   const parentShortcut = useCommandShortcut("session.parent")
   const previousShortcut = useCommandShortcut("session.child.previous")
   const nextShortcut = useCommandShortcut("session.child.next")
+  const interruptShortcut = useCommandShortcut("session.child.interrupt")
+  const armed = createMemo(() => props.interruptCount() > 0)
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   useTerminalDimensions()
 
@@ -94,6 +100,25 @@ export function SubagentFooter() {
             </Show>
           </box>
           <box flexDirection="row" gap={2}>
+            <Show when={props.sessionBusy()}>
+              <text fg={armed() ? theme.primary : theme.text}>
+                {armed() ? (
+                  <>
+                    <span style={{ fg: armed() ? theme.primary : theme.textMuted }}>
+                      {interruptShortcut()}
+                    </span>{" "}
+                    again to interrupt
+                  </>
+                ) : (
+                  <>
+                    Interrupt{" "}
+                    <span style={{ fg: armed() ? theme.primary : theme.textMuted }}>
+                      {interruptShortcut()}
+                    </span>
+                  </>
+                )}
+              </text>
+            </Show>
             <box
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
