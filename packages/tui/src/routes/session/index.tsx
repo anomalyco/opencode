@@ -2412,8 +2412,9 @@ function Subagent(props: ToolProps) {
       }}
       trailing={
         background() ? (
-          <text paddingLeft={1} paddingRight={1} flexShrink={0} bg={theme.backgroundElement} fg={theme.textMuted}>
-            Background
+          <text flexShrink={0} bg={theme.backgroundElement} fg={theme.textMuted}>
+            {" "}
+            Background{" "}
           </text>
         ) : undefined
       }
