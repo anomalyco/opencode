@@ -116,7 +116,7 @@ For project-specific TUI settings, add `tui.json` alongside it.
 Place project specific config in the root of your project.
 :::
 
-When OpenCode starts up, it looks for config files in the current directory and every ancestor directory. Ancestor configs are loaded first, so configs closer to the current directory can override them. This traversal continues across Git repository boundaries.
+When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
