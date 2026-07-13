@@ -212,10 +212,10 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 }
 
-export function FileTabContent(props: SessionFileViewProps) {
+export function FileTabContent(props: { tab: string }) {
   return (
     <Tabs.Content value={props.tab}>
-      <SessionFileView {...props} />
+      <SessionFileView tab={props.tab} />
     </Tabs.Content>
   )
 }
@@ -239,25 +239,17 @@ export function SessionFileView(props: SessionFileViewProps) {
   })
 
   return (
-    <Show
-      when={settings.general.newLayoutDesigns()}
-      fallback={<SessionFileViewV1 tab={props.tab} diff={diff()} expandUnchanged={props.expandUnchanged} />}
-    >
+    <Show when={settings.general.newLayoutDesigns()} fallback={<SessionFileViewV1 tab={props.tab} />}>
       <SessionFileViewV2 tab={props.tab} diff={diff()} expandUnchanged={props.expandUnchanged} />
     </Show>
   )
 }
 
-function SessionFileViewV1(props: {
-  tab: string
-  diff?: ReturnType<typeof normalize>
-  expandUnchanged?: boolean
-}) {
+function SessionFileViewV1(props: { tab: string }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
-  const layout = useLayout()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
@@ -300,15 +292,10 @@ function SessionFileViewV1(props: {
     })
   }
 
-  const buildPreview = (filePath: string, lines: SelectedLineRange) => {
-    const source =
-      filePath === path()
-        ? props.diff
-          ? text(props.diff, selectionSide(lines))
-          : contents()
-        : file.get(filePath)?.content?.content
+  const buildPreview = (filePath: string, selection: FileSelection) => {
+    const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
     if (!source) return undefined
-    return selectionPreview(source, selectionFromLines(lines))
+    return selectionPreview(source, selection)
   }
 
   const addCommentToContext = (input: {
@@ -319,7 +306,7 @@ function SessionFileViewV1(props: {
     origin?: "review" | "file"
   }) => {
     const selection = selectionFromLines(input.selection)
-    const preview = input.preview ?? buildPreview(input.file, input.selection)
+    const preview = input.preview ?? buildPreview(input.file, selection)
 
     const saved = comments.add({
       file: input.file,
@@ -344,7 +331,7 @@ function SessionFileViewV1(props: {
     comment: string
   }) => {
     comments.update(input.file, input.id, input.comment)
-    const preview = input.file === path() ? buildPreview(input.file, input.selection) : undefined
+    const preview = input.file === path() ? buildPreview(input.file, selectionFromLines(input.selection)) : undefined
     prompt.context.updateComment(input.file, input.id, {
       comment: input.comment,
       ...(preview ? { preview } : {}),
@@ -385,7 +372,6 @@ function SessionFileViewV1(props: {
     mention: {
       items: file.searchFilesAndDirectories,
     },
-    getSide: selectionSide,
     state: {
       opened: () => note.openedComment,
       setOpened: (id) => setNote("openedComment", id),
@@ -486,21 +472,12 @@ function SessionFileViewV1(props: {
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
-        {...(props.diff
-          ? {
-              mode: "diff" as const,
-              fileDiff: props.diff.fileDiff,
-              diffStyle: layout.review.diffStyle(),
-              expandUnchanged: props.expandUnchanged,
-            }
-          : {
-              mode: "text" as const,
-              file: {
-                name: path() ?? "",
-                contents: source,
-                cacheKey: cacheKey(),
-              },
-            })}
+        mode="text"
+        file={{
+          name: path() ?? "",
+          contents: source,
+          cacheKey: cacheKey(),
+        }}
         enableLineSelection
         enableGutterUtility
         selectedLines={activeSelection()}
@@ -540,7 +517,6 @@ function SessionFileViewV1(props: {
     <div class="mt-3 relative h-full min-h-0">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
-          <Match when={props.diff}>{renderFile(contents())}</Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
