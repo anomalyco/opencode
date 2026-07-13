@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { asc, eq } from "drizzle-orm"
+import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -54,12 +54,12 @@ describe("SessionEventLogCompaction", () => {
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: message("before") })
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: message("after") })
       const projection = yield* db.select().from(MessageTable).where(eq(MessageTable.id, messageID)).get()
-      const dryRun = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, dryRun: true })
+      const dryRun = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })
 
       expect(dryRun).toMatchObject({ candidates: 1, rewritten: 0, payloadBytesReclaimed: expect.any(Number) })
       expect(projection?.data).toMatchObject({ agent: "after" })
 
-      const applied = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })
+      const applied = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, apply: true })
       const compacted = yield* db
         .select()
         .from(EventTable)
@@ -83,6 +83,62 @@ describe("SessionEventLogCompaction", () => {
           })),
         ),
       ).toBe(sessionID)
+
+      const partID = SessionV1.PartID.ascending("prt_event_log_compaction")
+      const part = (text: string) => ({ id: partID, sessionID, messageID, type: "text" as const, text })
+      yield* events.publish(SessionV1.Event.PartUpdated, { sessionID, part: part("one"), time: 1 })
+      yield* events.publish(SessionV1.Event.PartUpdated, { sessionID, part: part("two"), time: 2 })
+      yield* events.publish(SessionV1.Event.PartUpdated, { sessionID, part: part("three"), time: 3 })
+
+      const firstPartBatch = yield* SessionEventLogCompaction.compact(db, {
+        aggregateID: sessionID,
+        apply: true,
+        limit: 1,
+      })
+      const secondPartBatch = yield* SessionEventLogCompaction.compact(db, {
+        aggregateID: sessionID,
+        apply: true,
+        limit: 1,
+      })
+      const idempotent = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, apply: true })
+      expect(firstPartBatch).toMatchObject({ candidates: 1, rewritten: 1, hasMore: true })
+      expect(firstPartBatch.continuation).toBe(`opencode db compact-events --session ${sessionID} --apply --limit 1`)
+      expect(secondPartBatch).toMatchObject({ candidates: 1, rewritten: 1 })
+      expect(idempotent).toMatchObject({ candidates: 0, rewritten: 0 })
+
+      const mismatchID = SessionV1.MessageID.ascending("msg_event_log_mismatch")
+      const mismatch = (agent: string) => ({ ...message(agent), id: mismatchID })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: mismatch("before") })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: mismatch("after") })
+      yield* db.run(sql`UPDATE message SET data = ${JSON.stringify({ agent: "stale" })} WHERE id = ${mismatchID}`)
+      expect(yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })).toMatchObject({
+        projectionMismatches: 1,
+      })
+
+      const malformedID = SessionV1.MessageID.ascending("msg_event_log_malformed")
+      const malformed = (agent: string) => ({ ...message(agent), id: malformedID })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: malformed("before") })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: malformed("after") })
+      yield* db.run(sql`UPDATE event SET data = 'not json' WHERE type = 'message.updated.1' AND seq = 6`)
+      expect(yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })).toMatchObject({ malformed: 1 })
+
+      const ownedID = SessionV1.MessageID.ascending("msg_event_log_owned")
+      const owned = (agent: string) => ({ ...message(agent), id: ownedID })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: owned("before") })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: owned("after") })
+      yield* events.claim(sessionID, "sync-owner")
+      const rejected = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, apply: true })
+      expect(rejected).toMatchObject({ candidates: 0, rewritten: 0, compatibilityRejected: expect.any(Number) })
+
+      for (const options of [
+        {},
+        { aggregateID: sessionID, all: true },
+        { aggregateID: sessionID, limit: 0 },
+        { aggregateID: sessionID, limit: 10_001 },
+      ]) {
+        const exit = yield* SessionEventLogCompaction.compact(db, options).pipe(Effect.exit)
+        expect(String(exit)).toContain("Error")
+      }
     }),
   )
 })

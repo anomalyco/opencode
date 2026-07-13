@@ -4,7 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { SessionEventLogCompaction } from "@opencode-ai/core/session/event-log-compaction"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
-import { effectCmd } from "../effect-cmd"
+import { effectCmd, fail } from "../effect-cmd"
 
 const QueryCommand = effectCmd({
   command: "$0 [query]",
@@ -60,15 +60,32 @@ const CompactEventsCommand = effectCmd({
     yargs
       .option("apply", { type: "boolean", default: false, describe: "write checkpoints; default is dry-run" })
       .option("session", { type: "string", describe: "compact one session aggregate" })
-      .option("limit", { type: "number", describe: "maximum snapshots to compact" }),
-  handler: Effect.fn("Cli.db.compactEvents")(function* (args: { apply: boolean; session?: string; limit?: number }) {
+      .option("all", { type: "boolean", default: false, describe: "inspect all session aggregates" })
+      .option("limit", { type: "number", describe: "maximum snapshots per bounded batch" }),
+  handler: Effect.fn("Cli.db.compactEvents")(function* (args: {
+    apply: boolean
+    session?: string
+    all: boolean
+    limit?: number
+  }) {
     const { db } = yield* Database.Service
     const report = yield* SessionEventLogCompaction.compact(db, {
       aggregateID: args.session,
-      dryRun: !args.apply,
+      all: args.all,
+      apply: args.apply,
       limit: args.limit,
-    })
+    }).pipe(Effect.catchDefect((error) => fail(error instanceof Error ? error.message : String(error))))
     console.log(JSON.stringify(report, null, 2))
+  }),
+})
+
+const EventLogStatusCommand = effectCmd({
+  command: "event-log-status",
+  describe: "report event-log growth and compaction recommendation",
+  instance: false,
+  handler: Effect.fn("Cli.db.eventLogStatus")(function* () {
+    const { db } = yield* Database.Service
+    console.log(JSON.stringify(yield* SessionEventLogCompaction.status(db), null, 2))
   }),
 })
 
@@ -77,7 +94,12 @@ export const DbCommand = effectCmd({
   describe: "database tools",
   instance: false,
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).command(CompactEventsCommand).demandCommand()
+    return yargs
+      .command(QueryCommand)
+      .command(PathCommand)
+      .command(CompactEventsCommand)
+      .command(EventLogStatusCommand)
+      .demandCommand()
   },
   handler: Effect.fn("Cli.db")(function* () {}),
 })
