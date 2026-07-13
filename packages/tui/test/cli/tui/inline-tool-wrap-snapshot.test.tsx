@@ -180,11 +180,8 @@ describe("TUI inline tool wrapping", () => {
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
   })
 
-  test("keeps background state attached to the subagent identity", () => {
-    expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Subagent — Inspect renderer")
-    expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
-      "Explore Subagent — Inspect renderer [background]",
-    )
+  test("keeps status styling separate from the subagent title", () => {
+    expect(formatSubagentTitle("Explore", "Inspect renderer")).toBe("Explore Subagent — Inspect renderer")
   })
 
   test("keeps retry status ahead of wrapping messages", () => {

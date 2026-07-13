@@ -2367,9 +2367,11 @@ function WebSearch(props: ToolProps) {
 
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
+  const { theme } = useTheme()
   const data = useData()
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
+  const background = createMemo(() => props.input.background === true || props.metadata.status === "running")
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -2390,14 +2392,16 @@ function Subagent(props: ToolProps) {
       {formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General"),
         description() ?? "Subagent",
-        props.input.background === true || props.metadata.status === "running",
       )}
+      <Show when={background()}>
+        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Background </span>
+      </Show>
     </InlineTool>
   )
 }
 
-export function formatSubagentTitle(agent: string, description: string, background: boolean) {
-  return `${agent} Subagent — ${description}${background ? " [background]" : ""}`
+export function formatSubagentTitle(agent: string, description: string) {
+  return `${agent} Subagent — ${description}`
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {
