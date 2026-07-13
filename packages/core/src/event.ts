@@ -289,7 +289,12 @@ export const layerWith = (options?: LayerOptions) =>
                             )
                           }
                           if (input && row?.ownerID && row.ownerID !== input.ownerID) {
-                            return
+                            yield* Effect.die(
+                              new InvalidDurableEventError({
+                                type: event.type,
+                                message: `Owner mismatch for aggregate ${aggregateID}: expected ${row.ownerID}, got ${input.ownerID ?? "none"}`,
+                              }),
+                            )
                           }
                           const seq = input?.seq ?? latest + 1
                           if (input && seq !== latest + 1) {
