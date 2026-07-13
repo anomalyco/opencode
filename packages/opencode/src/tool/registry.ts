@@ -146,7 +146,21 @@ const layer = Layer.effect(
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const coerced = (args ?? {}) as Record<string, unknown>
+                const validated = yield* Effect.try({
+                  try: () => (zodParams ? zodParams.parse(coerced) : coerced),
+                  catch: (error) =>
+                    new Tool.InvalidArgumentsError({
+                      tool: id,
+                      detail:
+                        error instanceof z.ZodError
+                          ? error.issues
+                              .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+                              .join("; ")
+                          : String(error),
+                    }),
+                })
+                const result = yield* Effect.promise(() => def.execute(validated as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const attachments = typeof result === "string" ? undefined : result.attachments

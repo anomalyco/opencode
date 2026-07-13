@@ -569,4 +569,95 @@ describe("tool.registry", () => {
       expect(ids).toContain("cowsay")
     }),
   )
+
+  // Regression: custom tools with optional args must tolerate
+  // undefined args from the AI SDK without crashing (#30219, #20019).
+  it.instance("custom tool with optional Zod args executes with undefined input", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "optional.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'echo optional text',",
+            "  args: { text: tool.schema.string().optional().describe('Some text') },",
+            "  execute: async (args) => ({ output: JSON.stringify(args), metadata: {} }),",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((t) => t.id === "optional")
+      if (!loaded) throw new Error("optional tool was not loaded")
+
+      const agents = yield* Agent.Service
+      const ctx = {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context
+
+      // Execute with undefined args — should not crash
+      const result = yield* loaded.execute(undefined as any, ctx)
+      // undefined is coerced to {} and parsed through optional schema, yielding empty object
+      expect(result.output).toBe("{}")
+
+      // Execute with valid args
+      const result2 = yield* loaded.execute({ text: "hello" }, ctx)
+      expect(result2.output).toBe('{"text":"hello"}')
+    }),
+  )
+
+  it.instance("custom tool with required Zod args rejects undefined input", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "required.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'echo required text',",
+            "  args: { text: tool.schema.string().describe('Required text') },",
+            "  execute: async (args) => ({ output: JSON.stringify(args), metadata: {} }),",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((t) => t.id === "required")
+      if (!loaded) throw new Error("required tool was not loaded")
+
+      const agents = yield* Agent.Service
+      const ctx = {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context
+
+      // Execute with undefined args — should fail with validation error
+      const exit = yield* loaded.execute(undefined as any, ctx).pipe(Effect.exit)
+      expect(exit._tag).toBe("Failure")
+    }),
+  )
 })
