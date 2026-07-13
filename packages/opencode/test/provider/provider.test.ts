@@ -581,6 +581,27 @@ it.instance(
 )
 
 it.instance(
+  "model config regenerates variants when overriding the provider package",
+  Effect.gen(function* () {
+    yield* set("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
+    expect(model.variants?.low).toEqual({ reasoningEffort: "low" })
+    expect(model.variants?.max).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          npm: "@ai-sdk/openai-compatible",
+          models: { "claude-sonnet-4-6": { name: "Claude via OpenAI" } },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "disabled_providers prevents loading even with env var",
   Effect.gen(function* () {
     yield* set("OPENAI_API_KEY", "test-openai-key")
