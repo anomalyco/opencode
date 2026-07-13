@@ -246,6 +246,20 @@ function Main {
         }
     }
 
+    Write-Step "Linking config for desktop app"
+    $desktopAppId = "ai.opencode.desktop.dev"
+    $desktopConfig = Join-Path $env:APPDATA "$desktopAppId\config\opencode"
+    $globalConfig = Join-Path $env:USERPROFILE ".config\opencode"
+    if (Test-Path $globalConfig) {
+        if (-not (Test-Path $desktopConfig)) {
+            New-Item -ItemType Directory -Path $desktopConfig -Force | Out-Null
+        }
+        Copy-Item -Path "$globalConfig\*" -Destination $desktopConfig -Recurse -Force
+        Write-Success "Desktop app config linked"
+    } else {
+        Write-Warn "No global config found — desktop app may need manual setup"
+    }
+
     Write-Step "Verifying installation"
     $opencodeExe = Join-Path $OPENCODE_DIR "opencode.exe"
     if (Test-Path $opencodeExe) {
