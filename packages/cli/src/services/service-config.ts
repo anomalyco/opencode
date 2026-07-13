@@ -1,7 +1,8 @@
 import { Global } from "@opencode-ai/core/global"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { Service } from "@opencode-ai/client/effect"
-import { Effect, FileSystem, Schema } from "effect"
+import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 
@@ -20,20 +21,57 @@ const keys = ["hostname", "port", "password"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
+
+export function filename(channel = InstallationChannel) {
+  if (channel === "latest") return "service.json"
+  if (channel === "local") return "service-local.json"
+  return `service-${Hash.fast(channel)}.json`
+}
+
+export function versionBelongsToChannel(
+  version: string | undefined,
+  channel = InstallationChannel,
+  installedVersion = InstallationVersion,
+) {
+  if (version === undefined) return false
+  if (version === installedVersion) return true
+  const prefix = `0.0.0-${channel}-`
+  if (!version.startsWith(prefix)) return false
+  return /^\d+(?:\.\d+)?$/.test(version.slice(prefix.length))
+}
+
+export const migrateRegistration = Effect.fnUntraced(function* (
+  legacy: string,
+  file: string,
+  channel = InstallationChannel,
+  installedVersion = InstallationVersion,
+) {
+  if (channel === "latest" || channel === "local") return
+  const fs = yield* FileSystem.FileSystem
+  const text = yield* fs.readFileString(legacy).pipe(Effect.option)
+  if (Option.isNone(text)) return
+  const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
+  if (Option.isNone(registration)) return
+  if (!versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
+  yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
+})
 
 function configKey(key: string): Key {
-  if (keys.includes(key as Key)) return key as Key
+  if (key === "hostname" || key === "port" || key === "password") return key
   throw new Error(`Unknown service config key: ${key}`)
 }
 
 const env = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
-  const filename = InstallationChannel === "local" ? "service-local.json" : "service.json"
+  const name = filename()
+  const file = path.join(global.state, name)
+  yield* migrateRegistration(path.join(global.state, "service.json"), file)
   return {
     fs,
-    file: path.join(global.state, filename),
-    configFile: path.join(global.config, filename),
+    file,
+    configFile: path.join(global.config, name),
   }
 })
 
@@ -93,6 +131,7 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string) 
       return yield* password()
     }
   }
+  throw new Error(`Unknown service config key: ${key}`)
 })
 
 export const set = Effect.fn("cli.service-config.set")(function* (key: string, value: string) {

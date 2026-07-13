@@ -101,7 +101,7 @@ const register = Effect.fnUntraced(function* (address: HttpServer.Address, passw
     Effect.flatMap(decodeInfo),
     Effect.orElseSucceed(() => undefined),
   )
-  yield* Effect.gen(function* () {
+  const assertRegistration = Effect.gen(function* () {
     const found = yield* current
     if (
       found !== undefined &&
@@ -113,12 +113,17 @@ const register = Effect.fnUntraced(function* (address: HttpServer.Address, passw
     )
       return
     yield* publish
-  }).pipe(Effect.repeat(Schedule.spaced("5 seconds")), Effect.forkScoped)
+  })
   yield* Effect.addFinalizer(() =>
     current.pipe(
       Effect.flatMap((current) => (current?.id === id ? fs.remove(options.file) : Effect.void)),
       Effect.ignore,
     ),
+  )
+  yield* assertRegistration.pipe(
+    Effect.catchCause((cause) => Effect.logWarning("failed to reassert service registration", { cause })),
+    Effect.repeat(Schedule.spaced("5 seconds")),
+    Effect.forkScoped,
   )
 })
 

@@ -35,6 +35,61 @@ test("local channel stores service config with the local service filename", asyn
   }
 })
 
+test("service filenames isolate installation channels", () => {
+  expect(ServiceConfig.filename("latest")).toBe("service.json")
+  expect(ServiceConfig.filename("local")).toBe("service-local.json")
+  expect(ServiceConfig.filename("preview-a")).not.toBe(ServiceConfig.filename("preview-b"))
+  expect(ServiceConfig.filename("preview-a")).not.toBe(ServiceConfig.filename("latest"))
+  expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234", "preview-a")).toBe(true)
+  expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234.2", "preview-a")).toBe(true)
+  expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-other-1234", "preview-a")).toBe(false)
+  expect(ServiceConfig.versionBelongsToChannel("1.2.3", "preview-a")).toBe(false)
+})
+
+test("preview registration migration never moves stable discovery", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-migration-"))
+  const legacy = path.join(root, "service.json")
+  const target = path.join(root, ServiceConfig.filename("preview-a"))
+  try {
+    await fs.writeFile(
+      legacy,
+      JSON.stringify({ id: "old-preview", version: "0.0.0-preview-a-1234", url: "http://localhost:4096", pid: 1 }),
+    )
+    await Effect.runPromise(
+      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(await Bun.file(legacy).exists()).toBe(true)
+    expect(await Bun.file(target).json()).toMatchObject({ id: "old-preview" })
+
+    await fs.rm(target)
+    await fs.writeFile(legacy, JSON.stringify({ id: "stable", version: "1.2.3", url: "http://localhost:4096", pid: 1 }))
+    await Effect.runPromise(
+      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(await Bun.file(legacy).exists()).toBe(true)
+    expect(await Bun.file(target).exists()).toBe(false)
+
+    await fs.writeFile(
+      legacy,
+      JSON.stringify({ id: "old-preview", version: "0.0.0-preview-a-1234", url: "http://localhost:4096", pid: 1 }),
+    )
+    await fs.writeFile(target, JSON.stringify({ id: "current-preview" }))
+    await Effect.runPromise(
+      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(await Bun.file(legacy).exists()).toBe(true)
+    expect(await Bun.file(target).json()).toMatchObject({ id: "current-preview" })
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("concurrent service processes elect one server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-election-"))
   const database = path.join(root, "opencode.db")
@@ -74,10 +129,10 @@ test("concurrent service processes elect one server", async () => {
     }),
   )
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
+  const registration = path.join(root, "state", "opencode", "service-local.json")
   const processes = Array.from({ length: 10 }, () => Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" }))
 
   try {
-    const registration = path.join(root, "state", "opencode", "service-local.json")
     const info = await waitForInfo(registration)
     const winner = processes.find((process) => process.pid === info.pid)
     const losers = processes.filter((process) => process.pid !== info.pid)
@@ -87,7 +142,12 @@ test("concurrent service processes elect one server", async () => {
 
     expect(exited).toEqual(losers.map(() => true))
     expect(winner?.exitCode).toBe(null)
+    const blockedTemp = registration + "." + info.id + ".tmp"
+    await fs.mkdir(blockedTemp)
     await fs.rm(registration)
+    await Bun.sleep(6_000)
+    expect(await Bun.file(registration).exists()).toBe(false)
+    await fs.rm(blockedTemp, { recursive: true })
     const restored = await waitForInfo(registration)
     expect(restored.id).toBe(info.id)
     expect(restored.pid).toBe(info.pid)
@@ -125,7 +185,11 @@ test("concurrent service processes elect one server", async () => {
   } finally {
     processes.forEach((process) => process.kill("SIGTERM"))
     await Promise.all(processes.map((process) => process.exited))
-    await fs.rm(root, { recursive: true, force: true })
+    try {
+      expect(await Bun.file(registration).exists()).toBe(false)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   }
 }, 60_000)
 
