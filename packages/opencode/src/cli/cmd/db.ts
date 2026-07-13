@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { spawn } from "child_process"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionEventLogCompaction } from "@opencode-ai/core/session/event-log-compaction"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { effectCmd } from "../effect-cmd"
@@ -51,12 +52,32 @@ const PathCommand = effectCmd({
   }),
 })
 
+const CompactEventsCommand = effectCmd({
+  command: "compact-events",
+  describe: "replace superseded message and part snapshots with replay-safe checkpoints",
+  instance: false,
+  builder: (yargs: Argv) =>
+    yargs
+      .option("apply", { type: "boolean", default: false, describe: "write checkpoints; default is dry-run" })
+      .option("session", { type: "string", describe: "compact one session aggregate" })
+      .option("limit", { type: "number", describe: "maximum snapshots to compact" }),
+  handler: Effect.fn("Cli.db.compactEvents")(function* (args: { apply: boolean; session?: string; limit?: number }) {
+    const { db } = yield* Database.Service
+    const report = yield* SessionEventLogCompaction.compact(db, {
+      aggregateID: args.session,
+      dryRun: !args.apply,
+      limit: args.limit,
+    })
+    console.log(JSON.stringify(report, null, 2))
+  }),
+})
+
 export const DbCommand = effectCmd({
   command: "db",
   describe: "database tools",
   instance: false,
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).demandCommand()
+    return yargs.command(QueryCommand).command(PathCommand).command(CompactEventsCommand).demandCommand()
   },
   handler: Effect.fn("Cli.db")(function* () {}),
 })
