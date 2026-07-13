@@ -602,7 +602,7 @@ export const ShellTool = Tool.define(
           output: committed || preview(output),
           exit: code,
           truncated: cut,
-          ...(file ? { outputPath: file } : {}),
+          ...(file ? (cut ? { outputPath: file } : { rawOutputPath: file }) : {}),
         },
         output,
       }

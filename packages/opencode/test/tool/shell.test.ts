@@ -1125,11 +1125,12 @@ describe("tool.shell abort", () => {
           expect(updates.every((output) => (output.match(/PROGRESS index=/g)?.length ?? 0) <= 1)).toBe(true)
           expect(updates.every((output) => !output.includes("\x1b[2K"))).toBe(true)
 
-          const outputPath = result.metadata.outputPath
-          expect(outputPath).toBeString()
-          if (typeof outputPath !== "string") return
+          expect(result.metadata.outputPath).toBeUndefined()
+          const rawOutputPath = result.metadata.rawOutputPath
+          expect(rawOutputPath).toBeString()
+          if (typeof rawOutputPath !== "string") return
           const fs = yield* FSUtil.Service
-          const saved = yield* fs.readFileString(outputPath)
+          const saved = yield* fs.readFileString(rawOutputPath)
           expect(saved.match(/PROGRESS index=/g)).toHaveLength(5000)
           expect(saved).toContain("\x1b[2K\rPROGRESS index=00000")
           expect(saved).toContain("FINAL_MARKER")
@@ -1232,6 +1233,7 @@ describe("tool.shell truncation", () => {
 
         const filepath = (result.metadata as { outputPath?: string }).outputPath
         expect(filepath).toBeTruthy()
+        expect(result.metadata.rawOutputPath).toBeUndefined()
 
         const saved = yield* (yield* FSUtil.Service).readFileString(filepath!)
         const lines = saved.trim().split(/\r?\n/)
