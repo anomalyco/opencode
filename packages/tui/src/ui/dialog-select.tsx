@@ -55,7 +55,7 @@ type DialogSelectActionBase<T> = {
   disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
 }
 
-export type DialogSelectAction<T> =
+type DialogSelectAction<T> =
   | (DialogSelectActionBase<T> & {
       selection?: "required"
       onTrigger: (option: DialogSelectOption<T>) => void
