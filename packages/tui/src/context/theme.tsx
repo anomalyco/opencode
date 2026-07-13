@@ -5,7 +5,6 @@ import {
   addTheme,
   allThemes,
   generateSyntax,
-  generateSystem,
   hasTheme,
   isTheme,
   resolveTheme,
@@ -13,11 +12,10 @@ import {
   setCustomThemes,
   setSystemTheme,
   subscribeThemes,
-  terminalMode,
-  tint,
   upsertTheme,
   type ThemeJson,
 } from "../theme"
+import { generateSystem, terminalMode } from "../theme/system"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -63,13 +61,10 @@ export {
   addTheme,
   allThemes,
   generateSyntax,
-  generateSystem,
   hasTheme,
   isTheme,
   resolveTheme,
   selectedForeground,
-  terminalMode,
-  tint,
   upsertTheme,
   type Theme,
   type ThemeJson,
