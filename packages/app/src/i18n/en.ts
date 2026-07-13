@@ -638,7 +638,7 @@ export const dict = {
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
   "session.error.notFound.closeTab": "Close Tab",
   "session.error.serverConnection": "Can't connect to this server",
-  "session.review.filesChanged": "{{count}} Files Changed",
+  "session.review.filesChanged": "Files Changed {{count}}",
   "session.review.change.one": "Change",
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
