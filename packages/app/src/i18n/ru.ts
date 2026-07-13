@@ -812,10 +812,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
-  "settings.general.row.newInterface.title": "Использовать новый интерфейс",
-  "settings.general.row.newInterface.badge": "Новое",
-  "settings.general.row.newInterface.description":
-    "Обновлённая компоновка, вкладки, редактор запросов и новая главная страница. Прежний интерфейс исчезнет {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Новая компоновка и оформление",
+  "settings.general.row.newLayoutDesigns.description":
+    "Включить обновлённую компоновку, главную страницу, редактор запросов и интерфейс сессии",
   "settings.general.row.pinchZoom.title": "Масштабирование щипком",
   "settings.general.row.pinchZoom.description":
     "Разрешить масштабирование жестом щипка на трекпаде и прокруткой с Ctrl",

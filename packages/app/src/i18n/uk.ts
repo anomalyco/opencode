@@ -902,10 +902,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.newInterface.title": "Використовувати новий інтерфейс",
-  "settings.general.row.newInterface.badge": "Нове",
-  "settings.general.row.newInterface.description":
-    "Оновлений макет, вкладки, редактор запитів і нова головна сторінка. Попередній інтерфейс зникне {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Новий макет і дизайн",
+  "settings.general.row.newLayoutDesigns.description":
+    "Увімкнути оновлений макет та інтерфейси головної сторінки, редактора запитів і сесії",
   "settings.general.row.pinchZoom.title": "Масштабування щипком",
   "settings.general.row.pinchZoom.description":
     "Дозволити масштабування жестом щипка на трекпаді та прокручуванням із Ctrl",

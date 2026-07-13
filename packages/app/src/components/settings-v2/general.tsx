@@ -1,6 +1,5 @@
 import { Component, Show, createMemo, createResource, onMount } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
@@ -22,7 +21,6 @@ import {
   sansInput,
   terminalDefault,
   terminalFontFamily,
-  oldInterfaceSunset,
   terminalInput,
   useSettings,
 } from "@/context/settings"
@@ -228,58 +226,6 @@ export const SettingsGeneralV2: Component<{
     },
   })
 
-  const InterfaceSection = () => (
-    <div class="settings-v2-section">
-      <div class="settings-v2-interface-feature">
-        <SettingsListV2>
-          <SettingsRowV2
-            title={
-              <span class="flex items-center gap-2">
-                {language.t("settings.general.row.newInterface.title")}
-                <Tag variant="accent">{language.t("settings.general.row.newInterface.badge")}</Tag>
-              </span>
-            }
-            description={language.t("settings.general.row.newInterface.description", {
-              date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
-                oldInterfaceSunset,
-              ),
-            })}
-          >
-            <div data-action="settings-new-layout-designs">
-              <Switch
-                checked={settings.general.newLayoutDesigns()}
-                onChange={(checked) => {
-                  settings.general.setNewLayoutDesigns(checked)
-                  if (checked) return
-                  void import("@/components/dialog-settings").then((module) => {
-                    void dialog.show(() => <module.DialogSettings />)
-                  })
-                }}
-              />
-            </div>
-          </SettingsRowV2>
-        </SettingsListV2>
-      </div>
-
-      <Show when={!settings.general.newInterfaceNoticeDismissed()}>
-        <SettingsListV2>
-          <SettingsRowV2
-            title={language.t("settings.general.row.newInterfaceNotice.title")}
-            description={language.t("settings.general.row.newInterfaceNotice.description", {
-              date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
-                oldInterfaceSunset,
-              ),
-            })}
-          >
-            <ButtonV2 size="small" variant="ghost-muted" onClick={settings.general.dismissNewInterfaceNotice}>
-              {language.t("settings.general.row.newInterfaceNotice.dismiss")}
-            </ButtonV2>
-          </SettingsRowV2>
-        </SettingsListV2>
-      </Show>
-    </div>
-  )
-
   const GeneralSection = () => (
     <div class="settings-v2-section">
       <SettingsListV2>
@@ -362,6 +308,24 @@ export const SettingsGeneralV2: Component<{
             <Switch
               checked={settings.general.editToolPartsExpanded()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.newLayoutDesigns.title")}
+          description={language.t("settings.general.row.newLayoutDesigns.description")}
+        >
+          <div data-action="settings-new-layout-designs">
+            <Switch
+              checked={settings.general.newLayoutDesigns()}
+              onChange={(checked) => {
+                settings.general.setNewLayoutDesigns(checked)
+                if (checked) return
+                void import("@/components/dialog-settings").then((module) => {
+                  dialog.show(() => <module.DialogSettings />)
+                })
+              }}
             />
           </div>
         </SettingsRowV2>
@@ -719,10 +683,6 @@ export const SettingsGeneralV2: Component<{
       </div>
 
       <div class="settings-v2-tab-body">
-        <Show when={Date.now() < oldInterfaceSunset.getTime()}>
-          <InterfaceSection />
-        </Show>
-
         <GeneralSection />
 
         <AppearanceSection />

@@ -999,10 +999,8 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.description": "모바일에서 제목 표시줄과 세션 탭을 화면 하단에 배치",
   "settings.general.row.showCustomAgents.title": "사용자 지정 에이전트",
   "settings.general.row.showCustomAgents.description": "입력창에 에이전트 선택기 표시",
-  "settings.general.row.newInterface.title": "새 인터페이스 사용",
-  "settings.general.row.newInterface.badge": "신규",
-  "settings.general.row.newInterface.description":
-    "새롭게 디자인된 레이아웃, 탭, 입력창과 새 홈 화면입니다. 이전 인터페이스는 {{date}}에 종료됩니다.",
+  "settings.general.row.newLayoutDesigns.title": "새 레이아웃 및 디자인",
+  "settings.general.row.newLayoutDesigns.description": "새롭게 디자인된 레이아웃, 홈, 입력창 및 세션 UI 활성화",
   "settings.general.row.pinchZoom.title": "핀치 줌",
   "settings.general.row.pinchZoom.description": "트랙패드 핀치 및 Ctrl-스크롤 제스처로 확대/축소 허용",
   "settings.updates.action.downloading": "다운로드 중...",

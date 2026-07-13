@@ -746,10 +746,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
-  "settings.general.row.newInterface.title": "Użyj nowego interfejsu",
-  "settings.general.row.newInterface.badge": "Nowość",
-  "settings.general.row.newInterface.description":
-    "Przeprojektowany układ, karty, edytor i nowa strona główna. Poprzedni interfejs zniknie {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Nowy układ i wygląd",
+  "settings.general.row.newLayoutDesigns.description":
+    "Włącz przeprojektowany układ, stronę główną, edytor wiadomości i interfejs sesji",
   "settings.general.row.pinchZoom.title": "Powiększanie gestem szczypania",
   "settings.general.row.pinchZoom.description":
     "Zezwalaj na powiększanie gestem szczypania na gładziku i przewijaniem z klawiszem Ctrl",

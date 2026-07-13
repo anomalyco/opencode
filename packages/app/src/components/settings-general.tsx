@@ -5,7 +5,6 @@ import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useParams } from "@solidjs/router"
@@ -24,7 +23,6 @@ import {
   sansInput,
   terminalDefault,
   terminalFontFamily,
-  oldInterfaceSunset,
   terminalInput,
   useSettings,
 } from "@/context/settings"
@@ -250,56 +248,6 @@ export const SettingsGeneral: Component = () => {
     triggerVariant: "settings" as const,
   })
 
-  const InterfaceSection = () => (
-    <div class="flex flex-col gap-4">
-      <SettingsList>
-        <SettingsRow
-          title={
-            <span class="flex items-center gap-2">
-              {language.t("settings.general.row.newInterface.title")}
-              <Tag variant="accent">{language.t("settings.general.row.newInterface.badge")}</Tag>
-            </span>
-          }
-          description={language.t("settings.general.row.newInterface.description", {
-            date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
-              oldInterfaceSunset,
-            ),
-          })}
-        >
-          <div data-action="settings-new-layout-designs">
-            <Switch
-              checked={settings.general.newLayoutDesigns()}
-              onChange={(checked) => {
-                settings.general.setNewLayoutDesigns(checked)
-                if (!checked) return
-                void import("@/components/settings-v2").then((module) => {
-                  void dialog.show(() => <module.DialogSettings />)
-                })
-              }}
-            />
-          </div>
-        </SettingsRow>
-      </SettingsList>
-
-      <Show when={!settings.general.newInterfaceNoticeDismissed()}>
-        <SettingsList>
-          <SettingsRow
-            title={language.t("settings.general.row.newInterfaceNotice.title")}
-            description={language.t("settings.general.row.newInterfaceNotice.description", {
-              date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
-                oldInterfaceSunset,
-              ),
-            })}
-          >
-            <Button size="small" variant="ghost" onClick={settings.general.dismissNewInterfaceNotice}>
-              {language.t("settings.general.row.newInterfaceNotice.dismiss")}
-            </Button>
-          </SettingsRow>
-        </SettingsList>
-      </Show>
-    </div>
-  )
-
   const GeneralSection = () => (
     <div class="flex flex-col gap-1">
       <SettingsList>
@@ -383,6 +331,24 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.general.editToolPartsExpanded()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.newLayoutDesigns.title")}
+          description={language.t("settings.general.row.newLayoutDesigns.description")}
+        >
+          <div data-action="settings-new-layout-designs">
+            <Switch
+              checked={settings.general.newLayoutDesigns()}
+              onChange={(checked) => {
+                settings.general.setNewLayoutDesigns(checked)
+                if (!checked) return
+                void import("@/components/settings-v2").then((module) => {
+                  dialog.show(() => <module.DialogSettings />)
+                })
+              }}
             />
           </div>
         </SettingsRow>
@@ -752,10 +718,6 @@ export const SettingsGeneral: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 w-full">
-        <Show when={Date.now() < oldInterfaceSunset.getTime()}>
-          <InterfaceSection />
-        </Show>
-
         <GeneralSection />
 
         <AppearanceSection />

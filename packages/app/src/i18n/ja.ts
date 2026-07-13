@@ -741,10 +741,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit ツールパーツを展開",
   "settings.general.row.editToolPartsExpanded.description":
     "タイムラインで edit、write、patch ツールパーツをデフォルトで展開して表示します",
-  "settings.general.row.newInterface.title": "新しいインターフェースを使用",
-  "settings.general.row.newInterface.badge": "新機能",
-  "settings.general.row.newInterface.description":
-    "刷新されたレイアウト、タブ、コンポーザー、ホーム画面です。以前のインターフェースは{{date}}に終了します。",
+  "settings.general.row.newLayoutDesigns.title": "新しいレイアウトとデザイン",
+  "settings.general.row.newLayoutDesigns.description":
+    "刷新されたレイアウト、ホーム、コンポーザー、セッションUIを有効にします",
   "settings.general.row.pinchZoom.title": "ピンチでズーム",
   "settings.general.row.pinchZoom.description":
     "トラックパッドのピンチ操作とCtrl+スクロール操作によるズームを許可します",

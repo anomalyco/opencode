@@ -1095,10 +1095,9 @@ export const dict = {
     "Plasser tittellinjen og sesjonsfanene nederst på mobilskjermen",
   "settings.general.row.showCustomAgents.title": "Egendefinerte agenter",
   "settings.general.row.showCustomAgents.description": "Vis agentvelgeren i skrivefeltet",
-  "settings.general.row.newInterface.title": "Bruk det nye grensesnittet",
-  "settings.general.row.newInterface.badge": "Ny",
-  "settings.general.row.newInterface.description":
-    "Et redesignet oppsett med faner, skrivefelt og ny startside. Det gamle grensesnittet forsvinner {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Ny layout og utforming",
+  "settings.general.row.newLayoutDesigns.description":
+    "Aktiver ny layout og utforming for startsiden, skrivefeltet og sesjonsgrensesnittet",
   "settings.general.row.pinchZoom.title": "Knip for å zoome",
   "settings.general.row.pinchZoom.description": "Tillat knipebevegelser på styreflaten og Ctrl-rulling for å zoome",
   "settings.updates.action.downloading": "Laster ned...",

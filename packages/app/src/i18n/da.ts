@@ -804,10 +804,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
-  "settings.general.row.newInterface.title": "Brug den nye brugerflade",
-  "settings.general.row.newInterface.badge": "Ny",
-  "settings.general.row.newInterface.description":
-    "Et nydesignet layout, faner, promptfelt og ny startside. Den gamle brugerflade forsvinder den {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Nyt layout og design",
+  "settings.general.row.newLayoutDesigns.description":
+    "Aktivér det nydesignede layout, startsiden, promptfeltet og sessionsbrugerfladen",
   "settings.general.row.pinchZoom.title": "Knib for at zoome",
   "settings.general.row.pinchZoom.description": "Tillad knibebevægelser på pegefeltet og Ctrl-rulning for at zoome",
   "settings.general.row.wayland.title": "Brug native Wayland",

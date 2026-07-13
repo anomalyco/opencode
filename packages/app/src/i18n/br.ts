@@ -746,10 +746,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes da ferramenta de edição",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar partes das ferramentas de edição, escrita e patch expandidas por padrão na linha do tempo",
-  "settings.general.row.newInterface.title": "Usar a nova interface",
-  "settings.general.row.newInterface.badge": "Novo",
-  "settings.general.row.newInterface.description":
-    "Layout, abas, área de composição e página inicial reformulados. A interface anterior será removida em {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Novo layout e design",
+  "settings.general.row.newLayoutDesigns.description":
+    "Ativar o layout, a página inicial, a área de composição e a interface de sessão reformulados",
   "settings.general.row.pinchZoom.title": "Zoom com gesto de pinça",
   "settings.general.row.pinchZoom.description":
     "Permitir gestos de pinça no trackpad e de Ctrl+rolagem para aplicar zoom",

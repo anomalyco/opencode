@@ -8,11 +8,10 @@ Use alongside headings or lists for quick metadata.
 
 ### API
 - Accepts standard span props.
-- Optional: \`variant\` is \`neutral\` (default) or \`accent\`.
 - Optional: \`data-high-contrast\` attribute for stronger border contrast.
 
 ### Variants and states
-- Neutral and accent variants.
+- Single size style.
 - Optional high-contrast border style.
 
 ### Behavior
@@ -52,8 +51,4 @@ export const HighContrast = {
       <Tag data-high-contrast>Label</Tag>
     </div>
   ),
-}
-
-export const Accent = {
-  render: () => <Tag variant="accent">New</Tag>,
 }

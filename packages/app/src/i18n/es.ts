@@ -816,10 +816,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
-  "settings.general.row.newInterface.title": "Usar la nueva interfaz",
-  "settings.general.row.newInterface.badge": "Nuevo",
-  "settings.general.row.newInterface.description":
-    "Un diseño renovado con pestañas, editor y nueva página de inicio. La interfaz anterior desaparecerá el {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "Nuevo diseño y estilos",
+  "settings.general.row.newLayoutDesigns.description":
+    "Activar el nuevo diseño de la interfaz, la página de inicio, el editor y las sesiones",
   "settings.general.row.pinchZoom.title": "Pellizcar para ampliar",
   "settings.general.row.pinchZoom.description":
     "Permitir ampliar con el gesto de pellizco del panel táctil y con Ctrl-scroll",

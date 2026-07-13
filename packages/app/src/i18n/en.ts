@@ -855,8 +855,9 @@ export const dict = {
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
-  "settings.general.row.shell.title": "Terminal shell",
-  "settings.general.row.shell.description": "Shell used by the terminal and agent tools",
+  "settings.general.row.shell.title": "Terminal Shell",
+  "settings.general.row.shell.description":
+    "Choose the shell used for your terminal. Compatible shells are also used for agent tool calls.",
   "settings.general.row.shell.autoDefault": "Auto (Default)",
   "settings.general.row.shell.terminalOnly": "terminal only",
   "settings.general.row.appearance.title": "Appearance",
@@ -888,9 +889,8 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description":
     "Place the title bar and session tabs at the bottom of the screen on mobile",
-  "settings.general.row.showCustomAgents.title": "Show agent",
-  "settings.general.row.showCustomAgents.description":
-    "Switch between agents in the composer. When hidden, defaults to Build agent.",
+  "settings.general.row.showCustomAgents.title": "Custom agents",
+  "settings.general.row.showCustomAgents.description": "Show the agent picker in the composer",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
@@ -899,12 +899,8 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.newInterface.title": "Use the new interface",
-  "settings.general.row.newInterface.badge": "New",
-  "settings.general.row.newInterface.description": "New layout, tabs, composer and home. Switch back until {{date}}.",
-  "settings.general.row.newInterfaceNotice.title": "You're now using the new interface",
-  "settings.general.row.newInterfaceNotice.description": "The old interface was phased out on {{date}}.",
-  "settings.general.row.newInterfaceNotice.dismiss": "Dismiss",
+  "settings.general.row.newLayoutDesigns.title": "New layout and designs",
+  "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 

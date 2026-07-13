@@ -759,10 +759,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
   "settings.general.row.editToolPartsExpanded.description":
     "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
-  "settings.general.row.newInterface.title": "Neue Oberfläche verwenden",
-  "settings.general.row.newInterface.badge": "Neu",
-  "settings.general.row.newInterface.description":
-    "Neu gestaltetes Layout, Tabs, Eingabebereich und neue Startseite. Die alte Oberfläche wird am {{date}} entfernt.",
+  "settings.general.row.newLayoutDesigns.title": "Neues Layout und Design",
+  "settings.general.row.newLayoutDesigns.description":
+    "Neu gestaltetes Layout, Startseite, Eingabebereich und Sitzungsoberfläche aktivieren",
   "settings.general.row.pinchZoom.title": "Zoom per Fingergeste",
   "settings.general.row.pinchZoom.description": "Zoomen per Zwei-Finger- und Ctrl-Scroll-Geste erlauben",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",

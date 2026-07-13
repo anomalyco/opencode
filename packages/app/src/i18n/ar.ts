@@ -735,10 +735,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "توسيع أجزاء أداة edit",
   "settings.general.row.editToolPartsExpanded.description":
     "إظهار أجزاء أدوات edit و write و patch موسعة بشكل افتراضي في الشريط الزمني",
-  "settings.general.row.newInterface.title": "استخدام الواجهة الجديدة",
-  "settings.general.row.newInterface.badge": "جديد",
-  "settings.general.row.newInterface.description":
-    "تخطيط وعلامات تبويب ومحرر رسائل وصفحة رئيسية معاد تصميمها. ستختفي الواجهة السابقة في {{date}}.",
+  "settings.general.row.newLayoutDesigns.title": "التخطيط والتصاميم الجديدة",
+  "settings.general.row.newLayoutDesigns.description":
+    "تمكين التخطيط والصفحة الرئيسية ومحرر الرسائل وواجهة الجلسة المعاد تصميمها",
   "settings.general.row.pinchZoom.title": "التكبير بإيماءة القرص",
   "settings.general.row.pinchZoom.description": "السماح بإيماءة القرص على لوحة اللمس وإيماءة Ctrl-scroll للتكبير",
   "settings.general.row.wayland.title": "استخدام Wayland الأصلي",
